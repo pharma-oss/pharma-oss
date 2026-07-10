@@ -1,0 +1,101 @@
+name: Onboarding E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  onboarding-e2e:
+    name: Onboarding browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Cache Puppeteer browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: ${{ runner.os }}-puppeteer-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-puppeteer-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx tsx --test $(find src -name "*.test.ts")
+
+      - name: Build
+        run: npm run build
+
+      - name: Start dev server
+        run: |
+          npm run dev > dev_server.log 2>&1 &
+          echo "$!" > dev_server.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/settings >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat dev_server.log
+          exit 1
+
+      - name: Run onboarding browser E2E
+        env:
+          YAKUREKI_E2E_AUTO_SEED: '1'
+          YAKUREKI_E2E_BASE_URL: http://127.0.0.1:3000
+          YAKUREKI_E2E_ARTIFACT_DIR: artifacts/onboarding-e2e
+        run: npm run test:e2e:onboarding
+
+      - name: Run return correction browser E2E
+        env:
+          YAKUREKI_E2E_BASE_URL: http://127.0.0.1:3000
+          YAKUREKI_E2E_ARTIFACT_DIR: artifacts/return-correction-e2e
+        run: npm run test:e2e:return-correction
+
+      - name: Run print layout screenshot regression
+        env:
+          YAKUREKI_E2E_AUTO_SEED: '1'
+          YAKUREKI_E2E_BASE_URL: http://127.0.0.1:3000
+          YAKUREKI_E2E_ARTIFACT_DIR: artifacts/print-layout-regression
+        run: npm run test:e2e:print-layout
+
+      - name: Upload onboarding E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: onboarding-e2e-artifacts
+          path: |
+            artifacts/onboarding-e2e
+            artifacts/return-correction-e2e
+            artifacts/print-layout-regression
+            dev_server.log
+          if-no-files-found: ignore
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -f dev_server.pid ]; then
+            kill "$(cat dev_server.pid)" || true
+          fi
