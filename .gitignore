@@ -1,0 +1,53 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.npm_cache
+.local_npmrc
+
+# Testing
+/coverage
+/artifacts
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+dev_server.log
+
+fetchKusuriShiori.log
+fetchKusuriShioriParallel.log
+fetch_shiori.log
+.playwright-mcp/
+
+# Generated working files (test/e2e outputs, compiled scratch, caches)
+/test_output.log
+/missing_shiori_all.json
+/tmp/
+/tmp-dist/
+/external_exports/
+/test-results/
+
+# Internal-only docs (kept locally, never published)
+/docs/internal/

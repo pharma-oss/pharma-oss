@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pharma-oss — 薬局業務を、これ1つで。</title>
+<meta name="description" content="ローカルファーストの調剤薬局向け電子薬歴・レセプト(UKE)システム。受付から請求までひと続き、サーバー不要、Apache-2.0のオープンソース。">
+<style>
+  :root {
+    --ink: #123f33;
+    --ink-deep: #0d2f26;
+    --accent: #1c7a5f;
+    --accent-strong: #145c48;
+    --wash: #e7f2ec;
+    --ground: #f7faf8;
+    --surface: #ffffff;
+    --text: #1d2823;
+    --text-muted: #5a6a62;
+    --line: #d9e5de;
+    --caution: #8a5a0b;
+    --caution-wash: #faf3e3;
+    --code-bg: #0d2f26;
+    --code-text: #cfe9dd;
+    --shadow: 0 24px 60px -28px rgba(13, 47, 38, 0.35);
+    --radius: 14px;
+    --display: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", "BIZ UDMincho", "Noto Serif JP", serif;
+    --body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", "BIZ UDGothic", "Noto Sans JP", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #0f2b22;
+      --ink-deep: #0a1f19;
+      --accent: #3ecf9e;
+      --accent-strong: #6adfb8;
+      --wash: #16281f;
+      --ground: #0e1713;
+      --surface: #152019;
+      --text: #e5ede8;
+      --text-muted: #94a59c;
+      --line: #24352c;
+      --caution: #d9a648;
+      --caution-wash: #211b0e;
+      --code-bg: #0a1f19;
+      --code-text: #b9dfcf;
+      --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --ink: #123f33; --ink-deep: #0d2f26; --accent: #1c7a5f; --accent-strong: #145c48;
+    --wash: #e7f2ec; --ground: #f7faf8; --surface: #ffffff; --text: #1d2823;
+    --text-muted: #5a6a62; --line: #d9e5de; --caution: #8a5a0b; --caution-wash: #faf3e3;
+    --code-bg: #0d2f26; --code-text: #cfe9dd; --shadow: 0 24px 60px -28px rgba(13, 47, 38, 0.35);
+  }
+  :root[data-theme="dark"] {
+    --ink: #0f2b22; --ink-deep: #0a1f19; --accent: #3ecf9e; --accent-strong: #6adfb8;
+    --wash: #16281f; --ground: #0e1713; --surface: #152019; --text: #e5ede8;
+    --text-muted: #94a59c; --line: #24352c; --caution: #d9a648; --caution-wash: #211b0e;
+    --code-bg: #0a1f19; --code-text: #b9dfcf; --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.6);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.85;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--accent-strong); }
+  a:focus-visible, button:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- header ---- */
+  .site-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: 20px 0;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+  .brand-mark {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--ink); color: #eaf6f0;
+    display: grid; place-items: center;
+    font-family: var(--display); font-size: 22px; font-weight: 600;
+  }
+  .brand-name { font-weight: 700; letter-spacing: 0.02em; }
+  .brand-name small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.08em; }
+  .header-links { display: flex; align-items: center; gap: 0.6rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.62rem 1.15rem; border-radius: 10px;
+    text-decoration: none; font-weight: 700; font-size: 0.92rem;
+    border: 1.5px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: #ffffff; }
+  .btn-primary:hover { background: var(--accent-strong); }
+  :root[data-theme="dark"] .btn-primary, :root:not([data-theme="light"]) .btn-primary { color: #06231a; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .btn-primary { color: #ffffff; } }
+  .btn-ghost { border-color: var(--line); color: var(--text); background: var(--surface); }
+  .btn-ghost:hover { border-color: var(--accent); }
+
+  /* ---- hero ---- */
+  .hero { padding: 56px 0 24px; }
+  .eyebrow {
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.18em;
+    color: var(--accent-strong); text-transform: uppercase;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2.1rem, 5.4vw, 3.6rem);
+    line-height: 1.28;
+    letter-spacing: 0.01em;
+    margin: 0.5rem 0 1rem;
+    text-wrap: balance;
+    font-weight: 600;
+  }
+  .hero-lede { max-width: 40em; color: var(--text-muted); margin: 0 0 1.6rem; }
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 0.9rem; }
+  .hero-note { font-size: 0.8rem; color: var(--text-muted); }
+  .hero-shot {
+    margin: 40px 0 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    animation: rise 0.7s ease-out both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .hero-shot { animation: none; }
+  }
+
+  /* ---- value strip ---- */
+  .values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; padding: 48px 0 8px; }
+  .value {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 1.3rem 1.4rem;
+  }
+  .value h3 { margin: 0 0 0.35rem; font-size: 1.02rem; }
+  .value p { margin: 0; font-size: 0.9rem; color: var(--text-muted); line-height: 1.75; }
+
+  /* ---- sections ---- */
+  section { padding: 64px 0 8px; }
+  .section-head { max-width: 42em; margin-bottom: 2rem; }
+  h2 {
+    font-family: var(--display);
+    font-size: clamp(1.5rem, 3.2vw, 2.1rem);
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0.4rem 0 0.7rem;
+    text-wrap: balance;
+  }
+  .section-head p { margin: 0; color: var(--text-muted); }
+
+  /* 業務フロー: 実際の調剤順なので番号に意味がある */
+  .flow-row {
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 2.4rem; align-items: center;
+    padding: 2.2rem 0; border-top: 1px solid var(--line);
+  }
+  .flow-row.reverse { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
+  .flow-row.reverse .flow-copy { order: 2; }
+  .flow-row.reverse .flow-media { order: 1; }
+  .flow-step {
+    font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.14em;
+    color: var(--accent-strong); font-weight: 700;
+  }
+  .flow-row h3 { font-family: var(--display); font-size: 1.45rem; font-weight: 600; margin: 0.3rem 0 0.6rem; }
+  .flow-row p { margin: 0 0 0.7rem; font-size: 0.95rem; color: var(--text-muted); }
+  .flow-row ul { margin: 0; padding-left: 1.2em; font-size: 0.9rem; color: var(--text-muted); }
+  .flow-row li { margin: 0.25rem 0; }
+  .flow-row li strong { color: var(--text); font-weight: 600; }
+  .flow-media { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.8rem; }
+  .chip {
+    font-size: 0.78rem; font-weight: 600; padding: 0.28rem 0.7rem;
+    background: var(--wash); color: var(--accent-strong);
+    border-radius: 999px; border: 1px solid var(--line);
+  }
+
+  /* ---- feature grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  .cell {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 1.1rem 1.2rem;
+  }
+  .cell h4 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+  .cell p { margin: 0; font-size: 0.83rem; color: var(--text-muted); line-height: 1.7; }
+
+  /* ---- honesty / safety ---- */
+  .honesty {
+    border: 1.5px solid var(--caution);
+    background: var(--caution-wash);
+    border-radius: var(--radius);
+    padding: 1.6rem 1.8rem;
+  }
+  .honesty h2 { font-size: 1.3rem; margin-top: 0; }
+  .honesty p, .honesty li { font-size: 0.92rem; color: var(--text); }
+  .honesty ul { padding-left: 1.2em; margin: 0.6rem 0 0; }
+  .honesty li { margin: 0.35rem 0; }
+  .honesty .label { color: var(--caution); font-weight: 700; letter-spacing: 0.12em; font-size: 0.75rem; }
+
+  /* ---- getting started ---- */
+  .start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
+  pre {
+    background: var(--code-bg); color: var(--code-text);
+    font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
+    padding: 1.2rem 1.4rem; border-radius: var(--radius);
+    overflow-x: auto; margin: 0;
+  }
+  pre .c { opacity: 0.55; }
+  ol.steps { margin: 0; padding-left: 1.3em; font-size: 0.95rem; }
+  ol.steps li { margin: 0.55rem 0; }
+  ol.steps strong { font-weight: 700; }
+
+  /* ---- CTA band ---- */
+  .cta-band {
+    margin: 72px 0 0;
+    background: var(--ink);
+    color: #eaf6f0;
+    padding: 64px 0;
+  }
+  .cta-band h2 { color: #ffffff; margin-top: 0; }
+  .cta-band p { color: #bcd8cc; max-width: 40em; }
+  .cta-band .btn-primary { background: #eaf6f0; color: var(--ink-deep); }
+  .cta-band .btn-primary:hover { background: #ffffff; }
+  .cta-band .btn-ghost { background: transparent; color: #eaf6f0; border-color: #3d6557; }
+  .cta-band .btn-ghost:hover { border-color: #eaf6f0; }
+
+  footer { padding: 28px 0 40px; font-size: 0.82rem; color: var(--text-muted); }
+  .foot-row { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; }
+  footer a { color: var(--text-muted); }
+
+  @media (max-width: 880px) {
+    .values, .grid { grid-template-columns: 1fr 1fr; }
+    .flow-row, .flow-row.reverse { grid-template-columns: 1fr; gap: 1.2rem; }
+    .flow-row.reverse .flow-copy { order: 1; }
+    .flow-row.reverse .flow-media { order: 2; }
+    .start-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .values, .grid { grid-template-columns: 1fr; }
+    .header-links .btn-ghost { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="site-header">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">薬</span>
+      <span class="brand-name">pharma-oss<small>PHARMACY OS — OPEN SOURCE</small></span>
+    </a>
+    <nav class="header-links" aria-label="サイト内リンク">
+      <a class="btn btn-ghost" href="#start">3分で試す</a>
+      <a class="btn btn-primary" href="https://github.com/pharma-oss/pharma-oss">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Local-first / Apache-2.0 / 令和8年調剤報酬ベース</p>
+      <h1 id="hero-title">薬局業務を、これ1つで。<br>データは店舗の端末から出さない。</h1>
+      <p class="hero-lede">
+        pharma-ossは、調剤薬局のための電子薬歴・レセプト（UKE）システムです。
+        処方箋の受付からピッキング、薬歴、帳票印刷、レセプト出力までがひと続き。
+        患者データは各端末のブラウザ内に暗号化保存され、サーバーも月額課金も要りません。
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="https://github.com/pharma-oss/pharma-oss">GitHubでソースを見る</a>
+        <a class="btn btn-ghost" href="#start">デモ患者で3分体験</a>
+      </div>
+      <p class="hero-note">オープンソース（Apache-2.0）。認証医療機器・レセコンではありません — <a href="#safety">免責と検証責任</a>を必ずご確認ください。</p>
+      <figure class="hero-shot" aria-label="ダッシュボード画面">
+        <img src="images/lp/dashboard.jpg" alt="pharma-ossのダッシュボード。本日の受付件数、日次KPI、要対応バナーが並ぶ" width="1600" height="1000" loading="eager">
+      </figure>
+    </section>
+
+    <div class="values" role="list">
+      <div class="value" role="listitem">
+        <h3>ローカルファースト</h3>
+        <p>患者データはブラウザ内DB（IndexedDB）に暗号化保存。オフラインでも業務は止まらず、PWAとしてインストールできます。</p>
+      </div>
+      <div class="value" role="listitem">
+        <h3>未完了なら、先に進めない</h3>
+        <p>GS1未照合・要修正・請求前チェックの指摘が残ったままでは完了やUKE出力ができない、抜け漏れ防止の設計です。</p>
+      </div>
+      <div class="value" role="listitem">
+        <h3>AI補助は候補提示に徹する</h3>
+        <p>SOAP下書きやリスク候補は根拠付きで提示。採否は薬剤師が判断し、その記録は監査ログに残ります。標準/制限/停止を店舗で選べます。</p>
+      </div>
+    </div>
+
+    <section aria-labelledby="flow-title">
+      <div class="section-head">
+        <p class="eyebrow">Workflow</p>
+        <h2 id="flow-title">受付から請求まで、現場の順番のまま。</h2>
+        <p>番号は画面の順番ではなく、薬局の1日の順番です。各工程に安全装置が組み込まれています。</p>
+      </div>
+
+      <div class="flow-row">
+        <div class="flow-copy">
+          <p class="flow-step">01 — 受付</p>
+          <h3>処方箋を読む。人が確認する。</h3>
+          <p>ブラウザ内OCR・処方箋QR・電子処方箋・手入力の4ルート。読み取り結果は原本と並べて確認し、氏名＋生年月日で既存患者へ自動名寄せします。</p>
+          <div class="chip-row">
+            <span class="chip">処方箋OCR</span><span class="chip">JAHIS QR</span><span class="chip">電子処方箋</span><span class="chip">名寄せ・重複統合</span>
+          </div>
+        </div>
+        <div class="flow-media">
+          <img src="images/lp/print.jpg" alt="帳票・請求確認画面。薬剤師確認、算定、GS1照合、UKE出力のステータスが並ぶ" width="1600" height="1000" loading="lazy">
+        </div>
+      </div>
+
+      <div class="flow-row reverse">
+        <div class="flow-copy">
+          <p class="flow-step">02 — 調剤・ピッキング</p>
+          <h3>現物とバーコードで照合する。</h3>
+          <p>棚番地順のピッキングリストで集め、GS1データバーで薬品・ロット・使用期限の一致を確認。棚不足はその場で記録し、発注候補へ自動連動します。</p>
+          <ul>
+            <li><strong>既存ピッキングシステム連携</strong> — 指示CSV書き出しと結果CSV取込</li>
+            <li><strong>NSIPS準拠機器・POS連携</strong> — 施設内コネクタ経由の送信・差替・取消</li>
+          </ul>
+        </div>
+        <div class="flow-media">
+          <img src="images/lp/picking.jpg" alt="ピッキング支援モード。GS1コード読取、照合進捗、棚番地つきの薬品リスト" width="1600" height="1000" loading="lazy">
+        </div>
+      </div>
+
+      <div class="flow-row">
+        <div class="flow-copy">
+          <p class="flow-step">03 — 薬歴</p>
+          <h3>前回との違いが、見える。</h3>
+          <p>4パネルSOAPと構造化チェック、前回Do・処方差分・タイムライン。患者アレルギー/副作用歴との突合、PMDA添付文書由来の相互作用・禁忌警告、同効薬重複の検知つき。</p>
+          <div class="chip-row">
+            <span class="chip">SOAP＋構造化チェック</span><span class="chip">AI下書き（薬剤師確認）</span><span class="chip">服薬フォロー管理</span>
+          </div>
+        </div>
+        <div class="flow-media">
+          <img src="images/lp/emr-soap.jpg" alt="薬歴入力画面。デモ患者のSOAPエディタ、服薬指導チェック、前回までの薬歴" width="1600" height="1000" loading="lazy">
+        </div>
+      </div>
+
+      <div class="flow-row reverse">
+        <div class="flow-copy">
+          <p class="flow-step">04 — 請求</p>
+          <h3>チェックを通らないUKEは、出さない。</h3>
+          <p>令和8年調剤報酬ベースの自動算定。廃止薬・レセ電コード欠落・必須レコード・合計点数を請求前チェックで検査し、問題があれば出力を停止して指摘CSVを残します。</p>
+          <ul>
+            <li><strong>UKE出力（Shift-JIS）</strong> — 単票・月次一括、請求スナップショットと差分表示</li>
+            <li><strong>返戻対応</strong> — 結果取込、返戻修正メモ、再請求ワークフロー</li>
+          </ul>
+        </div>
+        <div class="flow-media">
+          <img src="images/lp/dashboard.jpg" alt="ダッシュボードの月次請求ワークベンチとKPI" width="1600" height="1000" loading="lazy">
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="ops-title">
+      <div class="section-head">
+        <p class="eyebrow">Operations</p>
+        <h2 id="ops-title">監査・バックアップ・在庫まで、運用の道具を標準装備。</h2>
+      </div>
+      <div class="grid" role="list">
+        <div class="cell" role="listitem"><h4>監査ログ</h4><p>主要操作をハッシュチェーン署名付きで記録。整合性検証とS3 Object Lock（WORM）保全ジョブ。</p></div>
+        <div class="cell" role="listitem"><h4>バックアップ/復旧</h4><p>暗号化JSON書き出し、世代管理、復旧前差分プレビュー、閉店時予定とOSスケジューラ連携。</p></div>
+        <div class="cell" role="listitem"><h4>在庫・発注</h4><p>ロット/期限単位の在庫、発注ワークベンチ、入庫登録、分譲、デッドストック検知。</p></div>
+        <div class="cell" role="listitem"><h4>帳票一式</h4><p>調剤録・薬袋・薬情（薬剤師承認制テンプレ）・手帳シール・水剤/軟膏ラベル・レジロール。</p></div>
+        <div class="cell" role="listitem"><h4>権限とスタッフ</h4><p>管理者/薬剤師/事務のロール制御、パスキー、退職・端末移行の復旧手順。</p></div>
+        <div class="cell" role="listitem"><h4>日次締めとKPI</h4><p>完了率・処理時間・返戻・在庫不足・フォロー候補を横断表示。月次レビューとCSV/BI出力。</p></div>
+        <div class="cell" role="listitem"><h4>マスタ更新</h4><p>支払基金CSV/ZIP取込、差分CSVとロールバックJSONを自動生成。薬品重複の検出と統合。</p></div>
+        <div class="cell" role="listitem"><h4>練習用デモ一式</h4><p>架空のデモ患者・在庫・前回薬歴で全工程を練習。請求には混入せず、ワンクリックで片付け。</p></div>
+      </div>
+    </section>
+
+    <section id="safety" aria-labelledby="safety-title">
+      <div class="honesty">
+        <p class="label">ご利用前に必ず</p>
+        <h2 id="safety-title">正直に書きます — これは認証されたレセコンではありません。</h2>
+        <p>
+          pharma-ossは認証された医療機器・レセプトコンピュータではなく、無保証のオープンソースソフトウェアです。
+          実際の患者対応・保険請求に使う場合は、算定ロジック・医薬品マスタ・生成帳票を最新の公式資料
+          （厚生労働省告示・通知、支払基金仕様）と突合し、利用者自身の責任で検証してください。
+        </p>
+        <ul>
+          <li>実装済み範囲と未検証項目はアプリ内「設定 &gt; レセプト点検」と <a href="https://github.com/pharma-oss/pharma-oss/blob/main/operational_issues.md">operational_issues.md</a> にすべて公開しています。</li>
+          <li>同梱の医薬品マスタ・添付文書由来データの出所と鮮度の注意は <a href="https://github.com/pharma-oss/pharma-oss/blob/main/NOTICE">NOTICE</a> を参照してください。</li>
+          <li>AI補助（SOAP下書き・リスク候補）は候補提示であり、臨床・請求の最終判断は薬剤師が行います。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="start" aria-labelledby="start-title">
+      <div class="section-head">
+        <p class="eyebrow">Getting started</p>
+        <h2 id="start-title">3分で、デモ患者を1人さばけます。</h2>
+      </div>
+      <div class="start-grid">
+        <pre aria-label="セットアップコマンド"><code>git clone https://github.com/pharma-oss/pharma-oss.git
+cd pharma-oss
+npm install
+npm run dev
+<span class="c"># → http://localhost:3000</span></code></pre>
+        <ol class="steps">
+          <li>初回起動で<strong>管理者パスワード</strong>を設定します。</li>
+          <li>右上の「<strong>3分デモ</strong>」→ 最後のステップで「<strong>デモ患者で体験を始める</strong>」。</li>
+          <li>副作用歴アラート・前回薬歴・在庫ロット付きの架空患者で、受付→ピッキング（GS1照合・不足記録）→薬歴→帳票まで練習できます。</li>
+          <li>終わったらダッシュボードの「<strong>デモデータを片づける</strong>」で一括削除。デモは請求（UKE）に混入しません。</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="cta-band">
+  <div class="wrap">
+    <h2>薬局のソフトは、薬局のものに。</h2>
+    <p>
+      コードも、課題リストも、検証手順も、すべて公開しています。
+      薬剤師の目でのレビュー、現場でのフィードバック、Pull Requestを歓迎します。
+    </p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="https://github.com/pharma-oss/pharma-oss">GitHubで見る</a>
+      <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアルを読む</a>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <footer>
+    <div class="foot-row">
+      <span>© 2026 pharma-oss Project Contributors — <a href="https://github.com/pharma-oss/pharma-oss/blob/main/LICENSE">Apache-2.0</a></span>
+      <span><a href="https://github.com/pharma-oss/pharma-oss/blob/main/SECURITY.md">脆弱性の報告</a> · <a href="https://github.com/pharma-oss/pharma-oss">GitHub</a></span>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>

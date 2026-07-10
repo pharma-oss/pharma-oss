@@ -1,0 +1,80 @@
+pharma-oss (Pharmacy OS)
+Copyright 2026 pharma-oss Project Contributors
+
+This product includes software developed as part of the pharma-oss project
+and is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This NOTICE file documents third-party reference data bundled with the
+source code under src/lib/data/. This data is provided for pharmacy
+operational use and is derived from public official sources published by
+Japanese government-affiliated bodies. It is not itself licensed under
+Apache-2.0; it remains subject to the terms of use published by its
+original source. Redistributing or modifying this repository does not
+change those upstream terms.
+
+--------------------------------------------------------------------------
+src/lib/data/drugs.json, src/lib/data/general_drugs.json
+--------------------------------------------------------------------------
+Source: Examination and Payment Organization for Social Insurance /
+支払基金 (Social Insurance Medical Fee Payment Fund, 診療報酬支払基金),
+official 医薬品マスター (drug master) files published at ssk.or.jp.
+
+Fields such as drug code, name, YJ code, price (薬価), and generic-name
+classification are transcribed from this official master. Reference
+document URLs embedded per record (documentUrl) point back to PMDA
+(Pharmaceuticals and Medical Devices Agency, 医薬品医療機器総合機構),
+pmda.go.jp.
+
+This data changes on official revision schedules (通常年1回以上の薬価改定等).
+It may be stale relative to the current official master at any given time.
+Operators MUST re-verify against the current official source before using
+it for real billing (レセプト) or dispensing decisions. The in-app
+"設定 > マスタ更新" workflow re-imports the current official CSV/ZIP,
+records a diff, and keeps a rollback file — use it rather than trusting
+the bundled snapshot for production data.
+
+--------------------------------------------------------------------------
+src/lib/data/drug_infos.json
+--------------------------------------------------------------------------
+Source: Pharmaceuticals and Medical Devices Agency (PMDA, 医薬品医療機器
+総合機構), official package inserts (添付文書) published at pmda.go.jp.
+
+Every record's contraindications / interaction / usage-warning entries
+carry a sourceUrl pointing to the specific PMDA package-insert page
+(https://www.pmda.go.jp/PmdaSearch/iyakuDetail/...) the entry was
+extracted from, and a fetchedAt timestamp recording when it was retrieved.
+This dataset does NOT include and has never included content from
+"くすりのしおり" (Kusuri-no-Shiori, published by the RAD-AR Council of
+Japan / 一般社団法人くすりの適正使用協議会) or any other third-party
+commercial reference. Only PMDA official package-insert text is used.
+
+This is a point-in-time extraction and is provided for engineering/
+operational reference only. It is NOT a substitute for consulting the
+current official package insert. PMDA revises package inserts (改訂)
+without notice to downstream consumers of this repository; the
+contentSha256 field on each entry exists so operators can detect when
+a re-fetch differs from what is bundled. Clinical and billing decisions
+must be verified against the current official PMDA document, not this
+snapshot. See docs for the official_drug_interaction_label refresh
+tooling (`npm run drug-label:fetch`, `npm run drug-label:verify`).
+
+--------------------------------------------------------------------------
+src/lib/data/receipt_remarks.ts
+--------------------------------------------------------------------------
+A short curated list of commonly used レセプト摘要欄記載コード (claim-remark
+codes) used to populate the remark-selection UI. These codes are part of
+the public 電子レセプト (UKE) record specification maintained by 支払基金,
+but this file is a small hand-picked subset for UI convenience, not a
+verbatim or complete transcription of the official code master. Verify
+the current official code list before relying on any specific code here.
+
+--------------------------------------------------------------------------
+General notice
+--------------------------------------------------------------------------
+No warranty is made as to the accuracy, completeness, or currency of any
+bundled data. This software is not a certified medical device or an
+officially certified receipt-computer (レセプトコンピュータ) system — see
+the disclaimer in README.md. Anyone deploying this software for real
+patient care or real insurance billing is responsible for independently
+verifying all master data, drug information, and claim logic against the
+current official sources before use.
