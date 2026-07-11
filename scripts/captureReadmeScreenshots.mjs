@@ -97,12 +97,12 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    // 業務別30秒デモの自動表示は表示タイミングが非決定的なため、
+    // ログイン前デモ(PreLoginTour)と業務別30秒デモの自動表示はタイミングが非決定的なため、
     // 「閲覧済み」として扱わせて自動オープン自体を無効化する(手動オープンは可能なまま)
     await page.evaluateOnNewDocument(() => {
       const originalGetItem = Storage.prototype.getItem;
       Storage.prototype.getItem = function patchedGetItem(key) {
-        if (String(key).startsWith('yakureki:workflow-tutorial:')) {
+        if (String(key).startsWith('yakureki:workflow-tutorial:') || String(key).startsWith('yakureki:pre-login-tour')) {
           return '2026-01-01T00:00:00.000Z';
         }
         return originalGetItem.call(this, key);

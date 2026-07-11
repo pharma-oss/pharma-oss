@@ -189,6 +189,18 @@ async function run() {
       userDataDir
     });
     page = await browser.newPage();
+    // ログイン前デモ(PreLoginTour)と業務別30秒デモは自動表示のタイミングが非決定的で、
+    // 初期管理者フォームや検証対象パネルを覆うため、E2Eでは既読として扱って無効化する。
+    // 表示内容そのものは PreLoginTour.test.ts / WorkflowMiniTutorial の単体テストが担保する。
+    await page.evaluateOnNewDocument(() => {
+      const originalGetItem = Storage.prototype.getItem;
+      Storage.prototype.getItem = function patchedGetItem(key) {
+        if (String(key).startsWith('yakureki:pre-login-tour') || String(key).startsWith('yakureki:workflow-tutorial')) {
+          return '2026-01-01T00:00:00.000Z';
+        }
+        return originalGetItem.call(this, key);
+      };
+    });
     await page.setViewport({ width: 1440, height: 1800, deviceScaleFactor: 1 });
     page.on('pageerror', (error) => logs.push(`PAGEERROR ${error.message}`));
     page.on('console', (message) => {

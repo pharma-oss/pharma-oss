@@ -23,6 +23,38 @@ async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// PWAインストール案内バナーはページ上部を覆い、座標ベースの page.click() が
+// 返戻導線ボタンに当たらなくなる。クリック前に閉じてクリック対象を露出させる。
+async function dismissInstallBanner(page) {
+  await page.evaluate(() => document.querySelector('.pwa-dismiss-button')?.click()).catch(() => {});
+  await wait(200);
+}
+
+// このE2Eの目的は返戻導線のルーティング検証。固定ヘッダー等が座標クリックを
+// 妨げる環境差があるため、要素を可視化してからDOMクリックで発火させる。
+async function jsClick(page, selector) {
+  const clicked = await page.evaluate((sel) => {
+    const element = document.querySelector(sel);
+    if (!element) return false;
+    element.scrollIntoView({ block: 'center' });
+    element.click();
+    return true;
+  }, selector);
+  assertOk(clicked, `jsClick target not found: ${selector}`);
+}
+
+// SPA遷移がNext.jsのオンデマンドコンパイルを跨ぐとフルナビゲーションになり、
+// waitForFunctionの実行コンテキストが破棄されて条件成立を検知できないことがある。
+// puppeteer側で保持されるpage.url()をポーリングして待つ方が確実。
+async function waitForUrl(page, predicate, timeoutMs = 20000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (predicate(page.url())) return;
+    await wait(250);
+  }
+  assertOk(false, `URL condition not met within ${timeoutMs}ms: ${page.url()}`);
+}
+
 async function assertSelectors(page, selectors, label) {
   const missing = [];
   for (const selector of selectors) {
@@ -68,6 +100,7 @@ async function writeFailureArtifacts({ page, logs, error }) {
   await mkdir(artifactDir, { recursive: true });
   await writeFile(join(artifactDir, 'browser-logs.json'), JSON.stringify({
     baseUrl,
+    pageUrl: page && !page.isClosed() ? page.url() : null,
     error: errorSummary(error),
     logs
   }, null, 2), 'utf8');
@@ -88,22 +121,24 @@ async function writeFailureArtifacts({ page, logs, error }) {
 }
 
 async function verifyReturnCorrectionRoutes(page, visitId) {
-  await page.click('[data-testid="return-correction-action-claim-adjust-panel"]');
+  await dismissInstallBanner(page);
+  await jsClick(page, '[data-testid="return-correction-action-claim-adjust-panel"]');
   await wait(500);
   assertOk(
     page.url().includes(`/print/${encodeURIComponent(visitId)}`),
     `claim-adjust-panel action should stay on print page, got ${page.url()}`
   );
 
-  await page.click('[data-testid="return-correction-action-patient-insurance-editor"]');
-  await page.waitForFunction(() => window.location.pathname === '/emr' && window.location.search.includes('openInsurance=1'), { timeout: 10000 });
+  await jsClick(page, '[data-testid="return-correction-action-patient-insurance-editor"]');
+  await waitForUrl(page, (url) => url.includes('/emr') && url.includes('openInsurance=1'));
   assertOk(page.url().includes(`visitId=${encodeURIComponent(visitId)}`), `insurance action URL lost visitId: ${page.url()}`);
   assertOk(page.url().includes('returnCorrection=insurance-master'), `insurance action URL lost returnCorrection: ${page.url()}`);
 
   await page.goto(`${baseUrl}/print/${encodeURIComponent(visitId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await wait(2500);
-  await page.click('[data-testid="return-correction-action-prescription-intervention-record"]');
-  await page.waitForFunction(() => window.location.pathname === '/emr' && window.location.search.includes('openIntervention=1'), { timeout: 10000 });
+  await dismissInstallBanner(page);
+  await jsClick(page, '[data-testid="return-correction-action-prescription-intervention-record"]');
+  await waitForUrl(page, (url) => url.includes('/emr') && url.includes('openIntervention=1'));
   assertOk(page.url().includes(`visitId=${encodeURIComponent(visitId)}`), `prescription action URL lost visitId: ${page.url()}`);
   assertOk(page.url().includes('returnCorrection=prescription-items'), `prescription action URL lost returnCorrection: ${page.url()}`);
   assertOk(page.url().includes('reason='), `prescription action URL lost reason: ${page.url()}`);
@@ -123,6 +158,18 @@ async function run() {
       userDataDir
     });
     page = await browser.newPage();
+    // ログイン前デモ(PreLoginTour)と業務別30秒デモは自動表示のタイミングが非決定的で、
+    // 初期管理者フォームや検証対象パネルを覆うため、E2Eでは既読として扱って無効化する。
+    // 表示内容そのものは PreLoginTour.test.ts / WorkflowMiniTutorial の単体テストが担保する。
+    await page.evaluateOnNewDocument(() => {
+      const originalGetItem = Storage.prototype.getItem;
+      Storage.prototype.getItem = function patchedGetItem(key) {
+        if (String(key).startsWith('yakureki:pre-login-tour') || String(key).startsWith('yakureki:workflow-tutorial')) {
+          return '2026-01-01T00:00:00.000Z';
+        }
+        return originalGetItem.call(this, key);
+      };
+    });
     page.on('pageerror', (error) => logs.push(`PAGEERROR ${error.message}`));
     page.on('console', (message) => {
       const text = message.text();
@@ -131,10 +178,24 @@ async function run() {
       }
     });
 
+    // dev/CIでは/emrの初回オンデマンドコンパイルが遅く、返戻導線クリック後の
+    // SPA遷移待ち(10秒)を超えることがあるため、先に一度読み込んで温めておく
+    await page.goto(`${baseUrl}/emr`, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.goto(`${baseUrl}/settings`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await wait(2000);
     const seedResult = await seedReturnCorrectionData(page);
     const visitId = seedResult.visitId;
+
+    // seedは認証情報付きスタッフを投入するためログインゲートが有効になる。
+    // このE2Eは返戻導線の検証が目的なので、seedした管理者のセッションを直接確立する
+    // (実ログインフォームの検証は onboarding E2E が担う)。
+    await page.evaluate(() => {
+      window.sessionStorage.setItem('pharmacy_os_current_user', JSON.stringify({
+        userId: 'e2e_return_correction_admin',
+        name: 'E2E返戻管理者',
+        role: 'admin'
+      }));
+    });
 
     await page.goto(`${baseUrl}/print/${encodeURIComponent(visitId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await wait(2500);
