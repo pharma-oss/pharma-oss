@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# 閉店時バックアップ予定や期日計算のテストフィクスチャは、日本の店舗ローカル時刻
+# (JST)を前提にしている。UTCランナーのままだと時刻判定テストが誤って失敗する。
+env:
+  TZ: 'Asia/Tokyo'
+
 jobs:
   onboarding-e2e:
     name: Onboarding browser E2E

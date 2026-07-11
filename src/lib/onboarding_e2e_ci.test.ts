@@ -15,6 +15,8 @@ test('onboarding E2E GitHub Actions workflow runs the full quality gate', () => 
   assert.match(workflow, /name: Onboarding E2E/);
   assert.match(workflow, /actions\/setup-node@v4/);
   assert.match(workflow, /node-version: '22'/);
+  // 閉店予定・期日計算のテストは店舗ローカル(JST)前提。UTCランナーでの誤検知を防ぐ
+  assert.match(workflow, /TZ: 'Asia\/Tokyo'/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /npm run lint/);
   assert.match(workflow, /npx tsc --noEmit/);
