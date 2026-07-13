@@ -177,7 +177,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     label: '完了する',
     title: '監査・印刷・請求まで迷わず完了',
-    description: 'ピッキング、薬剤師確認、印刷、請求確認へ順番につながります。未完了があれば止まるので、抜けたまま進みません。「デモ患者で体験を始める」を押すと、練習用のデモ患者・受付・在庫(棚番地/JAN付き)に加えて、前回来局の薬歴と副作用歴アラートも投入され、履歴参照や薬剤師確認まで実際の画面で試せます。',
+    description: 'ピッキング、薬剤師確認、印刷、請求確認へ順番につながります。未完了があれば止まるので、抜けたまま進みません。「デモ患者で体験を始める」を押すと、練習用のデモ患者・受付・在庫(棚番地/JAN付き)に加えて、過去3回分の薬歴と副作用歴アラートも投入され、プロブレムが回を追って書き継がれる様子や薬剤師確認まで実際の画面で試せます。',
     points: [
       '必要な確認が終わるまで完了を防止',
       '操作記録を残してあとから追跡可能',
@@ -378,7 +378,7 @@ export default function FirstRunTutorial({ userId, autoOpen, onStartReception, o
                   className="tutorial-demo-start"
                   onClick={handleStartDemo}
                   data-testid="tutorial-start-demo"
-                  title="デモ患者・受付・在庫(棚番地/JAN付き)に前回薬歴・副作用歴アラートも投入し、履歴参照や不足記録まで練習できます"
+                  title="デモ患者・受付・在庫(棚番地/JAN付き)に過去3回分の薬歴・副作用歴アラートも投入し、履歴参照や不足記録まで練習できます"
                 >
                   <PackageCheck size={18} /> デモ患者で体験を始める
                 </button>

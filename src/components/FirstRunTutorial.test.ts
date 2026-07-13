@@ -66,5 +66,5 @@ test('FirstRunTutorial offers demo-data cleanup through a callback without touch
   assert.doesNotMatch(source, /cleanupTutorialDemoData/);
   // デモは請求(UKE)に載らないことを画面上でも明示する
   assert.match(source, /請求\(UKE\)・外部機器連携に載らず/);
-  assert.match(source, /前回来局の薬歴と副作用歴アラートも投入され/);
+  assert.match(source, /過去3回分の薬歴と副作用歴アラートも投入され/);
 });

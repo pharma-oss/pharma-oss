@@ -10,6 +10,12 @@ export const DEMO_INSTITUTION_NAME = 'デモ内科クリニック';
 export const DEMO_DRUG_CODE_PREFIX = 'DEMO-';
 
 const DEMO_ALERT_ID = 'alert_demo_tutorial';
+// 過去3回分の来局(84日前→56日前→28日前)を投入し、「経過」タブと薬剤履歴で
+// 血圧コントロールというプロブレムが回を追って継続管理される様子を見せる。
+const DEMO_ROUND1_VISIT_ID = 'v_demo_tutorial_r1';
+const DEMO_ROUND1_SOAP_ID = 'soap_demo_tutorial_r1';
+const DEMO_ROUND2_VISIT_ID = 'v_demo_tutorial_r2';
+const DEMO_ROUND2_SOAP_ID = 'soap_demo_tutorial_r2';
 const DEMO_PREVIOUS_VISIT_ID = 'v_demo_tutorial_prev';
 const DEMO_PREVIOUS_SOAP_ID = 'soap_demo_tutorial_prev';
 
@@ -119,6 +125,89 @@ const daysAgo = (days: number): Date => {
   return date;
 };
 
+interface DemoPastRoundItemSpec {
+  drug: DemoDrugSpec;
+  amount: number;
+  usage: string;
+  days: number;
+  dosageCategory: 'internal' | 'external' | 'internal_drop';
+  rpComment?: string;
+}
+
+interface DemoPastRoundProblemSpec {
+  title: string;
+  entries: { type: 'S' | 'O' | 'A' | 'P'; text: string }[];
+}
+
+interface DemoPastRoundSpec {
+  visitId: string;
+  soapId: string;
+  daysAgoCount: number;
+  items: DemoPastRoundItemSpec[];
+  problems: DemoPastRoundProblemSpec[];
+  structuredAssessment: {
+    adherence: 'unknown' | 'good' | 'partial' | 'poor';
+    leftoverMedicine: 'unknown' | 'none' | 'has';
+    adverseEvent: 'unknown' | 'none' | 'has';
+    genericChangePreference: 'unknown' | 'accepted' | 'declined' | 'consult';
+    medicationNotebook: 'unknown' | 'issued' | 'not_issued';
+  };
+}
+
+// 過去の完了来局(受付・処方明細・薬歴)を1回分投入する共通処理。
+// 3回分の来局を同じ形で並べ、日付だけ変えて「経過」タブの変遷を見せる。
+async function seedDemoPastRound(db: any, spec: DemoPastRoundSpec): Promise<void> {
+  const visitDate = daysAgo(spec.daysAgoCount);
+  const visitDateValue = toDateInputValue(visitDate);
+
+  await db.visits.upsert({
+    visitId: spec.visitId,
+    patientId: DEMO_PATIENT_ID,
+    institutionId: DEMO_INSTITUTION_NAME,
+    institutionCode: '',
+    institutionName: DEMO_INSTITUTION_NAME,
+    departmentName: '内科',
+    doctorId: 'デモ 一郎',
+    doctorName: 'デモ 一郎',
+    prescriptionDate: visitDateValue,
+    dispensingDate: visitDateValue,
+    issueDate: visitDate.toISOString(),
+    status: 'completed'
+  });
+
+  await Promise.all(spec.items.map((item, index) => db.prescription_items.upsert({
+    itemId: `item_${spec.visitId}_${index + 1}`,
+    visitId: spec.visitId,
+    rpNumber: index + 1,
+    drugId: item.drug.code,
+    dispensedDrug: '',
+    dispensedDrugCode: '',
+    amount: item.amount,
+    usage: item.usage,
+    days: item.days,
+    rpComment: item.rpComment ?? '',
+    dosageCategory: item.dosageCategory,
+    dosageCategorySource: 'auto',
+    isIppoka: false,
+    isCrushed: false,
+    tokkanType: 'none',
+    isPicked: true
+  })));
+
+  await db.soap_records.upsert({
+    soapId: spec.soapId,
+    visitId: spec.visitId,
+    authorId: 'demo_tutorial',
+    updatedAt: visitDate.toISOString(),
+    problems: spec.problems.map((problem, index) => ({
+      id: `${spec.soapId}_p${index + 1}`,
+      title: problem.title,
+      entries: problem.entries
+    })),
+    structuredAssessment: spec.structuredAssessment
+  });
+}
+
 export interface SeedTutorialDemoDataResult {
   visitId: string;
   alreadySeeded: boolean;
@@ -196,53 +285,111 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
     status: 'active'
   });
 
-  // 前回来局(28日前・完了済み): 処方履歴タイムライン・前回Do・前回薬歴参照の練習用。
+  // 過去3回分の来局(84日前→56日前→28日前・いずれも完了済み): 処方履歴タイムライン・
+  // 前回Do・薬剤履歴・「経過」タブの練習用。血圧コントロールのプロブレムを3回とも
+  // 同じタイトルで書き継ぎ、過去の薬歴から継続管理している様子が見えるようにする。
   // 過去日付の完了受付なので、本日の受付件数や日次締めには影響しない。
-  const previousDate = daysAgo(28);
-  const previousDateValue = toDateInputValue(previousDate);
-  await db.visits.upsert({
-    visitId: DEMO_PREVIOUS_VISIT_ID,
-    patientId: DEMO_PATIENT_ID,
-    institutionId: DEMO_INSTITUTION_NAME,
-    institutionCode: '',
-    institutionName: DEMO_INSTITUTION_NAME,
-    departmentName: '内科',
-    doctorId: 'デモ 一郎',
-    doctorName: 'デモ 一郎',
-    prescriptionDate: previousDateValue,
-    dispensingDate: previousDateValue,
-    issueDate: previousDate.toISOString(),
-    status: 'completed'
-  });
-  await db.prescription_items.upsert({
-    itemId: `item_${DEMO_PREVIOUS_VISIT_ID}_1`,
-    visitId: DEMO_PREVIOUS_VISIT_ID,
-    rpNumber: 1,
-    drugId: DEMO_DRUGS[0].code,
-    dispensedDrug: DEMO_DRUGS[0].name,
-    dispensedDrugCode: '',
-    amount: 1,
-    usage: '1日1回朝食後',
-    days: 28,
-    rpComment: '',
-    dosageCategory: 'internal',
-    dosageCategorySource: 'auto',
-    isIppoka: false,
-    isCrushed: false,
-    tokkanType: 'none',
-    isPicked: true
-  });
-  await db.soap_records.upsert({
-    soapId: DEMO_PREVIOUS_SOAP_ID,
-    visitId: DEMO_PREVIOUS_VISIT_ID,
-    authorId: 'demo_tutorial',
-    updatedAt: previousDate.toISOString(),
+  await seedDemoPastRound(db, {
+    visitId: DEMO_ROUND1_VISIT_ID,
+    soapId: DEMO_ROUND1_SOAP_ID,
+    daysAgoCount: 84,
+    items: [
+      {
+        drug: DEMO_DRUGS[0],
+        amount: 1,
+        usage: '1日1回朝食後',
+        days: 28,
+        dosageCategory: 'internal'
+      }
+    ],
     problems: [
       {
-        id: `${DEMO_PREVIOUS_SOAP_ID}_p1`,
         title: '血圧コントロール（デモ）',
         entries: [
-          { type: 'S', text: 'めまいはない。飲み忘れは週1回ほど。' },
+          { type: 'S', text: '健診で血圧を指摘され受診。自覚症状は特になし。' },
+          { type: 'O', text: '家庭血圧 148/92。飲み忘れが週2〜3回ある。残薬9錠。' },
+          { type: 'A', text: '血圧やや高値。アドヒアランス不良が主因と考えられる。' },
+          { type: 'P', text: '服薬カレンダーの使用を提案。次回、血圧と残薬を確認。' }
+        ]
+      }
+    ],
+    structuredAssessment: {
+      adherence: 'poor',
+      leftoverMedicine: 'has',
+      adverseEvent: 'none',
+      genericChangePreference: 'unknown',
+      medicationNotebook: 'issued'
+    }
+  });
+
+  await seedDemoPastRound(db, {
+    visitId: DEMO_ROUND2_VISIT_ID,
+    soapId: DEMO_ROUND2_SOAP_ID,
+    daysAgoCount: 56,
+    items: [
+      {
+        drug: DEMO_DRUGS[0],
+        amount: 1,
+        usage: '1日1回朝食後',
+        days: 28,
+        dosageCategory: 'internal'
+      },
+      {
+        drug: DEMO_DRUGS[1],
+        amount: 1,
+        usage: '1日1回 腰部に貼付',
+        days: 14,
+        dosageCategory: 'external',
+        rpComment: '腰痛時の頓用貼付を追加。経口NSAIDsは胃部不快感の既往があるため外用剤を選択。'
+      }
+    ],
+    problems: [
+      {
+        title: '血圧コントロール（デモ）',
+        entries: [
+          { type: 'S', text: '服薬カレンダーを使い始めてから飲み忘れが減った。' },
+          { type: 'O', text: '家庭血圧 138/86。残薬2錠まで減少。' },
+          { type: 'A', text: 'アドヒアランス改善し血圧も改善傾向。' },
+          { type: 'P', text: '現行用量を継続。後発品への変更を提案し了承を得た。' }
+        ]
+      },
+      {
+        title: '腰痛（デモ）',
+        entries: [
+          { type: 'S', text: '数日前から腰痛があり、湿布を希望。' },
+          { type: 'O', text: '腰部に圧痛あり、可動域制限なし。' },
+          { type: 'A', text: '非特異的腰痛と考えられる。' },
+          { type: 'P', text: 'ロキソプロフェンテープを追加。症状が続く場合は受診を検討。' }
+        ]
+      }
+    ],
+    structuredAssessment: {
+      adherence: 'good',
+      leftoverMedicine: 'has',
+      adverseEvent: 'none',
+      genericChangePreference: 'accepted',
+      medicationNotebook: 'issued'
+    }
+  });
+
+  await seedDemoPastRound(db, {
+    visitId: DEMO_PREVIOUS_VISIT_ID,
+    soapId: DEMO_PREVIOUS_SOAP_ID,
+    daysAgoCount: 28,
+    items: [
+      {
+        drug: DEMO_DRUGS[0],
+        amount: 1,
+        usage: '1日1回朝食後',
+        days: 28,
+        dosageCategory: 'internal'
+      }
+    ],
+    problems: [
+      {
+        title: '血圧コントロール（デモ）',
+        entries: [
+          { type: 'S', text: 'めまいはない。飲み忘れは週1回ほど。腰痛は治まった。' },
           { type: 'O', text: '家庭血圧 132/84。残薬2錠。' },
           { type: 'A', text: 'アドヒアランス概ね良好。継続で問題なし。' },
           { type: 'P', text: '飲み忘れ時は気づいた時点で1回分。次回残薬確認。' }
@@ -338,7 +485,7 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
   await logAuditAction(
     db,
     'stock_update',
-    `チュートリアルデモデータ投入: デモ患者10名(「デモ患者 みどり」の受付・処方3剤・在庫ロット(JAN/棚番地付き)・前回薬歴・副作用歴アラートに加え、患者検索練習用の軽量デモ患者9名)を登録しました。`,
+    `チュートリアルデモデータ投入: デモ患者10名(「デモ患者 みどり」の受付・処方3剤・在庫ロット(JAN/棚番地付き)・過去3回分の薬歴・副作用歴アラートに加え、患者検索練習用の軽量デモ患者9名)を登録しました。`,
     DEMO_PATIENT_ID,
     'デモ患者 みどり'
   );

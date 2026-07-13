@@ -129,17 +129,35 @@ test('seedTutorialDemoData creates the full practice set including history and a
   assert.strictEqual(alerts[0].status, 'active');
   assert.match(alerts[0].content, /ロキソプロフェン/);
 
-  // 前回来局: 完了済み・過去日付で、当日の受付キューや日次締めに影響しない
+  // 過去3回分の来局: いずれも完了済み・過去日付で、当日の受付キューや日次締めに影響しない
   const visits = Array.from(db.visits.rows.values());
-  const previousVisit = visits.find((visit) => visit.visitId === 'v_demo_tutorial_prev');
-  assert.ok(previousVisit, 'previous demo visit should be seeded');
-  assert.strictEqual(previousVisit.status, 'completed');
-  assert.ok(new Date(previousVisit.issueDate).getTime() < Date.now() - 20 * 86400000);
+  const pastVisitIds = ['v_demo_tutorial_r1', 'v_demo_tutorial_r2', 'v_demo_tutorial_prev'];
+  const pastVisits = pastVisitIds.map((id) => visits.find((visit) => visit.visitId === id));
+  for (const visit of pastVisits) {
+    assert.ok(visit, 'past demo visit should be seeded');
+    assert.strictEqual(visit.status, 'completed');
+    assert.ok(new Date(visit.issueDate).getTime() < Date.now() - 20 * 86400000);
+  }
+  // 3回とも同じ日付ではなく、84日前→56日前→28日前の順で古い順に並ぶ
+  const pastVisitDates = pastVisits.map((visit) => new Date(visit.issueDate).getTime());
+  assert.ok(pastVisitDates[0] < pastVisitDates[1] && pastVisitDates[1] < pastVisitDates[2]);
 
-  const soapRecords = Array.from(db.soap_records.rows.values());
-  assert.strictEqual(soapRecords.length, 1);
-  assert.strictEqual(soapRecords[0].visitId, 'v_demo_tutorial_prev');
-  assert.ok(soapRecords[0].problems.length > 0);
+  // プロブレム「血圧コントロール（デモ）」が3回とも同じタイトルで書き継がれ、
+  // 昔の薬歴から継続して管理している様子を「経過」タブで確認できる
+  const soapRecords = pastVisitIds.map((id) =>
+    Array.from(db.soap_records.rows.values()).find((soap) => soap.visitId === id)
+  );
+  assert.strictEqual(soapRecords.length, 3);
+  for (const soap of soapRecords) {
+    assert.ok(soap, 'past soap record should be seeded');
+    assert.ok(soap.problems.length > 0);
+    assert.ok(
+      soap.problems.some((problem: any) => problem.title === '血圧コントロール（デモ）'),
+      '血圧コントロール（デモ）が全回で継続していること'
+    );
+  }
+  // 2回目は腰痛という別プロブレムが追加される(現在の受付のロキソプロフェンテープに繋がる)
+  assert.ok(soapRecords[1].problems.some((problem: any) => problem.title === '腰痛（デモ）'));
 
   // 今回受付: 処理中1件、処方3剤
   const processingVisits = visits.filter((visit) => visit.status === 'processing');
@@ -175,9 +193,9 @@ test('cleanupTutorialDemoData removes demo data and keeps real records', async (
   const result = await cleanupTutorialDemoData(db);
 
   assert.strictEqual(result.removedPatients, 10);
-  assert.strictEqual(result.removedVisits, 2);
-  assert.strictEqual(result.removedPrescriptionItems, 4);
-  assert.strictEqual(result.removedSoapRecords, 1);
+  assert.strictEqual(result.removedVisits, 4);
+  assert.strictEqual(result.removedPrescriptionItems, 7);
+  assert.strictEqual(result.removedSoapRecords, 3);
   assert.strictEqual(result.removedAlerts, 1);
   assert.strictEqual(result.removedDrugs, 3);
   assert.strictEqual(result.removedStocks, 3);
