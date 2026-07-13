@@ -2619,12 +2619,6 @@ useEffect(() => {
           flex: 1 1 340px;
         }
         .patient-summary h2 { margin-bottom: 0.2rem; }
-        .patient-summary .row {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          flex-wrap: wrap;
-        }
         .id-tag { color: var(--text-ghost); font-family: var(--font-outfit), var(--font-noto-sans-jp), sans-serif; font-size: 0.9rem; }
 
         .patient-alerts {
@@ -3765,15 +3759,21 @@ const PatientBanner = React.memo(function PatientBanner({
     <div id="emr-patient-alerts" className="patient-banner glass">
       <div className="avatar large">{patientInitials}</div>
       <div className="patient-summary">
-        <div className="row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <h2>{patientTitle}</h2>
           <span className="id-tag">ID: {patientData?.patientId || '-'}</span>
           <span className="badge-outline">処理中</span>
+        </div>
+        <p className="text-muted">{calcBirthDate}</p>
+        <div
+          className="patient-actions"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}
+        >
           <button
-            className="btn-edit-insurance flex align-center gap-1" 
-            onClick={openModal} 
+            className="btn-edit-insurance flex align-center gap-1"
+            onClick={openModal}
             title="患者・保険・公費情報を編集"
-            style={{ 
+            style={{
               background: 'rgba(37, 99, 235, 0.08)',
               color: 'var(--primary)',
               border: '1px solid rgba(37, 99, 235, 0.15)',
@@ -3781,18 +3781,17 @@ const PatientBanner = React.memo(function PatientBanner({
               borderRadius: '6px',
               fontSize: '0.75rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              marginLeft: '4px'
+              cursor: 'pointer'
             }}
           >
             <CreditCard size={12} />
             <span>患者・保険・公費編集</span>
           </button>
-          <button 
-            className="btn-picking flex align-center gap-1" 
-            onClick={onOpenPicking} 
-            title="ピッキング支援モードを開始" 
-            style={{ 
+          <button
+            className="btn-picking flex align-center gap-1"
+            onClick={onOpenPicking}
+            title="ピッキング支援モードを開始"
+            style={{
               background: 'rgba(16, 185, 129, 0.08)',
               color: 'var(--success, #10b981)',
               border: '1px solid rgba(16, 185, 129, 0.15)',
@@ -3800,15 +3799,13 @@ const PatientBanner = React.memo(function PatientBanner({
               borderRadius: '6px',
               fontSize: '0.75rem',
               fontWeight: 600,
-              cursor: 'pointer',
-              marginLeft: '4px'
+              cursor: 'pointer'
             }}
           >
             <Activity size={12} />
             <span>ピッキング支援</span>
           </button>
         </div>
-        <p className="text-muted">{calcBirthDate}</p>
 
       </div>
       <div className="patient-alerts">
