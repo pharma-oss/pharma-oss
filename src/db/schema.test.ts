@@ -933,7 +933,25 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(AUDIT_LOG_SCHEMA, validLog);
       assert.strictEqual(errors, null);
-      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 17);
+      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 18);
+    });
+
+    test('should validate per-terminal chained audit logs with terminalId', () => {
+      const validLog = {
+        logId: 'log_terminal_chained',
+        timestamp: '2026-07-12T10:35:00Z',
+        userId: 'pharm_1',
+        userName: '薬剤師 一郎',
+        userRole: 'pharmacist',
+        actionType: 'print',
+        details: '薬袋を印刷しました。',
+        terminalId: 'satellite-1',
+        previousHash: '',
+        integrityHash: 'abcdef1234567890'
+      };
+
+      const errors = getErrors(AUDIT_LOG_SCHEMA, validLog);
+      assert.strictEqual(errors, null);
     });
 
     test('should validate patient medication info template audit actions', () => {

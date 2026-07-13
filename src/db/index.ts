@@ -1,11 +1,13 @@
 import { createRxDatabase, addRxPlugin } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { INITIAL_ADMIN_USER, REMOVED_DEMO_STAFF_USER_IDS } from '@/lib/initial_staff';
 import { createDefaultSoapStructuredAssessment } from '@/lib/soap_structured_assessment';
+import { resolveClientSyncRole } from '@/lib/sync/client_role';
 import { PharmacyDatabase, PharmacyDatabaseCollections } from './types';
 import {
   PATIENT_SCHEMA,
@@ -215,6 +217,32 @@ async function seedInitialAdminUser(db: PharmacyDatabase) {
     }
 }
 
+type CollectionDefinitions = Parameters<PharmacyDatabase['addCollections']>[0];
+
+async function createSatelliteDatabase(collectionDefinitions: CollectionDefinitions): Promise<PharmacyDatabase> {
+    // サテライト端末は患者データを一切ディスクへ書かない。RxDBのメモリストレージを使い、
+    // ローカルパスワード生成(localStorage永続化)・参照データJSONシード・初期管理者シードは
+    // 行わない(起動後にハブから同期して埋める。src/lib/sync/replication_client.ts が担当)。
+    // ただしpatients等のスキーマはRxDBのフィールド暗号化(`encrypted`)を宣言しており、
+    // ストレージが暗号化ハンドラを持たないと検証エラーになるため、メモリストレージにも
+    // 暗号化ラッパーは必要。鍵はプロセスメモリ上だけで使う使い捨てのランダム値でよく、
+    // どこにも永続化しない(タブを閉じれば鍵もデータも消える)。
+    const storageWithValidation = wrappedValidateAjvStorage({
+        storage: getRxStorageMemory()
+    });
+    const storageWithEncryption = wrappedKeyEncryptionCryptoJsStorage({
+        storage: storageWithValidation
+    });
+    const db = await createRxDatabase<PharmacyDatabaseCollections>({
+        name: 'pharmacy_os_db_satellite',
+        password: generateRandomPassword(),
+        storage: storageWithEncryption,
+        ignoreDuplicate: process.env.NODE_ENV === 'development'
+    });
+    await db.addCollections(collectionDefinitions);
+    return db;
+}
+
 const create = async () => {
     // Clear legacy auto-wipe requests from older builds. Production builds must never
     // delete patient data without an explicit administrator recovery workflow.
@@ -229,21 +257,7 @@ const create = async () => {
         }
     }
 
-    const storageWithValidation = wrappedValidateAjvStorage({
-        storage: getRxStorageDexie()
-    });
-
-    const storageWithEncryption = wrappedKeyEncryptionCryptoJsStorage({
-        storage: storageWithValidation
-    });
-
-    const password = resolveDbPassword();
-    const openDatabase = (candidatePassword: string) => createRxDatabase<PharmacyDatabaseCollections>({
-        name: 'pharmacy_os_db',
-        password: candidatePassword,
-        storage: storageWithEncryption,
-        ignoreDuplicate: process.env.NODE_ENV === 'development'
-    });
+    const syncRole = await resolveClientSyncRole();
 
     const collectionDefinitions = {
         patients: {
@@ -524,6 +538,26 @@ const create = async () => {
             `RxDBコレクション数 ${activeCollectionCount}件が無償版上限 ${ACTIVE_RXDB_COLLECTION_LIMIT}件を超えています。`
         );
     }
+
+    if (syncRole === 'satellite') {
+        return createSatelliteDatabase(collectionDefinitions);
+    }
+
+    const storageWithValidation = wrappedValidateAjvStorage({
+        storage: getRxStorageDexie()
+    });
+
+    const storageWithEncryption = wrappedKeyEncryptionCryptoJsStorage({
+        storage: storageWithValidation
+    });
+
+    const password = resolveDbPassword();
+    const openDatabase = (candidatePassword: string) => createRxDatabase<PharmacyDatabaseCollections>({
+        name: 'pharmacy_os_db',
+        password: candidatePassword,
+        storage: storageWithEncryption,
+        ignoreDuplicate: process.env.NODE_ENV === 'development'
+    });
 
     // 鍵不一致(RxDBのDB1)はcreateRxDatabaseではなくaddCollections時に検出されるため、
     // オープンとコレクション登録をひとまとめにして鍵を検証する。

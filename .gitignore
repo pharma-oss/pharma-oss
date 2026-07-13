@@ -51,3 +51,6 @@ fetch_shiori.log
 
 # Internal-only docs (kept locally, never published)
 /docs/internal/
+
+# メイン端末(hub)のサテライト同期用ローカルストア(患者データを含む暗号化SQLite)
+/data/

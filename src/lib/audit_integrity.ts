@@ -9,7 +9,26 @@ export interface AuditIntegrityReport {
   latestHash?: string;
   firstSignedAt?: string;
   lastSignedAt?: string;
+  /** 端末別チェーンの内訳。terminalId 未設定の既存ログは 'legacy' として1つのチェーン扱い。 */
+  chains?: AuditChainReport[];
 }
+
+export interface AuditChainReport {
+  /** 'hub-local' | サテライト端末ID | 'legacy'(terminalId未設定の既存ログ) */
+  terminalId: string;
+  total: number;
+  signed: number;
+  invalid: number;
+  /**
+   * previousHash が空のログで始まるチェーン断片の数。サテライトは起動のたびに
+   * メモリDBから新しい断片を始めるため、複数断片は正常。断片内の改ざん・欠落は
+   * invalid として検出される。
+   */
+  segments: number;
+  latestHash?: string;
+}
+
+export const LEGACY_AUDIT_CHAIN_ID = 'legacy';
 
 export interface AuditLogCustodyChecklist {
   label: string;
@@ -90,6 +109,9 @@ function canonicalAuditLogPayload(log: AuditLog, previousHash = '') {
     patientId: log.patientId || '',
     patientName: log.patientName || '',
     details: log.details,
+    // terminalId未設定の既存ログはペイロードを従来と完全に一致させる必要がある
+    // (キーを常に含めると過去の署名がすべて検証不能になる)。
+    ...(log.terminalId ? { terminalId: log.terminalId } : {}),
     previousHash
   };
 }
@@ -138,6 +160,14 @@ export async function buildAuditLogSignature(log: AuditLog, previousHash = ''): 
   };
 }
 
+// 複数端末のログを集約すると、時系列順に並べても各端末のチェーンが交互に現れるため、
+// 「直前の署名ログのハッシュと一致するか」という単一チェーン前提の検証は成立しない。
+// 端末ID(未設定は'legacy')でグループ化し、各チェーンを独立に検証する:
+//   - 各署名ログのintegrityHashを再計算して内容改ざんを検出する
+//   - previousHashは空(断片の開始)か、同一チェーン内かつ時系列で先行する署名ログの
+//     ハッシュに解決しなければならない(途中のログの削除・差し替えを検出する)
+// チェーン末尾の削除はハッシュチェーン単体では検出できない。従来どおり最新ハッシュの
+// 保全台帳への転記(外部アンカー)で担保する。
 export async function verifyAuditLogIntegrity(logs: AuditLog[]): Promise<AuditIntegrityReport> {
   const sortedLogs = sortAuditLogsChronologically(logs);
   let signed = 0;
@@ -147,26 +177,54 @@ export async function verifyAuditLogIntegrity(logs: AuditLog[]): Promise<AuditIn
   let firstSignedAt: string | undefined;
   let lastSignedAt: string | undefined;
 
-  for (let i = 0; i < sortedLogs.length; i++) {
-    const log = sortedLogs[i];
+  const chainLogs = new Map<string, AuditLog[]>();
+  for (const log of sortedLogs) {
     if (!log.integrityHash) {
       unsigned++;
       continue;
     }
-
     signed++;
     firstSignedAt = firstSignedAt || log.timestamp;
     lastSignedAt = log.timestamp;
-
-    if ((log.previousHash || '') !== latestHash) {
-      invalid++;
-    }
-
-    const expectedHash = await hashAuditLog(log, log.previousHash || '');
-    if (expectedHash !== log.integrityHash) {
-      invalid++;
-    }
     latestHash = log.integrityHash;
+
+    const chainId = log.terminalId || LEGACY_AUDIT_CHAIN_ID;
+    const chain = chainLogs.get(chainId);
+    if (chain) {
+      chain.push(log);
+    } else {
+      chainLogs.set(chainId, [log]);
+    }
+  }
+
+  const chains: AuditChainReport[] = [];
+  for (const [terminalId, chain] of chainLogs) {
+    let chainInvalid = 0;
+    let segments = 0;
+    const seenHashes = new Set<string>();
+    for (const log of chain) {
+      const previousHash = log.previousHash || '';
+      if (previousHash === '') {
+        segments++;
+      } else if (!seenHashes.has(previousHash)) {
+        chainInvalid++;
+      }
+
+      const expectedHash = await hashAuditLog(log, previousHash);
+      if (expectedHash !== log.integrityHash) {
+        chainInvalid++;
+      }
+      seenHashes.add(log.integrityHash as string);
+    }
+    invalid += chainInvalid;
+    chains.push({
+      terminalId,
+      total: chain.length,
+      signed: chain.length,
+      invalid: chainInvalid,
+      segments,
+      latestHash: chain[chain.length - 1]?.integrityHash
+    });
   }
 
   return {
@@ -177,7 +235,8 @@ export async function verifyAuditLogIntegrity(logs: AuditLog[]): Promise<AuditIn
     isValid: invalid === 0,
     latestHash: latestHash || undefined,
     firstSignedAt,
-    lastSignedAt
+    lastSignedAt,
+    chains
   };
 }
 

@@ -76,6 +76,7 @@ import {
   type RolePermissionPolicy
 } from '@/lib/audit';
 import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
+import TerminalSyncPanel from '@/components/TerminalSyncPanel';
 import {
   buildAuditLogExportJson,
   buildAuditLogRetentionLedgerCsv,
@@ -254,7 +255,7 @@ import {
   loadDrugInfoReferenceData
 } from '@/lib/drug_info_reference';
 
-type SettingsTab = 'facility' | 'external' | 'master' | 'medicationInfo' | 'backup' | 'officialAudit' | 'audit' | 'staff';
+type SettingsTab = 'facility' | 'external' | 'master' | 'medicationInfo' | 'backup' | 'officialAudit' | 'audit' | 'staff' | 'terminalSync';
 type MedicationInfoSourceType = NonNullable<PatientMedicationInfoTemplate['sourceType']>;
 type MedicationInfoTemplateStatusFilter = 'all' | PatientMedicationInfoTemplateStatus;
 type MedicationInfoTemplateReadinessFilter = 'all' | 'ready' | 'missing';
@@ -768,7 +769,7 @@ export default function SettingsPage() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'facility' || tab === 'external' || tab === 'master' || tab === 'medicationInfo' || tab === 'backup' || tab === 'officialAudit' || tab === 'audit' || tab === 'staff') {
+    if (tab === 'facility' || tab === 'external' || tab === 'master' || tab === 'medicationInfo' || tab === 'backup' || tab === 'officialAudit' || tab === 'audit' || tab === 'staff' || tab === 'terminalSync') {
       setActiveTab(tab);
     }
     if (params.get('onboarding') === '1') {
@@ -4726,6 +4727,16 @@ export default function SettingsPage() {
         >
           <Fingerprint size={15} aria-hidden="true" />
           スタッフ管理（パスキー）
+        </button>
+        <button
+          className={`tab-pill ${activeTab === 'terminalSync' ? 'active' : ''}`}
+          onClick={() => openTab('terminalSync', 'manage_facility_settings')}
+          style={tabButtonStyle(activeTab === 'terminalSync')}
+          disabled={!canManageFacility}
+          title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : undefined}
+        >
+          <Network size={15} aria-hidden="true" />
+          端末同期
         </button>
       </div>
 
@@ -9188,6 +9199,17 @@ export default function SettingsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'terminalSync' && (
+        <div className="settings-section glass">
+          <h2>端末同期（メイン端末集約）</h2>
+          <p className="section-desc">
+            メイン端末(hub)に患者データを集約し、サテライト端末は患者データを保存しません。<br />
+            サテライト端末の登録・失効と、同期競合のレビューを行います。
+          </p>
+          <TerminalSyncPanel />
         </div>
       )}
 

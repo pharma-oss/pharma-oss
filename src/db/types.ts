@@ -570,6 +570,12 @@ export interface AuditLog {
   patientId?: string;
   patientName?: string;
   details: string;
+  /**
+   * ハッシュチェーンは端末ごとに独立している(メイン端末は全端末分のログを集約保持するため、
+   * 単一チェーンでは検証が壊れる)。メイン端末='hub-local'、サテライト=発行された端末ID、
+   * 同期無効(standalone)の既存ログ=未設定(レガシーチェーンとして検証)。
+   */
+  terminalId?: string;
   previousHash?: string;
   integrityHash?: string;
 }

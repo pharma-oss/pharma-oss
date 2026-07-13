@@ -24,6 +24,7 @@
     "test:e2e:onboarding": "node scripts/runOnboardingE2E.mjs",
     "test:e2e:return-correction": "node scripts/runReturnCorrectionE2E.mjs",
     "test:e2e:print-layout": "node scripts/runPrintLayoutRegression.mjs",
+    "test:e2e:sync": "node scripts/runSyncE2E.mjs",
     "print:field-verification": "tsx scripts/runPrintMediaFieldVerification.ts",
     "support:triage": "tsx scripts/runSupportCaseTriage.ts",
     "support:drill": "tsx scripts/runSupportCaseDrill.ts",

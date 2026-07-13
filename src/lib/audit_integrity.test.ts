@@ -91,6 +91,76 @@ test('verifyAuditLogIntegrity reports legacy unsigned rows without breaking sign
   assert.strictEqual(report.isValid, true);
 });
 
+test('verifyAuditLogIntegrity verifies interleaved per-terminal chains independently', async () => {
+  // メイン端末('hub-local')とサテライト('satellite-1')のログが時系列で交互に並ぶ状況。
+  // 単一チェーン前提の検証ではすべて不整合になるが、端末別チェーンでは正常。
+  const hubFirst = makeAuditLog({ logId: 'hub_1', timestamp: '2026-07-12T09:00:00.000Z', terminalId: 'hub-local' });
+  const signedHubFirst = { ...hubFirst, ...await buildAuditLogSignature(hubFirst) };
+  const satFirst = makeAuditLog({ logId: 'sat_1', timestamp: '2026-07-12T09:00:30.000Z', terminalId: 'satellite-1' });
+  const signedSatFirst = { ...satFirst, ...await buildAuditLogSignature(satFirst) };
+  const hubSecond = makeAuditLog({ logId: 'hub_2', timestamp: '2026-07-12T09:01:00.000Z', terminalId: 'hub-local' });
+  const signedHubSecond = { ...hubSecond, ...await buildAuditLogSignature(hubSecond, signedHubFirst.integrityHash) };
+  const satSecond = makeAuditLog({ logId: 'sat_2', timestamp: '2026-07-12T09:01:30.000Z', terminalId: 'satellite-1' });
+  const signedSatSecond = { ...satSecond, ...await buildAuditLogSignature(satSecond, signedSatFirst.integrityHash) };
+
+  const report = await verifyAuditLogIntegrity([signedHubFirst, signedSatFirst, signedHubSecond, signedSatSecond]);
+  assert.strictEqual(report.invalid, 0);
+  assert.strictEqual(report.isValid, true);
+  assert.strictEqual(report.chains?.length, 2);
+
+  const hubChain = report.chains?.find((chain) => chain.terminalId === 'hub-local');
+  const satChain = report.chains?.find((chain) => chain.terminalId === 'satellite-1');
+  assert.strictEqual(hubChain?.signed, 2);
+  assert.strictEqual(hubChain?.segments, 1);
+  assert.strictEqual(hubChain?.latestHash, signedHubSecond.integrityHash);
+  assert.strictEqual(satChain?.signed, 2);
+  assert.strictEqual(satChain?.latestHash, signedSatSecond.integrityHash);
+});
+
+test('verifyAuditLogIntegrity detects tampering inside one terminal chain without flagging others', async () => {
+  const hubLog = makeAuditLog({ logId: 'hub_1', timestamp: '2026-07-12T09:00:00.000Z', terminalId: 'hub-local' });
+  const signedHubLog = { ...hubLog, ...await buildAuditLogSignature(hubLog) };
+  const satLog = makeAuditLog({ logId: 'sat_1', timestamp: '2026-07-12T09:00:30.000Z', terminalId: 'satellite-1' });
+  const signedSatLog = { ...satLog, ...await buildAuditLogSignature(satLog) };
+
+  const report = await verifyAuditLogIntegrity([
+    signedHubLog,
+    { ...signedSatLog, details: '改ざんされた内容' }
+  ]);
+  assert.strictEqual(report.isValid, false);
+  const hubChain = report.chains?.find((chain) => chain.terminalId === 'hub-local');
+  const satChain = report.chains?.find((chain) => chain.terminalId === 'satellite-1');
+  assert.strictEqual(hubChain?.invalid, 0);
+  assert.ok((satChain?.invalid || 0) >= 1);
+});
+
+test('verifyAuditLogIntegrity allows satellite session restarts as chain segments but detects missing middle links', async () => {
+  // セッション1: sat_1 → sat_2、セッション2(メモリDB再起動): sat_3 は previousHash 空で開始
+  const first = makeAuditLog({ logId: 'sat_1', timestamp: '2026-07-12T09:00:00.000Z', terminalId: 'satellite-1' });
+  const signedFirst = { ...first, ...await buildAuditLogSignature(first) };
+  const second = makeAuditLog({ logId: 'sat_2', timestamp: '2026-07-12T09:01:00.000Z', terminalId: 'satellite-1' });
+  const signedSecond = { ...second, ...await buildAuditLogSignature(second, signedFirst.integrityHash) };
+  const third = makeAuditLog({ logId: 'sat_3', timestamp: '2026-07-12T13:00:00.000Z', terminalId: 'satellite-1' });
+  const signedThird = { ...third, ...await buildAuditLogSignature(third) };
+
+  const healthy = await verifyAuditLogIntegrity([signedFirst, signedSecond, signedThird]);
+  assert.strictEqual(healthy.isValid, true);
+  assert.strictEqual(healthy.chains?.[0]?.segments, 2);
+
+  // sat_1 を削除すると sat_2 の previousHash が解決できず検出される
+  const missingMiddle = await verifyAuditLogIntegrity([signedSecond, signedThird]);
+  assert.strictEqual(missingMiddle.isValid, false);
+});
+
+test('verifyAuditLogIntegrity keeps legacy logs (no terminalId) verifying with their original hashes', async () => {
+  // terminalId 追加前に署名された既存ログのペイロードは変わらないこと(後方互換)
+  const legacy = makeAuditLog();
+  const signedLegacy = { ...legacy, ...await buildAuditLogSignature(legacy) };
+  const report = await verifyAuditLogIntegrity([signedLegacy]);
+  assert.strictEqual(report.isValid, true);
+  assert.strictEqual(report.chains?.[0]?.terminalId, 'legacy');
+});
+
 test('buildAuditLogExportJson creates a chronological audit export payload', async () => {
   const first = makeAuditLog();
   const signedFirst = {

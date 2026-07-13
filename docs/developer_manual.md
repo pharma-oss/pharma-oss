@@ -134,6 +134,17 @@ npm run electronic-prescription:field-readiness
 
 ローカル開発で実機なしに送信、重複送信、差替、取消を確認する場合だけ、`PHARMACY_DEVICE_CONNECTOR_SIMULATOR_ENABLED=true`を設定します。このとき`/api/external-integration/prescription-handoff`はプロセス内のメモリシミュレータへ接続し、`PHARMACY_DEVICE_CONNECTOR_KIND`と`PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION`を結果に反映します。`NODE_ENV=production`では無効になり、現地試験や安定運用の証跡としては使用しません。
 
+### 店舗内複数端末（サテライト端末同期）
+
+店舗内で複数端末を使う場合は、1台をメイン端末(hub)、他をサテライト端末にします。設計・運用の全体像は `docs/satellite_terminal_sync_plan.md` を参照してください。
+
+*   **役割**: 各端末の環境変数 `PHARMACY_SYNC_ROLE=hub|satellite|standalone`(既定 standalone=従来どおり単独動作)。
+*   **メイン端末(hub)**: Next.jsサーバー内の `node:sqlite`(Node 22.13以上)に正本を保持します(`src/lib/sync/hub_store.ts`、AES-256-GCMで暗号化)。`PHARMACY_SYNC_HUB_ENCRYPTION_KEY`(16進64文字)が必須、`PHARMACY_SYNC_HUB_DB_PATH`の既定は `./data/sync_hub.sqlite`。メイン端末のブラウザは従来どおり暗号化IndexedDBの全量レプリカを持ち、既存バックアップ導線がそのまま全端末分を含みます。
+*   **サテライト端末**: ブラウザはRxDBメモリストレージのみで患者データをディスクへ書きません。`PHARMACY_SYNC_HUB_ENDPOINT`(localhostはHTTP可、施設内LANはHTTPS必須。HTTPしか使えないLANでは`PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm`と共有鍵`PHARMACY_SYNC_TRANSPORT_KEY`でペイロードを暗号化)、メイン端末の設定>端末同期で発行した`PHARMACY_SYNC_TERMINAL_ID`/`PHARMACY_SYNC_TERMINAL_TOKEN`を設定します。トークンはサーバー側envにのみ置かれ、ブラウザへは渡りません。
+*   **同期**: RxDB open-coreの`replicateRxCollection`でブラウザ⇔自機`/api/sync/pull|push`を双方向同期します(サテライトの`audit_logs`はpush専用)。サテライトの自機サーバーは`/api/sync/remote/*`へBearerトークン付きで中継します。競合はハブ優先で、負けた書き込みは設定>端末同期の競合レビューに記録されます。
+*   **監査ログ**: ハッシュチェーンは端末ごとに独立します(`AuditLog.terminalId`、メイン端末は`hub-local`)。`verifyAuditLogIntegrity`は端末別にチェーンを検証し、terminalIdなしの既存ログはレガシーチェーンとして従来どおり検証します。
+*   **E2E**: `npm run build` 後に `npm run test:e2e:sync` で、ハブ起動→端末登録→サテライト経由push/pull→競合記録→トークン失効拒否を2プロセスで検証します。
+
 ```bash
 YAKUREKI_PHARMACY_DEVICE_CONNECTOR_READINESS=<接続準備診断JSON> \
 YAKUREKI_PHARMACY_DEVICE_FIELD_EVIDENCE=<現地確認証跡JSON> \

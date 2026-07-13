@@ -979,7 +979,7 @@ export const DRUG_INFO_SCHEMA: RxJsonSchema<DrugInfo> = {
 
 export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
   title: 'audit log schema',
-  version: 17,
+  version: 18,
   primaryKey: 'logId',
   type: 'object',
   properties: {
@@ -992,6 +992,7 @@ export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
     patientId: { type: 'string', maxLength: 100 },
     patientName: { type: 'string', maxLength: 100 },
     details: { type: 'string', maxLength: 2000 },
+    terminalId: { type: 'string', maxLength: 100 },
     previousHash: { type: 'string', maxLength: 200 },
     integrityHash: { type: 'string', maxLength: 200 }
   },

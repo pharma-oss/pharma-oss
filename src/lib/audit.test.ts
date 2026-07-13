@@ -16,6 +16,7 @@ import {
   logAuditAction
 } from './audit.ts';
 import type { AuditLog, User } from '../db/types.ts';
+import { resetClientSyncIdentityCacheForTests } from './sync/client_role.ts';
 
 const admin: User = { userId: 'u1', name: '管理者', role: 'admin' };
 const pharmacist: User = { userId: 'u2', name: '薬剤師', role: 'pharmacist' };
@@ -155,6 +156,74 @@ test('first-run setup bypass user cannot perform permissioned actions', () => {
   assert.strictEqual(canUserPerform(FIRST_RUN_USER, 'manage_facility_settings'), false);
 });
 
+test('logAuditAction (hub role) chains only onto its own terminal logs and stamps terminalId', async () => {
+  const previousWindow = (globalThis as any).window;
+  const previousSessionStorage = (globalThis as any).sessionStorage;
+  const previousLocalStorage = (globalThis as any).localStorage;
+  const previousFetch = (globalThis as any).fetch;
+  const insertedRows: AuditLog[] = [];
+  // メイン端末には同期で集約されたサテライトのログ(時系列で最新)と、
+  // 自端末(hub-local)のログが混在する。チェーンは自端末のログへ繋がること。
+  const satelliteLog: AuditLog = {
+    logId: 'log_satellite',
+    timestamp: '2026-07-12T10:01:00.000Z',
+    userId: 'pharm_2',
+    userName: '薬剤師 二郎',
+    userRole: 'pharmacist',
+    actionType: 'print',
+    details: '薬袋を印刷しました。',
+    terminalId: 'satellite-1',
+    integrityHash: 'satellite-hash'
+  };
+  const hubLog: AuditLog = {
+    logId: 'log_hub',
+    timestamp: '2026-07-12T09:00:00.000Z',
+    userId: 'admin_1',
+    userName: '管理者',
+    userRole: 'admin',
+    actionType: 'login',
+    details: 'ログインしました。',
+    terminalId: 'hub-local',
+    integrityHash: 'hub-hash'
+  };
+  const mockDb = {
+    audit_logs: {
+      find: () => ({
+        // timestamp desc: サテライトのログが先頭に来る
+        exec: async () => [{ toJSON: () => satelliteLog }, { toJSON: () => hubLog }]
+      }),
+      insert: async (row: AuditLog) => {
+        insertedRows.push(row);
+        return row;
+      }
+    }
+  };
+
+  (globalThis as any).window = {};
+  (globalThis as any).sessionStorage = createStorage();
+  (globalThis as any).localStorage = createStorage();
+  (globalThis as any).fetch = async () => new Response(
+    JSON.stringify({ role: 'hub', configured: true, terminalId: 'hub-local' }),
+    { status: 200 }
+  );
+  resetClientSyncIdentityCacheForTests();
+
+  try {
+    setCurrentUser(admin);
+    await logAuditAction(mockDb as any, 'audit_export', '監査ログJSONを書き出しました。');
+
+    assert.strictEqual(insertedRows.length, 1);
+    assert.strictEqual(insertedRows[0].terminalId, 'hub-local');
+    assert.strictEqual(insertedRows[0].previousHash, hubLog.integrityHash, 'サテライトのハッシュではなく自端末のハッシュへ連結する');
+  } finally {
+    (globalThis as any).window = previousWindow;
+    (globalThis as any).sessionStorage = previousSessionStorage;
+    (globalThis as any).localStorage = previousLocalStorage;
+    (globalThis as any).fetch = previousFetch;
+    resetClientSyncIdentityCacheForTests();
+  }
+});
+
 test('logAuditAction signs new audit logs against the latest signed row', async () => {
   const previousWindow = (globalThis as any).window;
   const previousSessionStorage = (globalThis as any).sessionStorage;
@@ -185,6 +254,8 @@ test('logAuditAction signs new audit logs against the latest signed row', async 
   (globalThis as any).window = {};
   (globalThis as any).sessionStorage = createStorage();
   (globalThis as any).localStorage = createStorage();
+  // 相対URLへのfetchはNodeでは失敗する → standalone(terminalIdなし)として動作する
+  resetClientSyncIdentityCacheForTests();
 
   try {
     setCurrentUser(admin);
@@ -194,10 +265,12 @@ test('logAuditAction signs new audit logs against the latest signed row', async 
     assert.strictEqual(insertedRows[0].userId, admin.userId);
     assert.strictEqual(insertedRows[0].actionType, 'audit_export');
     assert.strictEqual(insertedRows[0].previousHash, previousSignedLog.integrityHash);
+    assert.strictEqual(insertedRows[0].terminalId, undefined, 'standaloneではterminalIdを付けない(後方互換)');
     assert.match(insertedRows[0].integrityHash || '', /^(fallback-)?[a-f0-9]{8,64}$/);
   } finally {
     (globalThis as any).window = previousWindow;
     (globalThis as any).sessionStorage = previousSessionStorage;
     (globalThis as any).localStorage = previousLocalStorage;
+    resetClientSyncIdentityCacheForTests();
   }
 });

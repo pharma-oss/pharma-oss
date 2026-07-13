@@ -2,6 +2,7 @@ import type { AuditActionType, AuditLog, PharmacyDatabase, User } from '../db/ty
 import { buildAuditLogSignature } from './audit_integrity.ts';
 import { generateUUID } from './crypto.ts';
 import { isRemovedDemoStaffUserId } from './initial_staff.ts';
+import { resolveClientSyncIdentity } from './sync/client_role.ts';
 
 const USER_STORAGE_KEY = 'pharmacy_os_current_user';
 export const ROLE_PERMISSION_POLICY_STORAGE_KEY = 'pharmacy_os_role_permission_policy_v1';
@@ -287,10 +288,15 @@ export async function logAuditAction(
   const timestamp = new Date().toISOString();
 
   try {
+    // ハッシュチェーンは端末ごとに独立させる。メイン端末(hub)は同期で全端末分の
+    // 監査ログを保持するため、他端末のログへ連結すると全チェーンが壊れる。
+    // standalone(同期無効)では terminalId が undefined になり、従来どおり
+    // terminalId なしのログ同士で単一チェーンを継続する(完全な後方互換)。
+    const { terminalId } = await resolveClientSyncIdentity();
     const previousLogs = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
     const previousSignedLog = previousLogs
       .map(toAuditLog)
-      .find((log) => !!log.integrityHash);
+      .find((log) => !!log.integrityHash && (log.terminalId || undefined) === terminalId);
     const previousHash = previousSignedLog?.integrityHash || '';
     const unsignedLog: AuditLog = {
       logId,
@@ -301,7 +307,8 @@ export async function logAuditAction(
       actionType,
       patientId,
       patientName,
-      details
+      details,
+      ...(terminalId ? { terminalId } : {})
     };
     const signature = await buildAuditLogSignature(unsignedLog, previousHash);
 

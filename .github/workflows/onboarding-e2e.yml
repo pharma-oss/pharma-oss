@@ -53,6 +53,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Run satellite sync two-process E2E
+        run: npm run test:e2e:sync
+
       - name: Start dev server
         run: |
           npm run dev > dev_server.log 2>&1 &
