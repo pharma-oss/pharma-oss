@@ -29,9 +29,22 @@ test('PreLoginTour can always be skipped without completing every step', () => {
   assert.match(source, /onFinish: \(\) => void/);
   assert.match(source, /data-testid="pre-login-tour-skip"/);
   assert.match(source, /data-testid="pre-login-tour-skip-footer"/);
-  assert.match(source, /data-testid="pre-login-tour-finish"/);
   assert.match(source, /スキップしてログインへ/);
   assert.match(source, /if \(event\.key === 'Escape'\) \{\s*onFinish\(\);/);
+});
+
+test('PreLoginTour offers a guest-demo callback available from every step, without touching the DB itself', () => {
+  assert.match(source, /onStartGuestDemo: \(\) => void/);
+  assert.match(source, /data-testid="pre-login-tour-start-guest-demo"/);
+  assert.match(source, /デモ患者で実際に操作する/);
+  assert.match(source, /onClick=\{onStartGuestDemo\}/);
+  // 投入・ログイン処理は呼び出し側に委譲し、コンポーネント自体はDB非接触を維持する
+  assert.doesNotMatch(source, /from ['"]@\/db/);
+  assert.doesNotMatch(source, /seedTutorialDemoData/);
+  // 最終ステップまで進まなくても押せる(isLastStepの外側にある)ことを確認
+  const guestButtonIndex = source.indexOf('data-testid="pre-login-tour-start-guest-demo"');
+  const isLastStepGateIndex = source.indexOf('{!isLastStep && (');
+  assert.ok(guestButtonIndex > -1 && isLastStepGateIndex > guestButtonIndex);
 });
 
 test('PreLoginTour is an accessible modal rendered through a portal', () => {
@@ -50,13 +63,44 @@ test('PreLoginTour is an accessible modal rendered through a portal', () => {
 test('ClientLayout shows the pre-login tour before forcing initial admin password setup', () => {
   assert.match(clientLayoutSource, /import PreLoginTour from '@\/components\/PreLoginTour'/);
   assert.match(clientLayoutSource, /const showPreLoginTour = !isAuthenticated && initialAdminNeedsCredential && !preLoginTourDismissed/);
-  assert.match(clientLayoutSource, /\) : showPreLoginTour \? \(\s*<PreLoginTour onFinish=\{handleFinishPreLoginTour\} \/>\s*\) : initialAdminNeedsCredential \? \(/);
+  assert.match(
+    clientLayoutSource,
+    /\) : showPreLoginTour \? \(\s*<PreLoginTour onFinish=\{handleFinishPreLoginTour\} onStartGuestDemo=\{handleStartGuestDemo\} \/>\s*\) : initialAdminNeedsCredential \? \(/
+  );
   // 未ログインのまま体験できるよう、認証チェック(isAuthenticated)より後、パスワード設定フォームより前に分岐する
   const isAuthenticatedIndex = clientLayoutSource.indexOf(') : isAuthenticated ? (');
   const showTourIndex = clientLayoutSource.indexOf(') : showPreLoginTour ? (');
   const adminSetupIndex = clientLayoutSource.indexOf(') : initialAdminNeedsCredential ? (');
   assert.ok(isAuthenticatedIndex > -1 && showTourIndex > isAuthenticatedIndex);
   assert.ok(adminSetupIndex > -1 && adminSetupIndex > showTourIndex);
+});
+
+test('ClientLayout lets guests operate the real app as the not-yet-configured initial admin', () => {
+  // パスワード未設定の初期管理者としてログインさせ、既存のRBAC/監査ログをそのまま使う
+  assert.match(clientLayoutSource, /const isGuestDemoSession = isAuthenticated && isInitialAdminUser\(currentUser\) && !hasLoginCredential\(currentUser\)/);
+  assert.match(clientLayoutSource, /const handleStartGuestDemo = async \(\) => \{/);
+  assert.match(clientLayoutSource, /await completeLogin\(initialAdmin\)/);
+  assert.match(clientLayoutSource, /seedTutorialDemoData/);
+  assert.match(clientLayoutSource, /router\.push\(`\/emr\?visitId=\$\{encodeURIComponent\(result\.visitId\)\}`\)/);
+});
+
+test('ClientLayout suppresses the redundant first-run tutorial popup right after the guest demo tour', () => {
+  // PreLoginTourで案内済みのため、ログイン直後に3分デモを自動で二重表示しない
+  assert.match(clientLayoutSource, /import FirstRunTutorial, \{ tutorialStorageKey \} from '@\/components\/FirstRunTutorial'/);
+  assert.match(clientLayoutSource, /window\.localStorage\.setItem\(tutorialStorageKey\(initialAdmin\.userId\), new Date\(\)\.toISOString\(\)\)/);
+  const markSeenIndex = clientLayoutSource.indexOf('window.localStorage.setItem(tutorialStorageKey(initialAdmin.userId)');
+  const completeLoginIndex = clientLayoutSource.indexOf('await completeLogin(initialAdmin);');
+  assert.ok(markSeenIndex > -1 && completeLoginIndex > markSeenIndex, '3分デモの既読マークはログイン(isAuthenticated反転)より前に行う');
+});
+
+test('ClientLayout shows a persistent guest-demo banner with a way back to real password setup', () => {
+  assert.match(clientLayoutSource, /data-testid="guest-demo-banner"/);
+  assert.match(clientLayoutSource, /\{isGuestDemoSession && \(/);
+  assert.match(clientLayoutSource, /体験モードで操作しています（パスワード未設定）/);
+  assert.match(clientLayoutSource, /data-testid="guest-demo-end-button"/);
+  assert.match(clientLayoutSource, /const handleEndGuestDemo = \(\) => \{/);
+  assert.match(clientLayoutSource, /setCurrentUser\(UNAUTHENTICATED_USER\)/);
+  assert.match(cssSource, /\.guest-demo-banner/);
 });
 
 test('ClientLayout remembers pre-login tour dismissal without blocking skip when storage fails', () => {

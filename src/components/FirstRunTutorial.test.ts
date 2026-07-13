@@ -19,6 +19,8 @@ test('FirstRunTutorial keeps demo data isolated from real pharmacy records', () 
 test('FirstRunTutorial opens automatically once per authenticated staff member', () => {
   assert.match(source, /TUTORIAL_VERSION = 'v1'/);
   assert.match(source, /yakureki:first-run-tutorial:\$\{TUTORIAL_VERSION\}:\$\{userId\}/);
+  // ClientLayoutがゲスト体験の直後に既読マークできるよう公開している
+  assert.match(source, /export function tutorialStorageKey/);
   assert.match(source, /window\.localStorage\.getItem\(tutorialStorageKey\(userId\)\)/);
   assert.match(source, /window\.localStorage\.setItem\(tutorialStorageKey\(userId\), new Date\(\)\.toISOString\(\)\)/);
   assert.match(source, /if \(!autoOpen \|\| !userId\) return/);

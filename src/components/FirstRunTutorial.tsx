@@ -58,7 +58,9 @@ type TutorialStep = {
   preview: ReactNode;
 };
 
-function tutorialStorageKey(userId: string): string {
+// ClientLayoutがゲスト体験開始時に既読マークするために公開する
+// (PreLoginTourと連続で同じような案内が2回出るのを防ぐ)。
+export function tutorialStorageKey(userId: string): string {
   return `yakureki:first-run-tutorial:${TUTORIAL_VERSION}:${userId}`;
 }
 

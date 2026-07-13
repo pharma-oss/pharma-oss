@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, FileText, LayoutDashboard, Package, Scan, Search, Settings, X, KeyRound, Fingerprint, Loader2, RefreshCw, UserRound } from 'lucide-react';
+import { Download, FileText, LayoutDashboard, Package, Scan, Search, Settings, X, KeyRound, Fingerprint, Loader2, RefreshCw, UserRound, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,8 +9,9 @@ import { getCurrentUser, isAuthenticatedUser, setCurrentUser, logAuditAction, UN
 import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
 import type { Patient, User } from '@/db/types';
 import { toast } from 'sonner';
-import FirstRunTutorial from '@/components/FirstRunTutorial';
+import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
 import PreLoginTour from '@/components/PreLoginTour';
+import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 
 const navItems = [
   { href: '/', label: 'ダッシュボード', icon: LayoutDashboard },
@@ -54,6 +55,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const initialAdminNeedsCredential = !!initialAdmin && !hasLoginCredential(initialAdmin);
   const [preLoginTourDismissed, setPreLoginTourDismissed] = useState(false);
   const showPreLoginTour = !isAuthenticated && initialAdminNeedsCredential && !preLoginTourDismissed;
+  // ゲスト体験中(パスワード未設定の初期管理者としてログインしている)かどうか。
+  // 実際にパスワード/パスキーが設定されるとhasLoginCredentialがtrueになり自動的に外れる。
+  const isGuestDemoSession = isAuthenticated && isInitialAdminUser(currentUser) && !hasLoginCredential(currentUser);
 
   useEffect(() => {
     try {
@@ -320,6 +324,50 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (options?.continueOnboarding) {
       router.push('/settings?tab=staff&onboarding=1');
     }
+  };
+
+  // 初回起動(管理者パスワード未設定)の間だけ、ログインなしで実際のアプリをデモデータ付きで
+  // 操作できるようにする。認証は「未設定の初期管理者としてログイン」で成立させ、
+  // RBAC・監査ログなど既存の仕組みをそのまま使う。パスワード自体は設定しないため、
+  // 通常の初期セットアップ導線(パスワード/パスキー設定)は体験終了後もそのまま使える。
+  const handleStartGuestDemo = async () => {
+    if (!initialAdmin) {
+      toast.error('初期管理者の準備が完了していません。再読み込みしてください。');
+      return;
+    }
+    handleFinishPreLoginTour();
+    // PreLoginTourで既に案内済みのため、ログイン直後に「3分デモ」を二重に自動表示しない。
+    try {
+      window.localStorage.setItem(tutorialStorageKey(initialAdmin.userId), new Date().toISOString());
+    } catch {
+      // 保存できなくても体験は継続できる(3分デモが1回多く出るだけ)
+    }
+    await completeLogin(initialAdmin);
+
+    try {
+      const { getDatabase } = await import('@/db');
+      const db = await getDatabase();
+      if (!db) {
+        toast.error('データベースに接続できませんでした。');
+        return;
+      }
+      const { seedTutorialDemoData } = await import('@/lib/demo_data');
+      const result = await seedTutorialDemoData(db);
+      toast.success(result.alreadySeeded
+        ? '進行中のデモ受付を開きます。'
+        : 'デモ患者・受付・在庫を投入しました。ログインなしで実際の画面を操作できます。');
+      router.push(`/emr?visitId=${encodeURIComponent(result.visitId)}`);
+    } catch (err) {
+      console.error('Failed to seed guest demo data:', err);
+      toast.error('デモデータの投入に失敗しました。');
+    }
+  };
+
+  // ゲスト体験を終える。パスワードは設定していないので、通常の初期セットアップ画面へ戻る。
+  const handleEndGuestDemo = () => {
+    setCurrentUser(UNAUTHENTICATED_USER);
+    setLocalCurrentUser(UNAUTHENTICATED_USER);
+    toast.info('体験モードを終了しました。続けるには管理者パスワードを設定してください。');
   };
 
   const clearSessionLockTimer = useCallback(() => {
@@ -686,6 +734,31 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </aside>
 
             <main className="main-viewport">
+              {isGuestDemoSession && (
+                <div className="pwa-install-banner guest-demo-banner animate-fade-in" data-testid="guest-demo-banner">
+                  <div className="pwa-install-copy">
+                    <div className="pwa-install-icon" aria-hidden="true">
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <strong>体験モードで操作しています（パスワード未設定）</strong>
+                      <span>
+                        デモ患者・受付データで自由に試せます。実運用を始める前に管理者パスワードを設定してください。
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pwa-install-actions">
+                    <button
+                      type="button"
+                      className="pwa-install-button"
+                      onClick={handleEndGuestDemo}
+                      data-testid="guest-demo-end-button"
+                    >
+                      体験を終了してパスワードを設定
+                    </button>
+                  </div>
+                </div>
+              )}
               {showPwaBanner && (
                 <div className="pwa-install-banner animate-fade-in">
                   <div className="pwa-install-copy">
@@ -779,6 +852,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 </div>
 
                 <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <SyncStatusIndicator />
                   {isAuthenticated && (
                     <FirstRunTutorial
                       userId={currentUser.userId}
@@ -855,7 +929,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 ) : isAuthenticated ? (
                   children
                 ) : showPreLoginTour ? (
-                  <PreLoginTour onFinish={handleFinishPreLoginTour} />
+                  <PreLoginTour onFinish={handleFinishPreLoginTour} onStartGuestDemo={handleStartGuestDemo} />
                 ) : initialAdminNeedsCredential ? (
                   <form className="card glass" onSubmit={handleInitialAdminPasswordSetup} style={{ margin: '2rem auto', maxWidth: '720px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>

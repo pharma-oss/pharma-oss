@@ -32,6 +32,9 @@ type PreLoginTourProps = {
   // ログイン前の体験のため、デモ投入や後続画面遷移はすべて呼び出し側に委譲する。
   // このコンポーネント自体はDBに触れない設計を保つ。
   onFinish: () => void;
+  // 「デモ患者で実際に操作する」を押したときに呼ばれる。実際のデモデータ投入・
+  // ログイン処理はClientLayoutが担い、このコンポーネントはDBに触れない。
+  onStartGuestDemo: () => void;
 };
 
 type PreLoginTourStep = {
@@ -107,7 +110,7 @@ const PRE_LOGIN_TOUR_STEPS: PreLoginTourStep[] = [
   },
 ];
 
-export default function PreLoginTour({ onFinish }: PreLoginTourProps) {
+export default function PreLoginTour({ onFinish, onStartGuestDemo }: PreLoginTourProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [canUsePortal, setCanUsePortal] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -220,11 +223,16 @@ export default function PreLoginTour({ onFinish }: PreLoginTourProps) {
             <button type="button" className="tutorial-later" onClick={onFinish} data-testid="pre-login-tour-skip-footer">
               <SkipForward size={16} /> スキップしてログインへ
             </button>
-            {isLastStep ? (
-              <button type="button" className="tutorial-demo-start" onClick={onFinish} data-testid="pre-login-tour-finish">
-                <CheckCircle2 size={18} /> ログインへ進む
-              </button>
-            ) : (
+            <button
+              type="button"
+              className="tutorial-demo-start"
+              onClick={onStartGuestDemo}
+              data-testid="pre-login-tour-start-guest-demo"
+              title="デモ患者・受付・在庫を投入し、ログインなしで実際の画面を操作できます"
+            >
+              <PlayCircle size={18} /> デモ患者で実際に操作する
+            </button>
+            {!isLastStep && (
               <button type="button" className="tutorial-next" onClick={() => setStepIndex((current) => current + 1)}>
                 次へ <ArrowRight size={18} />
               </button>

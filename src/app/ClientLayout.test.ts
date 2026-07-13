@@ -44,7 +44,7 @@ test('PWA install banner uses responsive classes instead of cramped inline layou
 });
 
 test('ClientLayout surfaces the first-run tutorial without opening patient screens before authentication', () => {
-  assert.match(source, /import FirstRunTutorial from '@\/components\/FirstRunTutorial'/);
+  assert.match(source, /import FirstRunTutorial, \{ tutorialStorageKey \} from '@\/components\/FirstRunTutorial'/);
   assert.match(source, /isAuthenticated && \(/);
   assert.match(source, /<FirstRunTutorial/);
   assert.match(source, /userId=\{currentUser\.userId\}/);

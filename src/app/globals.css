@@ -256,6 +256,11 @@ button {
   overflow: hidden;
 }
 
+.guest-demo-banner {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.96), rgba(67, 56, 202, 0.96));
+  box-shadow: 0 10px 30px rgb(49 46 129 / 0.22);
+}
+
 .pwa-install-banner {
   display: flex;
   align-items: center;
