@@ -86,6 +86,9 @@ function createMockDb() {
 
 test('demo detection helpers identify tutorial data only', () => {
   assert.strictEqual(isDemoPatientId(DEMO_PATIENT_ID), true);
+  // 患者検索練習用の追加デモ患者(pt_demo_extra_1〜9)も同じ判定に含まれる
+  assert.strictEqual(isDemoPatientId('pt_demo_extra_1'), true);
+  assert.strictEqual(isDemoPatientId('pt_demo_extra_9'), true);
   assert.strictEqual(isDemoPatientId('pt_real_patient'), false);
   assert.strictEqual(isDemoPatientId(undefined), false);
   assert.strictEqual(isDemoVisit({ patientId: DEMO_PATIENT_ID }), true);
@@ -104,6 +107,13 @@ test('seedTutorialDemoData creates the full practice set including history and a
   assert.ok(result.visitId.startsWith('v_demo_'));
 
   assert.ok(db.patients.rows.has(DEMO_PATIENT_ID));
+  // 患者検索の練習ができるよう、合計10名(みどり+軽量デモ患者9名)投入される
+  assert.strictEqual(db.patients.rows.size, 10);
+  for (let i = 1; i <= 9; i++) {
+    assert.ok(db.patients.rows.has(`pt_demo_extra_${i}`), `pt_demo_extra_${i} should be seeded`);
+  }
+  // 生年月日だけの検索で複数候補が返る例として、一郎はみどりと同じ生年月日にしてある
+  assert.strictEqual(db.patients.rows.get('pt_demo_extra_3').birthDate, db.patients.rows.get(DEMO_PATIENT_ID).birthDate);
   assert.strictEqual(db.drugs.rows.size, 3);
   assert.strictEqual(db.drug_stocks.rows.size, 3);
   for (const drug of db.drugs.rows.values()) {
@@ -164,7 +174,7 @@ test('cleanupTutorialDemoData removes demo data and keeps real records', async (
   await seedTutorialDemoData(db);
   const result = await cleanupTutorialDemoData(db);
 
-  assert.strictEqual(result.removedPatient, true);
+  assert.strictEqual(result.removedPatients, 10);
   assert.strictEqual(result.removedVisits, 2);
   assert.strictEqual(result.removedPrescriptionItems, 4);
   assert.strictEqual(result.removedSoapRecords, 1);
@@ -173,6 +183,9 @@ test('cleanupTutorialDemoData removes demo data and keeps real records', async (
   assert.strictEqual(result.removedStocks, 3);
 
   assert.strictEqual(db.patients.rows.has(DEMO_PATIENT_ID), false);
+  for (let i = 1; i <= 9; i++) {
+    assert.strictEqual(db.patients.rows.has(`pt_demo_extra_${i}`), false, `pt_demo_extra_${i} should be removed`);
+  }
   assert.ok(db.patients.rows.has('pt_real'));
   assert.ok(db.visits.rows.has('v_real'));
   assert.ok(db.prescription_items.rows.has('item_real'));
@@ -189,7 +202,7 @@ test('cleanupTutorialDemoData is safe to run when no demo data exists', async ()
   const db = createMockDb();
   const result = await cleanupTutorialDemoData(db);
 
-  assert.strictEqual(result.removedPatient, false);
+  assert.strictEqual(result.removedPatients, 0);
   assert.strictEqual(result.removedVisits, 0);
   assert.strictEqual(result.removedDrugs, 0);
 });

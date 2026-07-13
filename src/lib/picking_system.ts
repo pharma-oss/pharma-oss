@@ -6,6 +6,7 @@
 // 実DBへの反映は呼び出し側(EMRピッキング支援)が行い、このライブラリは純関数に保つ。
 // 在庫の引き落としは行わない(完了操作時の既存フローに従う)。
 import { csvCell } from './inventory_order.ts';
+import { parseFlexibleDateInput } from './date_input.ts';
 
 export const PICKING_INSTRUCTION_FORMAT_VERSION = '1';
 
@@ -220,19 +221,7 @@ function splitLine(line: string, delimiter: string): string[] {
 
 // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYYMMDD を受け付けて YYYY-MM-DD へそろえる
 export function normalizePickingResultDate(value?: string): string | undefined {
-  const text = String(value || '').trim();
-  if (!text) return undefined;
-  const digits = text.replace(/[/.年月]/g, '-').replace(/日/g, '');
-  let match = digits.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (!match && /^\d{8}$/.test(text)) {
-    match = text.match(/^(\d{4})(\d{2})(\d{2})$/);
-  }
-  if (!match) return undefined;
-  const [, year, month, day] = match;
-  const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  const date = new Date(`${normalized}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized) return undefined;
-  return normalized;
+  return parseFlexibleDateInput(value);
 }
 
 function parseNumberCell(value?: string): number | undefined {

@@ -630,9 +630,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         result.removedAlerts +
         result.removedDrugs +
         result.removedStocks +
-        (result.removedPatient ? 1 : 0);
+        result.removedPatients;
       toast.success(removedTotal > 0
-        ? `デモデータを片づけました（受付${result.removedVisits}件・処方${result.removedPrescriptionItems}件・在庫${result.removedStocks}件など）。`
+        ? `デモデータを片づけました（患者${result.removedPatients}名・受付${result.removedVisits}件・処方${result.removedPrescriptionItems}件・在庫${result.removedStocks}件など）。`
         : '削除対象のデモデータはありませんでした。');
     } catch (err) {
       console.error('Failed to cleanup tutorial demo data:', err);

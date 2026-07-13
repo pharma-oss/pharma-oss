@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, Drug, InsuranceEligibilityStatus, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
+import { parseFlexibleDateInput } from '@/lib/date_input';
 import {
   buildPatientCandidateMatches,
   findMatchingPatient,
@@ -4276,19 +4277,31 @@ export default function OcrPage() {
               </div>
 
               <div className="form-row">
-                <div className="form-group" style={{ width: '160px' }}>
+                <div className="form-group" style={{ width: '180px' }}>
                   <label htmlFor="patientBirthDate">
                     生年月日
                     <span className="text-danger ml-1 text-sm" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="patientBirthDate"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="例: 19850315"
+                    maxLength={10}
                     value={patientBirthDate}
-                    onChange={(e) => setPatientBirthDate(e.target.value)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const digitsOnly = raw.replace(/[^\d]/g, '');
+                      // 半角8桁が揃った時点でYYYY-MM-DDへ自動変換する(生年月日8桁検索と同じ入力方式)。
+                      // 揃うまで・不正な日付のままはそのまま表示し、入力途中で書き換えない。
+                      const normalized = digitsOnly.length === 8 ? parseFlexibleDateInput(digitsOnly) : undefined;
+                      setPatientBirthDate(normalized || raw);
+                    }}
                     required
                     aria-required="true"
                   />
+                  <span className="field-hint">半角8桁(例: 19850315)でも入力できます</span>
                 </div>
 
                 <div className="form-group flex-1">
@@ -5330,6 +5343,11 @@ export default function OcrPage() {
           font-weight: 500;
         }
 
+        .field-hint {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+
         .form-group input,
         .form-group select,
         .form-group textarea {
@@ -5972,10 +5990,24 @@ export default function OcrPage() {
             grid-template-columns: 1fr;
           }
 
-          .side-by-side-container {
+          .side-by-side-container,
+          .side-by-side-container.manual-mode {
             grid-template-columns: 1fr;
             height: auto;
             min-height: 0;
+          }
+
+          /* 手入力受付では左カラムは案内文だけで実質空欄のため、幅の狭い画面では畳んで
+             右の入力フォームを広げる(ヘッダーの「受付をやり直す」ボタンは残す)。 */
+          .side-by-side-container.manual-mode .manual-placeholder {
+            display: none;
+          }
+
+          /* 処方箋イメージがある場合は原本確認のため残すが、フォームを圧迫しないよう
+             高さを抑える(拡大はブラウザのピンチズームで可能)。
+             next/image の fill は親に確定した高さが必要なため、100%ではなく固定値にする。 */
+          .image-preview-container {
+            height: 260px;
           }
 
           .provider-grid,

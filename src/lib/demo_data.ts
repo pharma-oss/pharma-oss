@@ -13,10 +13,37 @@ const DEMO_ALERT_ID = 'alert_demo_tutorial';
 const DEMO_PREVIOUS_VISIT_ID = 'v_demo_tutorial_prev';
 const DEMO_PREVIOUS_SOAP_ID = 'soap_demo_tutorial_prev';
 
+interface DemoExtraPatientSpec {
+  patientId: string;
+  name: string;
+  kana: string;
+  birthDate: string;
+  gender: 'male' | 'female';
+  insuranceNumber: string;
+  burdenRatio: number;
+}
+
+// 患者検索・名寄せの練習用に、受付・処方は持たない軽量なデモ患者を追加する。
+// pt_demo_extra_3(一郎)はDEMO_PATIENT_ID(みどり)と同じ生年月日にしてあり、
+// 生年月日だけの検索では複数候補が返ることを体験できるようにしている。
+const DEMO_EXTRA_PATIENTS: DemoExtraPatientSpec[] = [
+  { patientId: 'pt_demo_extra_1', name: 'デモ患者 太郎', kana: 'デモカンジャ タロウ', birthDate: '1990-07-22', gender: 'male', insuranceNumber: '00000001', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_2', name: 'デモ患者 花子', kana: 'デモカンジャ ハナコ', birthDate: '1985-03-15', gender: 'female', insuranceNumber: '00000002', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_3', name: 'デモ患者 一郎', kana: 'デモカンジャ イチロウ', birthDate: '1958-05-12', gender: 'male', insuranceNumber: '00000003', burdenRatio: 20 },
+  { patientId: 'pt_demo_extra_4', name: 'デモ患者 陽子', kana: 'デモカンジャ ヨウコ', birthDate: '1972-11-03', gender: 'female', insuranceNumber: '00000004', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_5', name: 'デモ患者 健太', kana: 'デモカンジャ ケンタ', birthDate: '2001-01-30', gender: 'male', insuranceNumber: '00000005', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_6', name: 'デモ患者 美咲', kana: 'デモカンジャ ミサキ', birthDate: '1995-09-18', gender: 'female', insuranceNumber: '00000006', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_7', name: 'デモ患者 大輔', kana: 'デモカンジャ ダイスケ', birthDate: '1965-02-27', gender: 'male', insuranceNumber: '00000007', burdenRatio: 20 },
+  { patientId: 'pt_demo_extra_8', name: 'デモ患者 直子', kana: 'デモカンジャ ナオコ', birthDate: '1978-06-09', gender: 'female', insuranceNumber: '00000008', burdenRatio: 30 },
+  { patientId: 'pt_demo_extra_9', name: 'デモ患者 蓮', kana: 'デモカンジャ レン', birthDate: '2010-12-05', gender: 'male', insuranceNumber: '00000009', burdenRatio: 10 }
+];
+const DEMO_EXTRA_PATIENT_IDS = DEMO_EXTRA_PATIENTS.map((patient) => patient.patientId);
+
 // デモ患者に紐づくデータかどうかの判定。
 // 請求(月次UKE・UKE出力・外部機器連携)へデモデータを混入させないための単一の判定点。
 export function isDemoPatientId(patientId?: string | null): boolean {
-  return patientId === DEMO_PATIENT_ID;
+  if (!patientId) return false;
+  return patientId === DEMO_PATIENT_ID || DEMO_EXTRA_PATIENT_IDS.includes(patientId);
 }
 
 export function isDemoVisit(visit?: { patientId?: string | null } | null): boolean {
@@ -144,6 +171,20 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
       burdenRatio: 30
     }
   });
+
+  // 患者検索・名寄せの練習用。受付・処方は持たない軽量な追加デモ患者9名。
+  await Promise.all(DEMO_EXTRA_PATIENTS.map((patient) => db.patients.upsert({
+    patientId: patient.patientId,
+    name: patient.name,
+    kana: patient.kana,
+    birthDate: patient.birthDate,
+    gender: patient.gender,
+    insuranceInfo: {
+      provider: 'デモ保険者',
+      number: patient.insuranceNumber,
+      burdenRatio: patient.burdenRatio
+    }
+  })));
 
   // 副作用歴アラート: 2剤目(ロキソプロフェン)に一致し「薬剤師確認」の練習になる。
   // アレルギー(要修正=エラー)ではなく副作用歴(警告)にして、練習の完了フローを止めない。
@@ -297,7 +338,7 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
   await logAuditAction(
     db,
     'stock_update',
-    `チュートリアルデモデータ投入: デモ患者「デモ患者 みどり」の受付・処方3剤・在庫ロット(JAN/棚番地付き)・前回薬歴・副作用歴アラートを登録しました。`,
+    `チュートリアルデモデータ投入: デモ患者10名(「デモ患者 みどり」の受付・処方3剤・在庫ロット(JAN/棚番地付き)・前回薬歴・副作用歴アラートに加え、患者検索練習用の軽量デモ患者9名)を登録しました。`,
     DEMO_PATIENT_ID,
     'デモ患者 みどり'
   );
@@ -305,12 +346,14 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
   return { visitId, alreadySeeded: false };
 }
 
+const ALL_DEMO_PATIENT_IDS = [DEMO_PATIENT_ID, ...DEMO_EXTRA_PATIENT_IDS];
+
 // デモデータが残っているかの判定。ダッシュボードの片づけ促しバナーに使う。
 // 患者・受付・薬品マスタのいずれかにデモ固定IDが残っていれば true。
 export async function hasTutorialDemoData(db: any): Promise<boolean> {
   if (!db) return false;
-  const patientDoc = await db.patients.findOne(DEMO_PATIENT_ID).exec();
-  if (patientDoc) return true;
+  const demoPatients = await db.patients.find({ selector: { patientId: { $in: ALL_DEMO_PATIENT_IDS } } }).exec();
+  if (demoPatients.length > 0) return true;
   const demoVisits = await db.visits.find({ selector: { patientId: DEMO_PATIENT_ID } }).exec();
   if (demoVisits.length > 0) return true;
   const demoDrugs = await db.drugs.find({ selector: { code: { $in: DEMO_DRUGS.map((drug) => drug.code) } } }).exec();
@@ -325,7 +368,7 @@ export interface CleanupTutorialDemoDataResult {
   removedAlerts: number;
   removedDrugs: number;
   removedStocks: number;
-  removedPatient: boolean;
+  removedPatients: number;
 }
 
 const getDocValue = (doc: any, key: string): any => (
@@ -364,7 +407,7 @@ export async function cleanupTutorialDemoData(db: any): Promise<CleanupTutorialD
   const demoDrugCodes = DEMO_DRUGS.map((drug) => drug.code);
   const drugDocs = await db.drugs.find({ selector: { code: { $in: demoDrugCodes } } }).exec();
   const stockDocs = await db.drug_stocks.find({ selector: { drugCode: { $in: demoDrugCodes } } }).exec();
-  const patientDoc = await db.patients.findOne(DEMO_PATIENT_ID).exec();
+  const demoPatientDocs = await db.patients.find({ selector: { patientId: { $in: ALL_DEMO_PATIENT_IDS } } }).exec();
 
   const result: CleanupTutorialDemoDataResult = {
     removedPrescriptionItems: await removeDocs(itemDocs),
@@ -374,17 +417,13 @@ export async function cleanupTutorialDemoData(db: any): Promise<CleanupTutorialD
     removedVisits: await removeDocs(demoVisits),
     removedStocks: await removeDocs(stockDocs),
     removedDrugs: await removeDocs(drugDocs),
-    removedPatient: false
+    removedPatients: await removeDocs(demoPatientDocs)
   };
-  if (patientDoc) {
-    await patientDoc.remove();
-    result.removedPatient = true;
-  }
 
   await logAuditAction(
     db,
     'stock_update',
-    `チュートリアルデモデータ削除: デモ患者・受付${result.removedVisits}件・処方${result.removedPrescriptionItems}件・薬歴${result.removedSoapRecords}件・アラート${result.removedAlerts}件・薬品${result.removedDrugs}件・在庫ロット${result.removedStocks}件を削除しました。`,
+    `チュートリアルデモデータ削除: デモ患者${result.removedPatients}名・受付${result.removedVisits}件・処方${result.removedPrescriptionItems}件・薬歴${result.removedSoapRecords}件・アラート${result.removedAlerts}件・薬品${result.removedDrugs}件・在庫ロット${result.removedStocks}件を削除しました。`,
     DEMO_PATIENT_ID,
     'デモ患者 みどり'
   );
