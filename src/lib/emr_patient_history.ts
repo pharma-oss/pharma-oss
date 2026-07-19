@@ -58,6 +58,25 @@ function isSubstitutionLabel(value: string): boolean {
   return !!value && !['変更なし', '変更調剤なし'].includes(value);
 }
 
+// 受付保存時は変更なしでも dispensedDrug に処方薬名がそのまま入るため、
+// 「値が入っている」だけでは変更調剤と判定できない。調剤コードがあれば
+// コード同士、なければマスター解決済みの処方薬名との実質比較で判定する。
+function isSubstitutedDispense(
+  item: Pick<PrescriptionItem, 'drugId' | 'dispensedDrug' | 'dispensedDrugCode'>,
+  prescribedLookupName: string | undefined
+): boolean {
+  const dispensedDrug = normalizeText(item.dispensedDrug);
+  if (!isSubstitutionLabel(dispensedDrug)) return false;
+
+  const dispensedCode = normalizeText(item.dispensedDrugCode);
+  const drugId = normalizeText(item.drugId);
+  if (dispensedCode && drugId) return dispensedCode !== drugId;
+
+  const prescribedName = normalizeText(prescribedLookupName);
+  if (!prescribedName) return false;
+  return dispensedDrug !== prescribedName;
+}
+
 export function normalizeSoapProblemTitle(title: string): string {
   return normalizeText(title)
     .replace(/^#\s*\d+\s*/u, '')
@@ -120,9 +139,10 @@ export function buildPrescriptionTimeline(params: {
       (a.rpNumber ?? 0) - (b.rpNumber ?? 0) || a.itemId.localeCompare(b.itemId)
     ));
     for (const item of visitItems) {
-      const prescribedName = drugNameFromLookup(params.drugNamesById, item.drugId) || item.drugId || '薬品名未設定';
+      const lookupName = drugNameFromLookup(params.drugNamesById, item.drugId);
+      const prescribedName = lookupName || item.drugId || '薬品名未設定';
       const dispensedDrug = normalizeText(item.dispensedDrug);
-      const substituted = isSubstitutionLabel(dispensedDrug);
+      const substituted = isSubstitutedDispense(item, lookupName);
       const drugLabel = substituted ? dispensedDrug : prescribedName;
       const usage = normalizeText(item.usage);
       const amount = Number.isFinite(item.amount) ? `${item.amount}` : '';

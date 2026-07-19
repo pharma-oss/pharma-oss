@@ -11,6 +11,27 @@ import {
   type MedHistoryVisit
 } from '@/lib/drug_medication_history';
 
+// 処方明細は薬品名を持たない(drugId=レセ電コードのみ)ため、
+// 表示名と変更調剤判定用に薬品マスターから名前を引いて渡す。
+async function loadDrugNamesByCode(
+  db: any,
+  items: MedHistoryPrescriptionItem[]
+): Promise<Map<string, string>> {
+  const codes = Array.from(new Set(
+    items
+      .flatMap((item) => [item.drugId, item.dispensedDrugCode])
+      .map((code) => String(code ?? '').trim())
+      .filter(Boolean)
+  ));
+  const names = new Map<string, string>();
+  if (codes.length === 0) return names;
+  const drugDocs = await db.drugs.findByIds(codes).exec();
+  for (const [code, drugDoc] of drugDocs.entries()) {
+    if (drugDoc?.name) names.set(code, drugDoc.name);
+  }
+  return names;
+}
+
 const SOAP_LETTER_COLOR: Record<string, string> = {
   S: 'var(--status-blue)',
   O: 'var(--status-green)',
@@ -36,6 +57,7 @@ export default function DrugHistoryModal({
   const [visits, setVisits] = useState<MedHistoryVisit[]>([]);
   const [items, setItems] = useState<MedHistoryPrescriptionItem[]>([]);
   const [soaps, setSoaps] = useState<MedHistorySoapRecord[]>([]);
+  const [drugNamesById, setDrugNamesById] = useState<Map<string, string>>(new Map());
   const [selectedDrugId, setSelectedDrugId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +84,7 @@ export default function DrugHistoryModal({
         }
         if (cancelled) return;
         if (!patientId) {
-          setVisits([]); setItems([]); setSoaps([]);
+          setVisits([]); setItems([]); setSoaps([]); setDrugNamesById(new Map());
           return;
         }
         const visitDocs = await db.visits.find({ selector: { patientId } }).exec();
@@ -72,10 +94,13 @@ export default function DrugHistoryModal({
           db.prescription_items.find({ selector: { visitId: { $in: visitIds } } }).exec(),
           db.soap_records.find({ selector: { visitId: { $in: visitIds } } }).exec()
         ]);
+        const itemList = itemDocs.map((d: any) => d.toJSON());
+        const drugNames = await loadDrugNamesByCode(db, itemList);
         if (cancelled) return;
         setVisits(visitList);
-        setItems(itemDocs.map((d: any) => d.toJSON()));
+        setItems(itemList);
         setSoaps(soapDocs.map((d: any) => d.toJSON()));
+        setDrugNamesById(drugNames);
       } catch (err) {
         console.error('Failed to load drug medication history:', err);
       } finally {
@@ -85,7 +110,10 @@ export default function DrugHistoryModal({
     return () => { cancelled = true; };
   }, [open, db, targetVisitId]);
 
-  const drugs = useMemo(() => listPatientPrescribedDrugs(items, visits), [items, visits]);
+  const drugs = useMemo(
+    () => listPatientPrescribedDrugs(items, visits, { drugNamesById }),
+    [items, visits, drugNamesById]
+  );
   const selectedDrug = useMemo(
     () => drugs.find((d) => d.drugId === selectedDrugId) ?? drugs[0],
     [drugs, selectedDrugId]
@@ -98,10 +126,11 @@ export default function DrugHistoryModal({
         matchNames: selectedDrug.matchNames,
         visits,
         items,
-        soapRecords: soaps
+        soapRecords: soaps,
+        drugNamesById
       })
       : null),
-    [selectedDrug, visits, items, soaps]
+    [selectedDrug, visits, items, soaps, drugNamesById]
   );
 
   if (!open) return null;

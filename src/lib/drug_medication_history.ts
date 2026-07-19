@@ -85,8 +85,47 @@ export interface PatientPrescribedDrug {
   lastDate?: string;
 }
 
+export type MedHistoryDrugNameLookup = Map<string, string> | Record<string, string>;
+
 function normalizeKey(value: string | undefined | null): string {
   return String(value ?? '').trim();
+}
+
+/** 全角半角ゆれを吸収した名前比較用の正規化。 */
+function normalizeComparableName(value: string | undefined | null): string {
+  return String(value ?? '').normalize('NFKC').trim();
+}
+
+function drugNameFromLookup(
+  lookup: MedHistoryDrugNameLookup | undefined,
+  drugId: string | undefined
+): string | undefined {
+  const key = normalizeKey(drugId);
+  if (!lookup || !key) return undefined;
+  if (lookup instanceof Map) return lookup.get(key);
+  return lookup[key];
+}
+
+const NO_SUBSTITUTION_LABELS = ['変更なし', '変更調剤なし'];
+
+// 受付保存時は変更なしでも dispensedDrug に処方薬名がそのまま入るため、
+// 「値が入っている」だけでは変更調剤と判定できない。調剤コードがあれば
+// コード同士、なければ処方薬名(マスター解決名 or 項目のdrugName)との
+// 実質比較で判定する。
+function isSubstitutedDispense(
+  item: MedHistoryPrescriptionItem,
+  prescribedLookupName: string | undefined
+): boolean {
+  const dispensed = normalizeKey(item.dispensedDrug);
+  if (!dispensed || NO_SUBSTITUTION_LABELS.includes(dispensed)) return false;
+
+  const dispensedCode = normalizeKey(item.dispensedDrugCode);
+  const drugId = normalizeKey(item.drugId);
+  if (dispensedCode && drugId) return dispensedCode !== drugId;
+
+  const prescribedName = normalizeComparableName(prescribedLookupName || item.drugName);
+  if (!prescribedName) return false;
+  return normalizeComparableName(dispensed) !== prescribedName;
 }
 
 /** prescriptionDate を最優先に、その受付の代表日付を返す。 */
@@ -102,8 +141,18 @@ function dateValue(date: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
-function itemDrugLabel(item: MedHistoryPrescriptionItem): string {
-  return normalizeKey(item.drugName) || normalizeKey(item.dispensedDrug) || normalizeKey(item.drugId) || '薬剤';
+// 処方行の表示名。マスター解決名を最優先し、変更調剤の行では
+// 調剤薬名(substitutedTo側で表示される)を処方名の代わりに使わない。
+function itemDrugLabel(
+  item: MedHistoryPrescriptionItem,
+  prescribedLookupName: string | undefined,
+  substituted: boolean
+): string {
+  return normalizeKey(prescribedLookupName)
+    || normalizeKey(item.drugName)
+    || (substituted ? '' : normalizeKey(item.dispensedDrug))
+    || normalizeKey(item.drugId)
+    || '薬剤';
 }
 
 function matchesItem(
@@ -137,6 +186,8 @@ export function buildDrugMedicationHistory(params: {
   soapRecords?: MedHistorySoapRecord[];
   includeStatuses?: string[];
   excludeStatuses?: string[];
+  /** drugId(レセ電コード)→薬品マスター名。処方名表示と変更調剤判定に使う。 */
+  drugNamesById?: MedHistoryDrugNameLookup;
 }): DrugMedicationHistory {
   const keys = new Set(params.matchKeys.map(normalizeKey).filter(Boolean));
   const names = new Set((params.matchNames ?? []).map(normalizeKey).filter(Boolean));
@@ -163,17 +214,14 @@ export function buildDrugMedicationHistory(params: {
     if (excludeStatuses.has(status)) continue;
     if (includeStatuses && !includeStatuses.has(status)) continue;
 
-    const dispensed = normalizeKey(item.dispensedDrug);
-    const prescriptionLabel = normalizeKey(item.drugName) || normalizeKey(item.drugId) || '薬剤';
-    const substitutedTo = dispensed && dispensed !== prescriptionLabel
-      && !['変更なし', '変更調剤なし'].includes(dispensed)
-      ? dispensed
-      : undefined;
+    const lookupName = drugNameFromLookup(params.drugNamesById, item.drugId);
+    const substituted = isSubstitutedDispense(item, lookupName);
+    const substitutedTo = substituted ? normalizeKey(item.dispensedDrug) : undefined;
 
     const list = matchedByVisit.get(item.visitId) ?? [];
     list.push({
       drugId: normalizeKey(item.drugId),
-      drugLabel: itemDrugLabel(item),
+      drugLabel: itemDrugLabel(item, lookupName, substituted),
       amount: Number(item.amount) || 0,
       usage: item.usage,
       days: Number(item.days) || 0,
@@ -218,7 +266,8 @@ export function buildDrugMedicationHistory(params: {
  */
 export function listPatientPrescribedDrugs(
   items: MedHistoryPrescriptionItem[],
-  visits: MedHistoryVisit[]
+  visits: MedHistoryVisit[],
+  options: { drugNamesById?: MedHistoryDrugNameLookup } = {}
 ): PatientPrescribedDrug[] {
   const visitDate = new Map<string, string | undefined>();
   for (const visit of visits) {
@@ -229,7 +278,10 @@ export function listPatientPrescribedDrugs(
   for (const item of items) {
     const drugId = normalizeKey(item.drugId);
     if (!drugId) continue;
-    const label = normalizeKey(item.drugName) || normalizeKey(item.dispensedDrug) || drugId;
+    const label = normalizeKey(drugNameFromLookup(options.drugNamesById, drugId))
+      || normalizeKey(item.drugName)
+      || normalizeKey(item.dispensedDrug)
+      || drugId;
     const date = visitDate.get(item.visitId);
 
     const existing = byDrug.get(drugId);

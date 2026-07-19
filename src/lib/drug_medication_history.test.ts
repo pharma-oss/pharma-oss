@@ -79,6 +79,74 @@ test('buildDrugMedicationHistory does not bleed into a different strength', () =
   assert.ok(!history.entries.some((e) => e.visitId === 'v1'), '2.5mg (D-AML25) is not matched by 5mg key');
 });
 
+// 実運用の受付保存では、変更なし調剤でも dispensedDrug に処方薬名が入り、
+// 明細自体は drugName を持たない(drugId=レセ電コードのみ)。
+test('buildDrugMedicationHistory does not mark unchanged real-flow items as substitution', () => {
+  const realFlowVisits: MedHistoryVisit[] = [
+    { visitId: 'r1', patientId: 'p2', prescriptionDate: '2026-07-01', status: 'completed' }
+  ];
+  const realFlowItems: MedHistoryPrescriptionItem[] = [
+    // 変更なし: dispensedDrug=処方薬名そのまま、調剤コードなし
+    { visitId: 'r1', drugId: '622290901', dispensedDrug: 'アムロジピンＯＤ錠１０ｍｇ「ＣＨ」', dispensedDrugCode: '', amount: 1, usage: '1日1回 朝食後', days: 14 }
+  ];
+  const drugNamesById = new Map([['622290901', 'アムロジピンＯＤ錠１０ｍｇ「ＣＨ」']]);
+
+  const history = buildDrugMedicationHistory({
+    anchorLabel: 'アムロジピンＯＤ錠１０ｍｇ「ＣＨ」',
+    matchKeys: ['622290901'],
+    visits: realFlowVisits,
+    items: realFlowItems,
+    drugNamesById
+  });
+
+  assert.strictEqual(history.entries.length, 1);
+  assert.strictEqual(history.entries[0].prescriptions[0].substitutedTo, undefined, 'same-name dispense is not a substitution');
+  assert.strictEqual(history.entries[0].prescriptions[0].drugLabel, 'アムロジピンＯＤ錠１０ｍｇ「ＣＨ」');
+});
+
+test('buildDrugMedicationHistory resolves prescribed names from master lookup instead of showing raw codes', () => {
+  const demoVisits: MedHistoryVisit[] = [
+    { visitId: 'd1', patientId: 'p3', prescriptionDate: '2026-06-20', status: 'completed' }
+  ];
+  // デモ過去回相当: dispensedDrug が空で drugName も無い
+  const demoItems: MedHistoryPrescriptionItem[] = [
+    { visitId: 'd1', drugId: 'DEMO-2171022G1', dispensedDrug: '', amount: 1, usage: '1日1回 朝食後', days: 28 }
+  ];
+  const drugNamesById = new Map([['DEMO-2171022G1', '「デモ」アムロジピンOD錠5mg']]);
+
+  const history = buildDrugMedicationHistory({
+    anchorLabel: '「デモ」アムロジピンOD錠5mg',
+    matchKeys: ['DEMO-2171022G1'],
+    visits: demoVisits,
+    items: demoItems,
+    drugNamesById
+  });
+  assert.strictEqual(history.entries[0].prescriptions[0].drugLabel, '「デモ」アムロジピンOD錠5mg');
+
+  const drugs = listPatientPrescribedDrugs(demoItems, demoVisits, { drugNamesById });
+  assert.strictEqual(drugs[0].label, '「デモ」アムロジピンOD錠5mg');
+});
+
+test('buildDrugMedicationHistory still marks genuine substitutions by differing dispensed code', () => {
+  const subVisits: MedHistoryVisit[] = [
+    { visitId: 's1', patientId: 'p4', prescriptionDate: '2026-07-05', status: 'completed' }
+  ];
+  const subItems: MedHistoryPrescriptionItem[] = [
+    { visitId: 's1', drugId: 'CODE-A', dispensedDrug: '後発品B錠', dispensedDrugCode: 'CODE-B', amount: 1, usage: '1日1回', days: 14 }
+  ];
+  const drugNamesById = new Map([['CODE-A', '先発品A錠'], ['CODE-B', '後発品B錠']]);
+
+  const history = buildDrugMedicationHistory({
+    anchorLabel: '先発品A錠',
+    matchKeys: ['CODE-A'],
+    visits: subVisits,
+    items: subItems,
+    drugNamesById
+  });
+  assert.strictEqual(history.entries[0].prescriptions[0].substitutedTo, '後発品B錠');
+  assert.strictEqual(history.entries[0].prescriptions[0].drugLabel, '先発品A錠', 'label shows the prescribed drug, chip shows the dispensed one');
+});
+
 test('listPatientPrescribedDrugs returns unique drugs by last dispensed date with occurrence counts', () => {
   const drugs = listPatientPrescribedDrugs(items, visits);
   const aml5 = drugs.find((d) => d.drugId === 'D-AML5');
