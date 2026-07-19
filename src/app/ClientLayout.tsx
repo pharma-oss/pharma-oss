@@ -161,6 +161,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [setupAdminPassword, setSetupAdminPassword] = useState('');
   const [setupError, setSetupError] = useState('');
   const [isCreatingInitialAdmin, setIsCreatingInitialAdmin] = useState(false);
+  const [isResumingGuestDemo, setIsResumingGuestDemo] = useState(false);
 
   // Load and subscribe to DB users
   useEffect(() => {
@@ -360,6 +361,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     } catch (err) {
       console.error('Failed to seed guest demo data:', err);
       toast.error('デモデータの投入に失敗しました。');
+    }
+  };
+
+  // パスワード設定を促す認証ゲート画面から、ログアウト等でセッションが切れた
+  // ゲスト体験にワンクリックで戻るための導線。処理自体はhandleStartGuestDemoと同じ
+  // (初期管理者としてログイン+デモデータ投入)だが、この画面専用のローディング表示を持たせる。
+  const handleResumeGuestDemoFromAuthGate = async () => {
+    setIsResumingGuestDemo(true);
+    try {
+      await handleStartGuestDemo();
+    } finally {
+      setIsResumingGuestDemo(false);
     }
   };
 
@@ -984,6 +997,22 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                         {isCreatingInitialAdmin && <Loader2 size={16} className="animate-spin" />}
                         <Fingerprint size={16} />
                         <span>パスキーを登録して開始</span>
+                      </button>
+                    </div>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <p className="text-muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                        まだパスワードを決めていない場合は、デモ患者・受付データで自由に試せる体験モードに戻れます。
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-secondary flex-center gap-2"
+                        onClick={handleResumeGuestDemoFromAuthGate}
+                        disabled={isResumingGuestDemo || isCreatingInitialAdmin}
+                        style={{ alignSelf: 'flex-start' }}
+                      >
+                        {isResumingGuestDemo && <Loader2 size={16} className="animate-spin" />}
+                        <Sparkles size={16} />
+                        <span>デモ体験を再開する</span>
                       </button>
                     </div>
                   </form>

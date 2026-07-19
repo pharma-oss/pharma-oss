@@ -57,6 +57,20 @@ test('ClientLayout surfaces the first-run tutorial without opening patient scree
   assert.match(cssSource, /\.tutorial-safe-badge/);
 });
 
+test('ClientLayout lets a locked-out guest demo session resume from the auth gate without forcing a password', () => {
+  // セッション切れ後は初期管理者の認証ゲート("初期管理者の認証を設定してください")に
+  // 戻されるが、そこにパスワード設定を強制せずゲスト体験へ戻れるボタンが必要。
+  const gateBlock = source.match(/\) : initialAdminNeedsCredential \? \(([\s\S]*?)\) : \(/)?.[1] || '';
+  assert.match(gateBlock, /handleResumeGuestDemoFromAuthGate/);
+  assert.match(gateBlock, /デモ体験を再開する/);
+  assert.match(gateBlock, /disabled=\{isResumingGuestDemo \|\| isCreatingInitialAdmin\}/);
+
+  assert.match(source, /const handleResumeGuestDemoFromAuthGate = async \(\) => \{/);
+  assert.match(source, /setIsResumingGuestDemo\(true\)/);
+  assert.match(source, /await handleStartGuestDemo\(\)/);
+  assert.match(source, /setIsResumingGuestDemo\(false\)/);
+});
+
 test('ClientLayout locks authenticated staff sessions after inactivity', () => {
   assert.match(source, /SESSION_LOCK_TIMEOUT_MS = 15 \* 60 \* 1000/);
   assert.match(source, /SESSION_ACTIVITY_EVENTS/);
