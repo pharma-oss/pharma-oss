@@ -70,9 +70,21 @@ export async function getDrugMasterRecordsFromJson(): Promise<DrugMasterRecord[]
     if (!drug.code || !drug.name) continue;
     byCode.set(drug.code, drug);
   }
+
+  // 添付文書由来レコードの code はYJコードで、薬価マスター側(レセ電コード)とは
+  // コード体系が異なる。code だけで重複排除すると同じ薬が「薬価0円のYJコード行」
+  // として二重に検索候補へ並び、誤選択すると請求コード・薬価が不正になるため、
+  // 既存行とYJコードまたは薬品名が一致するものは追加しない。
+  const knownYjCodes = new Set<string>();
+  const knownNames = new Set<string>();
+  for (const drug of byCode.values()) {
+    if (drug.yjCode) knownYjCodes.add(drug.yjCode);
+    knownNames.add(drug.name.normalize('NFKC'));
+  }
   for (const rawDrugInfo of rawDrugInfoData as any[]) {
     const drug = normalizeDrugInfoMasterRecord(rawDrugInfo);
     if (!drug.code || !drug.name || byCode.has(drug.code)) continue;
+    if (knownYjCodes.has(drug.code) || knownNames.has(drug.name.normalize('NFKC'))) continue;
     byCode.set(drug.code, drug);
   }
 
