@@ -2660,10 +2660,12 @@ useEffect(() => {
           border-right: 1px solid var(--border);
           border-radius: var(--radius-lg);
           background: var(--bg-card);
+          min-width: 0; /* グリッド内で内容幅より縮められるようにし、モバイルのはみ出しを防ぐ */
         }
 
         .section-tabs {
           display: flex;
+          flex-wrap: wrap; /* 幅が足りない画面ではタブとボタンを折り返す */
           padding: 0.75rem 1.5rem;
           border-bottom: 1px solid var(--border);
           background: #fdfdfd;
@@ -2721,6 +2723,7 @@ useEffect(() => {
           padding: 1rem;
           gap: 1rem;
           background: #fdfdfd;
+          min-width: 0;
         }
 
         .emr-actions {
@@ -2959,7 +2962,8 @@ useEffect(() => {
           }
 
           .emr-workspace {
-            grid-template-columns: 1fr;
+            /* min-width:auto による内容幅までの拡張を抑え、375px幅でもはみ出させない */
+            grid-template-columns: minmax(0, 1fr);
             overflow: visible;
           }
 
@@ -5201,6 +5205,7 @@ const SoapEditor = ({ targetVisitId, registerFlush, onResolvedVisitChange }: {
         }
         .soap-editor-toolbar {
           display: flex;
+          flex-wrap: wrap; /* 狭い画面ではヒントと保存ステータスを折り返す */
           align-items: center;
           justify-content: flex-end;
           gap: 0.75rem;

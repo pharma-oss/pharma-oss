@@ -17,8 +17,10 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <ClientLayout>{children}</ClientLayout>
-        {/* 右上はスタッフ選択・通知ベルと重なるため右下に表示する */}
-        <Toaster position="bottom-right" richColors />
+        {/* 右上はスタッフ選択・通知ベル、右下は受付フォームの送信ボタン・EMRの
+            完了/保存バーと重なる(エラートーストが再送信クリックを吸ってしまう)ため、
+            クリック対象のない上部中央に表示する */}
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );
