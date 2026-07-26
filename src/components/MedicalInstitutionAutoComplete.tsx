@@ -26,6 +26,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
   const [code, setCode] = useState(valueCode);
   const [name, setName] = useState(valueName);
   const [isOpen, setIsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<MedicalInstitutionRecord[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
   const containerRef = useRef<HTMLDivElement>(null);
