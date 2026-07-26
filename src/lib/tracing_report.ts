@@ -107,11 +107,38 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
   };
 }
 
+function escapeHtml(str?: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function generateTracingReportPrintHtml(
   report: Partial<VisitTracingReport>,
   pharmacyInfo: { pharmacyName?: string; pharmacyPhone?: string; pharmacyFax?: string; defaultPharmacistName?: string },
   patientName: string
 ): string {
+  const safeDestInst = escapeHtml(report.destinationInstitution || '医療機関');
+  const safeDestDept = escapeHtml(report.destinationDepartment);
+  const safeDestDoc = escapeHtml(report.destinationDoctor);
+  const safePatientName = escapeHtml(patientName);
+  const safeReportDate = escapeHtml(report.reportDate || new Date().toISOString().slice(0, 10));
+  const safePharmName = escapeHtml(pharmacyInfo.pharmacyName || '保険薬局');
+  const safePharmPhone = escapeHtml(pharmacyInfo.pharmacyPhone || '-');
+  const safePharmFax = escapeHtml(pharmacyInfo.pharmacyFax || '-');
+  const safePharmacist = escapeHtml(pharmacyInfo.defaultPharmacistName || '薬剤師');
+  const safeSubject = escapeHtml(report.subject || '服薬情報のご報告');
+
+  const safeMedSummary = escapeHtml(report.medicationSummary);
+  const safePatientCondition = escapeHtml(report.patientCondition);
+  const safeAssessment = escapeHtml(report.assessment);
+  const safeProposal = escapeHtml(report.proposal);
+  const safeFollowUp = escapeHtml(report.followUpPlan);
+
   return `
 <!DOCTYPE html>
 <html lang="ja">
@@ -125,7 +152,7 @@ export function generateTracingReportPrintHtml(
     .title { font-size: 18pt; font-weight: bold; text-align: center; margin-bottom: 25px; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 5px; }
     .dest-info { width: 60%; vertical-align: top; }
     .sender-info { width: 40%; vertical-align: top; text-align: right; font-size: 10pt; }
-    .box { border: 1px solid #444; border-radius: 4px; padding: 10px; margin-bottom: 15px; }
+    .box { border: 1px solid #444; border-radius: 4px; padding: 10px; margin-bottom: 15px; page-break-inside: avoid; break-inside: avoid; }
     .box-title { font-weight: bold; font-size: 10.5pt; background: #f0f0f0; padding: 4px 8px; margin: -10px -10px 8px -10px; border-bottom: 1px solid #444; border-top-left-radius: 3px; border-top-right-radius: 3px; }
     .field-content { white-space: pre-wrap; word-break: break-all; }
   </style>
@@ -136,54 +163,54 @@ export function generateTracingReportPrintHtml(
   <table class="header-table">
     <tr>
       <td class="dest-info">
-        <div style="font-size: 13pt; font-weight: bold;">${report.destinationInstitution || '医療機関'} 御中</div>
-        ${report.destinationDepartment ? `<div>${report.destinationDepartment}</div>` : ''}
-        ${report.destinationDoctor ? `<div>${report.destinationDoctor} 先生</div>` : ''}
+        <div style="font-size: 13pt; font-weight: bold;">${safeDestInst} 御中</div>
+        ${safeDestDept ? `<div>${safeDestDept}</div>` : ''}
+        ${safeDestDoc ? `<div>${safeDestDoc} 先生</div>` : ''}
         <div style="margin-top: 15px; font-size: 12pt;">
-          患者様氏名: <strong>${patientName}</strong> 様
+          患者様氏名: <strong>${safePatientName}</strong> 様
         </div>
       </td>
       <td class="sender-info">
-        <div>報告日: ${report.reportDate || new Date().toISOString().slice(0, 10)}</div>
-        <div style="margin-top: 10px; font-weight: bold; font-size: 11pt;">${pharmacyInfo.pharmacyName || '保険薬局'}</div>
-        <div>TEL: ${pharmacyInfo.pharmacyPhone || '-'} / FAX: ${pharmacyInfo.pharmacyFax || '-'}</div>
-        <div>担当薬剤師: ${pharmacyInfo.defaultPharmacistName || '薬剤師'}</div>
+        <div>報告日: ${safeReportDate}</div>
+        <div style="margin-top: 10px; font-weight: bold; font-size: 11pt;">${safePharmName}</div>
+        <div>TEL: ${safePharmPhone} / FAX: ${safePharmFax}</div>
+        <div>担当薬剤師: ${safePharmacist}</div>
       </td>
     </tr>
   </table>
 
   <div style="margin-bottom: 15px; font-weight: bold; font-size: 12pt;">
-    件名: ${report.subject || '服薬情報のご報告'}
+    件名: ${safeSubject}
   </div>
 
-  ${report.medicationSummary ? `
+  ${safeMedSummary ? `
   <div class="box">
     <div class="box-title">1. 対象処方・調剤薬剤概要</div>
-    <div class="field-content">${report.medicationSummary}</div>
+    <div class="field-content">${safeMedSummary}</div>
   </div>` : ''}
 
-  ${report.patientCondition ? `
+  ${safePatientCondition ? `
   <div class="box">
     <div class="box-title">2. 患者の服薬状況・主訴・経過</div>
-    <div class="field-content">${report.patientCondition}</div>
+    <div class="field-content">${safePatientCondition}</div>
   </div>` : ''}
 
-  ${report.assessment ? `
+  ${safeAssessment ? `
   <div class="box">
     <div class="box-title">3. 薬剤師アセスメント・懸念事項</div>
-    <div class="field-content">${report.assessment}</div>
+    <div class="field-content">${safeAssessment}</div>
   </div>` : ''}
 
-  ${report.proposal ? `
+  ${safeProposal ? `
   <div class="box">
     <div class="box-title">4. 処方提案・ご検討いただきたい事項</div>
-    <div class="field-content">${report.proposal}</div>
+    <div class="field-content">${safeProposal}</div>
   </div>` : ''}
 
-  ${report.followUpPlan ? `
+  ${safeFollowUp ? `
   <div class="box">
     <div class="box-title">5. 薬局での今後のフォローアップ計画</div>
-    <div class="field-content">${report.followUpPlan}</div>
+    <div class="field-content">${safeFollowUp}</div>
   </div>` : ''}
 </body>
 </html>

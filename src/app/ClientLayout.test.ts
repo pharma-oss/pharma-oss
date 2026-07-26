@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync(new URL('./ClientLayout.tsx', import.meta.url), 'utf8');
+const clientLayoutRaw = readFileSync(new URL('./ClientLayout.tsx', import.meta.url), 'utf8');
+const sessionLockRaw = readFileSync(new URL('../hooks/useSessionLock.ts', import.meta.url), 'utf8');
+const source = clientLayoutRaw + '\n' + sessionLockRaw;
 const cssSource = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 
 test('ClientLayout resolves the initial staff list before relying on subscription updates', () => {

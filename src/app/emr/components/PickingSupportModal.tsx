@@ -1,4 +1,3 @@
-'use meemo';
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -14,6 +13,7 @@ import {
   Edit2
 } from 'lucide-react';
 import type { PickingItem } from '@/lib/emr_helpers';
+import { WorkflowMiniTutorial } from '@/components/WorkflowMiniTutorial';
 
 export interface PickingSupportModalProps {
   isOpen: boolean;
@@ -21,6 +21,7 @@ export interface PickingSupportModalProps {
   items: PickingItem[];
   patientName: string;
   prescriptionId: string;
+  userId?: string;
   onScanGs1: (scannedCode: string) => Promise<{ success: boolean; message: string }>;
   onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<void>;
   onResetPick: (itemId: string) => void;
@@ -152,6 +153,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         <div className="patient-prescription-info" style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
           患者: <strong style={{ color: 'var(--text-main)' }}>{patientName}</strong> 様 / 処方ID: {prescriptionId}
         </div>
+        <WorkflowMiniTutorial kind="picking" userId={userId || 'pharmacist-001'} autoOpen={isOpen} />
       </div>
 
       <div className="modal-body" style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -332,17 +334,18 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
             type="button"
             className="btn-secondary flex-center gap-1"
             onClick={onExportInstruction}
+            data-testid="picking-instruction-export"
             title="ピッキング指示データ(CSV)を出力"
           >
             <Download size={15} />
             <span>指示CSV</span>
           </button>
-          <label className="btn-secondary flex-center gap-1" style={{ cursor: 'pointer' }}>
+          <label className="btn-secondary flex-center gap-1" style={{ cursor: 'pointer' }} data-testid="picking-result-import">
             <Upload size={15} />
             <span>{isImportingSystemResult ? '取込中...' : '結果取込'}</span>
             <input
               type="file"
-              accept=".csv,.txt"
+              accept=".csv,.tsv,.txt"
               style={{ display: 'none' }}
               disabled={isImportingSystemResult}
               onChange={async (e) => {

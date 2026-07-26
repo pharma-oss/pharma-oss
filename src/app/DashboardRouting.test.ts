@@ -2,7 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const dashboardSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+const mainPageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+const dashboardRowsSource = readFileSync(new URL('../components/dashboard/DashboardRows.tsx', import.meta.url), 'utf8');
+const dashboardCardsSource = readFileSync(new URL('../components/dashboard/DashboardCards.tsx', import.meta.url), 'utf8');
+const dashboardHelpersSource = readFileSync(new URL('../lib/dashboard_helpers.ts', import.meta.url), 'utf8');
+const dashboardSource = mainPageSource + '\n' + dashboardRowsSource + '\n' + dashboardCardsSource + '\n' + dashboardHelpersSource;
 const printSource = readFileSync(new URL('./print/[visitId]/page.tsx', import.meta.url), 'utf8');
 
 test('dashboard task cards open the pharmacist confirmation and print screen', () => {

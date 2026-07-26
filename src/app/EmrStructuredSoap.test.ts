@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const emrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const mainEmrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const soapCompSource = readFileSync(new URL('./emr/components/SoapComponents.tsx', import.meta.url), 'utf8');
+const structLibSource = readFileSync(new URL('../lib/soap_structured_assessment.ts', import.meta.url), 'utf8');
+const emrSource = mainEmrSource + '\n' + soapCompSource + '\n' + structLibSource;
 
 test('EMR SOAP editor stores structured medication guidance fields and warns on completion', () => {
   assert.match(emrSource, /SoapStructuredAssessmentPanel/);

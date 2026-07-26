@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const emrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const mainEmrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const insightCardsSource = readFileSync(new URL('./emr/components/EmrInsightCards.tsx', import.meta.url), 'utf8');
+const emrHelpersSource = readFileSync(new URL('../lib/emr_helpers.ts', import.meta.url), 'utf8');
+const emrSource = mainEmrSource + '\n' + insightCardsSource + '\n' + emrHelpersSource;
 
 function section(start: string, end: string): string {
   const startIndex = emrSource.indexOf(start);

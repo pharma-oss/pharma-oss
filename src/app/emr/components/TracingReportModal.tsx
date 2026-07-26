@@ -1,4 +1,3 @@
-'use meemo';
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -32,12 +31,15 @@ export interface TracingReportModalProps {
   onSaveReport: (report: VisitTracingReport) => Promise<void>;
 }
 
+const EMPTY_PRESCRIPTION_ITEMS: Array<{ drugName: string; quantity?: number; usage?: string }> = [];
+const EMPTY_SOAP_PROBLEMS: Array<{ title: string; entries: Array<{ type: 'S' | 'O' | 'A' | 'P'; text: string }> }> = [];
+
 export const TracingReportModal: React.FC<TracingReportModalProps> = ({
   isOpen,
   onClose,
   patientName,
-  prescriptionItems = [],
-  soapProblems = [],
+  prescriptionItems = EMPTY_PRESCRIPTION_ITEMS,
+  soapProblems = EMPTY_SOAP_PROBLEMS,
   assessment,
   existingReport,
   pharmacyInfo = {},
@@ -72,7 +74,8 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         setReport(draft);
       }
     }
-  }, [isOpen, existingReport, patientName, prescriptionItems, soapProblems, assessment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, existingReport]);
 
   if (!isOpen) return null;
 

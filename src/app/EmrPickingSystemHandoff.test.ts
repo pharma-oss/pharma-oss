@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const emrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const mainEmrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
+const pickingModalSource = readFileSync(new URL('./emr/components/PickingSupportModal.tsx', import.meta.url), 'utf8');
+const emrSource = mainEmrSource + '\n' + pickingModalSource;
 
 function section(start: string, end: string): string {
   const startIndex = emrSource.indexOf(start);
