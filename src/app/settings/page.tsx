@@ -48,6 +48,7 @@ import {
   DISPENSING_OFFICIAL_FEE_CODE_OVERRIDE_ITEMS,
   type OfficialFeeCodeOverrideKey
 } from '@/lib/calculator';
+import { MedicalInstitutionMasterSyncModal } from '@/components/MedicalInstitutionMasterSyncModal';
 import {
   buildOfficialFeeCodeMasterProposalFromCsv,
   buildOfficialFeeCodeMasterProposalReviewCsv,
@@ -522,6 +523,7 @@ export default function SettingsPage() {
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [isAnalyzingMigrationCsv, setIsAnalyzingMigrationCsv] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>('facility');
+  const [isMedicalInstSyncOpen, setIsMedicalInstSyncOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditIntegrity, setAuditIntegrity] = useState<AuditIntegrityReport | null>(null);
   const [isCheckingAuditIntegrity, setIsCheckingAuditIntegrity] = useState(false);
@@ -5848,8 +5850,31 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'master' && (
-        <div className="settings-section glass">
-          <h2>医薬品マスタ更新</h2>
+        <>
+          <div className="settings-section glass" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2>公式医療機関マスタ同期</h2>
+                <p className="section-desc">厚生労働省・支払基金の公式医療機関コードマスタ（CSV/JSON）をインポートして補完用データベースを更新します。</p>
+              </div>
+              <button
+                type="button"
+                className="btn-primary flex-center gap-1"
+                onClick={() => setIsMedicalInstSyncOpen(true)}
+              >
+                <RefreshCw size={16} />
+                <span>医療機関マスタ同期モーダルを開く</span>
+              </button>
+            </div>
+          </div>
+
+          <MedicalInstitutionMasterSyncModal
+            isOpen={isMedicalInstSyncOpen}
+            onClose={() => setIsMedicalInstSyncOpen(false)}
+          />
+
+          <div className="settings-section glass">
+            <h2>医薬品マスタ更新</h2>
           <p className="section-desc">支払基金からダウンロードした医薬品マスター（CSV・ZIP）をアップロードしてマスタを更新します。</p>
 
           <div className="upload-area">
@@ -6273,8 +6298,8 @@ export default function SettingsPage() {
                 })}
               </div>
             )}
-          </section>
         </div>
+      </>
       )}
 
       {activeTab === 'backup' && (

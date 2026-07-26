@@ -40,7 +40,7 @@ export function useDrugSearchWorker(
   const initialize = useCallback((records: DrugMasterRecord[]) => {
     if (!records || records.length === 0) return;
 
-    syncInitialize(records);
+    let workerCreated = false;
 
     if (typeof window !== 'undefined' && typeof window.Worker !== 'undefined') {
       try {
@@ -69,15 +69,24 @@ export function useDrugSearchWorker(
 
         worker.onerror = (err) => {
           console.warn('[useDrugSearchWorker] Worker error, falling back to sync search:', err);
+          setIsSearching(false);
+          if (records && records.length > 0 && indexedFallbackRef.current.length === 0) {
+            syncInitialize(records);
+          }
           workerRef.current = null;
         };
 
         worker.postMessage({ type: 'INIT', payload: records });
         workerRef.current = worker;
+        workerCreated = true;
       } catch (err) {
         console.warn('[useDrugSearchWorker] Failed to create Worker, using sync fallback:', err);
         workerRef.current = null;
       }
+    }
+
+    if (!workerCreated) {
+      syncInitialize(records);
     }
   }, [syncInitialize]);
 

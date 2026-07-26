@@ -45,7 +45,8 @@ export function verifyPrintLayoutStructure(
   rule.requiredSelectors.forEach((selector) => {
     if (selector.startsWith('.')) {
       const className = selector.slice(1);
-      if (!normalizedHtml.includes(`class="${className}"`) && !normalizedHtml.includes(`class='${className}'`) && !normalizedHtml.includes(className)) {
+      const hasClassAttr = new RegExp(`class=["'][^"']*\\b${className}\\b[^"']*["']`, 'i').test(html);
+      if (!hasClassAttr) {
         errors.push(`必須要素クラス "${selector}" が見つかりません。`);
       }
     } else if (selector.startsWith('#')) {

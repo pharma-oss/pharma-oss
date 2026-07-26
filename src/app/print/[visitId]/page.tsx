@@ -1160,7 +1160,7 @@ export default function PrintPage() {
   const handleRegisterReturn = async () => {
     if (!ensurePermission('change_billing')) return;
     const reasonOptionsText = OFFICIAL_CLAIM_RETURN_REASONS.map((r) => `[${r.code}] ${r.title}`).join('\n');
-    const defaultReason = visitData?.claimLifecycle?.returnReason || OFFICIAL_CLAIM_RETURN_REASONS[0].recommendedMemo;
+    const defaultReason = visitData?.claimLifecycle?.returnReason?.replace(/^【返戻修正 \[.*?\]】\s*/, '') || '';
     const input = window.prompt(
       `返戻理由・修正方針を入力してください。\n（主要理由コード:\n${reasonOptionsText}）`,
       defaultReason
@@ -1169,7 +1169,8 @@ export default function PrintPage() {
 
     try {
       const currentUserForClaim = getCurrentUser();
-      const matchedReason = OFFICIAL_CLAIM_RETURN_REASONS.find((r) => input.includes(r.code)) || OFFICIAL_CLAIM_RETURN_REASONS[0];
+      const r99Fallback = OFFICIAL_CLAIM_RETURN_REASONS[OFFICIAL_CLAIM_RETURN_REASONS.length - 1];
+      const matchedReason = OFFICIAL_CLAIM_RETURN_REASONS.find((r) => input.includes(r.code)) || r99Fallback;
       const summary = buildReturnCorrectionSummary({
         reasonCode: matchedReason.code,
         customNote: input.trim(),
@@ -2881,7 +2882,7 @@ export default function PrintPage() {
               onChange={(e) => {
                 const presetId = e.target.value;
                 if (!presetId) return;
-                const presets = getPrintPresetsForDocument();
+                const presets = getPrintPresetsForDocument('dispensing_record');
                 const preset = presets.find((p) => p.id === presetId);
                 if (preset) {
                   handleMarginTopChange(preset.marginTopMm);
@@ -2891,7 +2892,7 @@ export default function PrintPage() {
               }}
             >
               <option value="">-- プリンター・用紙プリセットを選択して一括適用 --</option>
-              {getPrintPresetsForDocument().map((preset) => (
+              {getPrintPresetsForDocument('dispensing_record').map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.name} ({preset.paperSize}) - {preset.description}
                 </option>

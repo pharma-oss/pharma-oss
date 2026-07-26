@@ -189,12 +189,14 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       <div className="modal-body" style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '65vh', overflowY: 'auto' }}>
         <div style={{ border: '1px solid var(--border)', padding: '0.85rem', borderRadius: '8px', background: 'var(--bg-subtle)' }}>
           <MedicalInstitutionAutoComplete
+            valueCode={(report as any).destinationInstitutionCode || ''}
             valueName={report.destinationInstitution || ''}
             onChange={({ code, name }) => {
               setReport((prev) => ({
                 ...prev,
-                destinationInstitution: name
-              }));
+                destinationInstitution: name,
+                destinationInstitutionCode: code
+              } as any));
             }}
           />
         </div>

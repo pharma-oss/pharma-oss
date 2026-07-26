@@ -83,14 +83,15 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
     setName(inst.name);
     onChange({ code: inst.code, name: inst.name, address: inst.address });
     setIsOpen(false);
+    setSelectedIndex(-1);
   };
 
   return (
-    <div ref={containerRef} className="medical-inst-autocomplete" style={{ position: 'relative', width: '100%' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.5rem' }}>
+    <div className="medical-inst-autocomplete" ref={containerRef}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.75rem' }}>
         <div>
           <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-            医療機関コード
+            医療機関コード (10桁)
           </label>
           <input
             type="text"
@@ -102,7 +103,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
           />
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} role="combobox" aria-expanded={isOpen} aria-haspopup="listbox">
           <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
             医療機関名
           </label>
@@ -112,6 +113,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
               className="input-field"
               value={name}
               onChange={handleNameChange}
+              onKeyDown={handleKeyDown}
               onFocus={() => {
                 if (name.trim()) {
                   const results = searchMedicalInstitutions(name);
@@ -127,6 +129,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
           {isOpen && suggestions.length > 0 && (
             <div
               className="suggestions-dropdown"
+              role="listbox"
               style={{
                 position: 'absolute',
                 top: '100%',
@@ -142,10 +145,12 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                 marginTop: '4px'
               }}
             >
-              {suggestions.map((inst) => (
+              {suggestions.map((inst, idx) => (
                 <button
                   key={inst.code}
                   type="button"
+                  role="option"
+                  aria-selected={idx === selectedIndex}
                   onClick={() => handleSelectSuggestion(inst)}
                   style={{
                     width: '100%',
@@ -153,7 +158,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                     padding: '0.6rem 0.8rem',
                     border: 'none',
                     borderBottom: '1px solid var(--border-subtle)',
-                    background: 'transparent',
+                    background: idx === selectedIndex ? 'var(--bg-subtle, #f1f5f9)' : 'transparent',
                     cursor: 'pointer',
                     display: 'flex',
                     flexDirection: 'column',
