@@ -26,9 +26,27 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
   const [code, setCode] = useState(valueCode);
   const [name, setName] = useState(valueName);
   const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<MedicalInstitutionRecord[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+    } else if (e.key === 'Enter' && selectedIndex >= 0 && selectedIndex < suggestions.length) {
+      e.preventDefault();
+      handleSelectSuggestion(suggestions[selectedIndex]);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+      setSelectedIndex(-1);
+    }
+  };
 
   useEffect(() => {
     setCode(valueCode);

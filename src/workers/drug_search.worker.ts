@@ -114,8 +114,8 @@ export function searchIndexedDrugs(
   return scoredResults.slice(0, limit).map((r) => r.record);
 }
 
-const isWorkerEnvironment = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
-if (isWorkerEnvironment && typeof self.postMessage === 'function') {
+const isWorkerEnvironment = typeof self !== 'undefined' && typeof (self as any).WorkerGlobalScope !== 'undefined';
+if (isWorkerEnvironment && typeof (self as any).postMessage === 'function') {
   self.addEventListener('message', (event: MessageEvent<WorkerIncomingMessage>) => {
     const message = event.data;
     if (!message || !message.type) return;

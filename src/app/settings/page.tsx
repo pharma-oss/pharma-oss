@@ -6298,6 +6298,7 @@ export default function SettingsPage() {
                 })}
               </div>
             )}
+          </section>
         </div>
       </>
       )}
