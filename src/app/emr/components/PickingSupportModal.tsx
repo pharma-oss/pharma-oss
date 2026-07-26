@@ -25,7 +25,7 @@ export interface PickingSupportModalProps {
   onScanGs1: (scannedCode: string) => Promise<{ success: boolean; message: string }>;
   onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<void>;
   onResetPick: (itemId: string) => void;
-  onExportInstruction: () => void;
+  onExportInstruction: () => Promise<void>;
   onImportResultFile: (file: File) => Promise<void>;
   onPrintReceipt: () => void;
 }
