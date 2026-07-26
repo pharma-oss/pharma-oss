@@ -8,11 +8,12 @@ import {
 } from './onboarding_e2e.ts';
 
 const dashboardSource = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+const dashboardRowsSource = readFileSync(new URL('../components/dashboard/DashboardRows.tsx', import.meta.url), 'utf8');
 const printSource = readFileSync(new URL('../app/print/[visitId]/page.tsx', import.meta.url), 'utf8');
 const settingsSource = readFileSync(new URL('../app/settings/page.tsx', import.meta.url), 'utf8');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const onboardingE2EScript = readFileSync(new URL('../../scripts/runOnboardingE2E.mjs', import.meta.url), 'utf8');
-const onboardingSources = [dashboardSource, printSource, settingsSource].join('\n');
+const onboardingSources = [dashboardSource, dashboardRowsSource, printSource, settingsSource].join('\n');
 
 function auditLog(actionType: AuditLog['actionType']): AuditLog {
   return {

@@ -55,3 +55,60 @@ export function getMissingSoapStructuredAssessmentFields(
     .filter((field) => normalized[field] === 'unknown')
     .map((field) => SOAP_STRUCTURED_ASSESSMENT_FIELD_LABELS[field]);
 }
+
+export interface SoapStructuredAssessmentControl<K extends keyof SoapStructuredAssessment = keyof SoapStructuredAssessment> {
+  field: K;
+  label: string;
+  options: Array<[SoapStructuredAssessment[K], string]>;
+}
+
+export const soapStructuredAssessmentControls: Array<SoapStructuredAssessmentControl<any>> = [
+  {
+    field: 'adherence',
+    label: '服薬コンプライアンス',
+    options: [
+      ['unknown', '未確認'],
+      ['good', '良好'],
+      ['partial', '一部飲み残し'],
+      ['poor', '不良']
+    ]
+  },
+  {
+    field: 'leftoverMedicine',
+    label: '残薬の有無',
+    options: [
+      ['unknown', '未確認'],
+      ['none', 'なし'],
+      ['has', 'あり']
+    ]
+  },
+  {
+    field: 'adverseEvent',
+    label: '副作用・体調変化',
+    options: [
+      ['unknown', '未確認'],
+      ['none', '特になし'],
+      ['has', '疑いあり']
+    ]
+  },
+  {
+    field: 'genericChangePreference',
+    label: 'ジェネリック変更希望',
+    options: [
+      ['unknown', '未確認'],
+      ['accepted', '変更希望'],
+      ['declined', '先発希望'],
+      ['consult', '要相談']
+    ]
+  },
+  {
+    field: 'medicationNotebook',
+    label: 'お薬手帳持参',
+    options: [
+      ['unknown', '未確認'],
+      ['issued', '持参あり'],
+      ['not_issued', 'なし']
+    ]
+  }
+];
+

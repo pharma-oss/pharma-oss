@@ -3,6 +3,7 @@ import type { Drug } from '@/db/types';
 export type DrugMasterRecord = Drug & {
   searchNameLower: string;
   searchGenericLower: string;
+  janCode?: string;
 };
 
 export interface ElectronicUsageOption {

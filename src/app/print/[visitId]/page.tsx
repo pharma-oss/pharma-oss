@@ -66,6 +66,8 @@ import {
   buildMedicationInfoPrintContent,
   selectApprovedPatientMedicationInfoTemplate
 } from '@/lib/patient_medication_info';
+import { getPrintPresetsForDocument, type PrintPreset, type PrintDocumentType } from '@/lib/print_presets';
+import { OFFICIAL_CLAIM_RETURN_REASONS, buildReturnCorrectionSummary } from '@/lib/claim_return_manager';
 
 const FEE_TOGGLES: { code: FeeCode; label: string }[] = [
   { code: 'base_fee', label: '調剤基本料' },
@@ -1157,20 +1159,32 @@ export default function PrintPage() {
 
   const handleRegisterReturn = async () => {
     if (!ensurePermission('change_billing')) return;
-    const reason = window.prompt('返戻理由・修正方針を入力してください。', visitData?.claimLifecycle?.returnReason || '返戻内容を確認し、修正後に再請求するため');
-    if (!reason?.trim()) return;
+    const reasonOptionsText = OFFICIAL_CLAIM_RETURN_REASONS.map((r) => `[${r.code}] ${r.title}`).join('\n');
+    const defaultReason = visitData?.claimLifecycle?.returnReason || OFFICIAL_CLAIM_RETURN_REASONS[0].recommendedMemo;
+    const input = window.prompt(
+      `返戻理由・修正方針を入力してください。\n（主要理由コード:\n${reasonOptionsText}）`,
+      defaultReason
+    );
+    if (!input?.trim()) return;
 
     try {
       const currentUserForClaim = getCurrentUser();
+      const matchedReason = OFFICIAL_CLAIM_RETURN_REASONS.find((r) => input.includes(r.code)) || OFFICIAL_CLAIM_RETURN_REASONS[0];
+      const summary = buildReturnCorrectionSummary({
+        reasonCode: matchedReason.code,
+        customNote: input.trim(),
+        operatorName: currentUserForClaim.name || '操作者'
+      });
+
       const nextLifecycle = markClaimReturned({
         current: visitData?.claimLifecycle,
         at: new Date().toISOString(),
         by: currentUserForClaim.name,
-        reason: reason.trim()
+        reason: summary.formattedMemo
       });
       await persistClaimLifecycle(
         nextLifecycle,
-        `請求状態変更: 返戻対応に切り替えました。理由: ${reason.trim()}`
+        summary.auditDetails
       );
     } catch (err) {
       console.error('Failed to register returned claim:', err);
@@ -2848,6 +2862,41 @@ export default function PrintPage() {
           <div className="preview-header">
             <h3><SlidersHorizontal size={18} aria-hidden="true" /> 印刷レイアウト微調整 (店舗個別設定)</h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>サーマルプリンタやブラウザの余白誤差をミリメートル単位で微調整できます。（端末に自動保存）</p>
+          </div>
+
+          <div style={{ padding: '0.75rem 0 0.25rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '0.35rem' }}>
+              🎯 印刷プリセット（用紙・プリンター別標準設定）
+            </label>
+            <select
+              className="select-input"
+              style={{
+                width: '100%',
+                padding: '0.55rem 0.75rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.85rem',
+                border: '1px solid var(--border)',
+                background: 'var(--background)'
+              }}
+              onChange={(e) => {
+                const presetId = e.target.value;
+                if (!presetId) return;
+                const presets = getPrintPresetsForDocument();
+                const preset = presets.find((p) => p.id === presetId);
+                if (preset) {
+                  handleMarginTopChange(preset.marginTopMm);
+                  handleMarginBottomChange(preset.marginBottomMm);
+                  handleFontScaleChange(preset.fontScalePercent);
+                }
+              }}
+            >
+              <option value="">-- プリンター・用紙プリセットを選択して一括適用 --</option>
+              {getPrintPresetsForDocument().map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name} ({preset.paperSize}) - {preset.description}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', padding: '0.5rem 0' }}>

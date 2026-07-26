@@ -12,6 +12,9 @@ import { toast } from 'sonner';
 import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
 import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
+import { LoginModal } from '@/components/layout/LoginModal';
+import { usePWA } from '@/hooks/usePWA';
+import { useSessionLock } from '@/hooks/useSessionLock';
 
 const navItems = [
   { href: '/', label: 'ダッシュボード', icon: LayoutDashboard },
@@ -20,8 +23,6 @@ const navItems = [
   { href: '/inventory', label: '在庫管理', icon: Package },
 ];
 
-const SESSION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
-const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'focus'] as const;
 const STAFF_LOAD_TIMEOUT_MS = 8000;
 // 初期管理者パスワード設定より前に、未ログインのまま体験できるデモの既読状態
 const PRE_LOGIN_TOUR_STORAGE_KEY = 'yakureki:pre-login-tour:v1';
@@ -49,7 +50,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [staffLoadTimedOut, setStaffLoadTimedOut] = useState(false);
   const [staffLoadError, setStaffLoadError] = useState('');
   const [staffLoadAttempt, setStaffLoadAttempt] = useState(0);
-  const sessionLockTimerRef = useRef<number | null>(null);
   const isAuthenticated = isAuthenticatedUser(currentUser);
   const initialAdmin = users.find(isInitialAdminUser);
   const initialAdminNeedsCredential = !!initialAdmin && !hasLoginCredential(initialAdmin);
@@ -58,6 +58,23 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // ゲスト体験中(パスワード未設定の初期管理者としてログインしている)かどうか。
   // 実際にパスワード/パスキーが設定されるとhasLoginCredentialがtrueになり自動的に外れる。
   const isGuestDemoSession = isAuthenticated && isInitialAdminUser(currentUser) && !hasLoginCredential(currentUser);
+
+  // Custom hook for PWA
+  const { showPwaBanner, handlePwaInstall, dismissPwaBanner } = usePWA();
+
+  // Custom hook for Session Lock
+  const handleSessionLocked = useCallback(() => {
+    setShowLoginModal(false);
+    setSelectedUser(null);
+    setPasswordInput('');
+    setLoginError('');
+  }, []);
+
+  useSessionLock({
+    isAuthenticated,
+    currentUser,
+    onSessionLocked: handleSessionLocked
+  });
 
   useEffect(() => {
     try {
@@ -77,73 +94,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
     setPreLoginTourDismissed(true);
   }, []);
-
-  // PWA States
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isPWA, setIsPWA] = useState(false);
-  const [showPwaBanner, setShowPwaBanner] = useState(false);
-
-  // Register Service Worker and manage PWA prompts
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // Check if already launched in PWA standalone mode
-    const checkPwaMode = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
-        || (window.navigator as any).standalone 
-        || document.referrer.includes('android-app://');
-      
-      setIsPWA(isStandalone);
-      
-      // If already PWA, make sure banner is hidden
-      if (isStandalone) {
-        setShowPwaBanner(false);
-      }
-    };
-
-    checkPwaMode();
-
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      
-      // Only show banner if NOT in PWA mode AND not manually dismissed this session
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-      const dismissed = sessionStorage.getItem('pwa_banner_dismissed') === 'true';
-      if (!isStandalone && !dismissed) {
-        setShowPwaBanner(true);
-      }
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Register sw.js
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then((reg) => console.log('Service Worker registered:', reg.scope))
-        .catch((err) => console.warn('Service Worker registration failed:', err));
-    }
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handlePwaInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-      setShowPwaBanner(false);
-      toast.success('薬局OSのインストールを開始しました！');
-    }
-  };
-
-  const dismissPwaBanner = () => {
-    sessionStorage.setItem('pwa_banner_dismissed', 'true');
-    setShowPwaBanner(false);
-  };
 
   // Load current user on mount to avoid hydration mismatch
   useEffect(() => {
@@ -382,64 +332,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     setLocalCurrentUser(UNAUTHENTICATED_USER);
     toast.info('体験モードを終了しました。続けるには管理者パスワードを設定してください。');
   };
-
-  const clearSessionLockTimer = useCallback(() => {
-    if (sessionLockTimerRef.current) {
-      window.clearTimeout(sessionLockTimerRef.current);
-      sessionLockTimerRef.current = null;
-    }
-  }, []);
-
-  const lockCurrentSession = useCallback(async () => {
-    const lockedUser = getCurrentUser();
-    if (!isAuthenticatedUser(lockedUser)) return;
-
-    try {
-      const { getDatabase } = await import('@/db');
-      const db = await getDatabase();
-      await logAuditAction(
-        db,
-        'session_lock',
-        `無操作セッションロック: 操作者「${lockedUser.name} (${lockedUser.role})」を自動ログアウトしました。`
-      );
-    } catch (err) {
-      console.error('Failed to log session lock audit action:', err);
-    } finally {
-      setCurrentUser(UNAUTHENTICATED_USER);
-      setLocalCurrentUser(UNAUTHENTICATED_USER);
-      setShowLoginModal(false);
-      setSelectedUser(null);
-      setPasswordInput('');
-      setLoginError('');
-      clearSessionLockTimer();
-      toast.warning('一定時間操作がなかったため、スタッフセッションをロックしました。');
-    }
-  }, [clearSessionLockTimer]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    clearSessionLockTimer();
-    if (!isAuthenticated) return;
-
-    const resetSessionLockTimer = () => {
-      clearSessionLockTimer();
-      sessionLockTimerRef.current = window.setTimeout(() => {
-        void lockCurrentSession();
-      }, SESSION_LOCK_TIMEOUT_MS);
-    };
-
-    resetSessionLockTimer();
-    for (let i = 0; i < SESSION_ACTIVITY_EVENTS.length; i++) {
-      window.addEventListener(SESSION_ACTIVITY_EVENTS[i], resetSessionLockTimer, { passive: true });
-    }
-
-    return () => {
-      clearSessionLockTimer();
-      for (let i = 0; i < SESSION_ACTIVITY_EVENTS.length; i++) {
-        window.removeEventListener(SESSION_ACTIVITY_EVENTS[i], resetSessionLockTimer);
-      }
-    };
-  }, [clearSessionLockTimer, currentUser.userId, isAuthenticated, lockCurrentSession]);
 
   const handleInitialAdminPasswordSetup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1031,143 +923,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
       {/* Staff Login Modal */}
       {showLoginModal && selectedUser && (
-        <div 
-          className="login-modal-overlay"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.45)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+        <LoginModal
+          selectedUser={selectedUser}
+          passwordInput={passwordInput}
+          loginError={loginError}
+          isVerifying={isVerifying}
+          onPasswordInputChange={setPasswordInput}
+          onPasswordSubmit={handlePasswordLogin}
+          onPasskeyClick={handlePasskeyLogin}
+          onCancel={() => {
+            setShowLoginModal(false);
+            setSelectedUser(null);
+            setPasswordInput('');
+            setLoginError('');
           }}
-        >
-          <div 
-            className="login-modal card glass animate-fade-in"
-            style={{
-              width: '90%',
-              maxWidth: '420px',
-              padding: '2rem',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              boxShadow: 'var(--shadow-xl)',
-              background: 'rgba(255, 255, 255, 0.85)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.5rem',
-              color: 'var(--foreground)'
-            }}
-          >
-            <div style={{ textAlign: 'center' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>
-                スタッフログイン
-              </h2>
-              <p className="text-muted text-sm">
-                「{selectedUser.name}」として認証してください
-              </p>
-            </div>
-
-            {loginError && (
-              <div 
-                style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fee2e2',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '0.75rem',
-                  color: '#dc2626',
-                  fontSize: '0.85rem',
-                  fontWeight: 500
-                }}
-              >
-                ⚠️ {loginError}
-              </div>
-            )}
-
-            <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label htmlFor="staff-password" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  パスワード
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    id="staff-password"
-                    type="password"
-                    placeholder="パスワードを入力してください"
-                    style={{
-                      width: '100%',
-                      padding: '0.65rem 0.75rem 0.65rem 2.25rem',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      background: 'rgba(255, 255, 255, 0.8)',
-                      color: 'var(--foreground)'
-                    }}
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    required
-                  />
-                  <KeyRound 
-                    size={16} 
-                    className="text-ghost" 
-                    style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }} 
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  type="submit"
-                  className="btn-primary flex-center gap-2"
-                  style={{ width: '100%', padding: '0.7rem' }}
-                  disabled={isVerifying}
-                >
-                  {isVerifying && <Loader2 size={16} className="animate-spin" />}
-                  <span>パスワードでログイン</span>
-                </button>
-
-                {selectedUser.passkeyCredentialId && (
-                  <button
-                    type="button"
-                    className="btn-secondary flex-center gap-2"
-                    style={{
-                      width: '100%',
-                      padding: '0.7rem',
-                      border: '1px solid #3b82f6',
-                      color: '#2563eb',
-                      background: 'rgba(37, 99, 235, 0.04)'
-                    }}
-                    onClick={handlePasskeyLogin}
-                    disabled={isVerifying}
-                  >
-                    <Fingerprint size={16} />
-                    <span>パスキーでログイン</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="btn-secondary text-sm"
-                  style={{ width: '100%', marginTop: '0.25rem', padding: '0.7rem' }}
-                  onClick={() => {
-                    setShowLoginModal(false);
-                    setSelectedUser(null);
-                    setPasswordInput('');
-                    setLoginError('');
-                  }}
-                  disabled={isVerifying}
-                >
-                  キャンセル
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        />
       )}
     </>
   );

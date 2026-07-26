@@ -92,3 +92,20 @@ export async function findSubstitutionCandidates(prescribedDrugCode: string): Pr
 
   return candidates;
 }
+
+import { indexDrugRecords, searchIndexedDrugs } from '@/workers/drug_search.worker';
+
+let memoryIndexedCache: ReturnType<typeof indexDrugRecords> | null = null;
+
+export async function searchDrugMasterFast(query: string, limit = 100): Promise<DrugMasterRecord[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return [];
+
+  if (!memoryIndexedCache) {
+    const drugs = await getDrugMasterRecords();
+    memoryIndexedCache = indexDrugRecords(drugs);
+  }
+
+  return searchIndexedDrugs(memoryIndexedCache, normalizedQuery, limit);
+}
+
