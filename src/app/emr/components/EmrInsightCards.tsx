@@ -287,7 +287,7 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
   onSelectGuidance: (type: string, text: string) => void;
 }) {
   return (
-    <div className="insight-card doc-link">
+    <div className="insight-card doc-link emr-prescription-doc-links" id="emr-prescription-doc-links">
       <div className="insight-header">
         <FileText size={18} className="icon-doc" />
         <h3>指導文・患者説明資料</h3>

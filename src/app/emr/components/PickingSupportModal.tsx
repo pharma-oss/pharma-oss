@@ -13,7 +13,7 @@ import {
   Edit2
 } from 'lucide-react';
 import type { PickingItem } from '@/lib/emr_helpers';
-import { WorkflowMiniTutorial } from '@/components/WorkflowMiniTutorial';
+import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 
 export interface PickingSupportModalProps {
   isOpen: boolean;
@@ -36,6 +36,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   items,
   patientName,
   prescriptionId,
+  userId,
   onScanGs1,
   onRecordShortage,
   onResetPick,
@@ -153,7 +154,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         <div className="patient-prescription-info" style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
           患者: <strong style={{ color: 'var(--text-main)' }}>{patientName}</strong> 様 / 処方ID: {prescriptionId}
         </div>
-        <WorkflowMiniTutorial kind="picking" userId={userId || 'pharmacist-001'} autoOpen={isOpen} />
+        <WorkflowMiniTutorial kind="picking" userId={userId || ''} autoOpen={isOpen} />
       </div>
 
       <div className="modal-body" style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -366,7 +367,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         <div className="actions" style={{ display: 'flex', gap: '0.5rem' }}>
           <button type="button" className="btn-secondary flex-center gap-1" onClick={onPrintReceipt}>
             <Printer size={15} />
-            <span>印刷</span>
+            <span>レジロール印刷</span>
           </button>
           <button type="button" className="btn-primary" onClick={onClose}>
             完了

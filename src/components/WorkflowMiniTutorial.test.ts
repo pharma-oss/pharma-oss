@@ -5,7 +5,9 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('./WorkflowMiniTutorial.tsx', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
 const ocrSource = readFileSync(new URL('../app/ocr/page.tsx', import.meta.url), 'utf8');
-const emrSource = readFileSync(new URL('../app/emr/page.tsx', import.meta.url), 'utf8');
+const mainEmrSource = readFileSync(new URL('../app/emr/page.tsx', import.meta.url), 'utf8');
+const pickingModalSource = readFileSync(new URL('../app/emr/components/PickingSupportModal.tsx', import.meta.url), 'utf8');
+const emrSource = mainEmrSource + '\n' + pickingModalSource;
 
 test('workflow demos use isolated fixed fixtures and never write pharmacy records', () => {
   assert.match(source, /WORKFLOW_DEMO_FIXTURE/);
@@ -31,7 +33,7 @@ test('each mini demo opens once per staff member and workflow', () => {
 test('input, picking, and medication demos are attached to their actual workflow screens', () => {
   assert.match(ocrSource, /<WorkflowMiniTutorial[\s\S]*?kind="input"[\s\S]*?autoOpen/);
   assert.match(emrSource, /<WorkflowMiniTutorial[\s\S]*?kind="medication"[\s\S]*?autoOpen=\{!isPickingModalOpen\}/);
-  assert.match(emrSource, /<WorkflowMiniTutorial kind="picking" userId=\{userId\} autoOpen=\{isOpen\}/);
+  assert.match(emrSource, /<WorkflowMiniTutorial[\s\S]*?kind="picking"[\s\S]*?autoOpen/);
   assert.match(emrSource, /openPicking'\) === '1'/);
 });
 

@@ -128,6 +128,20 @@ export default function EmrPage() {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('visitId');
   });
+  const [currentPatientName, setCurrentPatientName] = useState<string>('患者未選択');
+
+  useEffect(() => {
+    if (!db || !targetVisitId) return;
+    db.visits.findOne(targetVisitId).exec().then(async (v) => {
+      if (v) {
+        const pId = v.patientId;
+        if (pId) {
+          const pDoc = await db.patients.findOne(pId).exec();
+          if (pDoc?.name) setCurrentPatientName(pDoc.name);
+        }
+      }
+    });
+  }, [db, targetVisitId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2120,7 +2134,7 @@ useEffect(() => {
       <TracingReportModal
         isOpen={isTracingModalOpen}
         onClose={() => setIsTracingModalOpen(false)}
-        patientName={patientData?.name || '患者未選択'}
+        patientName={currentPatientName}
         pharmacyInfo={facilitySettings || {}}
         onSaveReport={async (report) => {
           if (!db) return;
@@ -2157,7 +2171,7 @@ useEffect(() => {
               'follow_up_record',
               `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`,
               currentVisit.patientId,
-              patientData?.name || '不明'
+              currentPatientName
             );
             if (!auditOk) {
               toast.warning('レポートは保存しましたが、監査ログ記録に失敗しました。');
@@ -2175,7 +2189,7 @@ useEffect(() => {
         isOpen={isPickingModalOpen}
         onClose={() => setIsPickingModalOpen(false)}
         items={pickingItems}
-        patientName={patientData?.name || '患者未選択'}
+        patientName={currentPatientName}
         prescriptionId={targetVisitId || ''}
         onScanGs1={async (scannedCode) => {
           const res = await handleVerifyPickingScan(scannedCode);
