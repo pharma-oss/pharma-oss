@@ -164,6 +164,7 @@ export interface VisitTracingReport {
   status: TracingReportStatus;
   reportDate: string;
   destinationInstitution?: string;
+  destinationInstitutionCode?: string;
   destinationDepartment?: string;
   destinationDoctor?: string;
   subject: string;

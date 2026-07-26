@@ -122,7 +122,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
           />
         </div>
 
-        <div style={{ position: 'relative' }} role="combobox" aria-expanded={isOpen} aria-haspopup="listbox">
+        <div style={{ position: 'relative' }} role="combobox" aria-expanded={isOpen} aria-haspopup="listbox" aria-controls="med-inst-suggestions-list">
           <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
             医療機関名
           </label>
@@ -147,6 +147,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
 
           {isOpen && suggestions.length > 0 && (
             <div
+              id="med-inst-suggestions-list"
               className="suggestions-dropdown"
               role="listbox"
               style={{

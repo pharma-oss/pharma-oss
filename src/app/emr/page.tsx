@@ -2166,10 +2166,11 @@ useEffect(() => {
             });
             setTracingReports(nextReports);
 
+            const instCodeInfo = finalReport.destinationInstitutionCode ? `[${finalReport.destinationInstitutionCode}] ` : '';
             const auditOk = await logAuditAction(
               db,
               'follow_up_record',
-              `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`,
+              `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${instCodeInfo}${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`,
               currentVisit.patientId,
               currentPatientName
             );

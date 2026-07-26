@@ -100,6 +100,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         status: (report.status as TracingReportStatus) || 'draft',
         reportDate: report.reportDate || now.slice(0, 10),
         destinationInstitution: report.destinationInstitution || '',
+        destinationInstitutionCode: report.destinationInstitutionCode || '',
         destinationDepartment: report.destinationDepartment || '',
         destinationDoctor: report.destinationDoctor || '',
         subject: report.subject || '',
