@@ -3,6 +3,7 @@ import { Search, X, AlertCircle } from 'lucide-react';
 import type { Drug } from '@/db/types';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { getDrugMasterRecords, isGeneralNameDrugRecord, type DrugMasterRecord } from '@/lib/master-data/drug_master';
+import { useDrugSearchWorker } from '@/hooks/useDrugSearchWorker';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { getFormulationType } from '@/lib/calculator';
 
@@ -193,6 +194,8 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const { initialize: initWorkerSearch, search: searchViaWorker, results: workerSearchResults } = useDrugSearchWorker();
+
   // Load the app-local drug master instead of adding more RxDB collection work.
   useEffect(() => {
     let isMounted = true;
@@ -201,6 +204,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
       getDrugMasterRecords().then((drugs) => {
         if (!isMounted) return;
         setAllDrugs(drugs);
+        initWorkerSearch(drugs);
         setIsLoading(false);
       }).catch((error) => {
         console.error('Failed to load drug master:', error);
@@ -210,7 +214,13 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
       });
     }
     return () => { isMounted = false; };
-  }, [isOpen]);
+  }, [isOpen, initWorkerSearch]);
+
+  useEffect(() => {
+    if (isOpen && deferredQuery.trim()) {
+      searchViaWorker(deferredQuery, 100);
+    }
+  }, [isOpen, deferredQuery, searchViaWorker]);
 
   useEffect(() => {
     let isMounted = true;
@@ -281,10 +291,12 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const terms = getSearchTerms(deferredQuery);
     if (terms.length === 0) return [];
 
+    const sourceDataset = workerSearchResults.length > 0 ? workerSearchResults : allDrugs;
+
     if (mode === 'prescribed') {
       const prescribedResults: DrugMasterRecord[] = [];
-      for (let i = 0; i < allDrugs.length; i++) {
-        const drug = allDrugs[i];
+      for (let i = 0; i < sourceDataset.length; i++) {
+        const drug = sourceDataset[i];
         if (matchesDrug(drug, terms)) {
           prescribedResults.push(drug);
           if (prescribedResults.length >= 150) break;
@@ -298,8 +310,8 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
 
     // ⚡ Bolt: Replace chained .filter().map() with a single manual loop to avoid O(N) array allocations
     // This is significantly faster for large arrays and reduces GC pressure during fast typing.
-    for (let i = 0; i < allDrugs.length; i++) {
-      const d = allDrugs[i];
+    for (let i = 0; i < sourceDataset.length; i++) {
+      const d = sourceDataset[i];
       if (matchesDrug(d, terms)) {
         if (d.genericName) {
           matchingGenericNames.add(d.genericName);
