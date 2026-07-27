@@ -158,6 +158,178 @@ const getDosageGroup = (yjCode: string | undefined) => {
   return dosageChar;
 };
 
+export interface FilterDrugsParams {
+  query: string;
+  mode: 'prescribed' | 'dispensed';
+  showAllCandidates: boolean;
+  allDrugs: DrugMasterRecord[];
+  workerSearchResults: DrugMasterRecord[];
+  prescribedDrugCode?: string;
+  getAvailableStock?: (drug: DrugMasterRecord) => number;
+}
+
+export function sortDrugsHelper(
+  drugs: DrugMasterRecord[],
+  terms: string[],
+  mode: 'prescribed' | 'dispensed',
+  getAvailableStock?: (drug: DrugMasterRecord) => number
+): DrugMasterRecord[] {
+  const primaryTerm = terms.find((term) => !term.includes('【般】')) || terms[0] || '';
+  const preferGeneral = terms.some((term) => term.includes('【般】'));
+  const rank = (drug: DrugMasterRecord) => {
+    const stockRank = getAvailableStock ? (getAvailableStock(drug) > 0 ? 0 : 1) : 0;
+    const abolishedRank = drug.isAbolished ? 1 : 0;
+    const generalRank = mode === 'prescribed' && isGeneralNameRecord(drug) !== preferGeneral ? 1 : 0;
+    const name = drug.searchNameLower || (drug.name || '').toLowerCase();
+    const generic = drug.searchGenericLower || (drug.genericName || '').toLowerCase();
+    let matchRank = 5;
+
+    if (primaryTerm) {
+      if (name === primaryTerm) matchRank = 0;
+      else if (name.startsWith(primaryTerm)) matchRank = 1;
+      else if (name.includes(primaryTerm)) matchRank = 2;
+      else if (generic.startsWith(primaryTerm)) matchRank = 3;
+      else if (generic.includes(primaryTerm)) matchRank = 4;
+    }
+
+    return abolishedRank * 1000 + stockRank * 100 + generalRank * 10 + matchRank;
+  };
+
+  return [...drugs].sort((a, b) => {
+    const rankDiff = rank(a) - rank(b);
+    if (rankDiff !== 0) return rankDiff;
+    return a.name.localeCompare(b.name, 'ja');
+  });
+}
+
+export function calculateFilteredDrugs(params: FilterDrugsParams): DrugMasterRecord[] {
+  const {
+    query,
+    mode,
+    showAllCandidates,
+    allDrugs,
+    workerSearchResults,
+    prescribedDrugCode,
+    getAvailableStock
+  } = params;
+
+  const terms = getSearchTerms(query);
+  if (terms.length === 0) return [];
+
+  const hasWorkerResults = workerSearchResults.length > 0;
+  const textMatchedDataset = hasWorkerResults ? workerSearchResults : allDrugs;
+
+  // 1. prescribed モード（処方欄入力）: 医師が【般】（一般名処方）を処方した場合に入力・検索できるよう
+  // isGeneralNameRecord(drug) を除外せず、すべて検索結果・並び順ソート対象に含める
+  if (mode === 'prescribed') {
+    const prescribedResults: DrugMasterRecord[] = [];
+    for (let i = 0; i < textMatchedDataset.length; i++) {
+      const drug = textMatchedDataset[i];
+      if (hasWorkerResults || matchesDrug(drug, terms)) {
+        prescribedResults.push(drug);
+        if (prescribedResults.length >= 150) break;
+      }
+    }
+    return sortDrugsHelper(prescribedResults, terms, mode, getAvailableStock);
+  }
+
+  // 2. dispensed モード（調剤選択・後発品変更調剤）: 調剤選択候補では【般】プレースホルダーを除外
+  const matchingGenericNames = new Set<string>();
+  const matchingSourceDrugs: DrugMasterRecord[] = [];
+
+  for (let i = 0; i < textMatchedDataset.length; i++) {
+    const d = textMatchedDataset[i];
+    if (isGeneralNameRecord(d)) continue;
+    if (hasWorkerResults || matchesDrug(d, terms)) {
+      if (d.genericName) {
+        matchingGenericNames.add(d.genericName);
+        matchingSourceDrugs.push(d);
+      }
+    }
+  }
+
+  const prescribedPrefix = prescribedDrugCode && prescribedDrugCode.length >= 7
+    ? prescribedDrugCode.substring(0, 7)
+    : '';
+  const prescribedFormulation = prescribedDrugCode ? getFormulationType(prescribedDrugCode) : '';
+
+  if (!showAllCandidates) {
+    const substitutionCriteria = new Map<string, { hasBrand: boolean; maxGenericPrice: number }>();
+    for (let i = 0; i < matchingSourceDrugs.length; i++) {
+      const source = matchingSourceDrugs[i];
+      if (!source.genericName) continue;
+      const group = getDosageGroup(source.yjCode);
+      const key = `${source.genericName}|${group}`;
+
+      let criteria = substitutionCriteria.get(key);
+      if (!criteria) {
+        criteria = { hasBrand: false, maxGenericPrice: -1 };
+        substitutionCriteria.set(key, criteria);
+      }
+
+      if (!source.isGeneric) {
+        criteria.hasBrand = true;
+      } else {
+        criteria.maxGenericPrice = Math.max(criteria.maxGenericPrice, source.price || 0);
+      }
+    }
+
+    const results: DrugMasterRecord[] = [];
+    const seenCodes = new Set<string>();
+
+    for (let i = 0; i < allDrugs.length; i++) {
+      const drug = allDrugs[i];
+      if (isGeneralNameRecord(drug)) continue;
+      if (!drug.genericName) continue;
+
+      const group = getDosageGroup(drug.yjCode);
+      const key = `${drug.genericName}|${group}`;
+      const criteria = substitutionCriteria.get(key);
+      if (!criteria || !criteria.hasBrand) continue;
+
+      if (drug.isGeneric && (criteria.maxGenericPrice < 0 || (drug.price || 0) <= criteria.maxGenericPrice)) {
+        if (!seenCodes.has(drug.code)) {
+          seenCodes.add(drug.code);
+          results.push(drug);
+        }
+      }
+    }
+
+    return sortDrugsHelper(results, terms, mode, getAvailableStock);
+  }
+
+  const results: DrugMasterRecord[] = [];
+  const seenCodes = new Set<string>();
+
+  for (let i = 0; i < allDrugs.length; i++) {
+    const drug = allDrugs[i];
+    if (isGeneralNameRecord(drug)) continue;
+
+    const isTextMatch = hasWorkerResults
+      ? workerSearchResults.some((w) => w.code === drug.code)
+      : matchesDrug(drug, terms);
+
+    const samePrescribedIngredient = !!(
+      prescribedPrefix &&
+      drug.yjCode?.startsWith(prescribedPrefix) &&
+      getFormulationType(drug.yjCode) === prescribedFormulation
+    );
+    const sameMatchedIngredient = !prescribedPrefix && !!drug.genericName && matchingGenericNames.has(drug.genericName);
+
+    if (!isTextMatch && !samePrescribedIngredient && !sameMatchedIngredient) {
+      continue;
+    }
+    if (seenCodes.has(drug.code)) continue;
+
+    seenCodes.add(drug.code);
+    results.push(drug);
+
+    if (results.length >= 150) break;
+  }
+
+  return sortDrugsHelper(results, terms, mode, getAvailableStock);
+}
+
 interface DrugSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -258,153 +430,15 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     stockByCode.get(drug.code) ?? drug.stockQuantity ?? 0
   ), [stockByCode]);
 
-  const sortDrugsForInput = React.useCallback((drugs: DrugMasterRecord[], terms: string[]) => {
-    const primaryTerm = terms.find((term) => !term.includes('【般】')) || terms[0] || '';
-    const preferGeneral = terms.some((term) => term.includes('【般】'));
-    const rank = (drug: DrugMasterRecord) => {
-      const stockRank = getAvailableStock(drug) > 0 ? 0 : 1;
-      const abolishedRank = drug.isAbolished ? 1 : 0;
-      const generalRank = mode === 'prescribed' && isGeneralNameRecord(drug) !== preferGeneral ? 1 : 0;
-      const name = drug.searchNameLower;
-      const generic = drug.searchGenericLower;
-      let matchRank = 5;
-
-      if (primaryTerm) {
-        if (name === primaryTerm) matchRank = 0;
-        else if (name.startsWith(primaryTerm)) matchRank = 1;
-        else if (name.includes(primaryTerm)) matchRank = 2;
-        else if (generic.startsWith(primaryTerm)) matchRank = 3;
-        else if (generic.includes(primaryTerm)) matchRank = 4;
-      }
-
-      return abolishedRank * 1000 + stockRank * 100 + generalRank * 10 + matchRank;
-    };
-
-    return [...drugs].sort((a, b) => {
-      const rankDiff = rank(a) - rank(b);
-      if (rankDiff !== 0) return rankDiff;
-      return a.name.localeCompare(b.name, 'ja');
-    });
-  }, [getAvailableStock, mode]);
-
-  const filteredDrugs = useMemo(() => {
-    const terms = getSearchTerms(deferredQuery);
-    if (terms.length === 0) return [];
-
-    const hasWorkerResults = workerSearchResults.length > 0;
-    const textMatchedDataset = hasWorkerResults ? workerSearchResults : allDrugs;
-
-    if (mode === 'prescribed') {
-      const prescribedResults: DrugMasterRecord[] = [];
-      for (let i = 0; i < textMatchedDataset.length; i++) {
-        const drug = textMatchedDataset[i];
-        if (isGeneralNameRecord(drug)) continue;
-        if (hasWorkerResults || matchesDrug(drug, terms)) {
-          prescribedResults.push(drug);
-          if (prescribedResults.length >= 150) break;
-        }
-      }
-      return sortDrugsForInput(prescribedResults, terms);
-    }
-
-    const matchingGenericNames = new Set<string>();
-    const matchingSourceDrugs: DrugMasterRecord[] = [];
-
-    // テキストにヒットする医薬品（Worker または メインスレッドマッチ）から成分名を収集
-    for (let i = 0; i < textMatchedDataset.length; i++) {
-      const d = textMatchedDataset[i];
-      if (isGeneralNameRecord(d)) continue;
-      if (hasWorkerResults || matchesDrug(d, terms)) {
-        if (d.genericName) {
-          matchingGenericNames.add(d.genericName);
-          matchingSourceDrugs.push(d);
-        }
-      }
-    }
-
-    const prescribedPrefix = prescribedDrugCode && prescribedDrugCode.length >= 7
-      ? prescribedDrugCode.substring(0, 7)
-      : '';
-    const prescribedFormulation = prescribedDrugCode ? getFormulationType(prescribedDrugCode) : '';
-
-    if (!showAllCandidates) {
-      const substitutionCriteria = new Map<string, { hasBrand: boolean; maxGenericPrice: number }>();
-      for (let i = 0; i < matchingSourceDrugs.length; i++) {
-        const source = matchingSourceDrugs[i];
-        if (!source.genericName) continue;
-        const group = getDosageGroup(source.yjCode);
-        const key = `${source.genericName}|${group}`;
-
-        let criteria = substitutionCriteria.get(key);
-        if (!criteria) {
-          criteria = { hasBrand: false, maxGenericPrice: -1 };
-          substitutionCriteria.set(key, criteria);
-        }
-
-        if (!source.isGeneric) {
-          criteria.hasBrand = true;
-        } else {
-          criteria.maxGenericPrice = Math.max(criteria.maxGenericPrice, source.price || 0);
-        }
-      }
-
-      const results: DrugMasterRecord[] = [];
-      const seenCodes = new Set<string>();
-
-      // 置換候補の探索は全件マスタ(allDrugs)を走査し、網羅的に後発品候補を拾う
-      for (let i = 0; i < allDrugs.length; i++) {
-        const drug = allDrugs[i];
-        if (isGeneralNameRecord(drug)) continue;
-        if (!drug.genericName) continue;
-
-        const group = getDosageGroup(drug.yjCode);
-        const key = `${drug.genericName}|${group}`;
-        const criteria = substitutionCriteria.get(key);
-        if (!criteria || !criteria.hasBrand) continue;
-
-        if (drug.isGeneric && (criteria.maxGenericPrice < 0 || (drug.price || 0) <= criteria.maxGenericPrice)) {
-          if (!seenCodes.has(drug.code)) {
-            seenCodes.add(drug.code);
-            results.push(drug);
-          }
-        }
-      }
-
-      return sortDrugsForInput(results, terms);
-    }
-
-    const results: DrugMasterRecord[] = [];
-    const seenCodes = new Set<string>();
-
-    // 候補一覧取得時も、テキストにマッチした薬（Worker結果優先）に加え、全件マスタ(allDrugs)から同一成分・同一剤形の薬を漏れなく収集
-    for (let i = 0; i < allDrugs.length; i++) {
-      const drug = allDrugs[i];
-      if (isGeneralNameRecord(drug)) continue;
-
-      const isTextMatch = hasWorkerResults
-        ? workerSearchResults.some((w) => w.code === drug.code)
-        : matchesDrug(drug, terms);
-
-      const samePrescribedIngredient = !!(
-        prescribedPrefix &&
-        drug.yjCode?.startsWith(prescribedPrefix) &&
-        getFormulationType(drug.yjCode) === prescribedFormulation
-      );
-      const sameMatchedIngredient = !prescribedPrefix && !!drug.genericName && matchingGenericNames.has(drug.genericName);
-
-      if (!isTextMatch && !samePrescribedIngredient && !sameMatchedIngredient) {
-        continue;
-      }
-      if (seenCodes.has(drug.code)) continue;
-
-      seenCodes.add(drug.code);
-      results.push(drug);
-
-      if (results.length >= 150) break;
-    }
-
-    return sortDrugsForInput(results, terms);
-  }, [deferredQuery, mode, showAllCandidates, allDrugs, workerSearchResults, prescribedDrugCode, sortDrugsForInput]);
+  const filteredDrugs = useMemo(() => calculateFilteredDrugs({
+    query: deferredQuery,
+    mode,
+    showAllCandidates,
+    allDrugs,
+    workerSearchResults,
+    prescribedDrugCode,
+    getAvailableStock
+  }), [deferredQuery, mode, showAllCandidates, allDrugs, workerSearchResults, prescribedDrugCode, getAvailableStock]);
 
   const handleSelect = React.useCallback((drug: DrugMasterRecord) => {
     setSelectedDrug(drug);
