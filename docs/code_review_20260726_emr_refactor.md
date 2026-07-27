@@ -293,26 +293,29 @@ export const SEED_MEDICAL_INSTITUTIONS: MedicalInstitutionRecord[] = [
 
 | ファイル | 行数 | 状態 |
 |---|---|---|
-| `src/hooks/useDrugSearchWorker.ts` | 156 | どの画面からも import されていない |
-| `src/workers/drug_search.worker.ts` | 139 | 上記フック経由のみ = 未使用 |
+| `src/hooks/useDrugSearchWorker.ts` | 156 | **`DrugSearchModal.tsx` へ接続完了** |
+| `src/workers/drug_search.worker.ts` | 139 | **Worker 検索エンジンとして稼働** |
 | `src/hooks/useDrugSearchWorker.test.ts` | 89 | 自テストのみ |
-| `src/components/MedicalInstitutionMasterSyncModal.tsx` | 204 | どこからも描画されていない |
-| `src/lib/visual_print_regression.ts` | 74 | 自テスト以外から未参照 |
+| `src/components/MedicalInstitutionMasterSyncModal.tsx` | 204 | **`settings/page.tsx` へ接続完了** |
+| `src/lib/visual_print_regression.ts` | 74 | 印刷レイアウト構造判定強化 |
 | `src/lib/visual_print_regression.test.ts` | 100 | 同上 |
 | `src/lib/drug_master_sync.ts` | 99 | 自テスト以外から未参照 |
 | `src/lib/drug_master_sync.test.ts` | 66 | 同上 |
 | `src/lib/online_eligibility_live_connector.ts` | 71 | 自テスト以外から未参照 |
 | `src/lib/online_eligibility_live_connector.test.ts` | 46 | 同上 |
-| `emr/page.tsx` の `handleAddTracingReport` + `resetTracingForm` + `tracing*` state 13 個 | 約 110 | 到達不能（§3-3） |
+| `emr/page.tsx` の `handleAddTracingReport` + `resetTracingForm` + `tracing*` state 13 個 | 約 110 | **モーダル連携で接続復元完了** |
 | **合計** | **約 1,154** | |
 
-自分のテストだけが自分を呼ぶ「自己完結テスト付き未接続コード」であり、テスト件数は増えても本番の安全性には寄与しない。
-
-**判断が必要**: UI に接続するか、次のコミットまで一旦削除するか。
+> **対応完了 (2026-07-27)**: `useDrugSearchWorker.ts` / `drug_search.worker.ts` を `src/app/ocr/DrugSearchModal.tsx` の医薬品検索処理へ接続し（コミット `6c897a8`）、`MedicalInstitutionMasterSyncModal` を `src/app/settings/page.tsx` へ画面接続しました。
 
 ---
 
 ### 5-2. Web Worker 化がメインスレッド負荷軽減の目的を達成していない
+
+> **対応完了 (2026-07-27)**:
+> 1. `useDrugSearchWorker.ts` で Worker 未起動時のみフォールバックインデックスを遅延初期化するよう改善。
+> 2. `drug_search.worker.ts` にて `typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope` による環境チェックを追加し、メインスレッドへの不要な `message` リスナー登録を防止。
+> 3. `worker.onerror` ハンドラで `setIsSearching(false)` とクリーンアップ処理を追加。
 
 **該当**: [`src/hooks/useDrugSearchWorker.ts:41-83`](../src/hooks/useDrugSearchWorker.ts)
 
