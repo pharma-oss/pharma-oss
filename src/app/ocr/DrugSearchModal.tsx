@@ -291,13 +291,15 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const terms = getSearchTerms(deferredQuery);
     if (terms.length === 0) return [];
 
-    const sourceDataset = workerSearchResults.length > 0 ? workerSearchResults : allDrugs;
+    // Worker の検索結果（バックグラウンドでスコアリング・正規化済み）が存在する場合はそれをそのまま使用
+    const hasWorkerResults = workerSearchResults.length > 0;
+    const sourceDataset = hasWorkerResults ? workerSearchResults : allDrugs;
 
     if (mode === 'prescribed') {
       const prescribedResults: DrugMasterRecord[] = [];
       for (let i = 0; i < sourceDataset.length; i++) {
         const drug = sourceDataset[i];
-        if (matchesDrug(drug, terms)) {
+        if (hasWorkerResults || matchesDrug(drug, terms)) {
           prescribedResults.push(drug);
           if (prescribedResults.length >= 150) break;
         }
@@ -308,11 +310,9 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const matchingGenericNames = new Set<string>();
     const matchingSourceDrugs: DrugMasterRecord[] = [];
 
-    // ⚡ Bolt: Replace chained .filter().map() with a single manual loop to avoid O(N) array allocations
-    // This is significantly faster for large arrays and reduces GC pressure during fast typing.
     for (let i = 0; i < sourceDataset.length; i++) {
       const d = sourceDataset[i];
-      if (matchesDrug(d, terms)) {
+      if (hasWorkerResults || matchesDrug(d, terms)) {
         if (d.genericName) {
           matchingGenericNames.add(d.genericName);
           matchingSourceDrugs.push(d);
@@ -326,8 +326,6 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const prescribedFormulation = prescribedDrugCode ? getFormulationType(prescribedDrugCode) : '';
 
     if (!showAllCandidates) {
-      // ⚡ Bolt: Replace O(N*M) nested array search with O(M) Map building and O(N) Map lookup.
-      // Build a criteria map for valid substitutions per generic ingredient and dosage group.
       const substitutionCriteria = new Map<string, { hasBrand: boolean; maxGenericPrice: number }>();
       for (let i = 0; i < matchingSourceDrugs.length; i++) {
         const source = matchingSourceDrugs[i];
@@ -344,51 +342,39 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
         if (!source.isGeneric) {
           criteria.hasBrand = true;
         } else {
-          if ((source.price || 0) > criteria.maxGenericPrice) {
-            criteria.maxGenericPrice = source.price || 0;
+          criteria.maxGenericPrice = Math.max(criteria.maxGenericPrice, source.price || 0);
+        }
+      }
+
+      const results: DrugMasterRecord[] = [];
+      const seenCodes = new Set<string>();
+
+      for (let i = 0; i < sourceDataset.length; i++) {
+        const drug = sourceDataset[i];
+        if (!hasWorkerResults && !matchesDrug(drug, terms)) continue;
+        if (!drug.genericName) continue;
+
+        const group = getDosageGroup(drug.yjCode);
+        const key = `${drug.genericName}|${group}`;
+        const criteria = substitutionCriteria.get(key);
+        if (!criteria || !criteria.hasBrand) continue;
+
+        if (drug.isGeneric && (criteria.maxGenericPrice < 0 || (drug.price || 0) <= criteria.maxGenericPrice)) {
+          if (!seenCodes.has(drug.code)) {
+            seenCodes.add(drug.code);
+            results.push(drug);
           }
         }
       }
 
-      const ruleResults: DrugMasterRecord[] = [];
-      for (let i = 0; i < allDrugs.length; i++) {
-        const drug = allDrugs[i];
-        if (isGeneralNameRecord(drug)) continue;
-        // 1. Must be part of the matched generic ingredient groups
-        if (!drug.genericName || !matchingGenericNames.has(drug.genericName)) continue;
-
-        // 2. Rule filtering: standard substitution candidates only
-        if (!drug.isGeneric) continue;
-
-        const targetGroup = getDosageGroup(drug.yjCode);
-        const key = `${drug.genericName}|${targetGroup}`;
-        const criteria = substitutionCriteria.get(key);
-
-        // If no criteria exists for this generic/group combo, it is not a valid substitution
-        if (!criteria) continue;
-
-        // If replacing a generic with another generic, price must not be higher.
-        // If replacing a brand name drug (hasBrand === true), price check is not required.
-        if (!criteria.hasBrand && (drug.price || 0) > criteria.maxGenericPrice) {
-          continue;
-        }
-
-        ruleResults.push(drug);
-
-        // ⚡ Bolt: Prevent massive React renders by capping results.
-        if (ruleResults.length >= 150) break;
-      }
-
-      return sortDrugsForInput(ruleResults, terms);
+      return sortDrugsForInput(results, terms);
     }
 
     const results: DrugMasterRecord[] = [];
     const seenCodes = new Set<string>();
 
-    for (let i = 0; i < allDrugs.length; i++) {
-      const drug = allDrugs[i];
-      if (isGeneralNameRecord(drug)) continue;
-
+    for (let i = 0; i < sourceDataset.length; i++) {
+      const drug = sourceDataset[i];
       const samePrescribedIngredient = !!(
         prescribedPrefix &&
         drug.yjCode?.startsWith(prescribedPrefix) &&
@@ -396,7 +382,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
       );
       const sameMatchedIngredient = !prescribedPrefix && !!drug.genericName && matchingGenericNames.has(drug.genericName);
 
-      if (!matchesDrug(drug, terms) && !samePrescribedIngredient && !sameMatchedIngredient) {
+      if (!hasWorkerResults && !matchesDrug(drug, terms) && !samePrescribedIngredient && !sameMatchedIngredient) {
         continue;
       }
       if (seenCodes.has(drug.code)) continue;
@@ -408,7 +394,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     }
 
     return sortDrugsForInput(results, terms);
-  }, [deferredQuery, mode, showAllCandidates, allDrugs, prescribedDrugCode, sortDrugsForInput]);
+  }, [deferredQuery, mode, showAllCandidates, allDrugs, workerSearchResults, prescribedDrugCode, sortDrugsForInput]);
 
   const handleSelect = React.useCallback((drug: DrugMasterRecord) => {
     setSelectedDrug(drug);
