@@ -656,7 +656,7 @@ function requireDigits(value: unknown, label: string, lengths: number[]): string
   return digits;
 }
 
-const PREFECTURE_CODES = new Map([
+export const PREFECTURE_CODES = new Map([
   ['北海道', '01'], ['青森県', '02'], ['岩手県', '03'], ['宮城県', '04'], ['秋田県', '05'],
   ['山形県', '06'], ['福島県', '07'], ['茨城県', '08'], ['栃木県', '09'], ['群馬県', '10'],
   ['埼玉県', '11'], ['千葉県', '12'], ['東京都', '13'], ['神奈川県', '14'], ['新潟県', '15'],

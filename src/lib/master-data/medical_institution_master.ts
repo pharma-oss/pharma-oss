@@ -1,6 +1,10 @@
 export interface MedicalInstitutionRecord {
-  code: string; // 10桁の公式医療機関コード (都道府県2桁 + 点数表区分1桁 + 点数表番号7桁)
-  scoreCode: string; // 7桁点数表番号
+  // 公式には「都道府県2桁+点数表区分1桁+検索番号7桁」の10桁だが、地方厚生局の
+  // 「コード内容別医療機関一覧表」からは点数表区分(1桁)を確実に判定できないため、
+  // 厚生局データ由来のレコードは「都道府県2桁+検索番号7桁」の9桁になる場合がある。
+  // (詳細: src/lib/master-data/medical_institution_bureau_import.ts の説明コメント参照)
+  code: string;
+  scoreCode: string; // 検索番号(届出番号)7桁
   prefectureCode: string; // 都道府県コード 2桁 (例: "13" 東京)
   name: string; // 正式医療機関名称
   nameKana?: string; // 医療機関カナ
@@ -74,13 +78,63 @@ export function normalizeInstitutionCode(code: string): string {
   return code.replace(/[^\d]/g, '').trim();
 }
 
+export interface BureauSyncLogEntry {
+  sourceFileName?: string;
+  prefectureName: string;
+  importedCount: number;
+  skippedInactiveCount: number;
+  issueCount: number;
+  importedAt: string;
+}
+
 let activeInstitutionRecords: MedicalInstitutionRecord[] = [...SEED_MEDICAL_INSTITUTIONS];
 let lastSyncTimestamp: string | null = null;
+let bureauSyncLog: BureauSyncLogEntry[] = [];
 
 export function updateMedicalInstitutionMasterRecords(newRecords: MedicalInstitutionRecord[]) {
   if (!newRecords || newRecords.length === 0) return;
   activeInstitutionRecords = [...newRecords];
   lastSyncTimestamp = new Date().toISOString();
+  bureauSyncLog = [];
+}
+
+/**
+ * 地方厚生局の一覧表から取り込んだレコードを、同一都道府県の既存レコードだけを
+ * 置き換える形でマージする(他の都道府県・シードデータは保持する)。
+ * 月次で該当都道府県のみ再取込みしても、他都道府県分が消えない「更新に耐える」設計。
+ */
+export function mergeBureauMedicalInstitutionRecords(
+  newRecords: MedicalInstitutionRecord[],
+  meta: { prefectureName: string; sourceFileName?: string; skippedInactiveCount?: number; issueCount?: number }
+): void {
+  const prefectureCode = newRecords[0]?.prefectureCode;
+  const isSeedOnly = activeInstitutionRecords === SEED_MEDICAL_INSTITUTIONS || lastSyncTimestamp === null;
+  const kept = isSeedOnly
+    ? []
+    : activeInstitutionRecords.filter((rec) => !(prefectureCode && rec.prefectureCode === prefectureCode));
+
+  const byCode = new Map<string, MedicalInstitutionRecord>();
+  for (const rec of [...kept, ...newRecords]) {
+    byCode.set(rec.code, rec);
+  }
+  activeInstitutionRecords = [...byCode.values()];
+  lastSyncTimestamp = new Date().toISOString();
+
+  bureauSyncLog = [
+    {
+      sourceFileName: meta.sourceFileName,
+      prefectureName: meta.prefectureName,
+      importedCount: newRecords.length,
+      skippedInactiveCount: meta.skippedInactiveCount || 0,
+      issueCount: meta.issueCount || 0,
+      importedAt: lastSyncTimestamp
+    },
+    ...bureauSyncLog
+  ].slice(0, 50);
+}
+
+export function getBureauSyncLog(): BureauSyncLogEntry[] {
+  return bureauSyncLog;
 }
 
 export function getActiveMedicalInstitutionRecords(): MedicalInstitutionRecord[] {
@@ -92,6 +146,14 @@ export function getMedicalInstitutionMasterStats() {
     totalCount: activeInstitutionRecords.length,
     lastSyncTimestamp
   };
+}
+
+/**
+ * 一度も厚生局マスタファイルを取り込んでおらず、同梱の架空シードデータ(5件)のみで
+ * 動作している状態かどうか。true の場合、コード検索の候補は実在しない架空データ。
+ */
+export function isUsingSeedMedicalInstitutionData(): boolean {
+  return lastSyncTimestamp === null;
 }
 
 export function importMedicalInstitutionMasterCsv(csvText: string): MedicalInstitutionRecord[] {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Building2, Search, Check } from 'lucide-react';
 import {
   findMedicalInstitutionByCode,
+  isUsingSeedMedicalInstitutionData,
   searchMedicalInstitutions,
   type MedicalInstitutionRecord
 } from '@/lib/master-data/medical_institution_master';
@@ -188,6 +189,11 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                 >
                   <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
                     {inst.name}
+                    {isUsingSeedMedicalInstitutionData() && (
+                      <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-soft)', padding: '1px 6px', borderRadius: '4px' }}>
+                        サンプル
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                     コード: <strong>{inst.code}</strong> (点数表: {inst.scoreCode}) {inst.address ? ` / ${inst.address}` : ''}
