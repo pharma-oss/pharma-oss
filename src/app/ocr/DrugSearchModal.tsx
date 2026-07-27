@@ -291,14 +291,14 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const terms = getSearchTerms(deferredQuery);
     if (terms.length === 0) return [];
 
-    // Worker の検索結果（バックグラウンドでスコアリング・正規化済み）が存在する場合はそれをそのまま使用
     const hasWorkerResults = workerSearchResults.length > 0;
-    const sourceDataset = hasWorkerResults ? workerSearchResults : allDrugs;
+    const textMatchedDataset = hasWorkerResults ? workerSearchResults : allDrugs;
 
     if (mode === 'prescribed') {
       const prescribedResults: DrugMasterRecord[] = [];
-      for (let i = 0; i < sourceDataset.length; i++) {
-        const drug = sourceDataset[i];
+      for (let i = 0; i < textMatchedDataset.length; i++) {
+        const drug = textMatchedDataset[i];
+        if (isGeneralNameRecord(drug)) continue;
         if (hasWorkerResults || matchesDrug(drug, terms)) {
           prescribedResults.push(drug);
           if (prescribedResults.length >= 150) break;
@@ -310,8 +310,10 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const matchingGenericNames = new Set<string>();
     const matchingSourceDrugs: DrugMasterRecord[] = [];
 
-    for (let i = 0; i < sourceDataset.length; i++) {
-      const d = sourceDataset[i];
+    // テキストにヒットする医薬品（Worker または メインスレッドマッチ）から成分名を収集
+    for (let i = 0; i < textMatchedDataset.length; i++) {
+      const d = textMatchedDataset[i];
+      if (isGeneralNameRecord(d)) continue;
       if (hasWorkerResults || matchesDrug(d, terms)) {
         if (d.genericName) {
           matchingGenericNames.add(d.genericName);
@@ -349,9 +351,10 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
       const results: DrugMasterRecord[] = [];
       const seenCodes = new Set<string>();
 
-      for (let i = 0; i < sourceDataset.length; i++) {
-        const drug = sourceDataset[i];
-        if (!hasWorkerResults && !matchesDrug(drug, terms)) continue;
+      // 置換候補の探索は全件マスタ(allDrugs)を走査し、網羅的に後発品候補を拾う
+      for (let i = 0; i < allDrugs.length; i++) {
+        const drug = allDrugs[i];
+        if (isGeneralNameRecord(drug)) continue;
         if (!drug.genericName) continue;
 
         const group = getDosageGroup(drug.yjCode);
@@ -373,8 +376,15 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
     const results: DrugMasterRecord[] = [];
     const seenCodes = new Set<string>();
 
-    for (let i = 0; i < sourceDataset.length; i++) {
-      const drug = sourceDataset[i];
+    // 候補一覧取得時も、テキストにマッチした薬（Worker結果優先）に加え、全件マスタ(allDrugs)から同一成分・同一剤形の薬を漏れなく収集
+    for (let i = 0; i < allDrugs.length; i++) {
+      const drug = allDrugs[i];
+      if (isGeneralNameRecord(drug)) continue;
+
+      const isTextMatch = hasWorkerResults
+        ? workerSearchResults.some((w) => w.code === drug.code)
+        : matchesDrug(drug, terms);
+
       const samePrescribedIngredient = !!(
         prescribedPrefix &&
         drug.yjCode?.startsWith(prescribedPrefix) &&
@@ -382,7 +392,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
       );
       const sameMatchedIngredient = !prescribedPrefix && !!drug.genericName && matchingGenericNames.has(drug.genericName);
 
-      if (!hasWorkerResults && !matchesDrug(drug, terms) && !samePrescribedIngredient && !sameMatchedIngredient) {
+      if (!isTextMatch && !samePrescribedIngredient && !sameMatchedIngredient) {
         continue;
       }
       if (seenCodes.has(drug.code)) continue;
