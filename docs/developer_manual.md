@@ -275,6 +275,8 @@ pharma-oss は単一 Web アプリ + RxDB を基本構成とし、患者、来�
 
 医療機関、診療科、医師は専用マスタDBではなく Visit に保存し、`src/lib/master-data/provider_history.ts` で過去 Visit から候補化します。
 
+これとは別に、服薬情報提供書（トレーシングレポート）の宛先検索専用に `src/lib/master-data/medical_institution_master.ts` があります（自局の Visit 履歴にない、外部の病院・診療所・歯科医院を検索するためのモジュールスコープの配列で、RxDB には保存しません）。初期状態は架空のシードデータ5件のみで、`src/lib/master-data/medical_institution_bureau_import.ts` と `xlsx_zip_reader.ts` が、各地方厚生局の「コード内容別医療機関一覧表」（.zip / .xlsx、局ごとにコードの区切り文字が異なる）を解析して都道府県単位で差分マージします。薬局・休止施設は取り込み対象外です（宛先検索の対象は処方医の医療機関のみのため）。医療機関コードは9桁（都道府県2桁＋検索番号7桁）で保持し、正式な10桁（＋点数表区分1桁）への補完は一覧表だけからは判定できないため行いません。
+
 ## 6. プルリクエスト（PR）の作成
 *   PR作成前には必ず Linter とテストを実行してください。
 *   パフォーマンス改善のPRは、タイトルに ⚡ 絵文字を含め、説明に「💡 What」「🎯 Why」「📊 Impact」「🔬 Measurement」のセクションを設けてください。
