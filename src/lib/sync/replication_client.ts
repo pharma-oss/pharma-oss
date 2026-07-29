@@ -1,5 +1,5 @@
 import { replicateRxCollection, type RxReplicationState } from 'rxdb/plugins/replication';
-import type { RxCollection } from 'rxdb';
+import type { RxCollection, WithDeleted } from 'rxdb';
 import type { PharmacyDatabase } from '@/db/types';
 import { ALL_SYNC_COLLECTIONS, isPushOnlyFromSatelliteCollection, type SyncCollectionName } from './sync_collections';
 import type { HubPullResult, HubPushRow } from './hub_store';
@@ -66,7 +66,8 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
     if (!response.ok) {
       throw new Error(`同期pushに失敗しました(${collectionName}): HTTP ${response.status}`);
     }
-    const body = await response.json() as { conflicts: Record<string, unknown>[] };
+    // ハブが返す conflicts は保存済みの完全なドキュメント状態(_deleted 含む)。
+    const body = await response.json() as { conflicts: WithDeleted<Record<string, unknown>>[] };
     return body.conflicts;
   };
 }

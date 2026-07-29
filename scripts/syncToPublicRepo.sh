@@ -34,6 +34,20 @@ case "$DEST_REMOTE" in
     ;;
 esac
 
+# 同期前に簡易 Secret Scan を実行し、暗号鍵や証明書・トークン露呈を防止
+echo "performing pre-sync secret scanning..."
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks detect --source="$SOURCE_DIR" --no-git || {
+    echo "エラー: gitleaks により機密情報（シークレット）が検出されました。" >&2
+    exit 1
+  }
+else
+  if grep -r -E "BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY" "$SOURCE_DIR/src" "$SOURCE_DIR/docs" 2>/dev/null; then
+    echo "エラー: ソースコードまたはドキュメントに秘密鍵が含まれています。" >&2
+    exit 1
+  fi
+fi
+
 echo "sync: $SOURCE_DIR -> $DEST_DIR"
 
 rsync -a --delete \

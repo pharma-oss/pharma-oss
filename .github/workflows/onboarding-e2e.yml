@@ -15,8 +15,36 @@ env:
   TZ: 'Asia/Tokyo'
 
 jobs:
+  static:
+    name: Static checks & Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx tsx --test $(find src -name "*.test.ts")
+
   onboarding-e2e:
     name: Onboarding browser E2E
+    needs: static
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -30,6 +58,14 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('package-lock.json') }}-
+
       - name: Cache Puppeteer browser
         uses: actions/cache@v4
         with:
@@ -40,15 +76,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Unit tests
-        run: npx tsx --test $(find src -name "*.test.ts")
 
       - name: Build
         run: npm run build

@@ -434,6 +434,7 @@ test('buildAnonymousDiagnosticExport keeps operational counts without raw identi
 
   assert.strictEqual(diagnostic.type, 'yakureki-support-diagnostic');
   assert.strictEqual(diagnostic.schemaVersion, 2);
+  assert.strictEqual(diagnostic.appVersion, '1.0.0');
   assert.strictEqual(diagnostic.privacy.containsPatientIdentifiers, false);
   assert.strictEqual(diagnostic.privacy.containsStaffNames, false);
   assert.strictEqual(diagnostic.privacy.containsFacilityName, false);

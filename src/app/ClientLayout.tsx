@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
 import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
+import { DbSecurityBanner } from '@/components/DbSecurityBanner';
 import { LoginModal } from '@/components/layout/LoginModal';
 import { usePWA } from '@/hooks/usePWA';
 import { useSessionLock } from '@/hooks/useSessionLock';
@@ -639,6 +640,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </aside>
 
             <main className="main-viewport">
+              <DbSecurityBanner />
               {isGuestDemoSession && (
                 <div className="pwa-install-banner guest-demo-banner animate-fade-in" data-testid="guest-demo-banner">
                   <div className="pwa-install-copy">

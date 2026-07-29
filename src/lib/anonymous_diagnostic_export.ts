@@ -51,6 +51,7 @@ export interface AnonymousDiagnosticExportInput {
 export interface AnonymousDiagnosticExport {
   type: 'yakureki-support-diagnostic';
   schemaVersion: 2;
+  appVersion: string;
   generatedAt: string;
   privacy: {
     containsPatientIdentifiers: false;
@@ -526,6 +527,7 @@ export function buildAnonymousDiagnosticExport(input: AnonymousDiagnosticExportI
   return {
     type: 'yakureki-support-diagnostic',
     schemaVersion: 2,
+    appVersion: '1.0.0',
     generatedAt: generatedAt.toISOString(),
     privacy: {
       containsPatientIdentifiers: false,

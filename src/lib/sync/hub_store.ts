@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { WithDeleted } from 'rxdb';
 import { decryptAesGcm, encryptAesGcm, isValidAesGcmKey } from './sync_crypto.ts';
 
 // メイン端末（ハブ）の正本ストア。RxDB open-core の外側で、患者データを含む
@@ -16,7 +17,8 @@ export interface HubPushRow {
 }
 
 export interface HubPullResult {
-  documents: Record<string, unknown>[];
+  // 保存済みの完全なドキュメント状態(_deleted 含む)を返す。
+  documents: WithDeleted<Record<string, unknown>>[];
   checkpoint: { seq: number };
 }
 
