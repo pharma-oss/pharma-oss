@@ -16,6 +16,7 @@ function baseDiagnostic(): AnonymousDiagnosticExport {
   return {
     type: 'yakureki-support-diagnostic',
     schemaVersion: 2,
+    appVersion: packageJson.version || '1.0.0',
     generatedAt: '2026-06-23T08:50:00.000Z',
     privacy: {
       containsPatientIdentifiers: false,
