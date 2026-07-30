@@ -10,13 +10,22 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 
 const HUB_PORT = Number(process.env.YAKUREKI_SYNC_E2E_HUB_PORT || 3401);
 const SATELLITE_PORT = Number(process.env.YAKUREKI_SYNC_E2E_SATELLITE_PORT || 3402);
 const HUB_URL = `http://127.0.0.1:${HUB_PORT}`;
 const SATELLITE_URL = `http://127.0.0.1:${SATELLITE_PORT}`;
 const SERVER_READY_TIMEOUT_MS = 120_000;
+// mainの各ステップが正常に失敗/成功しても、プロセスツリーの残骸(next startが
+// forkするnext-serverワーカー等)でイベントループが生き続けてスクリプトが
+// 終了しないケースへの保険。CIのジョブタイムアウト(cancelled=ハング扱いで
+// 原因が分かりにくい)より先に、必ず失敗として終了させる。
+const HARD_TIMEOUT_MS = 4 * 60_000;
 
 function assertOk(condition, message) {
   if (!condition) {
@@ -29,9 +38,16 @@ async function wait(ms) {
 }
 
 function startServer(name, port, env) {
-  const child = spawn('npx', ['next', 'start', '-p', String(port)], {
+  // npx経由だとspawnした子は"npx"自体になり、実際にHTTPを待ち受ける
+  // next-serverはさらにその子(孫プロセス)になる。child.kill()は直接の
+  // 子にしかシグナルを送らないため、npxだけ死んでnext-serverが残る
+  // (実際にCIでオーファン化して25分のジョブタイムアウトまでハングした)。
+  // next バイナリを直接spawnし、かつ detached: true で新しいプロセスグループの
+  // リーダーにすることで、停止時に -pid でグループ全体へシグナルを送れるようにする。
+  const child = spawn(NEXT_BIN, ['start', '-p', String(port)], {
     env: { ...process.env, ...env },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true
   });
   let output = '';
   child.stdout.on('data', (chunk) => { output += chunk; });
@@ -66,10 +82,26 @@ async function waitForRole(baseUrl, expectedRole, server) {
 
 async function stopServer(server) {
   if (!server) return;
-  server.child.kill('SIGTERM');
-  await wait(500);
+  const pid = server.child.pid;
+  if (!pid) return;
+  const signalGroup = (signal) => {
+    try {
+      // 負のPIDでプロセスグループ全体(next startが起動するnext-serverワーカーを含む)へ送る。
+      process.kill(-pid, signal);
+    } catch {
+      // グループが既に消えている、または権限がない場合は個別プロセスへフォールバック
+      try {
+        server.child.kill(signal);
+      } catch {
+        // 既に終了済み
+      }
+    }
+  };
+  signalGroup('SIGTERM');
+  await wait(1000);
   if (server.child.exitCode === null) {
-    server.child.kill('SIGKILL');
+    signalGroup('SIGKILL');
+    await wait(300);
   }
 }
 
@@ -192,7 +224,20 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('[sync-e2e] FAILED:', error.message || error);
+// main()自体がハングした場合(ネットワーク待ちの取りこぼし等)でも、CIのジョブタイムアウト
+// (原因不明の"cancelled"になり調査しづらい)より先に、必ずエラーとして終了させる。
+// 実行中にプロセスがまだ生きていればここで強制終了するため、hub/satelliteサーバーの
+// 停止漏れがあっても最終的にはプロセスツリーごと片付く。
+const hardTimeout = setTimeout(() => {
+  console.error(`[sync-e2e] FAILED: ${HARD_TIMEOUT_MS / 1000}秒以内に完了しませんでした(ハング検知)。`);
   process.exit(1);
-});
+}, HARD_TIMEOUT_MS);
+hardTimeout.unref?.();
+
+main()
+  .then(() => clearTimeout(hardTimeout))
+  .catch((error) => {
+    clearTimeout(hardTimeout);
+    console.error('[sync-e2e] FAILED:', error.message || error);
+    process.exit(1);
+  });
