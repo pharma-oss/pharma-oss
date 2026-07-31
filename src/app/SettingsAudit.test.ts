@@ -2,7 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const settingsSource = readFileSync(new URL('./settings/page.tsx', import.meta.url), 'utf8');
+const settingsSource = [
+  './settings/page.tsx',
+  '../components/settings/FacilitySettingsTab.tsx',
+  '../components/settings/ExternalConnectorSettingsTab.tsx',
+  '../components/settings/MedicationInfoTemplateSettingsTab.tsx',
+  '../components/settings/DrugMasterSettingsTab.tsx',
+  '../components/settings/BackupSettingsTab.tsx',
+  '../components/settings/OfficialAuditSettingsTab.tsx',
+  '../components/settings/AuditSettingsTab.tsx',
+  '../components/settings/StaffSettingsTab.tsx',
+  '../lib/medication_info_template_ui.ts',
+  '../lib/drug_master_update_ui.ts'
+].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
 
 test('settings audit tab verifies audit-log integrity and exports JSON evidence', () => {
   assert.match(settingsSource, /verifyAuditLogIntegrity/);

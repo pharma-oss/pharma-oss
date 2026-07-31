@@ -3,7 +3,10 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
 const authSource = readFileSync(new URL('./auth.ts', import.meta.url), 'utf8');
-const settingsSource = readFileSync(new URL('../app/settings/page.tsx', import.meta.url), 'utf8');
+const settingsSource = [
+  '../app/settings/page.tsx',
+  '../components/settings/StaffSettingsTab.tsx'
+].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
 const dbTypesSource = readFileSync(new URL('../db/types.ts', import.meta.url), 'utf8');
 
 test('registerPasskey does not save a production mock public key for real credentials', () => {

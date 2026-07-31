@@ -52,7 +52,8 @@ test('browser backup export job refuses plaintext backup by default before launc
 });
 
 test('settings backup screen exposes stable hooks for browser export automation', async () => {
-  const source = await readFile(settingsPageUrl, 'utf8');
+  const backupTabComponentUrl = new URL('../components/settings/BackupSettingsTab.tsx', import.meta.url);
+  const source = (await readFile(settingsPageUrl, 'utf8')) + '\n' + (await readFile(backupTabComponentUrl, 'utf8'));
 
   assert.match(source, /params\.get\('tab'\)/);
   assert.match(source, /tab === 'backup'/);
