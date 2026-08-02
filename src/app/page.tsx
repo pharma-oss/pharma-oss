@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { DailyClosingWizardModal } from '@/components/dashboard/DailyClosingWizardModal';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { AuditLog, FacilitySettings } from '@/db/types';
 import { useDashboardTasks, type DashboardClaimRisk, type DashboardClaimWorkItem, type DashboardFollowUpCandidate, type DashboardInventoryRisk } from '@/hooks/useDashboardTasks';
@@ -180,6 +181,8 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [db]);
+
+  const [isClosingWizardOpen, setIsClosingWizardOpen] = useState(false);
 
   const handleNewReception = useCallback(() => {
     router.push('/ocr');
@@ -1310,10 +1313,28 @@ export default function Dashboard() {
           <h2>おはようございます、{currentUser.name}さん</h2>
           <p className="text-muted">受付から薬歴完了まで、いま動いている業務をここで確認できます。</p>
         </div>
-        <button className="btn-primary" onClick={handleNewReception}>
-          <Plus size={18} aria-hidden="true" />
-          <span>新規受付</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {canUserPerform(currentUser, 'manage_backups') && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                if (!canUserPerform(currentUser, 'manage_backups')) {
+                  toast.error(getPermissionDeniedMessage(currentUser, 'manage_backups'));
+                  return;
+                }
+                setIsClosingWizardOpen(true);
+              }}
+            >
+              <ShieldCheck size={18} aria-hidden="true" />
+              <span>日次締め・閉局</span>
+            </button>
+          )}
+          <button className="btn-primary" onClick={handleNewReception}>
+            <Plus size={18} aria-hidden="true" />
+            <span>新規受付</span>
+          </button>
+        </div>
       </header>
 
       {hasDemoData && (
@@ -1923,6 +1944,15 @@ export default function Dashboard() {
           </form>
         </div>
       )}
+
+      <DailyClosingWizardModal
+        isOpen={isClosingWizardOpen}
+        onClose={() => setIsClosingWizardOpen(false)}
+        onComplete={() => {
+          toast.success('日次締めが正常に記録されました。');
+          refresh();
+        }}
+      />
     </div>
   );
 }

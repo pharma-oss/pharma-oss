@@ -30,6 +30,8 @@ import {
   makeBackupExternalTransferManifestFileName,
   normalizeBackupSchedulePolicy,
   validateBackupExternalTransferReceipt,
+  exportLocalSettings,
+  importLocalSettings,
   type BackupPayload,
   type YakurekiBackup
 } from './backup.ts';
@@ -37,6 +39,35 @@ import {
 test('makeBackupFileName creates a stable timestamped JSON name', () => {
   const date = new Date(2026, 5, 4, 9, 8, 7);
   assert.strictEqual(makeBackupFileName(date), 'yakureki_backup_20260604_090807.json');
+});
+
+test('exportLocalSettings and importLocalSettings roundtrips local configuration keys', () => {
+  const storageMap = new Map<string, string>();
+  const originalWindow = (global as any).window;
+
+  try {
+    (global as any).window = {
+      localStorage: {
+        getItem: (key: string) => storageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => storageMap.set(key, value),
+        removeItem: (key: string) => storageMap.delete(key)
+      }
+    };
+
+    const mockSettings = {
+      'pharmacy_os_role_permission_policy_v1': '{"role":"admin"}',
+      'yakureki:print-presets:v1': '{"preset":"a4"}',
+      'yakureki_backup_schedule_policy': '{"daily":true}'
+    };
+
+    const count = importLocalSettings(mockSettings);
+    assert.strictEqual(count, 3);
+
+    const exported = exportLocalSettings();
+    assert.deepStrictEqual(exported, mockSettings);
+  } finally {
+    (global as any).window = originalWindow;
+  }
 });
 
 test('validateBackupPayload accepts the current backup format', () => {

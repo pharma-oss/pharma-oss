@@ -211,8 +211,10 @@ export function openHubStore(options: HubStoreOptions): HubStore {
             writeDoc(collection, row.docId, row.newDocumentState);
             continue;
           }
-          conflicts.push(currentDoc);
-          recordConflict(collection, row.docId, terminalId, row.newDocumentState);
+          if (currentDoc) {
+            conflicts.push(currentDoc);
+          }
+          recordConflict(collection, row.docId, terminalId, row.newDocumentState || {});
         }
         const counterRow = db.prepare("SELECT value FROM seq_counter WHERE name = 'global'").get() as { value: number };
         lastSeq = counterRow.value;

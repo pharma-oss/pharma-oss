@@ -56,6 +56,14 @@ export function SyncStatusIndicator() {
     const evaluate = async () => {
       const reachable = await probeHubReachable();
       if (!cancelled) setHubReachable(reachable);
+      // Hubと疎通できているあいだは、切断中にローカル暗号化キューへ
+      // 溜まった未送信データを都度フラッシュする。キューが空なら
+      // flushUnsentLocalQueue は即returnするため負荷は無視できる。
+      if (reachable && role === 'satellite') {
+        import('@/lib/sync/satellite_local_queue').then(({ flushUnsentLocalQueue }) => {
+          flushUnsentLocalQueue();
+        }).catch(() => {});
+      }
     };
     evaluate();
     const timer = setInterval(evaluate, POLL_INTERVAL_MS);
@@ -92,15 +100,31 @@ export function SyncStatusIndicator() {
 
   useEffect(() => {
     if (role !== 'satellite') return;
-    // サテライトはタブを閉じるとメモリ上の未同期データが消える。
-    // 同期済みなら黙って閉じられる(データはメイン端末にある)。
+    // サテライト端末のデータ保護: visibilitychange (hidden) で前倒しフラッシュを実行し、
+    // beforeunload でも未同期ダイアログを提示
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        import('@/lib/sync/satellite_local_queue').then(({ flushUnsentLocalQueue }) => {
+          flushUnsentLocalQueue();
+        }).catch(() => {});
+      }
+    };
+
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (indicatorRef.current === 'synced') return;
+      import('@/lib/sync/satellite_local_queue').then(({ flushUnsentLocalQueue }) => {
+        flushUnsentLocalQueue();
+      }).catch(() => {});
       event.preventDefault();
       event.returnValue = '';
     };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, [role]);
 
   if (role === 'standalone') return null;

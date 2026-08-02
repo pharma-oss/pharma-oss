@@ -31,6 +31,7 @@ export interface YakurekiBackup {
   formatVersion: typeof BACKUP_FORMAT_VERSION;
   createdAt: string;
   collections: BackupCollections;
+  localSettings?: Record<string, unknown>;
 }
 
 export interface EncryptedYakurekiBackup {
@@ -172,13 +173,19 @@ export async function buildDatabaseBackup(db: PharmacyDatabase): Promise<Yakurek
     app: BACKUP_APP_ID,
     formatVersion: BACKUP_FORMAT_VERSION,
     createdAt: new Date().toISOString(),
-    collections
+    collections,
+    localSettings: exportLocalSettings(),
   };
 }
 
 export async function importDatabaseBackup(db: PharmacyDatabase, backup: YakurekiBackup): Promise<BackupImportResult> {
   const collections: BackupImportCollectionResult[] = [];
   let totalRows = 0;
+
+  // 店舗設定 (権限ロール・印刷プリセット等) の自動復元
+  if (backup.localSettings) {
+    importLocalSettings(backup.localSettings);
+  }
 
   for (const collectionName of BACKUP_COLLECTIONS) {
     const rows = backup.collections[collectionName] || [];
@@ -1549,4 +1556,41 @@ export function buildBackupContinuityReport(
       : `バックアップ保存 ${backupLabel} / 復旧テスト ${drillLabel} / 外部保存 ${externalStorageLabel}`,
     recommendation: scheduleRecommendation || recommendation
   };
+}
+
+const LOCAL_SETTING_KEYS_TO_BACKUP = [
+  'pharmacy_os_role_permission_policy_v1',
+  'yakureki:print-presets:v1',
+  'yakureki_backup_schedule_policy'
+];
+
+export function exportLocalSettings(): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return settings;
+  for (const key of LOCAL_SETTING_KEYS_TO_BACKUP) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val !== null) settings[key] = val;
+    } catch {
+      // 無視
+    }
+  }
+  return settings;
+}
+
+export function importLocalSettings(settings: Record<string, unknown> = {}): number {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return 0;
+  let restoredCount = 0;
+  for (const key of LOCAL_SETTING_KEYS_TO_BACKUP) {
+    const val = settings[key];
+    if (typeof val === 'string') {
+      try {
+        window.localStorage.setItem(key, val);
+        restoredCount++;
+      } catch {
+        // 無視
+      }
+    }
+  }
+  return restoredCount;
 }

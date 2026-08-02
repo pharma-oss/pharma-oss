@@ -1,4 +1,5 @@
 import { AES_GCM_KEY_BYTES, parseHexKey } from './sync_crypto.ts';
+import { getAppEnv } from '../env.ts';
 
 // メイン端末(hub)/サテライト端末(satellite)/従来どおりの単独動作(standalone)を
 // 環境変数から解釈する。satellite の endpoint 検証は
@@ -51,15 +52,16 @@ const DEFAULT_HUB_DB_PATH = './data/sync_hub.sqlite';
 
 export function getPharmacySyncEnv(env?: PharmacySyncEnv): PharmacySyncEnv {
   if (env) return env;
+  const appEnv = getAppEnv();
   return {
-    PHARMACY_SYNC_ROLE: process.env.PHARMACY_SYNC_ROLE,
-    PHARMACY_SYNC_HUB_ENCRYPTION_KEY: process.env.PHARMACY_SYNC_HUB_ENCRYPTION_KEY,
-    PHARMACY_SYNC_HUB_DB_PATH: process.env.PHARMACY_SYNC_HUB_DB_PATH,
-    PHARMACY_SYNC_HUB_ENDPOINT: process.env.PHARMACY_SYNC_HUB_ENDPOINT,
-    PHARMACY_SYNC_TERMINAL_ID: process.env.PHARMACY_SYNC_TERMINAL_ID,
-    PHARMACY_SYNC_TERMINAL_TOKEN: process.env.PHARMACY_SYNC_TERMINAL_TOKEN,
-    PHARMACY_SYNC_TRANSPORT_ENCRYPTION: process.env.PHARMACY_SYNC_TRANSPORT_ENCRYPTION,
-    PHARMACY_SYNC_TRANSPORT_KEY: process.env.PHARMACY_SYNC_TRANSPORT_KEY
+    PHARMACY_SYNC_ROLE: appEnv.syncRole,
+    PHARMACY_SYNC_HUB_ENCRYPTION_KEY: appEnv.syncHubEncryptionKey,
+    PHARMACY_SYNC_HUB_DB_PATH: appEnv.syncHubDbPath,
+    PHARMACY_SYNC_HUB_ENDPOINT: appEnv.syncHubEndpoint,
+    PHARMACY_SYNC_TERMINAL_ID: appEnv.syncTerminalId,
+    PHARMACY_SYNC_TERMINAL_TOKEN: appEnv.syncHubToken,
+    PHARMACY_SYNC_TRANSPORT_ENCRYPTION: appEnv.syncTransportEncryption,
+    PHARMACY_SYNC_TRANSPORT_KEY: appEnv.syncTransportKey
   };
 }
 

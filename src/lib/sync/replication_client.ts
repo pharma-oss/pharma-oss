@@ -51,6 +51,19 @@ function buildPullHandler(collectionName: SyncCollectionName, fetchImpl: typeof 
   };
 }
 
+function enqueueRowsToLocalQueue(
+  collectionName: SyncCollectionName,
+  primaryPath: string,
+  rows: { newDocumentState: Record<string, unknown>; assumedMasterState?: Record<string, unknown> }[]
+): void {
+  // 送信失敗時は未送信ローカル暗号化キューに登録 (assumedMasterState も保持)
+  import('@/lib/sync/satellite_local_queue').then(({ enqueueUnsentRecord }) => {
+    for (const r of rows) {
+      enqueueUnsentRecord(collectionName, r.newDocumentState, primaryPath, r.assumedMasterState);
+    }
+  }).catch(() => {});
+}
+
 function buildPushHandler(collectionName: SyncCollectionName, primaryPath: string, fetchImpl: typeof fetch) {
   return async (rows: { newDocumentState: Record<string, unknown>; assumedMasterState?: Record<string, unknown> }[]) => {
     const pushRows: HubPushRow[] = rows.map((row) => ({
@@ -58,15 +71,29 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
       newDocumentState: row.newDocumentState,
       assumedMasterState: row.assumedMasterState ?? null
     }));
-    const response = await fetchImpl('/api/sync/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collection: collectionName, rows: pushRows })
-    });
+
+    let response: Response;
+    try {
+      response = await fetchImpl('/api/sync/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collection: collectionName, rows: pushRows })
+      });
+    } catch (err) {
+      // fetch自体が失敗した(=Hubに届いていない)場合のみローカルキューへ退避する
+      enqueueRowsToLocalQueue(collectionName, primaryPath, rows);
+      throw err;
+    }
+
     if (!response.ok) {
+      enqueueRowsToLocalQueue(collectionName, primaryPath, rows);
       throw new Error(`同期pushに失敗しました(${collectionName}): HTTP ${response.status}`);
     }
+
     // ハブが返す conflicts は保存済みの完全なドキュメント状態(_deleted 含む)。
+    // ここから先(応答の解釈)で失敗しても、送信自体はHubに届いているため
+    // ローカルキューには積まない。積むと古いassumedMasterStateで再送し、
+    // 無用な競合をhub_store側に生成してしまう。RxDB自身のリトライに委ねる。
     const body = await response.json() as { conflicts: WithDeleted<Record<string, unknown>>[] };
     return body.conflicts;
   };

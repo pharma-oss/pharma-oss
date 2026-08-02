@@ -98,6 +98,34 @@ test('push accepts an update whose assumedMasterState matches the current master
   }
 });
 
+test('push protects master patient allergy alerts and logs conflict when satellite replays with null assumedMasterState', () => {
+  const store = createTestStore();
+  try {
+    // 1. ハブに重要アレルギー情報(ペニシリン系禁忌)を含む患者データが存在
+    store.push('patients', HUB_LOCAL_TERMINAL_ID, [
+      { docId: 'p1', newDocumentState: { patientId: 'p1', name: '山田太郎', alertNote: '重大アレルギー: ペニシリン系禁忌', _deleted: false } }
+    ]);
+
+    // 2. サテライトが assumedMasterState: null で古い状態を再送
+    const conflicts = store.push('patients', 'satellite-1', [
+      {
+        docId: 'p1',
+        newDocumentState: { patientId: 'p1', name: '山田太郎(旧表記)', alertNote: '', _deleted: false },
+        assumedMasterState: null
+      }
+    ]);
+
+    // 3. 安全上、競合として判定され、ハブの正本データ(ペニシリン系禁忌)が上書きされず100%保護されることを実証
+    assert.equal(conflicts.length, 1);
+    assert.equal(conflicts[0].alertNote, '重大アレルギー: ペニシリン系禁忌');
+
+    const pullResult = store.pull('patients', 0, 10);
+    assert.equal(pullResult.documents[0].alertNote, '重大アレルギー: ペニシリン系禁忌');
+  } finally {
+    store.close();
+  }
+});
+
 test('push reports a conflict and preserves the master document when assumedMasterState is stale', () => {
   const store = createTestStore();
   try {
