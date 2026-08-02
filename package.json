@@ -50,7 +50,8 @@
     "drug-label:fetch": "tsx src/scripts/fetchOfficialDrugInteractionLabels.ts",
     "drug-label:queue-review": "tsx scripts/runOfficialDrugLabelQueueReview.ts",
     "drug-label:no-candidate-review": "tsx scripts/runOfficialDrugLabelNoCandidateReview.ts",
-    "drug-label:verify": "tsx src/scripts/verifyOfficialDrugInteractionLabels.ts"
+    "drug-label:verify": "tsx src/scripts/verifyOfficialDrugInteractionLabels.ts",
+    "brand:icons": "node scripts/generateBrandIcons.mjs"
   },
   "keywords": [
     "pharmacy",

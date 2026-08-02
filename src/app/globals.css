@@ -120,6 +120,40 @@ button {
   min-height: 40px;
 }
 
+/* テキスト選択をブランドカラーに寄せる（既定の青は teal 基調の画面から浮く） */
+::selection {
+  background: var(--primary-soft);
+  color: var(--text-main);
+}
+
+/* 細めのスクロールバー。掴みやすさを損なわないよう 10px は確保する。
+   薬歴・在庫の長い一覧が主要画面なので、常時表示の太いバーだと情報量を削る。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-ghost);
+  background-clip: padding-box;
+}
+
 .layout-wrapper {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
@@ -163,17 +197,35 @@ button {
   color: var(--text-muted);
 }
 
+/* アプリアイコン(src/app/icon.svg)と同じ 3 ストップのグラデーション。
+   ファビコン・PWA アイコンと見た目を揃えるため、色を変える場合は
+   scripts/brandMark.mjs の tileGradient も必ず合わせること。 */
 .logo-spark {
+  position: relative;
   width: 38px;
   height: 38px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--primary), var(--accent));
-  color: white;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #2ad3be 0%, var(--primary) 55%, #0b5766 100%);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  box-shadow: 0 10px 20px rgb(15 118 110 / 0.18);
+  box-shadow: 0 8px 18px rgb(15 118 110 / 0.28);
+  overflow: hidden;
+}
+
+/* アイコン本体と同じ左上からの光沢 */
+.logo-spark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 28% 18%, rgb(255 255 255 / 0.34), transparent 70%);
+  pointer-events: none;
+}
+
+.logo-spark > svg {
+  position: relative;
+  z-index: 1;
 }
 
 .side-nav,
@@ -206,9 +258,15 @@ button {
 }
 
 .nav-item.active {
-  background: var(--primary-soft);
+  /* 左端のインジケータから右へ抜ける淡いグラデーションにして、
+     選択中の項目が「面」ではなく「流れ」として読めるようにする */
+  background: linear-gradient(90deg, var(--primary-soft) 0%, rgb(203 243 236 / 0.45) 100%);
   color: var(--primary-dark);
   box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.nav-item.active svg {
+  color: var(--primary);
 }
 
 .status-panel {
@@ -564,15 +622,26 @@ button {
 }
 
 .btn-primary {
-  background: var(--primary);
+  /* 単色ベタ塗りより、上方向のわずかな明度差の方が押せる面に見える */
+  background: linear-gradient(180deg, #12857b 0%, var(--primary) 100%);
   color: #fff;
-  border: 1px solid var(--primary);
-  box-shadow: 0 8px 18px rgb(15 118 110 / 0.22);
+  border: 1px solid var(--primary-dark);
+  box-shadow: 0 8px 18px rgb(15 118 110 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.14);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--primary-dark);
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
   border-color: var(--primary-dark);
+  box-shadow: 0 10px 22px rgb(15 118 110 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+
+/* 押した瞬間の手応え。reduced-motion でも位置移動だけは残す(距離が 1px で
+   前庭系への影響がなく、押下のフィードバックとして重要なため) */
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled),
+.btn-complete:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 4px 10px rgb(15 118 110 / 0.2);
 }
 
 .btn-secondary {
@@ -2993,6 +3062,12 @@ input[type="search"]::-webkit-search-cancel-button {
   .brand {
     padding: 0;
     border-bottom: none;
+  }
+
+  /* 狭い画面でロゴ名が "pharma-" / "oss" に泣き別れるのを防ぐ */
+  .brand h1 {
+    font-size: 1.05rem;
+    white-space: nowrap;
   }
 
   .brand span,

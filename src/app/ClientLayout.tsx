@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
 import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
+import { CapsuleGlyph } from '@/components/brand/CapsuleMark';
 import { DbSecurityBanner } from '@/components/DbSecurityBanner';
 import { LoginModal } from '@/components/layout/LoginModal';
 import { usePWA } from '@/hooks/usePWA';
@@ -604,7 +605,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           <div className="layout-wrapper">
             <aside className="sidebar">
               <div className="brand">
-                <div className="logo-spark" aria-hidden="true">薬</div>
+                <div className="logo-spark" aria-hidden="true">
+                  <CapsuleGlyph size={24} />
+                </div>
                 <div>
                   <h1>pharma-oss</h1>
                   <span>薬局業務支援</span>
