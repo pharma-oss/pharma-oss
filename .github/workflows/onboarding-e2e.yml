@@ -37,10 +37,10 @@ jobs:
         run: npm run lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Unit tests
-        run: npx tsx --test $(find src -name "*.test.ts")
+        run: npm test
 
   onboarding-e2e:
     name: Onboarding browser E2E
