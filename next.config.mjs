@@ -2,10 +2,6 @@
 const nextConfig = {
   allowedDevOrigins: ['127.0.0.1', '[::1]'],
   transpilePackages: ['rxdb', 'rxjs', 'tesseract.js'],
-  webpack: (config) => {
-    config.resolve.fallback = { fs: false, path: false };
-    return config;
-  },
   turbopack: {},
   async headers() {
     return [
