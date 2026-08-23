@@ -23,9 +23,29 @@ export interface RestoreDbKeyFailure {
 
 export type RestoreDbKeyResult = RestoreDbKeySuccess | RestoreDbKeyFailure;
 
-const PBKDF2_ITERATIONS = 100000;
+export const LOCAL_DB_PASSWORD_KEY = 'pharmacy_os_local_db_password';
+export const PBKDF2_ITERATIONS = 120000;
 const PBKDF2_HASH = 'SHA-256';
 const AES_KEY_LENGTH = 256;
+
+export function getLocalStoredDbPassword(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(LOCAL_DB_PASSWORD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLocalStoredDbPassword(password: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.setItem(LOCAL_DB_PASSWORD_KEY, password);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -230,7 +250,7 @@ export function formatEscrowKeySheetText(escrow: DbKeyEscrowPayload, pharmacyNam
     `発行施設: ${pharmacyName}`,
     `発行日時: ${escrow.createdAt}`,
     `鍵識別子 (Fingerprint): ${escrow.keyFingerprint}`,
-    `暗号方式: ${escrow.algorithm} (PBKDF2 100,000回 / AES-GCM-256)`,
+    `暗号方式: ${escrow.algorithm} (PBKDF2 120,000回 / AES-GCM-256)`,
     '--------------------------------------------------',
     '【保管・セキュリティ上の注意】',
     '・本シートは端末障害・ブラウザプロファイル破損時の緊急復旧用です。',

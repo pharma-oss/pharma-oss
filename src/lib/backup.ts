@@ -26,7 +26,13 @@ export const BACKUP_COLLECTIONS = [
 export type BackupCollectionName = (typeof BACKUP_COLLECTIONS)[number];
 export type BackupCollections = Partial<Record<BackupCollectionName, Record<string, unknown>[]>>;
 
-import type { DbKeyEscrowPayload } from './db_key_escrow.ts';
+import {
+  type DbKeyEscrowPayload,
+  createDbKeyEscrow,
+  restoreDbKeyFromEscrow,
+  getLocalStoredDbPassword,
+  setLocalStoredDbPassword
+} from './db_key_escrow.ts';
 
 export interface YakurekiBackup {
   app: typeof BACKUP_APP_ID;
@@ -146,13 +152,20 @@ export function validateBackupPayload(value: unknown): BackupValidationResult {
     collections[collectionName] = sanitizedRows;
   }
 
+  const localSettings = isRecord(value.localSettings) ? value.localSettings : undefined;
+  const keyEscrow = isRecord(value.keyEscrow) && value.keyEscrow.version === 1 && typeof value.keyEscrow.ciphertextHex === 'string'
+    ? value.keyEscrow as unknown as DbKeyEscrowPayload
+    : undefined;
+
   return {
     ok: true,
     backup: {
       app: BACKUP_APP_ID,
       formatVersion: BACKUP_FORMAT_VERSION,
       createdAt: value.createdAt,
-      collections
+      collections,
+      localSettings,
+      keyEscrow
     }
   };
 }
@@ -163,7 +176,15 @@ export function countBackupRows(backup: YakurekiBackup): number {
   }, 0);
 }
 
-export async function buildDatabaseBackup(db: PharmacyDatabase): Promise<YakurekiBackup> {
+export interface BuildDatabaseBackupOptions {
+  adminPassword?: string;
+  dbPassword?: string;
+}
+
+export async function buildDatabaseBackup(
+  db: PharmacyDatabase,
+  options?: BuildDatabaseBackupOptions
+): Promise<YakurekiBackup> {
   const collections: BackupCollections = {};
 
   for (const collectionName of BACKUP_COLLECTIONS) {
@@ -172,16 +193,28 @@ export async function buildDatabaseBackup(db: PharmacyDatabase): Promise<Yakurek
     collections[collectionName] = docs.map((doc) => doc.toJSON());
   }
 
+  let keyEscrow: DbKeyEscrowPayload | undefined;
+  if (options?.adminPassword) {
+    const dbPassword = options.dbPassword || getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD;
+    if (dbPassword) {
+      keyEscrow = await createDbKeyEscrow(dbPassword, options.adminPassword);
+    }
+  }
+
   return {
     app: BACKUP_APP_ID,
     formatVersion: BACKUP_FORMAT_VERSION,
     createdAt: new Date().toISOString(),
     collections,
     localSettings: exportLocalSettings(),
+    keyEscrow
   };
 }
 
-export async function importDatabaseBackup(db: PharmacyDatabase, backup: YakurekiBackup): Promise<BackupImportResult> {
+export async function importDatabaseBackup(
+  db: PharmacyDatabase,
+  backup: YakurekiBackup
+): Promise<BackupImportResult> {
   const collections: BackupImportCollectionResult[] = [];
   let totalRows = 0;
 
@@ -207,6 +240,23 @@ export async function importDatabaseBackup(db: PharmacyDatabase, backup: Yakurek
   }
 
   return { totalRows, collections };
+}
+
+export async function restoreDatabaseKeyFromBackupEscrow(
+  backup: YakurekiBackup,
+  adminPassword: string
+): Promise<{ ok: true; dbPassword: string; keyFingerprint: string } | { ok: false; reason: string }> {
+  if (!backup.keyEscrow) {
+    return { ok: false, reason: 'バックアップに暗号鍵エスクローデータが含まれていません。' };
+  }
+
+  const result = await restoreDbKeyFromEscrow(backup.keyEscrow, adminPassword);
+  if (!result.ok) {
+    return result;
+  }
+
+  setLocalStoredDbPassword(result.dbPassword);
+  return result;
 }
 
 export function isEncryptedBackup(value: unknown): value is EncryptedYakurekiBackup {

@@ -23,6 +23,16 @@ import {
 } from '@/lib/patient_duplicate_review';
 import { type PatientMergeExecutionPlan, type PatientMergePlan } from '@/lib/patient_merge';
 import { type AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
+import {
+  type DbKeyEscrowPayload,
+  createDbKeyEscrow,
+  restoreDbKeyFromEscrow,
+  computeKeyFingerprint,
+  formatEscrowKeySheetText,
+  parseEscrowKeySheetText,
+  getLocalStoredDbPassword,
+  setLocalStoredDbPassword
+} from '@/lib/db_key_escrow';
 
 import { getBackupDrillStatusStyle as backupDrillStatusStyle } from '@/lib/backup_settings_helpers';
 
@@ -216,6 +226,85 @@ export default function BackupSettingsTab({
   handleRecordBackupDrill,
   handleConfirmRestore
 }: BackupSettingsTabProps) {
+  const [currentKeyFingerprint, setCurrentKeyFingerprint] = React.useState<string>('計算中...');
+  const [escrowAdminPassword, setEscrowAdminPassword] = React.useState('');
+  const [isGeneratingEscrow, setIsGeneratingEscrow] = React.useState(false);
+  const [issuedEscrow, setIssuedEscrow] = React.useState<DbKeyEscrowPayload | null>(null);
+  const [escrowError, setEscrowError] = React.useState<string | null>(null);
+
+  // 復元用ステート
+  const [escrowRestoreInput, setEscrowRestoreInput] = React.useState('');
+  const [escrowRestorePassword, setEscrowRestorePassword] = React.useState('');
+  const [isRestoringEscrow, setIsRestoringEscrow] = React.useState(false);
+  const [escrowRestoreMessage, setEscrowRestoreMessage] = React.useState<{ ok: boolean; text: string } | null>(null);
+
+  React.useEffect(() => {
+    const localKey = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || '';
+    if (localKey) {
+      computeKeyFingerprint(localKey).then(setCurrentKeyFingerprint).catch(() => setCurrentKeyFingerprint('未設定'));
+    } else {
+      setCurrentKeyFingerprint('未設定 (セッション一時鍵)');
+    }
+  }, []);
+
+  const handleIssueEscrowSheet = async () => {
+    if (!escrowAdminPassword || escrowAdminPassword.length < 8) {
+      setEscrowError('管理者パスワードは8文字以上で入力してください。');
+      return;
+    }
+    setIsGeneratingEscrow(true);
+    setEscrowError(null);
+    try {
+      const localKey = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || '';
+      if (!localKey) {
+        throw new Error('ローカルDB暗号鍵が見つかりません。');
+      }
+      const escrow = await createDbKeyEscrow(localKey, escrowAdminPassword);
+      setIssuedEscrow(escrow);
+      const text = formatEscrowKeySheetText(escrow, '青空薬局');
+      downloadTextFile(`emergency_key_escrow_${escrow.keyFingerprint}.txt`, text, 'text/plain;charset=utf-8');
+      setEscrowAdminPassword('');
+    } catch (err: any) {
+      setEscrowError(err.message || 'エスクローの発行に失敗しました。');
+    } finally {
+      setIsGeneratingEscrow(false);
+    }
+  };
+
+  const handleRestoreFromEscrow = async () => {
+    if (!escrowRestoreInput.trim()) {
+      setEscrowRestoreMessage({ ok: false, text: 'エスクロー文字列またはJSONを入力してください。' });
+      return;
+    }
+    if (!escrowRestorePassword) {
+      setEscrowRestoreMessage({ ok: false, text: '管理者パスワードを入力してください。' });
+      return;
+    }
+    setIsRestoringEscrow(true);
+    setEscrowRestoreMessage(null);
+    try {
+      const parsed = parseEscrowKeySheetText(escrowRestoreInput);
+      if (!parsed) {
+        throw new Error('エスクローデータの形式を認識できませんでした。Base64またはJSONをそのまま貼り付けてください。');
+      }
+      const result = await restoreDbKeyFromEscrow(parsed, escrowRestorePassword);
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+      setLocalStoredDbPassword(result.dbPassword);
+      setEscrowRestoreMessage({
+        ok: true,
+        text: `DB暗号鍵の復元に成功しました（Fingerprint: ${result.keyFingerprint}）。ページを再読み込みして復旧したDBにアクセスしてください。`
+      });
+      setEscrowRestoreInput('');
+      setEscrowRestorePassword('');
+    } catch (err: any) {
+      setEscrowRestoreMessage({ ok: false, text: err.message || '復元に失敗しました。' });
+    } finally {
+      setIsRestoringEscrow(false);
+    }
+  };
+
   return (
         <div className="settings-section glass backup-section" data-testid="backup-section">
           <h2>バックアップ/復旧</h2>
@@ -606,6 +695,128 @@ export default function BackupSettingsTab({
                 <div style={{ color: backupGenerationReview.status === 'pass' ? 'var(--text-main)' : backupGenerationReviewColor, fontWeight: 700 }}>
                   {backupGenerationReview.requiredActions.join(' / ')}
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 暗号鍵エスクロー（緊急復旧）管理セクション */}
+          <section
+            aria-label="暗号鍵エスクロー（緊急復旧）管理"
+            data-testid="db-key-escrow-section"
+            style={{
+              padding: '1.2rem',
+              marginBottom: '1.5rem',
+              border: '2px solid #0284c7',
+              borderRadius: '12px',
+              background: '#f0f9ff'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <ShieldCheck size={20} aria-hidden="true" />
+                  暗号鍵エスクロー（緊急復旧）管理
+                </h3>
+                <p className="help-text" style={{ color: '#0c4a6e', margin: '0.35rem 0 0' }}>
+                  端末障害・ブラウザプロファイル破損時のデータ全損を防ぐため、DB暗号鍵を管理者パスワード（PBKDF2 120,000回 ＋ AES-GCM-256）で暗号化して控えを発行・復旧します。
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', display: 'block' }}>現在のDB鍵識別子 (Fingerprint)</span>
+                <strong style={{ fontSize: '1.1rem', fontFamily: 'monospace', color: '#0284c7' }}>{currentKeyFingerprint}</strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+              {/* 発行パネル */}
+              <div style={{ background: '#ffffff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '1rem' }}>
+                <h4 style={{ margin: '0 0 0.5rem', fontSize: 'var(--fs-sm)', color: '#0369a1' }}>① 緊急復旧用シートを発行・保管</h4>
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                  管理者パスワードを入力してエスクローテキストを発行します。耐火金庫等の鍵のかかる安全な場所に施錠保管してください。
+                </p>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="password"
+                    placeholder="管理者パスワード (8文字以上)"
+                    value={escrowAdminPassword}
+                    onChange={(e) => setEscrowAdminPassword(e.target.value)}
+                    disabled={isGeneratingEscrow || !canManageBackups}
+                    style={{ padding: '0.4rem 0.6rem', fontSize: 'var(--fs-sm)', border: '1px solid var(--border)', borderRadius: '6px', flex: '1 1 180px' }}
+                    data-testid="escrow-issue-password-input"
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary flex-center gap-2"
+                    onClick={handleIssueEscrowSheet}
+                    disabled={isGeneratingEscrow || !canManageBackups || !escrowAdminPassword}
+                    style={{ padding: '0.4rem 0.85rem', fontSize: 'var(--fs-sm)' }}
+                    data-testid="escrow-issue-button"
+                  >
+                    {isGeneratingEscrow ? <Loader2 size={15} className="spin" /> : <Download size={15} />}
+                    <span>エスクロー控えを出力</span>
+                  </button>
+                </div>
+                {escrowError && (
+                  <p style={{ color: '#b91c1c', fontSize: 'var(--fs-xs)', margin: '0.5rem 0 0' }}>{escrowError}</p>
+                )}
+                {issuedEscrow && (
+                  <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: 'var(--fs-xs)', color: '#166534' }}>
+                    ✔ エスクローを発行しダウンロードしました (FP: {issuedEscrow.keyFingerprint})
+                  </div>
+                )}
+              </div>
+
+              {/* 復元パネル */}
+              <div style={{ background: '#ffffff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '1rem' }} data-testid="db-key-escrow-restore-section">
+                <h4 style={{ margin: '0 0 0.5rem', fontSize: 'var(--fs-sm)', color: '#0369a1' }}>② エスクローからDB暗号鍵を復元</h4>
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                  紙面控えのBase64またはJSONと、発行時の管理者パスワードを入力して端末のDB暗号鍵を復元します。
+                </p>
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  <textarea
+                    placeholder="エスクロー暗号化ペイロード (Base64またはJSON)"
+                    value={escrowRestoreInput}
+                    onChange={(e) => setEscrowRestoreInput(e.target.value)}
+                    rows={2}
+                    style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-xs)', fontFamily: 'monospace', border: '1px solid var(--border)', borderRadius: '6px' }}
+                    data-testid="escrow-restore-payload-input"
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      type="password"
+                      placeholder="発行時の管理者パスワード"
+                      value={escrowRestorePassword}
+                      onChange={(e) => setEscrowRestorePassword(e.target.value)}
+                      disabled={isRestoringEscrow || !canManageBackups}
+                      style={{ padding: '0.4rem 0.6rem', fontSize: 'var(--fs-sm)', border: '1px solid var(--border)', borderRadius: '6px', flex: '1 1 180px' }}
+                      data-testid="escrow-restore-password-input"
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary flex-center gap-2"
+                      onClick={handleRestoreFromEscrow}
+                      disabled={isRestoringEscrow || !canManageBackups || !escrowRestoreInput || !escrowRestorePassword}
+                      style={{ padding: '0.4rem 0.85rem', fontSize: 'var(--fs-sm)', background: '#0284c7', borderColor: '#0284c7' }}
+                      data-testid="escrow-restore-button"
+                    >
+                      {isRestoringEscrow ? <Loader2 size={15} className="spin" /> : <ShieldCheck size={15} />}
+                      <span>暗号鍵を復元して適用</span>
+                    </button>
+                  </div>
+                </div>
+                {escrowRestoreMessage && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    padding: '0.5rem',
+                    background: escrowRestoreMessage.ok ? '#f0fdf4' : '#fef2f2',
+                    border: `1px solid ${escrowRestoreMessage.ok ? '#86efac' : '#fca5a5'}`,
+                    borderRadius: '6px',
+                    fontSize: 'var(--fs-xs)',
+                    color: escrowRestoreMessage.ok ? '#166534' : '#991b1b'
+                  }}>
+                    {escrowRestoreMessage.text}
+                  </div>
+                )}
               </div>
             </div>
           </section>

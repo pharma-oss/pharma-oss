@@ -6,7 +6,9 @@ import {
   BACKUP_COLLECTIONS,
   BACKUP_FORMAT_VERSION,
   countBackupRows,
+  buildDatabaseBackup,
   importDatabaseBackup,
+  restoreDatabaseKeyFromBackupEscrow,
   makeBackupFileName,
   validateBackupPayload,
   isEncryptedBackup,
@@ -841,4 +843,43 @@ test('buildBackupGenerationReview requires external storage evidence for latest 
   assert.strictEqual(review.statusLabel, '要確認');
   assert.strictEqual(review.externalStorageStatusLabel, '保存未確認');
   assert.ok(review.requiredActions.some((action) => action.includes('外部保存確認')));
+});
+
+test('buildDatabaseBackup includes keyEscrow and restoreDatabaseKeyFromBackupEscrow recovers DB password', async () => {
+  const dummyDb: any = {};
+  for (const name of [
+    'facility_settings', 'patients', 'visits', 'prescription_items',
+    'soap_records', 'alerts', 'interventions', 'drugs', 'drug_stocks',
+    'locations', 'medication_guidances', 'patient_medication_info_templates',
+    'users', 'audit_logs'
+  ]) {
+    dummyDb[name] = {
+      find: () => ({
+        exec: async () => []
+      })
+    };
+  }
+
+  const adminPassword = 'AdminSecurePassword2026!';
+  const originalDbKey = 'my-super-secret-db-key-999';
+
+  const backup = await buildDatabaseBackup(dummyDb, {
+    adminPassword,
+    dbPassword: originalDbKey
+  });
+
+  assert.ok(backup.keyEscrow);
+  assert.strictEqual(backup.keyEscrow.version, 1);
+  assert.strictEqual(backup.keyEscrow.algorithm, 'PBKDF2-AES-GCM-256');
+
+  // 正しい管理者パスワードで復元
+  const restoreResult = await restoreDatabaseKeyFromBackupEscrow(backup, adminPassword);
+  assert.strictEqual(restoreResult.ok, true);
+  if (restoreResult.ok) {
+    assert.strictEqual(restoreResult.dbPassword, originalDbKey);
+  }
+
+  // 誤った管理者パスワードで復元失敗
+  const failResult = await restoreDatabaseKeyFromBackupEscrow(backup, 'WrongAdminPassword!');
+  assert.strictEqual(failResult.ok, false);
 });

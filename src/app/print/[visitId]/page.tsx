@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import '../print.css';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -106,7 +106,11 @@ import { OintmentLabelSheetPrint } from '../components/OintmentLabelSheetPrint';
 import { EmergencyRecoveryKeySheetPrint } from '../components/EmergencyRecoveryKeySheetPrint';
 import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffPanel';
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
-import type { DbKeyEscrowPayload } from '@/lib/db_key_escrow';
+import {
+  type DbKeyEscrowPayload,
+  createDbKeyEscrow,
+  getLocalStoredDbPassword
+} from '@/lib/db_key_escrow';
 
 import { usePrintVisitData } from '@/hooks/usePrintVisitData';
 import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
@@ -119,17 +123,33 @@ export default function PrintPage() {
   const db = useDatabase();
   const visitId = params.visitId as string;
 
-  const escrowPayload: DbKeyEscrowPayload = useMemo(() => ({
-    version: 1,
-    algorithm: 'PBKDF2-AES-GCM-256',
-    saltHex: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
-    ivHex: '1234567890abcdef12345678',
-    ciphertextHex: '8f4c2e1b9a0d3f7e6c5b4a3928170e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f',
-    checksumSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    createdAt: '2026-08-23T00:00:00.000Z',
-    issuerRole: 'admin',
-    keyFingerprint: 'A1B2C3D4E5F6'
-  }), []);
+  const [escrowPayload, setEscrowPayload] = useState<DbKeyEscrowPayload | null>(null);
+  const [isGeneratingEscrow, setIsGeneratingEscrow] = useState(false);
+  const [escrowError, setEscrowError] = useState<string | null>(null);
+
+  const handleGenerateEscrow = useCallback(async (adminPassword: string) => {
+    setIsGeneratingEscrow(true);
+    setEscrowError(null);
+    try {
+      const dbPassword = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || 'local-demo-encryption-key-2026';
+      const generated = await createDbKeyEscrow(dbPassword, adminPassword);
+      setEscrowPayload(generated);
+    } catch (err: any) {
+      setEscrowError(err.message || 'エスクローの発行に失敗しました。');
+      throw err;
+    } finally {
+      setIsGeneratingEscrow(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visitId === 'e2e_onboarding_visit' || visitId.startsWith('demo_')) {
+      const dbPassword = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || 'local-demo-encryption-key-2026';
+      createDbKeyEscrow(dbPassword, 'AdminPassword2026!').then((payload) => {
+        setEscrowPayload(payload);
+      }).catch(console.error);
+    }
+  }, [visitId]);
 
   const debounceRef = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -1759,6 +1779,9 @@ export default function PrintPage() {
           facilityAddress={pharmacyAddressLine}
           facilityPhone={pharmacyInfo.phone}
           renderIdentityMark={renderIdentityMark}
+          onGenerateEscrow={handleGenerateEscrow}
+          isGenerating={isGeneratingEscrow}
+          errorMessage={escrowError}
         />
       </div>
     </div>
