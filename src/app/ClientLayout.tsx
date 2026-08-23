@@ -783,7 +783,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       borderRadius: '8px',
                       background: 'rgba(255, 255, 255, 0.65)',
                       color: 'var(--foreground)',
-                      fontSize: '0.82rem',
+                      fontSize: 'var(--fs-md)',
                       fontWeight: 600,
                       cursor: 'pointer',
                       outline: 'none'
@@ -849,7 +849,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       </p>
                     </div>
                     {setupError && (
-                      <div role="alert" style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', fontSize: '0.9rem' }}>
+                      <div role="alert" style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', fontSize: 'var(--fs-base)' }}>
                         {setupError}
                       </div>
                     )}
@@ -860,7 +860,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                         value={setupAdminName}
                         onChange={(e) => setSetupAdminName(e.target.value)}
                         autoComplete="name"
-                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.95rem' }}
+                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 'var(--fs-base)' }}
                       />
                     </label>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 600 }}>
@@ -871,7 +871,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                         onChange={(e) => setSetupAdminPassword(e.target.value)}
                         autoComplete="new-password"
                         minLength={8}
-                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.95rem' }}
+                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 'var(--fs-base)' }}
                       />
                     </label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -897,7 +897,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       </button>
                     </div>
                     <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <p className="text-muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+                      <p className="text-muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>
                         まだパスワードを決めていない場合は、デモ患者・受付データで自由に試せる体験モードに戻れます。
                       </p>
                       <button

@@ -53,15 +53,26 @@ async function ensureInitialAdmin(page) {
   const passwordInput = await page.waitForSelector('input[type=password]', { timeout: 15000 }).catch(() => null);
   if (!passwordInput) return false;
 
-  const formHandle = await passwordInput.evaluateHandle((input) => input.closest('form'));
-  const nameInput = await formHandle.asElement()?.$('input[type=text]');
-  if (nameInput) {
-    await nameInput.click({ clickCount: 3 });
-    await page.keyboard.type('E2E導入管理者');
-  }
-  await passwordInput.click({ clickCount: 3 });
-  await page.keyboard.type(setupPassword);
-  await wait(500);
+  const prepared = await page.evaluate(({ name, password }) => {
+    const passwordInput = document.querySelector('input[type=password]');
+    const form = passwordInput?.closest('form');
+    if (!(passwordInput instanceof HTMLInputElement) || !form) return false;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!valueSetter) return false;
+    const setValue = (input, value) => {
+      valueSetter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const nameInput = form.querySelector('input[type=text]');
+    if (nameInput instanceof HTMLInputElement) {
+      setValue(nameInput, name);
+    }
+    setValue(passwordInput, password);
+    return true;
+  }, { name: 'E2E導入管理者', password: setupPassword });
+  assertOk(prepared, 'Initial admin setup form could not be prepared.');
+  await wait(200);
   const submitted = await page.evaluate(() => {
     const passwordInput = document.querySelector('input[type=password]');
     const form = passwordInput?.closest('form');
@@ -120,7 +131,6 @@ async function screenshotElement(element, filePath) {
 async function capturePrintTargets(page, artifactDir) {
   const captures = [];
 
-  await page.screenshot({ path: join(artifactDir, 'print-page-full.png'), fullPage: true });
   for (const target of printTargets) {
     const elements = await page.$$(target.selector);
     assertOk(elements.length > 0, `print layout target missing: ${target.selector}`);
@@ -185,7 +195,7 @@ async function run() {
     browser = await puppeteer.launch({
       headless,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      protocolTimeout: 90000,
+      protocolTimeout: 180000,
       userDataDir
     });
     page = await browser.newPage();
@@ -195,13 +205,17 @@ async function run() {
     await page.evaluateOnNewDocument(() => {
       const originalGetItem = Storage.prototype.getItem;
       Storage.prototype.getItem = function patchedGetItem(key) {
-        if (String(key).startsWith('yakureki:pre-login-tour') || String(key).startsWith('yakureki:workflow-tutorial')) {
+        if (
+          String(key).startsWith('yakureki:pre-login-tour') ||
+          String(key).startsWith('yakureki:workflow-tutorial') ||
+          String(key).startsWith('yakureki:first-run-tutorial')
+        ) {
           return '2026-01-01T00:00:00.000Z';
         }
         return originalGetItem.call(this, key);
       };
     });
-    await page.setViewport({ width: 1440, height: 1800, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 1440, height: 16000, deviceScaleFactor: 1 });
     page.on('pageerror', (error) => logs.push(`PAGEERROR ${error.message}`));
     page.on('console', (message) => {
       const text = message.text();

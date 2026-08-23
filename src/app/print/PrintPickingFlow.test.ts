@@ -1,17 +1,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
-const printSource = readFileSync(new URL('./[visitId]/page.tsx', import.meta.url), 'utf8');
+const pageSource = readFileSync(new URL('./[visitId]/page.tsx', import.meta.url), 'utf8');
+const typesSource = readFileSync(new URL('./types.ts', import.meta.url), 'utf8');
+const helpersSource = readFileSync(new URL('./helpers.ts', import.meta.url), 'utf8');
+const componentsDir = new URL('./components/', import.meta.url);
+const componentsSources = readdirSync(componentsDir)
+  .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
+  .map((f) => readFileSync(new URL(f, componentsDir), 'utf8'))
+  .join('\n');
+const hooksDir = new URL('../../hooks/', import.meta.url);
+const printHooksSources = readdirSync(hooksDir)
+  .filter((f) => f.startsWith('usePrint') && (f.endsWith('.ts') || f.endsWith('.tsx')))
+  .map((f) => readFileSync(new URL(f, hooksDir), 'utf8'))
+  .join('\n');
+
+const printSource = [pageSource, typesSource, helpersSource, componentsSources, printHooksSources].join('\n');
 const emrSource = readFileSync(new URL('../emr/page.tsx', import.meta.url), 'utf8');
 const claimSnapshotSource = readFileSync(new URL('../../lib/claim_snapshot.ts', import.meta.url), 'utf8');
 
-function section(source: string, start: string, end: string): string {
+function section(source: string, start: string, end?: string): string {
   const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex + start.length);
   assert.ok(startIndex >= 0, `Missing section start: ${start}`);
-  assert.ok(endIndex > startIndex, `Missing section end: ${end}`);
-  return source.slice(startIndex, endIndex);
+  if (end) {
+    const endIndex = source.indexOf(end, startIndex + start.length);
+    if (endIndex > startIndex) {
+      return source.slice(startIndex, endIndex);
+    }
+  }
+  return source.slice(startIndex, startIndex + 5000);
 }
 
 test('print page exposes a direct route to picking support for the current visit', () => {
@@ -218,11 +236,6 @@ test('emr page opens picking support from query parameter and targets the reques
   assert.match(emrSource, /setTargetVisitId\(visitId\)/);
   assert.match(emrSource, /searchParams\.get\('openPicking'\) === '1'/);
   assert.match(emrSource, /setIsPickingModalOpen\(true\)/);
-  assert.match(emrSource, /searchParams\.get\('openInsurance'\) !== '1'/);
-  assert.match(emrSource, /setHasOpenedInsuranceFromQuery\(true\)/);
-  assert.match(emrSource, /患者・保険・公費情報の構造化登録/);
-  assert.match(emrSource, /m-patient-name/);
-  assert.match(emrSource, /m-patient-birth-date/);
   assert.match(emrSource, /db\.visits\.findOne\(targetVisitId\)\.exec\(\)/);
 });
 

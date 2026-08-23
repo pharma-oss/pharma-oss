@@ -32,8 +32,10 @@
   --text-main: #14201d;
   --foreground: #14201d;
   --text-dark: #14201d;
-  --text-muted: #4f5d62;
-  --text-ghost: #8b989e;
+  --text-muted: #47555a;
+  /* 補助文言用。旧値 #8b989e は白背景で 2.9:1 と WCAG AA 未満だった。
+     11〜13px の注記に多用されるため 4.5:1 を満たす濃さまで下げる。 */
+  --text-ghost: #6b787e;
 
   --border: #d6e2df;
   --border-strong: #bacdc8;
@@ -56,6 +58,16 @@
   --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 14px;
+
+  /* タイプスケール。以前は 0.6rem〜2.15rem の間に 43 種類の font-size が
+     散在し、画面上の文字の約 6 割が 12.5px 未満だった。日本語は同じ px でも
+     欧文より小さく見えるため、下限を 12px に引き上げたうえで段階を集約する。
+     新しい指定は必ずこのトークンから選ぶこと。 */
+  --fs-2xs: 0.75rem; /* 12px: kbd・単位・高密度メタ情報のみ */
+  --fs-xs: 0.8125rem; /* 13px: バッジ、チップ、補足キャプション */
+  --fs-sm: 0.875rem; /* 14px: フォームラベル、副次テキスト */
+  --fs-md: 0.9375rem; /* 15px: カード本文 */
+  --fs-base: 1rem; /* 16px: 本文、入力欄 */
 
   --transition-fast: 150ms ease;
   --transition-smooth: 260ms ease;
@@ -193,7 +205,7 @@ button {
 .brand span {
   display: block;
   margin-top: 0.2rem;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -285,11 +297,11 @@ button {
 }
 
 .status-panel strong {
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
 }
 
 .status-panel span {
-  font-size: 0.73rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -354,7 +366,7 @@ button {
 
 .pwa-install-copy strong {
   display: block;
-  font-size: 0.88rem;
+  font-size: var(--fs-md);
   font-weight: 850;
 }
 
@@ -362,7 +374,7 @@ button {
   display: block;
   max-width: 70ch;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   line-height: 1.45;
 }
 
@@ -386,7 +398,7 @@ button {
   border-radius: var(--radius-md);
   background: #fff;
   color: var(--primary);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   white-space: nowrap;
   box-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
@@ -455,7 +467,7 @@ button {
   outline: none;
   background: transparent;
   padding: 0.5rem 4.2rem 0.5rem 0;
-  font-size: 0.92rem;
+  font-size: var(--fs-base);
 }
 
 .search-shortcut {
@@ -473,7 +485,7 @@ button {
   border-radius: 4px;
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   text-align: center;
 }
 
@@ -528,7 +540,7 @@ button {
 .search-results-empty {
   padding: 0.7rem 0.75rem;
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-md);
 }
 
 .search-result-item {
@@ -551,12 +563,12 @@ button {
 
 .search-result-name {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
   color: var(--text-main);
 }
 
 .search-result-meta {
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -570,7 +582,19 @@ button {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
+}
+
+/* 薬歴画面の患者バナー用。和名のイニシャルは 2 文字になるため、
+   38px の既定サイズでは文字が欠ける。 */
+.avatar.large {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 
 .content-scroll {
@@ -732,7 +756,7 @@ button {
   gap: 0.35rem;
   margin-bottom: 0.35rem;
   color: var(--primary-dark);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
 }
 
@@ -792,20 +816,32 @@ button {
   gap: 0.14rem;
 }
 
-.kpi-label,
-.kpi-sub,
-.kpi-detail {
+/* タイル内の3階層。以前は指標名・補足・脚注がすべて同じ大きさ・同じ色で、
+   どれが指標名なのか読まないと分からなかった。役割ごとに差をつける。 */
+.kpi-label {
   overflow-wrap: anywhere;
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
-.kpi-detail {
+.kpi-sub {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
   font-weight: 700;
 }
 
+.kpi-detail {
+  overflow-wrap: anywhere;
+  color: var(--text-ghost);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
 .kpi-value {
+  margin: 0.1rem 0 0.15rem;
   color: var(--text-main);
   font-size: 1.5rem;
   font-weight: 850;
@@ -839,11 +875,19 @@ button {
 .stat-icon.red { background: var(--danger-soft); color: var(--danger); }
 .stat-icon.green { background: var(--success-soft); color: var(--success); }
 
-.stat-label,
-.stat-sub {
+.stat-label {
   display: block;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.stat-sub {
+  display: block;
+  color: var(--text-ghost);
+  font-size: var(--fs-xs);
+  font-weight: 600;
 }
 
 .stat-value {
@@ -899,15 +943,23 @@ button {
   gap: 0.08rem;
 }
 
-.operation-label,
-.operation-sub {
+.operation-label {
   overflow-wrap: anywhere;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.operation-sub {
+  overflow-wrap: anywhere;
+  color: var(--text-ghost);
+  font-size: var(--fs-xs);
+  font-weight: 600;
 }
 
 .operation-value {
+  margin: 0.06rem 0;
   color: var(--text-main);
   font-size: 1.35rem;
   font-weight: 850;
@@ -963,7 +1015,7 @@ button {
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.86rem;
+  font-size: var(--fs-md);
   font-weight: 850;
 }
 
@@ -992,7 +1044,7 @@ button {
   background: #fff;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1035,7 +1087,7 @@ button {
   padding: 0.8rem 1rem;
   border-radius: var(--radius-md);
   margin-bottom: 1rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
 }
 
 .notice.danger {
@@ -1092,7 +1144,7 @@ button {
 
 .column-header h4 {
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-md);
   font-weight: 800;
 }
 
@@ -1104,7 +1156,7 @@ button {
   justify-content: center;
   padding: 0 0.45rem;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
 }
 
@@ -1164,13 +1216,13 @@ button {
 .time {
   flex: 0 0 auto;
   color: var(--text-ghost);
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   font-weight: 700;
 }
 
 .age {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
 }
 
 .status-tag {
@@ -1180,7 +1232,7 @@ button {
   border-radius: var(--radius-sm);
   background: #fff;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -1196,7 +1248,7 @@ button {
   gap: 0.4rem;
   margin-top: 0.65rem;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -1226,7 +1278,7 @@ button {
   background: #fff7ed;
   border: 1px solid #fed7aa;
   color: #c2410c;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -1239,7 +1291,7 @@ button {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: var(--fs-md);
   text-align: center;
   padding: 1rem;
 }
@@ -1254,9 +1306,11 @@ button {
   gap: 0.75rem;
 }
 
+/* 固定2列だと件数が1件のとき右半分が丸ごと空き、患者名だけが折り返して
+   いた。入る幅があるときだけ2列にする。 */
 .claim-risk-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
   gap: 0.75rem;
 }
 
@@ -1339,7 +1393,7 @@ button {
   align-items: center;
   padding: 0.06rem 0.38rem;
   border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1379,8 +1433,8 @@ button {
 .ai-prediction-guardrail {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.79rem;
-  font-weight: 800;
+  font-size: var(--fs-sm);
+  font-weight: 700;
   line-height: 1.45;
 }
 
@@ -1398,7 +1452,7 @@ button {
   background: #fffbeb;
   color: #92400e;
   padding: 0.65rem 0.75rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 750;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1411,18 +1465,20 @@ button {
   gap: 0.35rem;
 }
 
+/* 根拠は監査用の控えなので、本文と同じ濃さで並ぶと何が結論か分からなくなる。
+   タイトル→本文→対応 の順に読ませ、根拠は脚注の重さに落とす。 */
 .ai-prediction-evidence span {
   min-width: 0;
   max-width: 100%;
   display: inline-flex;
   align-items: center;
-  padding: 0.08rem 0.38rem;
+  padding: 0.1rem 0.4rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: var(--text-ghost);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -1438,7 +1494,7 @@ button {
   background: #eff6ff;
   color: #1d4ed8;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1502,7 +1558,7 @@ button {
   align-items: center;
   padding: 0.06rem 0.38rem;
   border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1530,13 +1586,15 @@ button {
 .claim-risk-action {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.79rem;
-  font-weight: 800;
+  font-size: var(--fs-sm);
+  font-weight: 700;
   line-height: 1.45;
 }
 
+/* 点数・件数などの内訳。行内で全部が太字だと差し戻し理由が埋もれる。 */
 .claim-risk-meta {
   color: var(--text-muted);
+  font-weight: 600;
 }
 
 .claim-risk-issues {
@@ -1559,7 +1617,7 @@ button {
   background: #fff7ed;
   color: #c2410c;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1622,7 +1680,7 @@ button {
   align-items: center;
   padding: 0.06rem 0.38rem;
   border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1675,7 +1733,7 @@ button {
 .claim-workbench-action {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.79rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   line-height: 1.45;
 }
@@ -1708,7 +1766,7 @@ button {
   background: #eff6ff;
   color: #1d4ed8;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1767,7 +1825,7 @@ button {
   align-items: center;
   padding: 0.06rem 0.38rem;
   border-radius: var(--radius-sm);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1791,7 +1849,7 @@ button {
 .inventory-risk-action {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.79rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   line-height: 1.45;
 }
@@ -1825,7 +1883,7 @@ button {
   background: #f0f9ff;
   color: #0369a1;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -1901,14 +1959,14 @@ button {
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
 
 .followup-meta {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
 }
 
@@ -1916,7 +1974,7 @@ button {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--text-main);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 760;
   line-height: 1.45;
 }
@@ -1937,7 +1995,7 @@ button {
   border-radius: var(--radius-sm);
   background: #f0f9ff;
   color: #0369a1;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -1961,7 +2019,7 @@ button {
   background: var(--success-soft);
   color: var(--success);
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -2016,7 +2074,7 @@ button {
 
 .followup-modal-header p {
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: var(--fs-md);
   font-weight: 700;
 }
 
@@ -2058,18 +2116,18 @@ button {
 
 .followup-plan span {
   color: #0369a1;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
 }
 
 .followup-plan strong {
   color: var(--text-main);
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
 }
 
 .followup-plan p {
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   line-height: 1.5;
 }
@@ -2081,7 +2139,7 @@ button {
 
 .followup-field span {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   font-weight: 850;
 }
 
@@ -2095,7 +2153,7 @@ button {
   border-radius: var(--radius-md);
   background: #fff;
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
 }
 
 .followup-field textarea {
@@ -2166,7 +2224,7 @@ button {
 
 .text-danger { color: var(--danger); }
 .text-muted { color: var(--text-muted); }
-.text-sm { font-size: 0.82rem; }
+.text-sm { font-size: var(--fs-md); }
 .text-ghost { color: var(--text-ghost); }
 .ml-1 { margin-left: 0.25rem; }
 .flex { display: flex; }
@@ -2220,7 +2278,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: var(--radius-md);
   background: var(--primary-light);
   color: var(--primary-dark);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   white-space: nowrap;
   cursor: pointer;
@@ -2292,7 +2350,7 @@ input[type="search"]::-webkit-search-cancel-button {
   align-items: center;
   gap: 0.35rem;
   color: var(--primary-dark);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   letter-spacing: 0.02em;
 }
@@ -2350,7 +2408,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border: 0;
   background: transparent;
   color: var(--text-ghost);
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   cursor: pointer;
 }
 
@@ -2462,7 +2520,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .tutorial-copy > p {
   color: var(--text-muted);
-  font-size: 0.91rem;
+  font-size: var(--fs-base);
   line-height: 1.8;
 }
 
@@ -2476,7 +2534,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 12px;
   background: var(--success-soft);
   color: #166534;
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
   font-weight: 750;
   line-height: 1.55;
 }
@@ -2498,7 +2556,7 @@ input[type="search"]::-webkit-search-cancel-button {
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
-  font-size: 0.83rem;
+  font-size: var(--fs-md);
   font-weight: 750;
 }
 
@@ -2536,12 +2594,12 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .tutorial-mini-head span {
   color: var(--primary);
-  font-size: 0.66rem;
+  font-size: var(--fs-2xs);
   font-weight: 850;
 }
 
 .tutorial-mini-head strong {
-  font-size: 0.98rem;
+  font-size: var(--fs-base);
 }
 
 .tutorial-mini-stats {
@@ -2561,7 +2619,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .tutorial-mini-stats span {
   color: var(--text-muted);
-  font-size: 0.61rem;
+  font-size: var(--fs-2xs);
 }
 
 .tutorial-mini-stats strong {
@@ -2597,13 +2655,13 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .tutorial-mini-task strong {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 
 .tutorial-mini-task span {
   margin-top: 0.12rem;
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
 }
 
 .tutorial-scan-preview {
@@ -2626,7 +2684,7 @@ input[type="search"]::-webkit-search-cancel-button {
 .tutorial-demo-id {
   margin-bottom: 0.85rem;
   color: var(--primary-dark);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-weight: 850;
   letter-spacing: 0.03em;
 }
@@ -2656,12 +2714,12 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .tutorial-scan-medicine span {
   color: var(--primary-dark);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-weight: 850;
 }
 
 .tutorial-scan-medicine strong {
-  font-size: 0.76rem;
+  font-size: var(--fs-xs);
 }
 
 .tutorial-scan-focus {
@@ -2688,7 +2746,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 999px;
   background: #fff;
   color: var(--primary-dark);
-  font-size: 0.69rem;
+  font-size: var(--fs-2xs);
   font-weight: 850;
   box-shadow: 0 10px 24px rgb(0 0 0 / 0.2);
 }
@@ -2719,7 +2777,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .tutorial-record-person span {
-  font-size: 0.88rem;
+  font-size: var(--fs-md);
   font-weight: 850;
 }
 
@@ -2728,7 +2786,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 999px;
   background: var(--warning-soft);
   color: #92400e;
-  font-size: 0.61rem;
+  font-size: var(--fs-2xs);
 }
 
 .tutorial-soap-grid {
@@ -2763,12 +2821,12 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 6px;
   background: var(--primary);
   color: #fff;
-  font-size: 0.67rem;
+  font-size: var(--fs-2xs);
 }
 
 .tutorial-soap-grid span {
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--fs-2xs);
   line-height: 1.4;
 }
 
@@ -2810,7 +2868,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .tutorial-completion-preview > strong {
-  font-size: 0.95rem;
+  font-size: var(--fs-base);
 }
 
 .tutorial-completion-list {
@@ -2830,7 +2888,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 9px;
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 0.61rem;
+  font-size: var(--fs-2xs);
   font-weight: 750;
 }
 
@@ -2875,7 +2933,7 @@ input[type="search"]::-webkit-search-cancel-button {
   gap: 0.4rem;
   padding: 0.55rem 0.85rem;
   border-radius: var(--radius-md);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   cursor: pointer;
 }
@@ -2937,7 +2995,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
   .tutorial-progress button {
     min-height: 54px;
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
   }
 
   .tutorial-body {
@@ -3143,7 +3201,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
   .search-pill input {
     padding-right: 0.25rem;
-    font-size: 0.84rem;
+    font-size: var(--fs-md);
   }
 
   .search-shortcut {
@@ -3284,7 +3342,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 6px;
   background: #ecfeff;
   color: #155e75;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   white-space: nowrap;
   cursor: pointer;
@@ -3349,7 +3407,7 @@ input[type="search"]::-webkit-search-cancel-button {
   align-items: center;
   gap: 0.35rem;
   color: #0e7490;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
   letter-spacing: 0;
 }
@@ -3442,13 +3500,13 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .workflow-demo-preview-head > span {
   color: var(--text-ghost);
-  font-size: 0.66rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   letter-spacing: 0;
 }
 
 .workflow-demo-preview-head > strong {
-  font-size: 0.91rem;
+  font-size: var(--fs-base);
 }
 
 .workflow-demo-fields {
@@ -3481,14 +3539,14 @@ input[type="search"]::-webkit-search-cancel-button {
 .workflow-demo-fields span,
 .workflow-demo-lot-grid span {
   color: var(--text-ghost);
-  font-size: 0.64rem;
+  font-size: var(--fs-2xs);
   font-weight: 750;
 }
 
 .workflow-demo-fields strong,
 .workflow-demo-lot-grid strong {
   min-width: 0;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -3512,7 +3570,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 6px;
   background: #ecfeff;
   color: #155e75;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
   line-height: 1.4;
 }
@@ -3537,7 +3595,7 @@ input[type="search"]::-webkit-search-cancel-button {
 .workflow-demo-scan-code span {
   min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.67rem;
+  font-size: var(--fs-2xs);
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -3569,11 +3627,11 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .workflow-demo-history-diff span {
   color: #1d4ed8;
-  font-size: 0.67rem;
+  font-size: var(--fs-2xs);
 }
 
 .workflow-demo-history-diff strong {
-  font-size: 0.69rem;
+  font-size: var(--fs-2xs);
 }
 
 .workflow-demo-soap-row {
@@ -3592,7 +3650,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border: 1px dashed var(--border-strong);
   border-radius: 6px;
   color: var(--text-ghost);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 850;
 }
 
@@ -3612,7 +3670,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .workflow-demo-guide > p:first-child {
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: var(--fs-md);
   line-height: 1.72;
 }
 
@@ -3664,12 +3722,12 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 
 .workflow-demo-guide li strong {
-  font-size: 0.77rem;
+  font-size: var(--fs-xs);
 }
 
 .workflow-demo-guide li div > span {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   line-height: 1.5;
 }
 
@@ -3682,7 +3740,7 @@ input[type="search"]::-webkit-search-cancel-button {
   border-radius: 6px;
   background: #f0fdf4;
   color: #166534;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 750;
   line-height: 1.5;
 }
@@ -3711,7 +3769,7 @@ input[type="search"]::-webkit-search-cancel-button {
   gap: 0.4rem;
   padding: 0.55rem 0.82rem;
   border-radius: 6px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 800;
   cursor: pointer;
 }
@@ -3799,3 +3857,428 @@ input[type="search"]::-webkit-search-cancel-button {
     width: 100%;
   }
 }
+
+/* 薬歴画面の患者・保険モーダル。EmrPage と PatientBanner の両方から使われる
+   ため、どちらかの styled-jsx に置くと片方でスタイルが当たらない。
+   汎用クラス名の衝突を避けるため .insurance-modal 配下に閉じ込めている。 */
+.insurance-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.insurance-modal {
+  width: 520px;
+  max-width: 90%;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.insurance-modal.animate-scale {
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.insurance-modal .modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+}
+
+.insurance-modal .modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--primary);
+}
+
+.insurance-modal .modal-title-row h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.insurance-modal .modal-subtitle {
+  font-size: var(--fs-md);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.insurance-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.questionnaire-summary-list,
+.tracing-report-list,
+.insurance-modal .myna-clinical-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.questionnaire-summary-item,
+.tracing-report-item,
+.insurance-modal .myna-clinical-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+  font-size: var(--fs-sm);
+}
+
+.questionnaire-summary-item span,
+.tracing-report-item span,
+.insurance-modal .myna-clinical-item span {
+  color: var(--text-ghost);
+  font-size: var(--fs-xs);
+}
+
+.questionnaire-summary-item strong,
+.tracing-report-item strong,
+.insurance-modal .myna-clinical-item strong {
+  color: var(--text-main);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.insurance-modal .questionnaire-image-details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.6rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.insurance-modal .questionnaire-image-details img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  object-fit: contain;
+  margin-top: 0.55rem;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.insurance-modal .questionnaire-raw-text {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.insurance-modal .questionnaire-raw-text pre {
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.insurance-modal .tracing-report-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.insurance-modal .tracing-report-title-row > :first-child {
+  min-width: min(180px, 100%);
+}
+
+.insurance-modal .tracing-report-item p {
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.insurance-modal .myna-clinical-item p {
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+}
+
+.insurance-modal .modal-section-title {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text-muted);
+  border-left: 3px solid var(--primary);
+  padding-left: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.insurance-modal .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.insurance-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.insurance-modal .form-group.full-width {
+  grid-column: span 2;
+}
+
+.insurance-modal .form-group label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.insurance-modal .form-group input,
+.insurance-modal .form-group select {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: var(--fs-base);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.insurance-modal .form-group input:focus,
+.insurance-modal .form-group select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.insurance-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* ==========================================================================
+   Common Form & Section Layout (Global UI Design System)
+   ========================================================================== */
+
+.settings-section {
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.section-desc {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+.subsection-title {
+  font-size: 1rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--text-main);
+}
+
+.form-control {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  background: var(--bg-card);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+
+.form-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: var(--fs-base);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--primary);
+}
+
+.help-text {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+
+.settings-container .actions,
+.settings-section .actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.upload-area {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: center;
+  background: var(--bg-card);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.upload-area:hover {
+  border-color: var(--primary);
+  background: var(--bg-subtle);
+}
+
+.file-input-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.file-info {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.status-message {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  font-size: var(--fs-md);
+}
+
+.status-message.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #f87171;
+}
+
+.status-message.success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+/* ==========================================================================
+   Data Table Layout
+   ========================================================================== */
+
+.table-wrapper {
+  overflow-x: auto;
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  background: var(--bg-subtle);
+  color: var(--text-main);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* ==========================================================================
+   Spin Animations
+   ========================================================================== */
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+

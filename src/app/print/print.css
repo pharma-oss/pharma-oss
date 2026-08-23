@@ -1,0 +1,3177 @@
+.print-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100%;
+}
+
+.print-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* 日本語見出しは単語区切りがなく、折り返しなしのflexだと1文字幅まで
+   潰れてしまうため、タイトル側に最低幅を確保し、ボタン列は折り返す。 */
+.print-header > div:first-child {
+  flex: 1 1 260px;
+  min-width: min(260px, 100%);
+}
+
+.print-header > div:last-child {
+  flex-wrap: wrap;
+}
+
+.flex { display: flex; }
+.items-center { align-items: center; }
+.gap-4 { gap: 1rem; }
+.gap-2 { gap: 0.5rem; }
+
+.print-workspace {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  padding: 0 0.5rem 2rem;
+}
+
+        .print-preview-card {
+          display: flex;
+          flex-direction: column;
+          background: #ffffff;
+          padding: 1rem;
+          border: 1px solid #d9dee7;
+          border-radius: 8px;
+        }
+
+        .paper-preview-card {
+          align-items: center;
+          overflow-x: auto;
+          background:
+            linear-gradient(90deg, rgba(226, 232, 240, 0.7) 1px, transparent 1px),
+            linear-gradient(rgba(226, 232, 240, 0.7) 1px, transparent 1px),
+            #f7f8fb;
+          background-size: 16px 16px;
+          padding: 1.25rem;
+        }
+
+        .dispensing-record-card,
+        .yakutai-card {
+          align-items: center;
+        }
+
+        .dispensing-record-card .preview-header,
+        .yakutai-card .preview-header,
+        .paper-preview-card .preview-header {
+          align-self: stretch;
+        }
+
+        .preview-header {
+          margin-bottom: 1rem;
+        }
+        .preview-header h3 {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 1rem;
+          color: var(--text-main);
+        }
+
+        .receipt-console-panel {
+          grid-column: 1 / -1;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          padding: 1rem;
+          display: grid;
+          gap: 1rem;
+          box-shadow: var(--shadow-sm);
+        }
+
+        .receipt-console-main {
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: flex-start;
+        }
+
+        .receipt-console-main h2 {
+          margin: 0.1rem 0;
+          font-size: 1.25rem;
+          color: #111827;
+        }
+
+        .receipt-console-main p,
+        .console-total small {
+          margin: 0;
+          color: #6b7280;
+          font-size: 0.84rem;
+        }
+
+        .console-kicker {
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #047857;
+          letter-spacing: 0;
+        }
+
+        .console-total {
+          text-align: right;
+          min-width: 160px;
+        }
+
+        .console-total span {
+          display: block;
+          font-size: 0.78rem;
+          color: #6b7280;
+        }
+
+        .console-total strong {
+          display: block;
+          font-size: 1.45rem;
+          color: #111827;
+        }
+
+        .receipt-flow-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 0.75rem;
+        }
+
+        .receipt-flow-step {
+          min-height: 64px;
+          border-radius: 8px;
+          border: 1px solid #d1d5db;
+          background: #f9fafb;
+          padding: 0.7rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 0.2rem;
+        }
+
+        .receipt-flow-step span {
+          font-size: 0.74rem;
+          color: #6b7280;
+          font-weight: 800;
+        }
+
+        .receipt-flow-step strong {
+          font-size: 0.92rem;
+          color: #111827;
+        }
+
+        .receipt-flow-step.ok {
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+        }
+
+        .receipt-flow-step.warning {
+          border-color: #fde68a;
+          background: #fffbeb;
+        }
+
+        .receipt-flow-step.error {
+          border-color: #fecaca;
+          background: #fef2f2;
+        }
+
+        /* --- Document Styles (Paper Simulation) --- */
+        .print-document {
+          background: white;
+          color: #111;
+          box-sizing: border-box;
+          box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+          border: 1px solid #b7b7b7;
+          border-radius: 0;
+          line-height: 1.35;
+          margin: 0 auto;
+          padding-top: var(--print-margin-top, 15mm);
+          padding-bottom: var(--print-margin-bottom, 15mm);
+          font-size: calc(100% * var(--print-font-scale, 1));
+          font-variant-numeric: tabular-nums;
+        }
+
+        .yakujo-doc {
+          width: 210mm;
+          max-width: 100%;
+          min-height: 297mm;
+          padding: 11mm 13mm;
+          font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+        }
+
+        .identity-mark {
+          --mark-color: #2563eb;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 7mm;
+          height: 7mm;
+          min-width: 7mm;
+          min-height: 7mm;
+          border: none;
+          background: transparent;
+          padding: 0;
+          line-height: 0;
+          flex: 0 0 auto;
+        }
+
+        .identity-mark.compact {
+          width: 6mm;
+          height: 6mm;
+          min-width: 6mm;
+          min-height: 6mm;
+        }
+
+        .identity-mark.tiny {
+          width: 4mm;
+          height: 4mm;
+          min-width: 4mm;
+          min-height: 4mm;
+        }
+
+        .identity-symbol {
+          width: 100%;
+          height: 100%;
+          border: 1px solid rgba(17, 17, 17, 0.28);
+          border-radius: 999px;
+          background: var(--mark-color);
+          display: inline-block;
+          box-shadow: inset 0 0 0 0.8mm rgba(255, 255, 255, 0.85);
+        }
+
+        .identity-mark.compact .identity-symbol {
+          box-shadow: inset 0 0 0 0.65mm rgba(255, 255, 255, 0.85);
+        }
+
+        .identity-mark.tiny .identity-symbol {
+          box-shadow: inset 0 0 0 0.45mm rgba(255, 255, 255, 0.85);
+        }
+
+        .mark-sakura { --mark-color: #be123c; }
+        .mark-aoba { --mark-color: #047857; }
+        .mark-tsubaki { --mark-color: #b91c1c; }
+        .mark-sumire { --mark-color: #6d28d9; }
+        .mark-kohaku { --mark-color: #b45309; }
+        .mark-shizuku { --mark-color: #0369a1; }
+
+        .doc-header {
+          display: flex;
+          justify-content: space-between;
+          border-bottom: 2px solid #333;
+          padding-bottom: 10px;
+          margin-bottom: 20px;
+        }
+
+        .doc-title { font-size: 1.5rem; font-weight: bold; }
+        .doc-submeta {
+          margin-top: 4px;
+          font-size: 0.78rem;
+          color: #555;
+        }
+        .doc-meta {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          text-align: right;
+          font-size: 0.9rem;
+        }
+
+        .doc-patient {
+          margin-bottom: 30px;
+          font-size: 1.2rem;
+        }
+        .patient-name { font-size: 1.5rem; font-weight: bold; margin-right: 10px; }
+
+        .doc-intro { margin-bottom: 20px; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .text-sm { font-size: 0.85rem; }
+        .font-bold { font-weight: bold; }
+        .bg-gray-50 { background-color: #f9fafb; }
+
+        .drug-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 30px;
+        }
+        .drug-table th, .drug-table td {
+          border: 1px solid #333;
+          padding: 8px;
+          text-align: left;
+        }
+        .drug-table th { background-color: #f1f5f9; }
+
+        .dispensing-record-doc {
+          font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+          color: #111;
+        }
+
+        .dispensing-record-doc .doc-title {
+          font-size: 1.45rem;
+          text-align: left;
+        }
+
+        .record-titlebar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: start;
+          gap: 12px;
+          border-bottom: 2px solid #111;
+          padding-bottom: 3.5mm;
+          margin-bottom: 4mm;
+        }
+
+        .record-number {
+          margin-top: 1mm;
+          font-size: 0.78rem;
+          color: #333;
+          white-space: nowrap;
+        }
+
+        .record-info-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 5mm;
+          font-size: 0.82rem;
+        }
+
+        .record-info-table th,
+        .record-info-table td {
+          border: 1px solid #333;
+          padding: 2.1mm 2.4mm;
+          vertical-align: top;
+        }
+
+        .record-info-table th {
+          width: 22%;
+          background: #f7f7f7;
+          font-weight: 700;
+          text-align: left;
+          white-space: nowrap;
+          word-break: keep-all;
+        }
+
+        .record-info-table td {
+          width: 28%;
+        }
+
+        .record-drug-table {
+          font-size: 0.78rem;
+          table-layout: fixed;
+        }
+
+        .record-drug-table th,
+        .record-drug-table td {
+          padding: 1.8mm;
+          vertical-align: top;
+        }
+
+        .record-drug-table th {
+          white-space: nowrap;
+          word-break: keep-all;
+        }
+
+        .record-drug-table th:nth-child(1),
+        .record-drug-table td:nth-child(1) {
+          width: 42px;
+        }
+
+        .record-drug-table th:nth-child(2),
+        .record-drug-table td:nth-child(2) {
+          width: 30%;
+        }
+
+        .record-drug-table th:nth-child(3),
+        .record-drug-table td:nth-child(3) {
+          width: 74px;
+        }
+
+        .record-drug-table th:nth-child(5),
+        .record-drug-table td:nth-child(5) {
+          width: 72px;
+        }
+
+        .record-drug-table th:nth-child(6),
+        .record-drug-table td:nth-child(6) {
+          width: 30%;
+        }
+
+        .record-guidance-box {
+          border: 1px solid #333;
+          margin-top: 5mm;
+          min-height: 31mm;
+          padding: 3mm;
+        }
+
+        .record-guidance-label {
+          font-size: 0.86rem;
+          font-weight: 700;
+          margin-bottom: 3mm;
+        }
+
+        .record-guidance-lines {
+          display: grid;
+          gap: 9mm;
+        }
+
+        .record-guidance-lines span {
+          display: block;
+          border-bottom: 1px solid #999;
+          min-height: 1px;
+        }
+
+        .dispensing-record-doc .doc-footer {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 16px;
+          margin-top: 18px;
+          text-align: left;
+        }
+
+        .pharmacist-seal-box {
+          width: 18mm;
+          height: 18mm;
+          border: 1px solid #333;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.9rem;
+        }
+
+        .receipt-summary-strip {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border: 1px solid #333;
+          margin-bottom: 18px;
+        }
+
+        .receipt-summary-strip div {
+          padding: 8px;
+          border-right: 1px solid #333;
+        }
+
+        .receipt-summary-strip div:last-child {
+          border-right: none;
+        }
+
+        .receipt-summary-strip span {
+          display: block;
+          font-size: 0.74rem;
+          color: #555;
+          margin-bottom: 2px;
+        }
+
+        .statement-topbar {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: start;
+          gap: 6mm;
+          border-bottom: 2px solid #111;
+          padding-bottom: 3mm;
+          margin-bottom: 3mm;
+        }
+
+        .statement-document-title {
+          text-align: center;
+          font-size: 1.34rem;
+          font-weight: 900;
+          letter-spacing: 0;
+        }
+
+        .statement-admin-row {
+          display: grid;
+          grid-template-columns: 20mm 20mm 1fr 1fr 1fr;
+          border: 1px solid #222;
+          border-bottom: none;
+          min-height: 7mm;
+          align-items: center;
+          font-size: 0.72rem;
+        }
+
+        .statement-admin-row span {
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-right: 1px solid #222;
+          padding: 0 2mm;
+        }
+
+        .statement-admin-row span:last-child {
+          border-right: none;
+        }
+
+        .statement-patient-table,
+        .statement-ledger-table,
+        .receipt-breakdown-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .statement-patient-table {
+          margin-bottom: 4mm;
+          font-size: 0.72rem;
+        }
+
+        .statement-patient-table th,
+        .statement-patient-table td {
+          border: 1px solid #222;
+          padding: 1.7mm 2mm;
+          vertical-align: middle;
+        }
+
+        .statement-patient-table th {
+          width: 18mm;
+          background: #f4f4f4;
+          font-weight: 700;
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        .statement-patient-name {
+          font-weight: 800;
+          font-size: 0.86rem;
+        }
+
+        .statement-ledger-table {
+          table-layout: fixed;
+          font-size: 0.7rem;
+        }
+
+        .statement-ledger-table th,
+        .statement-ledger-table td {
+          border: 1px solid #222;
+          padding: 1.4mm 1.8mm;
+          vertical-align: top;
+        }
+
+        .statement-ledger-table th {
+          background: #f0f3f7;
+          text-align: center;
+          font-weight: 800;
+        }
+
+        .statement-ledger-table td strong {
+          display: block;
+          font-size: 0.77rem;
+          line-height: 1.28;
+        }
+
+        .statement-ledger-table td span {
+          display: block;
+          margin-top: 0.7mm;
+          color: #444;
+          line-height: 1.3;
+        }
+
+        .statement-ledger-table tfoot td {
+          background: #f7f7f7;
+          font-weight: 800;
+        }
+
+        .statement-category-col {
+          width: 22mm;
+        }
+
+        .statement-points-col {
+          width: 18mm;
+        }
+
+        .statement-code-col {
+          width: 31mm;
+        }
+
+        .statement-category {
+          text-align: center;
+          font-weight: 700;
+          word-break: keep-all;
+          background: #fafafa;
+        }
+
+        .statement-footer-note {
+          display: flex;
+          justify-content: space-between;
+          gap: 10mm;
+          align-items: flex-end;
+          margin-top: 4mm;
+          font-size: 0.68rem;
+          color: #333;
+        }
+
+        .receipt-doc {
+          width: 148mm;
+          max-width: 100%;
+          min-height: 210mm;
+          padding: 10mm 11mm;
+          font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+        }
+
+        .receipt-topbar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: start;
+          gap: 5mm;
+          border-bottom: 2px solid #111;
+          padding-bottom: 3mm;
+          margin-bottom: 3mm;
+        }
+
+        .receipt-kicker {
+          text-align: left;
+          font-size: 0.68rem;
+          color: #444;
+          margin-bottom: 1mm;
+          font-weight: 700;
+        }
+
+        .receipt-title {
+          text-align: left;
+          font-size: 1.42rem;
+          font-weight: 900;
+          letter-spacing: 0;
+        }
+
+        .receipt-meta-row,
+        .receipt-footer {
+          display: flex;
+          justify-content: space-between;
+          gap: 8mm;
+        }
+
+        .receipt-meta-row {
+          font-size: 0.72rem;
+          border: 1px solid #222;
+          padding: 1.5mm 2mm;
+          margin-bottom: 4mm;
+        }
+
+        .receipt-patient-box {
+          display: grid;
+          grid-template-columns: 20mm 1fr;
+          border: 1.5px solid #222;
+          min-height: 11mm;
+          margin-bottom: 5mm;
+          align-items: center;
+        }
+
+        .receipt-patient-box span {
+          height: 100%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #f5f5f5;
+          border-right: 1px solid #222;
+          font-size: 0.8rem;
+          font-weight: 700;
+        }
+
+        .receipt-patient-box strong {
+          padding: 0 3mm;
+          font-size: 1rem;
+        }
+
+        .receipt-total-box {
+          border: 3px double #111;
+          padding: 4mm;
+          margin-bottom: 5mm;
+          text-align: center;
+        }
+
+        .receipt-total-box span {
+          display: block;
+          font-size: 0.76rem;
+          color: #444;
+          margin-bottom: 1mm;
+          font-weight: 700;
+        }
+
+        .receipt-total-box strong {
+          display: block;
+          font-size: 1.85rem;
+          line-height: 1.1;
+        }
+
+        .receipt-total-box small {
+          display: block;
+          margin-top: 1.5mm;
+          font-size: 0.68rem;
+          color: #444;
+        }
+
+        .receipt-breakdown-table {
+          font-size: 0.72rem;
+          margin-bottom: 4mm;
+        }
+
+        .receipt-breakdown-table th,
+        .receipt-breakdown-table td {
+          border: 1px solid #222;
+          padding: 1.7mm;
+        }
+
+        .receipt-breakdown-table th {
+          background: #f0f3f7;
+          text-align: center;
+        }
+
+        .receipt-settlement-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid #222;
+          margin-bottom: 3mm;
+        }
+
+        .receipt-settlement-grid div {
+          min-height: 12mm;
+          padding: 2mm;
+          border-right: 1px solid #222;
+          border-bottom: 1px solid #222;
+        }
+
+        .receipt-settlement-grid div:nth-child(2n) {
+          border-right: none;
+        }
+
+        .receipt-settlement-grid div:nth-last-child(-n + 2) {
+          border-bottom: none;
+        }
+
+        .receipt-settlement-grid span {
+          display: block;
+          color: #555;
+          font-size: 0.7rem;
+          font-weight: 700;
+        }
+
+        .receipt-settlement-grid strong {
+          display: block;
+          margin-top: 1mm;
+          font-size: 0.84rem;
+        }
+
+        .receipt-note {
+          font-size: 0.68rem;
+          color: #444;
+          margin: 0 0 5mm;
+          line-height: 1.45;
+        }
+
+        .receipt-footer {
+          align-items: flex-end;
+          margin-top: auto;
+          border-top: 1px solid #222;
+          padding-top: 4mm;
+          font-size: 0.7rem;
+          line-height: 1.45;
+        }
+
+        .receipt-seal-box {
+          width: 20mm;
+          height: 20mm;
+          border: 1px solid #222;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4mm;
+          font-size: 0.72rem;
+          color: #333;
+          flex: 0 0 auto;
+        }
+
+        .drug-info-titlebar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 68mm;
+          gap: 6mm;
+          align-items: start;
+          border-bottom: 2px solid #111;
+          padding-bottom: 3.5mm;
+          margin-bottom: 3.5mm;
+        }
+
+        .drug-info-stamp-stack {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 2.5mm;
+          align-items: stretch;
+        }
+
+        .drug-info-pharmacy-stamp {
+          border: 1px solid #222;
+          padding: 2.4mm;
+          min-height: 11mm;
+          font-size: 0.7rem;
+          line-height: 1.4;
+        }
+
+        .drug-info-pharmacy-stamp strong,
+        .drug-info-pharmacy-stamp span {
+          display: block;
+        }
+
+        .drug-info-patient-line {
+          display: grid;
+          grid-template-columns: 1.1fr 0.85fr 1.45fr 0.85fr;
+          gap: 0;
+          border: 1px solid #222;
+          margin-bottom: 4mm;
+          font-size: 0.72rem;
+        }
+
+        .drug-info-patient-line strong,
+        .drug-info-patient-line span {
+          padding: 1.8mm 2mm;
+          border-right: 1px solid #222;
+        }
+
+        .drug-info-patient-line span:last-child {
+          border-right: none;
+        }
+
+        .drug-info-list {
+          display: grid;
+          gap: 2.8mm;
+        }
+
+        .drug-info-row {
+          display: grid;
+          grid-template-columns: 24mm minmax(0, 1fr);
+          gap: 3mm;
+          border: 1px solid #222;
+          page-break-inside: avoid;
+        }
+
+        .drug-info-row.high-risk {
+          border-left: 4px solid #b91c1c;
+        }
+
+        .drug-appearance-cell {
+          border-right: 1px solid #222;
+          background: #f7f7f7;
+          min-height: 30mm;
+          padding: 2.5mm;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 2.5mm;
+          text-align: center;
+        }
+
+        .drug-appearance-cell small {
+          font-size: 0.68rem;
+          color: #444;
+          font-weight: 700;
+        }
+
+        .drug-shape {
+          display: inline-block;
+          position: relative;
+          width: 17mm;
+          height: 10mm;
+          background: #fefefe;
+          border: 1.5px solid #8792a2;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+        }
+
+        .drug-shape.tablet {
+          border-radius: 999px;
+        }
+
+        .drug-shape.tablet::after {
+          content: "";
+          position: absolute;
+          inset: 1mm auto 1mm 50%;
+          border-left: 1px solid #b9c0ca;
+        }
+
+        .drug-shape.high-risk {
+          border-color: #b91c1c;
+          background: #fff5f5;
+        }
+
+        .drug-shape.powder {
+          width: 15mm;
+          height: 17mm;
+          border-radius: 1mm;
+          background: linear-gradient(160deg, #ffffff 0 58%, #d8e6f3 59% 100%);
+        }
+
+        .drug-shape.liquid {
+          width: 12mm;
+          height: 20mm;
+          border-radius: 2mm 2mm 4mm 4mm;
+          background: linear-gradient(#ffffff 0 38%, #bae6fd 39% 100%);
+          border-color: #0284c7;
+        }
+
+        .drug-shape.ointment {
+          width: 20mm;
+          height: 8mm;
+          border-radius: 999px 2mm 2mm 999px;
+          background: linear-gradient(90deg, #dcfce7 0 25%, #ffffff 26% 100%);
+          border-color: #15803d;
+        }
+
+        .drug-info-main {
+          min-width: 0;
+          padding: 2.5mm 3mm 2.7mm 0;
+        }
+
+        .drug-info-name-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 3mm;
+          border-bottom: 1px solid #bbb;
+          padding-bottom: 1.5mm;
+          margin-bottom: 2mm;
+        }
+
+        .drug-info-name-row strong {
+          font-size: 0.93rem;
+          line-height: 1.35;
+        }
+
+        .drug-risk-badge {
+          border: 1px solid #b91c1c;
+          color: #991b1b;
+          background: #fff5f5;
+          padding: 0.5mm 2mm;
+          font-size: 0.68rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .drug-info-change {
+          margin: -1mm 0 2.5mm;
+          color: #555;
+          font-size: 0.72rem;
+        }
+
+        .drug-info-dose-grid {
+          display: grid;
+          grid-template-columns: 24mm minmax(0, 1fr) 22mm;
+          border: 1px solid #222;
+          margin-bottom: 2mm;
+        }
+
+        .drug-info-dose-grid div {
+          padding: 1.7mm;
+          border-right: 1px solid #222;
+        }
+
+        .drug-info-dose-grid div:last-child {
+          border-right: none;
+        }
+
+        .drug-info-dose-grid span {
+          display: block;
+          color: #555;
+          font-size: 0.66rem;
+          font-weight: 700;
+        }
+
+        .drug-info-dose-grid strong {
+          display: block;
+          margin-top: 0.6mm;
+          font-size: 0.76rem;
+          line-height: 1.35;
+        }
+
+        .drug-info-guidance {
+          margin: 0;
+          font-size: 0.74rem;
+          line-height: 1.5;
+        }
+
+        .drug-info-control-panel {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+          align-items: center;
+          margin-top: 0.65rem;
+          padding: 0.55rem;
+          border: 1px dashed #cbd5e1;
+          background: #f8fafc;
+          border-radius: 6px;
+        }
+
+        .paper-embedded-control {
+          display: none;
+        }
+
+        .drug-info-claim-tools {
+          width: 100%;
+          max-width: 210mm;
+          margin-top: 0.85rem;
+          display: grid;
+          gap: 0.55rem;
+          align-self: center;
+        }
+
+        .drug-info-claim-row {
+          display: grid;
+          grid-template-columns: minmax(160px, 0.8fr) minmax(0, 2.2fr);
+          gap: 0.75rem;
+          align-items: center;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          background: #ffffff;
+          padding: 0.65rem;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+
+        .drug-info-claim-row > strong {
+          min-width: 0;
+          color: #111827;
+          font-size: 0.84rem;
+          line-height: 1.4;
+        }
+
+        .drug-info-control-panel label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          color: #334155;
+          font-size: 0.76rem;
+          font-weight: 700;
+        }
+
+        .drug-info-control-panel input[type="text"],
+        .drug-info-control-panel select {
+          min-height: 28px;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          padding: 0 0.45rem;
+          font-size: 0.78rem;
+          background: #fff;
+        }
+
+        .drug-info-control-panel input[type="text"] {
+          width: 140px;
+        }
+
+        .drug-info-control-panel .agent-override-field {
+          gap: 0.35rem;
+          padding: 0.12rem 0.35rem;
+          border: 1px solid #bae6fd;
+          border-radius: 6px;
+          background: #f0f9ff;
+          color: #075985;
+        }
+
+        .drug-info-control-panel .agent-override-field input[type="text"] {
+          width: 96px;
+          border-color: #7dd3fc;
+          font-weight: 700;
+        }
+
+        .drug-info-control-panel input.agent-override-reason {
+          width: 180px;
+          border-color: #7dd3fc;
+        }
+
+        .drug-info-empty {
+          border: 1px solid #222;
+          padding: 5mm;
+          text-align: center;
+          color: #555;
+        }
+
+        .drug-info-bottom-note {
+          display: grid;
+          grid-template-columns: 22mm minmax(0, 1fr);
+          border: 1px solid #222;
+          margin-top: 5mm;
+          font-size: 0.78rem;
+        }
+
+        .drug-info-bottom-note strong {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #f5f5f5;
+          border-right: 1px solid #222;
+          padding: 2.5mm;
+        }
+
+        .drug-info-bottom-note span {
+          padding: 2.5mm;
+        }
+
+        .drug-info-footer {
+          margin-top: 8mm;
+        }
+
+        .claim-panel {
+          grid-column: 1 / -1;
+          background: #f8fafc;
+        }
+
+        .claim-lifecycle-panel {
+          grid-column: 1 / -1;
+          background: #fff7ed;
+          border-color: #fed7aa;
+        }
+
+        .claim-lifecycle-panel.status-draft,
+        .claim-lifecycle-panel.status-rebilling,
+        .claim-lifecycle-panel.status-returned {
+          background: #f8fafc;
+          border-color: #e2e8f0;
+        }
+
+        .claim-lifecycle-panel.status-accepted {
+          background: #ecfeff;
+          border-color: #a5f3fc;
+        }
+
+        .claim-lifecycle-panel.status-closed {
+          background: #f0fdf4;
+          border-color: #bbf7d0;
+        }
+
+        .electronic-prescription-lifecycle-panel {
+          grid-column: 1 / -1;
+          background: #f8fafc;
+          border-color: #cbd5e1;
+        }
+
+        .electronic-prescription-lifecycle-panel.status-ok {
+          background: #f0fdf4;
+          border-color: #bbf7d0;
+        }
+
+        .electronic-prescription-lifecycle-panel.status-warning {
+          background: #fffbeb;
+          border-color: #fde68a;
+        }
+
+        .electronic-prescription-lifecycle-panel.status-error {
+          background: #fef2f2;
+          border-color: #fecaca;
+        }
+
+        .electronic-prescription-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
+          padding: 0 0.65rem;
+          border-radius: 999px;
+          font-size: 0.78rem;
+          font-weight: 800;
+          white-space: nowrap;
+          background: #e0f2fe;
+          color: #0369a1;
+          border: 1px solid #bae6fd;
+        }
+
+        .electronic-prescription-badge.ok {
+          background: #dcfce7;
+          color: #166534;
+          border-color: #bbf7d0;
+        }
+
+        .electronic-prescription-badge.warning {
+          background: #fef3c7;
+          color: #92400e;
+          border-color: #fde68a;
+        }
+
+        .electronic-prescription-badge.error {
+          background: #fee2e2;
+          color: #b91c1c;
+          border-color: #fecaca;
+        }
+
+        .claim-lifecycle-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
+          padding: 0 0.65rem;
+          border-radius: 999px;
+          font-size: 0.78rem;
+          font-weight: 800;
+          white-space: nowrap;
+          background: #fff7ed;
+          color: #c2410c;
+          border: 1px solid #fed7aa;
+        }
+
+        .claim-lifecycle-badge.draft,
+        .claim-lifecycle-badge.rebilling,
+        .claim-lifecycle-badge.returned {
+          background: #eff6ff;
+          color: #1d4ed8;
+          border-color: #bfdbfe;
+        }
+
+        .claim-lifecycle-badge.closed {
+          background: #dcfce7;
+          color: #166534;
+          border-color: #bbf7d0;
+        }
+
+        .claim-lifecycle-badge.accepted {
+          background: #cffafe;
+          color: #0e7490;
+          border-color: #67e8f9;
+        }
+
+        .claim-lifecycle-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+          gap: 0.75rem;
+          align-items: stretch;
+        }
+
+        .electronic-prescription-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(188px, auto);
+        }
+
+        .claim-lifecycle-status-card,
+        .claim-lifecycle-event {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.85rem;
+        }
+
+        .claim-lifecycle-status-card span,
+        .claim-lifecycle-event span {
+          display: block;
+          color: var(--text-muted);
+          font-size: 0.75rem;
+          font-weight: 800;
+        }
+
+        .claim-lifecycle-status-card strong,
+        .claim-lifecycle-event strong {
+          display: block;
+          margin-top: 0.18rem;
+          color: var(--text-main);
+          font-size: 0.96rem;
+        }
+
+        .claim-lifecycle-status-card p,
+        .claim-lifecycle-event p {
+          margin-top: 0.28rem;
+          color: var(--text-muted);
+          font-size: 0.82rem;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .claim-lifecycle-actions {
+          min-width: 184px;
+          display: grid;
+          gap: 0.5rem;
+          align-content: center;
+        }
+
+        .electronic-prescription-actions {
+          min-width: 188px;
+        }
+
+        .claim-lifecycle-history {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.75rem;
+          margin-top: 0.85rem;
+        }
+
+        .claim-snapshot-panel {
+          margin-top: 0.85rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.85rem;
+        }
+
+        .claim-snapshot-panel.changed {
+          border-color: #fdba74;
+          background: #fff7ed;
+        }
+
+        .claim-snapshot-panel.ok {
+          border-color: #bbf7d0;
+          background: #f0fdf4;
+        }
+
+        .claim-snapshot-panel.empty {
+          background: #f8fafc;
+        }
+
+        .claim-snapshot-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .claim-snapshot-header span,
+        .claim-snapshot-facts span {
+          display: block;
+          color: var(--text-muted);
+          font-size: 0.75rem;
+          font-weight: 800;
+        }
+
+        .claim-snapshot-header strong,
+        .claim-snapshot-facts strong {
+          display: block;
+          margin-top: 0.18rem;
+          color: var(--text-main);
+          font-size: 0.96rem;
+        }
+
+        .claim-snapshot-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
+          padding: 0 0.65rem;
+          border-radius: 999px;
+          font-size: 0.78rem;
+          font-weight: 800;
+          white-space: nowrap;
+          background: #f8fafc;
+          color: #475569;
+          border: 1px solid #e2e8f0;
+        }
+
+        .claim-snapshot-badge.changed {
+          background: #ffedd5;
+          color: #c2410c;
+          border-color: #fdba74;
+        }
+
+        .claim-snapshot-badge.ok {
+          background: #dcfce7;
+          color: #166534;
+          border-color: #bbf7d0;
+        }
+
+        .claim-snapshot-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 0.45rem;
+          flex-wrap: wrap;
+        }
+
+        .claim-snapshot-facts {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.75rem;
+          margin-top: 0.75rem;
+        }
+
+        .claim-snapshot-facts > div {
+          min-width: 0;
+          border-top: 1px solid rgba(148, 163, 184, 0.35);
+          padding-top: 0.65rem;
+        }
+
+        .claim-snapshot-facts p,
+        .claim-snapshot-ok,
+        .claim-snapshot-diff-row p {
+          margin-top: 0.28rem;
+          color: var(--text-muted);
+          font-size: 0.82rem;
+          line-height: 1.5;
+        }
+
+        .claim-snapshot-diff-list {
+          display: grid;
+          gap: 0.5rem;
+          margin-top: 0.75rem;
+        }
+
+        .claim-snapshot-diff-row {
+          border: 1px solid #fed7aa;
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.7rem;
+        }
+
+        .claim-snapshot-diff-row strong {
+          display: block;
+          color: #9a3412;
+          font-size: 0.88rem;
+        }
+
+        .claim-snapshot-diff-row p {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.5rem;
+        }
+
+        .claim-return-suggestions {
+          display: grid;
+          gap: 0.55rem;
+          margin-top: 0.85rem;
+          padding-top: 0.85rem;
+          border-top: 1px solid rgba(251, 146, 60, 0.45);
+        }
+
+        .claim-return-suggestion-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .claim-return-suggestion-header span {
+          color: #9a3412;
+          font-size: 0.75rem;
+          font-weight: 900;
+        }
+
+        .claim-return-suggestion-header strong {
+          color: #c2410c;
+          font-size: 0.86rem;
+        }
+
+        .claim-return-suggestion-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.8rem;
+          border: 1px solid #fed7aa;
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.72rem;
+        }
+
+        .claim-return-suggestion-row.warning {
+          border-color: #fde68a;
+        }
+
+        .claim-return-suggestion-row > div {
+          min-width: 0;
+        }
+
+        .claim-return-suggestion-row strong {
+          display: block;
+          color: #7c2d12;
+          font-size: 0.88rem;
+        }
+
+        .claim-return-suggestion-row p,
+        .claim-return-suggestion-row small {
+          display: block;
+          margin-top: 0.25rem;
+          color: var(--text-muted);
+          font-size: 0.8rem;
+          line-height: 1.45;
+        }
+
+        .claim-return-suggestion-row > button {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 26px;
+          padding: 0 0.6rem;
+          border-radius: 999px;
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+          color: #9a3412;
+          font-size: 0.76rem;
+          font-weight: 900;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+
+        .claim-return-suggestion-row > button:hover {
+          background: #ffedd5;
+          border-color: #fdba74;
+        }
+
+        .claim-controls {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .claim-lock-notice {
+          margin-bottom: 0.85rem;
+          padding: 0.7rem 0.85rem;
+          border: 1px solid #fed7aa;
+          border-radius: 8px;
+          background: #fff7ed;
+          color: #9a3412;
+          font-size: 0.84rem;
+          font-weight: 700;
+          line-height: 1.5;
+        }
+
+        .fee-toggle-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 0.75rem;
+        }
+
+        .claim-switch {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          min-height: 34px;
+          font-size: 0.9rem;
+          color: var(--text-main);
+        }
+
+        .claim-switch input {
+          width: 1rem;
+          height: 1rem;
+          accent-color: var(--primary);
+        }
+
+        .claim-switch-strong {
+          font-weight: 700;
+          color: #0f766e;
+        }
+
+        .claim-check-panel {
+          grid-column: 1 / -1;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+        }
+
+        .claim-check-panel.error {
+          background: #fff7ed;
+          border-color: #fed7aa;
+        }
+
+        .claim-check-panel.warning {
+          background: #fefce8;
+          border-color: #fde68a;
+        }
+
+        .claim-check-panel.ok {
+          background: #f0fdf4;
+          border-color: #bbf7d0;
+        }
+
+        .claim-check-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 1rem;
+        }
+
+        .claim-header-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .compact-action {
+          min-height: 32px;
+          padding: 0.35rem 0.6rem;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          white-space: nowrap;
+        }
+
+        .compact-action:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .claim-check-subtitle {
+          margin-top: 0.25rem;
+          font-size: 0.84rem;
+          line-height: 1.5;
+          color: var(--text-muted);
+        }
+
+        .claim-check-badge,
+        .claim-issue-severity {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 24px;
+          padding: 0 0.55rem;
+          border-radius: 999px;
+          font-size: 0.76rem;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .claim-check-badge.error,
+        .claim-issue-severity.error {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        .claim-check-badge.warning,
+        .claim-issue-severity.warning {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        .claim-check-badge.ok,
+        .claim-issue-severity.info {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .claim-issue-list {
+          display: grid;
+          gap: 0.75rem;
+        }
+
+        .claim-check-ok-row,
+        .claim-issue {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 0.75rem;
+          align-items: flex-start;
+          border-radius: 8px;
+          background: white;
+          border: 1px solid #e2e8f0;
+          padding: 0.85rem;
+        }
+
+        .claim-check-ok-row {
+          align-items: center;
+          color: #166534;
+          font-weight: 700;
+        }
+
+        .claim-issue {
+          border-left-width: 4px;
+        }
+
+        .claim-issue.error {
+          border-left-color: #dc2626;
+        }
+
+        .claim-issue.warning {
+          border-left-color: #f59e0b;
+        }
+
+        .claim-issue.info {
+          border-left-color: #2563eb;
+        }
+
+        .claim-issue-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          color: #475569;
+        }
+
+        .claim-issue.error .claim-issue-icon {
+          color: #dc2626;
+        }
+
+        .claim-issue.warning .claim-issue-icon {
+          color: #d97706;
+        }
+
+        .claim-issue.info .claim-issue-icon {
+          color: #2563eb;
+        }
+
+        .claim-issue-title-row {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 0.75rem;
+        }
+
+        .claim-issue-title-row > .claim-issue-title {
+          min-width: min(200px, 100%);
+        }
+
+        .claim-issue-title {
+          color: var(--text-main);
+          line-height: 1.4;
+        }
+
+        .claim-issue-message {
+          margin-top: 0.25rem;
+          font-size: 0.84rem;
+          line-height: 1.55;
+          color: var(--text-muted);
+        }
+
+        .claim-issue-more {
+          color: var(--text-muted);
+          font-size: 0.84rem;
+          font-weight: 700;
+          padding: 0 0.15rem;
+        }
+
+        .ai-assist-panel {
+          margin-top: 0.95rem;
+          display: grid;
+          gap: 0.75rem;
+          border-top: 1px solid rgba(148, 163, 184, 0.45);
+          padding-top: 0.85rem;
+        }
+
+        .ai-assist-mode-notice {
+          margin-top: 0.85rem;
+          border: 1px solid #f59e0b;
+          border-radius: 8px;
+          background: #fffbeb;
+          color: #92400e;
+          padding: 0.65rem 0.75rem;
+          font-size: 0.82rem;
+          font-weight: 700;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .ai-assist-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .ai-assist-heading {
+          display: inline-flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+          color: #334155;
+          font-size: 0.9rem;
+        }
+
+        .ai-assist-heading svg {
+          color: #7c3aed;
+        }
+
+        .ai-assist-heading span {
+          color: var(--text-muted);
+          font-size: 0.78rem;
+          font-weight: 700;
+        }
+
+        .ai-assist-review-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 24px;
+          padding: 0 0.6rem;
+          border-radius: 999px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          border: 1px solid #bfdbfe;
+          font-size: 0.75rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .ai-assist-list {
+          display: grid;
+          gap: 0.65rem;
+        }
+
+        .ai-assist-item {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 0.8rem;
+          align-items: start;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+          border-left-width: 4px;
+          background: rgba(255, 255, 255, 0.86);
+          padding: 0.75rem;
+        }
+
+        .ai-assist-item.critical {
+          border-left-color: #dc2626;
+        }
+
+        .ai-assist-item.warning {
+          border-left-color: #d97706;
+        }
+
+        .ai-assist-item.info {
+          border-left-color: #2563eb;
+        }
+
+        .ai-assist-item-main {
+          min-width: 0;
+        }
+
+        .ai-assist-title-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .ai-assist-title-row strong {
+          line-height: 1.4;
+          color: var(--text-main);
+        }
+
+        .ai-assist-item p {
+          margin-top: 0.25rem;
+          color: var(--text-muted);
+          line-height: 1.55;
+          font-size: 0.84rem;
+        }
+
+        .ai-assist-meta,
+        .ai-assist-evidence {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+          margin-top: 0.45rem;
+        }
+
+        .ai-assist-meta span,
+        .ai-assist-evidence span {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          border-radius: 999px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          color: #475569;
+          font-size: 0.74rem;
+          font-weight: 700;
+          line-height: 1.35;
+          padding: 0.18rem 0.48rem;
+        }
+
+        .ai-assist-evidence span {
+          border-radius: 6px;
+          background: #fff;
+          color: #64748b;
+          font-weight: 600;
+        }
+
+        .ai-assist-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          max-width: 260px;
+        }
+
+        .ai-assist-decision {
+          min-width: 68px;
+          justify-content: center;
+        }
+
+        .doc-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px 16px;
+          border: 1px solid #333;
+          padding: 10px;
+          margin-bottom: 20px;
+        }
+
+        .summary-label {
+          display: block;
+          font-size: 0.75rem;
+          color: #555;
+          margin-bottom: 2px;
+        }
+
+        .doc-subtitle {
+          font-size: 1rem;
+          margin: 18px 0 8px;
+        }
+
+        .doc-notes {
+          border: 1px solid #ccc;
+          padding: 10px;
+          margin-bottom: 40px;
+        }
+
+        .doc-footer {
+          margin-top: auto;
+          text-align: right;
+          font-size: 0.9rem;
+        }
+
+        /* 薬袋 (Yakutai) */
+        .yakutai-doc {
+          --bag-color: #175a48;
+          --bag-soft: #f3fbf7;
+          width: 148mm;
+          min-height: 210mm;
+          padding: 9mm 11mm;
+          display: flex;
+          flex-direction: column;
+          gap: 4.2mm;
+          border: 1.5px solid var(--bag-color);
+          font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+          color: #111;
+        }
+
+        .yakutai-doc.external-bag {
+          --bag-color: #9f1239;
+          --bag-soft: #fff5f7;
+        }
+
+        .yakutai-topline {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 4mm;
+          font-size: 0.68rem;
+          color: #333;
+        }
+
+        .yakutai-title {
+          text-align: center;
+          color: var(--bag-color);
+          font-size: 1.9rem;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          border-top: 1.5px solid var(--bag-color);
+          border-bottom: 1.5px solid var(--bag-color);
+          padding: 2mm 0 2.5mm;
+        }
+
+        .yakutai-name-line {
+          display: grid;
+          grid-template-columns: 20mm minmax(0, 1fr);
+          align-items: end;
+          gap: 3mm;
+          min-height: 17mm;
+          border-bottom: 1px solid var(--bag-color);
+        }
+
+        .yakutai-name-line span,
+        .yakutai-field-grid span,
+        .yakutai-usage-box span,
+        .yakutai-dose-box > span,
+        .yakutai-count-grid span,
+        .yakutai-note-lines span,
+        .yakutai-code-box span {
+          color: #4b5563;
+          font-size: 0.68rem;
+          font-weight: 800;
+        }
+
+        .yakutai-name-line strong {
+          min-width: 0;
+          font-size: 1.55rem;
+          line-height: 1.15;
+          padding-bottom: 1.5mm;
+        }
+
+        .yakutai-field-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid var(--bag-color);
+        }
+
+        .yakutai-field-grid > div {
+          display: grid;
+          gap: 1mm;
+          padding: 2mm 2.5mm;
+          border-right: 1px solid var(--bag-color);
+          min-height: 12mm;
+        }
+
+        .yakutai-field-grid > div:last-child {
+          border-right: none;
+        }
+
+        .yakutai-field-grid strong {
+          font-size: 0.9rem;
+        }
+
+        .yakutai-usage-box {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-areas:
+            "label days"
+            "usage days";
+          gap: 1.5mm 5mm;
+          border: 1.8px solid var(--bag-color);
+          background: var(--bag-soft);
+          padding: 4mm;
+          min-height: 31mm;
+        }
+
+        .yakutai-usage-box span {
+          grid-area: label;
+        }
+
+        .yakutai-usage-box strong {
+          grid-area: usage;
+          min-width: 0;
+          font-size: 1.45rem;
+          line-height: 1.25;
+        }
+
+        .yakutai-usage-box em {
+          grid-area: days;
+          align-self: center;
+          border-left: 1px solid var(--bag-color);
+          padding-left: 4mm;
+          font-style: normal;
+          font-size: 1.05rem;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .yakutai-dose-box {
+          display: grid;
+          gap: 1.6mm;
+        }
+
+        .yakutai-drug-list {
+          display: grid;
+          gap: 1.6mm;
+        }
+
+        .drug-line {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 4mm;
+          align-items: baseline;
+          font-size: 0.9rem;
+          border-bottom: 1px dashed #9ca3af;
+          padding-bottom: 1.4mm;
+        }
+
+        .drug-line strong {
+          white-space: nowrap;
+        }
+
+        .yakutai-count-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border: 1px solid var(--bag-color);
+        }
+
+        .yakutai-count-grid > div {
+          min-height: 13mm;
+          display: grid;
+          align-content: center;
+          gap: 1mm;
+          text-align: center;
+          border-right: 1px solid var(--bag-color);
+          padding: 1.8mm;
+        }
+
+        .yakutai-count-grid > div:last-child {
+          border-right: none;
+        }
+
+        .yakutai-count-grid strong {
+          font-size: 0.85rem;
+        }
+
+        .yakutai-note-lines {
+          display: grid;
+          gap: 1.5mm;
+          border: 1px solid var(--bag-color);
+          padding: 2.5mm;
+          min-height: 22mm;
+        }
+
+        .yakutai-note-lines strong {
+          font-size: 0.82rem;
+          line-height: 1.4;
+        }
+
+        .yakutai-note-lines i {
+          display: block;
+          border-bottom: 1px solid #9ca3af;
+          min-height: 4mm;
+        }
+
+        .yakutai-bottom {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 32mm;
+          gap: 5mm;
+          align-items: end;
+          font-size: 0.68rem;
+          line-height: 1.35;
+          border-top: 1.5px solid var(--bag-color);
+          padding-top: 3mm;
+          margin-top: auto;
+        }
+
+        .yakutai-pharmacy {
+          display: grid;
+          gap: 0.6mm;
+        }
+
+        .yakutai-code-box {
+          display: grid;
+          gap: 1mm;
+          text-align: right;
+        }
+
+        .yakutai-code-box small {
+          color: #555;
+          font-size: 0.62rem;
+          line-height: 1.25;
+        }
+
+        .sticker-sheet, .label-sheet {
+          width: 210mm;
+          max-width: 100%;
+          min-height: 297mm;
+          padding: 11mm;
+          display: grid;
+          align-content: start;
+          gap: 6mm;
+          font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+        }
+
+        .sticker-sheet {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .handbook-sticker {
+          min-height: 47mm;
+          border: 1px solid #222;
+          border-top: 4px solid #2563eb;
+          padding: 4mm;
+          display: flex;
+          flex-direction: column;
+          gap: 2.2mm;
+          page-break-inside: avoid;
+          background: #ffffff;
+        }
+
+        .sticker-head, .sticker-row, .label-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 3mm;
+        }
+
+        .sticker-head {
+          align-items: flex-start;
+          border-bottom: 1px solid #222;
+          padding-bottom: 1.6mm;
+        }
+
+        .sticker-head > div {
+          display: grid;
+          gap: 0.8mm;
+        }
+
+        .sticker-head strong {
+          font-size: 0.86rem;
+        }
+
+        .sticker-head span {
+          font-size: 0.68rem;
+          color: #444;
+        }
+
+        .sticker-drug, .label-drug {
+          font-size: 0.98rem;
+          font-weight: 700;
+          line-height: 1.35;
+        }
+
+        .sticker-usage, .label-usage {
+          font-size: 0.9rem;
+          line-height: 1.4;
+          border: 1px solid #222;
+          padding: 1.8mm 2mm;
+        }
+
+        .sticker-footer, .label-footer {
+          margin-top: auto;
+          display: grid;
+          gap: 0.7mm;
+          border-top: 1px solid #bbb;
+          padding-top: 1.5mm;
+          font-size: 0.68rem;
+          color: #555;
+          text-align: left;
+          line-height: 1.25;
+        }
+
+        .sticker-footer strong,
+        .label-footer strong {
+          color: #111;
+          font-size: 0.72rem;
+        }
+
+        .label-sheet {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .bottle-label {
+          min-height: 56mm;
+          border: 1.5px solid #111;
+          padding: 5mm;
+          display: flex;
+          flex-direction: column;
+          gap: 2.8mm;
+          page-break-inside: avoid;
+          background: #fff;
+        }
+
+        .liquid-label {
+          border-left: 5px solid #0369a1;
+          background: #ffffff;
+        }
+
+        .ointment-label {
+          border-left: 5px solid #15803d;
+          background: #ffffff;
+        }
+
+        .label-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 3mm;
+          border-bottom: 1px solid #222;
+          padding-bottom: 1.8mm;
+        }
+
+        .label-title {
+          font-size: 1.15rem;
+          font-weight: 900;
+          color: #111827;
+        }
+
+        .label-patient {
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
+
+        /* --- Radical print redesign: practical paper family --- */
+        .statement-ledger-doc {
+          display: flex;
+          flex-direction: column;
+          gap: 4mm;
+        }
+
+        .statement-redesign-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 38mm auto;
+          gap: 4mm;
+          align-items: start;
+          border-bottom: 2px solid #111;
+          padding-bottom: 4mm;
+        }
+
+        .statement-title-stack span,
+        .receipt-redesign-titlebar span,
+        .receipt-copy-band span,
+        .statement-redesign-meta span,
+        .statement-summary-band span,
+        .statement-confirmation-grid span,
+        .receipt-accounting-strip span,
+        .receipt-office-info span,
+        .receipt-stub span,
+        .drug-info-med-title span,
+        .drug-info-fact span,
+        .drug-info-usage-hero span,
+        .sticker-dose-panel span,
+        .label-dose-grid span {
+          color: #4b5563;
+          font-size: 0.68rem;
+          font-weight: 800;
+        }
+
+        .statement-title-stack h2,
+        .receipt-redesign-titlebar h2 {
+          margin: 1mm 0 0;
+          color: #111;
+          font-size: 1.65rem;
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: 0;
+        }
+
+        .statement-title-stack p {
+          margin: 2mm 0 0;
+          color: #444;
+          font-size: 0.73rem;
+          line-height: 1.5;
+        }
+
+        .statement-issue-box {
+          border: 1px solid #111;
+          min-height: 19mm;
+          padding: 2.2mm;
+          display: grid;
+          align-content: center;
+          gap: 0.8mm;
+          text-align: center;
+        }
+
+        .statement-issue-box span,
+        .statement-issue-box small {
+          color: #4b5563;
+          font-size: 0.66rem;
+          font-weight: 800;
+        }
+
+        .statement-issue-box strong {
+          font-size: 0.9rem;
+          line-height: 1.25;
+        }
+
+        .statement-redesign-meta {
+          display: grid;
+          grid-template-columns: 1.25fr 1.2fr 1fr;
+          border: 1px solid #111;
+        }
+
+        .statement-redesign-meta > div {
+          min-width: 0;
+          min-height: 22mm;
+          padding: 2.4mm 2.8mm;
+          border-right: 1px solid #111;
+          display: grid;
+          align-content: center;
+          gap: 1mm;
+        }
+
+        .statement-redesign-meta > div:last-child {
+          border-right: none;
+        }
+
+        .statement-redesign-meta strong {
+          min-width: 0;
+          color: #111;
+          font-size: 0.88rem;
+          line-height: 1.3;
+        }
+
+        .statement-person-block strong {
+          font-size: 1.05rem;
+        }
+
+        .statement-redesign-meta p {
+          margin: 0;
+          color: #333;
+          font-size: 0.68rem;
+          line-height: 1.4;
+        }
+
+        .statement-summary-band {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border: 2px solid #111;
+        }
+
+        .statement-summary-band > div {
+          min-height: 18mm;
+          padding: 2.4mm 2.8mm;
+          border-right: 1px solid #111;
+          display: grid;
+          align-content: center;
+          gap: 1mm;
+        }
+
+        .statement-summary-band > div:last-child {
+          border-right: none;
+        }
+
+        .statement-summary-band strong {
+          color: #111;
+          font-size: 1.02rem;
+          line-height: 1.2;
+        }
+
+        .statement-summary-primary {
+          background: #f8fafc;
+        }
+
+        .statement-summary-primary strong {
+          font-size: 1.18rem;
+        }
+
+        .statement-section-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 4mm;
+          border-bottom: 1.5px solid #111;
+          padding-bottom: 1.5mm;
+        }
+
+        .statement-section-heading strong {
+          font-size: 0.95rem;
+        }
+
+        .statement-section-heading span {
+          color: #4b5563;
+          font-size: 0.68rem;
+          font-weight: 800;
+        }
+
+        .statement-fee-ledger {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          font-size: 0.68rem;
+        }
+
+        .statement-fee-ledger th,
+        .statement-fee-ledger td {
+          border: 1px solid #111;
+          padding: 1.55mm 1.8mm;
+          vertical-align: top;
+        }
+
+        .statement-fee-ledger th {
+          background: #eef2f7;
+          text-align: center;
+          font-weight: 900;
+        }
+
+        .statement-fee-ledger th:nth-child(1) { width: 21mm; }
+        .statement-fee-ledger th:nth-child(2) { width: 35mm; }
+        .statement-fee-ledger th:nth-child(4) { width: 17mm; }
+        .statement-fee-ledger th:nth-child(5) { width: 27mm; }
+
+        .statement-fee-name {
+          font-weight: 800;
+          line-height: 1.3;
+        }
+
+        .statement-point-cell {
+          text-align: right;
+          font-weight: 900;
+          font-size: 0.76rem;
+        }
+
+        .statement-confirmation-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 46mm 19mm;
+          border: 1px solid #111;
+          margin-top: auto;
+        }
+
+        .statement-confirmation-grid > div {
+          min-height: 18mm;
+          padding: 2.3mm;
+          border-right: 1px solid #111;
+        }
+
+        .statement-confirmation-grid > div:last-child {
+          border-right: none;
+        }
+
+        .statement-confirmation-grid strong {
+          display: block;
+          margin-top: 0.8mm;
+          font-size: 0.78rem;
+        }
+
+        .statement-confirmation-grid p {
+          margin: 0.8mm 0 0;
+          color: #333;
+          font-size: 0.68rem;
+          line-height: 1.35;
+        }
+
+        .statement-seal-cell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #555;
+          font-size: 0.7rem;
+          font-weight: 800;
+        }
+
+        .receipt-redesign-doc {
+          display: flex;
+          flex-direction: column;
+          gap: 4mm;
+        }
+
+        .receipt-copy-band,
+        .receipt-stub {
+          display: grid;
+          grid-template-columns: 22mm minmax(0, 1fr) auto;
+          gap: 3mm;
+          align-items: center;
+          border: 1px solid #111;
+          min-height: 8mm;
+          padding: 1.3mm 2mm;
+          font-size: 0.68rem;
+        }
+
+        .receipt-copy-band strong,
+        .receipt-stub strong {
+          min-width: 0;
+          font-size: 0.78rem;
+        }
+
+        .receipt-redesign-titlebar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 5mm;
+          align-items: start;
+          border-bottom: 2px solid #111;
+          padding-bottom: 3mm;
+        }
+
+        .receipt-payee-line {
+          display: grid;
+          grid-template-columns: 20mm minmax(0, 1fr);
+          border: 1.5px solid #111;
+          min-height: 15mm;
+          align-items: center;
+        }
+
+        .receipt-payee-line span {
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #f3f4f6;
+          border-right: 1px solid #111;
+          color: #333;
+          font-size: 0.78rem;
+          font-weight: 900;
+        }
+
+        .receipt-payee-line strong {
+          padding: 0 3mm;
+          font-size: 1.05rem;
+        }
+
+        .receipt-money-panel {
+          border: 3px double #111;
+          padding: 4.5mm 5mm;
+          text-align: center;
+          background: #fff;
+        }
+
+        .receipt-money-panel strong {
+          display: block;
+          margin-top: 1mm;
+          color: #111;
+          font-size: 2.15rem;
+          line-height: 1;
+          font-weight: 900;
+        }
+
+        .receipt-money-panel p {
+          margin: 2mm 0 0;
+          color: #333;
+          font-size: 0.72rem;
+          line-height: 1.45;
+        }
+
+        .receipt-accounting-strip {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid #111;
+        }
+
+        .receipt-accounting-strip > div {
+          min-height: 13mm;
+          padding: 2.2mm;
+          border-right: 1px solid #111;
+          border-bottom: 1px solid #111;
+        }
+
+        .receipt-accounting-strip > div:nth-child(2n) {
+          border-right: none;
+        }
+
+        .receipt-accounting-strip > div:nth-last-child(-n + 2) {
+          border-bottom: none;
+        }
+
+        .receipt-accounting-strip strong {
+          display: block;
+          margin-top: 1mm;
+          font-size: 0.9rem;
+        }
+
+        .receipt-redesign-table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          font-size: 0.7rem;
+        }
+
+        .receipt-redesign-table th,
+        .receipt-redesign-table td {
+          border: 1px solid #111;
+          padding: 1.7mm;
+          vertical-align: top;
+        }
+
+        .receipt-redesign-table th {
+          background: #eef2f7;
+          text-align: center;
+          font-weight: 900;
+        }
+
+        .receipt-redesign-table th:nth-child(2) {
+          width: 24mm;
+        }
+
+        .receipt-office-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 22mm;
+          gap: 4mm;
+          align-items: end;
+          border-top: 1.5px solid #111;
+          padding-top: 4mm;
+          margin-top: auto;
+        }
+
+        .receipt-office-info {
+          display: grid;
+          gap: 0.7mm;
+          line-height: 1.3;
+        }
+
+        .receipt-office-info strong {
+          font-size: 0.82rem;
+        }
+
+        .receipt-redesign-doc .receipt-seal-box {
+          width: 22mm;
+          height: 22mm;
+          border-radius: 999px;
+          font-size: 0.72rem;
+        }
+
+        .receipt-stub {
+          border-style: dashed;
+          margin-top: 1mm;
+        }
+
+        .drug-info-row.drug-info-card {
+          display: block;
+          border: 1.5px solid #111;
+          padding: 0;
+          page-break-inside: avoid;
+        }
+
+        .drug-info-row.drug-info-card.high-risk {
+          border-left: 5px solid #b91c1c;
+        }
+
+        .drug-info-med-header {
+          display: grid;
+          grid-template-columns: 23mm minmax(0, 1fr) auto;
+          gap: 3mm;
+          align-items: stretch;
+          border-bottom: 1px solid #111;
+          background: #f8fafc;
+        }
+
+        .drug-info-card .drug-appearance-cell {
+          min-height: 24mm;
+          border-right: 1px solid #111;
+          background: #fff;
+        }
+
+        .drug-info-med-title {
+          min-width: 0;
+          display: grid;
+          align-content: center;
+          gap: 1mm;
+          padding: 2.2mm 0;
+        }
+
+        .drug-info-med-title strong {
+          min-width: 0;
+          font-size: 1.02rem;
+          line-height: 1.25;
+        }
+
+        .drug-info-flag-list {
+          display: flex;
+          align-content: center;
+          align-items: center;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 1.2mm;
+          max-width: 38mm;
+          padding: 2mm 2.5mm 2mm 0;
+        }
+
+        .drug-info-flag-list span,
+        .drug-info-timing-row em,
+        .sticker-timing-row span,
+        .yakutai-timing-strip span {
+          border: 1px solid #111;
+          background: #fff;
+          color: #111;
+          font-size: 0.64rem;
+          font-style: normal;
+          font-weight: 900;
+          line-height: 1;
+          padding: 1mm 1.7mm;
+          white-space: nowrap;
+        }
+
+        .drug-info-card .drug-info-change {
+          margin: 0;
+          padding: 1.5mm 2.5mm;
+          border-bottom: 1px solid #111;
+          background: #fff7ed;
+          color: #7c2d12;
+          font-size: 0.7rem;
+        }
+
+        .drug-info-counseling-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 25mm 22mm;
+          border-bottom: 1px solid #111;
+        }
+
+        .drug-info-counseling-grid > div {
+          min-height: 20mm;
+          padding: 2.2mm 2.5mm;
+          border-right: 1px solid #111;
+        }
+
+        .drug-info-counseling-grid > div:last-child {
+          border-right: none;
+        }
+
+        .drug-info-usage-hero strong {
+          display: block;
+          margin-top: 1mm;
+          font-size: 0.92rem;
+          line-height: 1.35;
+        }
+
+        .drug-info-timing-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1mm;
+          margin-top: 2mm;
+        }
+
+        .drug-info-fact strong {
+          display: block;
+          margin-top: 1mm;
+          font-size: 0.92rem;
+        }
+
+        .drug-info-safety-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border-bottom: 1px solid #111;
+        }
+
+        .drug-info-safety-grid > div {
+          min-height: 19mm;
+          padding: 2mm 2.5mm;
+          border-right: 1px solid #111;
+        }
+
+        .drug-info-safety-grid > div:last-child {
+          border-right: none;
+        }
+
+        .drug-info-safety-grid span,
+        .drug-info-source-line span {
+          display: block;
+          color: #0f766e;
+          font-size: 0.62rem;
+          font-weight: 900;
+          margin-bottom: 0.8mm;
+        }
+
+        .drug-info-safety-grid p {
+          margin: 0;
+          color: #111;
+          font-size: 0.68rem;
+          line-height: 1.35;
+        }
+
+        .drug-info-source-line {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 2mm;
+          padding: 1.7mm 2.5mm;
+          border-bottom: 1px solid #111;
+          background: #f8fafc;
+        }
+
+        .drug-info-source-line small {
+          display: block;
+          color: #4b5563;
+          font-size: 0.6rem;
+          font-weight: 800;
+        }
+
+        .drug-info-source-line span {
+          margin-bottom: 0;
+          color: #334155;
+        }
+
+        .drug-info-source-line a {
+          color: #0f766e;
+          font-size: 0.66rem;
+          font-weight: 900;
+          text-decoration: underline;
+        }
+
+        .yakutai-doc {
+          display: grid;
+          grid-template-columns: 23mm minmax(0, 1fr);
+          gap: 0;
+          padding: 0;
+          overflow: hidden;
+        }
+
+        .yakutai-ribbon {
+          background: var(--bag-color);
+          color: #fff;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: space-between;
+          gap: 5mm;
+          padding: 8mm 3mm;
+          writing-mode: vertical-rl;
+          text-orientation: mixed;
+        }
+
+        .yakutai-ribbon span {
+          font-size: 0.9rem;
+          font-weight: 900;
+          letter-spacing: 0.08em;
+        }
+
+        .yakutai-ribbon strong {
+          font-size: 1.45rem;
+          letter-spacing: 0.1em;
+        }
+
+        .yakutai-body {
+          min-width: 0;
+          padding: 9mm 10mm;
+          display: flex;
+          flex-direction: column;
+          gap: 4mm;
+        }
+
+        .yakutai-doc .yakutai-topline {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          align-items: center;
+          gap: 3mm;
+          border-bottom: 1px solid var(--bag-color);
+          padding-bottom: 2mm;
+        }
+
+        .yakutai-usage-hero {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 2mm 5mm;
+          border: 2px solid var(--bag-color);
+          background: var(--bag-soft);
+          padding: 4mm;
+        }
+
+        .yakutai-usage-hero span {
+          grid-column: 1 / -1;
+          color: #4b5563;
+          font-size: 0.74rem;
+          font-weight: 900;
+        }
+
+        .yakutai-usage-hero strong {
+          min-width: 0;
+          font-size: 1.58rem;
+          line-height: 1.22;
+        }
+
+        .yakutai-usage-hero em {
+          align-self: center;
+          border-left: 1px solid var(--bag-color);
+          padding-left: 4mm;
+          font-style: normal;
+          font-size: 1.05rem;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .yakutai-timing-strip {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1.5mm;
+        }
+
+        .yakutai-timing-strip span {
+          border-color: var(--bag-color);
+          color: var(--bag-color);
+        }
+
+        .yakutai-drug-ledger {
+          border: 1px solid var(--bag-color);
+        }
+
+        .yakutai-ledger-head,
+        .yakutai-ledger-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 4mm;
+          align-items: center;
+          padding: 2.2mm 2.5mm;
+          border-bottom: 1px solid var(--bag-color);
+        }
+
+        .yakutai-ledger-head {
+          background: var(--bag-soft);
+        }
+
+        .yakutai-ledger-head span,
+        .yakutai-ledger-row span,
+        .yakutai-safety-strip span {
+          color: #4b5563;
+          font-size: 0.68rem;
+          font-weight: 900;
+        }
+
+        .yakutai-ledger-head strong,
+        .yakutai-ledger-row strong {
+          font-size: 0.86rem;
+          line-height: 1.35;
+        }
+
+        .yakutai-ledger-row:last-child {
+          border-bottom: none;
+        }
+
+        .yakutai-ledger-row div {
+          min-width: 0;
+          display: grid;
+          gap: 0.7mm;
+        }
+
+        .yakutai-ledger-row em {
+          font-style: normal;
+          font-size: 0.8rem;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .yakutai-safety-strip {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid var(--bag-color);
+        }
+
+        .yakutai-safety-strip > div {
+          min-height: 13mm;
+          padding: 2.2mm;
+          border-right: 1px solid var(--bag-color);
+          display: grid;
+          align-content: center;
+          gap: 1mm;
+        }
+
+        .yakutai-safety-strip > div:last-child {
+          border-right: none;
+        }
+
+        .yakutai-safety-strip strong {
+          font-size: 0.84rem;
+        }
+
+        .handbook-sticker {
+          min-height: 54mm;
+          border-top-width: 6px;
+          gap: 2mm;
+        }
+
+        .sticker-dose-panel,
+        .label-dose-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid #111;
+        }
+
+        .sticker-dose-panel > div,
+        .label-dose-grid > div {
+          min-height: 11mm;
+          padding: 1.8mm;
+          border-right: 1px solid #111;
+          display: grid;
+          align-content: center;
+          gap: 0.7mm;
+        }
+
+        .sticker-dose-panel > div:last-child,
+        .label-dose-grid > div:last-child {
+          border-right: none;
+        }
+
+        .sticker-dose-panel strong,
+        .label-dose-grid strong {
+          font-size: 0.88rem;
+        }
+
+        .sticker-timing-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1mm;
+        }
+
+        .sticker-timing-row span {
+          border-color: #2563eb;
+          color: #1d4ed8;
+        }
+
+        .label-dose-grid {
+          margin-top: -0.7mm;
+        }
+
+        .label-warning {
+          border: 1px solid #111;
+          background: #f8fafc;
+          padding: 1.8mm 2mm;
+          color: #111;
+          font-size: 0.78rem;
+          font-weight: 900;
+          line-height: 1.35;
+        }
+
+        @media (max-width: 900px) {
+          .receipt-console-main {
+            flex-direction: column;
+          }
+
+          .console-total {
+            text-align: left;
+          }
+
+          .receipt-flow-grid,
+          .receipt-summary-strip,
+          .claim-lifecycle-grid,
+          .electronic-prescription-grid,
+          .claim-lifecycle-history,
+          .claim-snapshot-facts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .claim-lifecycle-actions,
+          .electronic-prescription-actions {
+            grid-column: 1 / -1;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .record-titlebar,
+          .dispensing-record-doc .doc-footer {
+            grid-template-columns: 1fr;
+            flex-direction: column;
+            align-items: flex-start;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .claim-lifecycle-grid,
+          .electronic-prescription-grid,
+          .claim-lifecycle-history,
+          .claim-snapshot-facts,
+          .claim-snapshot-diff-row p,
+          .claim-lifecycle-actions,
+          .electronic-prescription-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .claim-snapshot-header {
+            flex-direction: column;
+          }
+
+          .claim-snapshot-actions {
+            width: 100%;
+            justify-content: stretch;
+          }
+
+          .claim-lifecycle-actions,
+          .electronic-prescription-actions {
+            min-width: 0;
+          }
+
+          .claim-snapshot-actions .compact-action,
+          .claim-lifecycle-actions .compact-action,
+          .electronic-prescription-actions .compact-action {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .ai-assist-item,
+          .ai-assist-title-row {
+            grid-template-columns: 1fr;
+            flex-direction: column;
+          }
+
+          .ai-assist-actions {
+            max-width: none;
+            justify-content: stretch;
+          }
+
+          .ai-assist-decision {
+            flex: 1 1 0;
+          }
+        }
+
+        /* --- Print Styles --- */
+        @media print {
+          body { background: white !important; }
+          header, .no-print { display: none !important; }
+
+          .print-workspace {
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+            position: relative !important;
+          }
+
+          .print-preview-card {
+            background: white !important;
+            padding: 0 !important;
+            margin-bottom: 20px !important;
+            box-shadow: none !important;
+            border: none !important;
+            page-break-after: always !important;
+          }
+
+          .print-document {
+            box-shadow: none !important;
+            margin: 0 auto !important;
+            padding-top: var(--print-margin-top, 10mm) !important;
+            padding-bottom: var(--print-margin-bottom, 10mm) !important;
+            font-size: calc(100% * var(--print-font-scale, 1)) !important;
+          }
+
+          .yakutai-doc {
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+        }
