@@ -26,12 +26,15 @@ export const BACKUP_COLLECTIONS = [
 export type BackupCollectionName = (typeof BACKUP_COLLECTIONS)[number];
 export type BackupCollections = Partial<Record<BackupCollectionName, Record<string, unknown>[]>>;
 
+import type { DbKeyEscrowPayload } from './db_key_escrow.ts';
+
 export interface YakurekiBackup {
   app: typeof BACKUP_APP_ID;
   formatVersion: typeof BACKUP_FORMAT_VERSION;
   createdAt: string;
   collections: BackupCollections;
   localSettings?: Record<string, unknown>;
+  keyEscrow?: DbKeyEscrowPayload;
 }
 
 export interface EncryptedYakurekiBackup {

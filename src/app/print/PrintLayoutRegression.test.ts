@@ -16,6 +16,7 @@ const stickerSource = readFileSync(new URL('./components/MedicineNotebookSticker
 const liquidLabelSource = readFileSync(new URL('./components/LiquidLabelSheetPrint.tsx', import.meta.url), 'utf8');
 const ointmentLabelSource = readFileSync(new URL('./components/OintmentLabelSheetPrint.tsx', import.meta.url), 'utf8');
 const dispensingRecordSource = readFileSync(new URL('./components/DispensingRecordPrint.tsx', import.meta.url), 'utf8');
+const emergencyKeySheetSource = readFileSync(new URL('./components/EmergencyRecoveryKeySheetPrint.tsx', import.meta.url), 'utf8');
 
 const allSources = [
   pageSource,
@@ -26,7 +27,8 @@ const allSources = [
   stickerSource,
   liquidLabelSource,
   ointmentLabelSource,
-  dispensingRecordSource
+  dispensingRecordSource,
+  emergencyKeySheetSource
 ].join('\n');
 
 const printDocumentTestIds = [
@@ -37,7 +39,8 @@ const printDocumentTestIds = [
   'medicine-bag-doc',
   'medicine-notebook-sticker-doc',
   'liquid-label-sheet-doc',
-  'ointment-label-sheet-doc'
+  'ointment-label-sheet-doc',
+  'emergency-recovery-key-sheet-doc'
 ];
 
 test('print documents expose stable screenshot regression selectors', () => {

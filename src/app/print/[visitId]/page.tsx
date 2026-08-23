@@ -103,8 +103,10 @@ import { MedicineBagPrint } from '../components/MedicineBagPrint';
 import { MedicineNotebookStickerPrint } from '../components/MedicineNotebookStickerPrint';
 import { LiquidLabelSheetPrint } from '../components/LiquidLabelSheetPrint';
 import { OintmentLabelSheetPrint } from '../components/OintmentLabelSheetPrint';
+import { EmergencyRecoveryKeySheetPrint } from '../components/EmergencyRecoveryKeySheetPrint';
 import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffPanel';
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
+import type { DbKeyEscrowPayload } from '@/lib/db_key_escrow';
 
 import { usePrintVisitData } from '@/hooks/usePrintVisitData';
 import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
@@ -116,6 +118,18 @@ export default function PrintPage() {
   const router = useRouter();
   const db = useDatabase();
   const visitId = params.visitId as string;
+
+  const escrowPayload: DbKeyEscrowPayload = useMemo(() => ({
+    version: 1,
+    algorithm: 'PBKDF2-AES-GCM-256',
+    saltHex: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+    ivHex: '1234567890abcdef12345678',
+    ciphertextHex: '8f4c2e1b9a0d3f7e6c5b4a3928170e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f',
+    checksumSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    createdAt: '2026-08-23T00:00:00.000Z',
+    issuerRole: 'admin',
+    keyFingerprint: 'A1B2C3D4E5F6'
+  }), []);
 
   const debounceRef = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -1735,6 +1749,15 @@ export default function PrintPage() {
           pharmacyInfo={pharmacyInfo}
           pharmacyAddressLine={pharmacyAddressLine}
           currentDateStr={currentDateStr}
+          renderIdentityMark={renderIdentityMark}
+        />
+
+        {/* 9. 緊急復旧用 暗号鍵エスクローシート (emergency-recovery-key-sheet) */}
+        <EmergencyRecoveryKeySheetPrint
+          escrow={escrowPayload}
+          facilityName={pharmacyInfo.name}
+          facilityAddress={pharmacyAddressLine}
+          facilityPhone={pharmacyInfo.phone}
           renderIdentityMark={renderIdentityMark}
         />
       </div>

@@ -18,7 +18,7 @@ const printFieldVerificationScript = readFileSync(new URL('../../scripts/runPrin
 
 const manifest: PrintLayoutRegressionManifestInput = {
   ok: true,
-  captureCount: 8,
+  captureCount: 9,
   captures: [
     { label: 'dispensing-record', selector: '[data-testid="dispensing-record-doc"]', fileName: 'secret-patient-dispensing.png', width: 920, height: 1280, bytes: 12000 },
     { label: 'receipt-statement', selector: '[data-testid="receipt-statement-doc"]', fileName: 'receipt-statement.png', width: 920, height: 1280, bytes: 12000 },
@@ -27,7 +27,8 @@ const manifest: PrintLayoutRegressionManifestInput = {
     { label: 'medicine-bag', selector: '[data-testid="medicine-bag-doc"]', fileName: 'medicine-bag.png', width: 760, height: 1080, bytes: 12000 },
     { label: 'medicine-notebook-sticker', selector: '[data-testid="medicine-notebook-sticker-doc"]', fileName: 'sticker.png', width: 760, height: 760, bytes: 12000 },
     { label: 'liquid-label-sheet', selector: '[data-testid="liquid-label-sheet-doc"]', fileName: 'liquid-label.png', width: 640, height: 420, bytes: 12000 },
-    { label: 'ointment-label-sheet', selector: '[data-testid="ointment-label-sheet-doc"]', fileName: 'ointment-label.png', width: 640, height: 420, bytes: 12000 }
+    { label: 'ointment-label-sheet', selector: '[data-testid="ointment-label-sheet-doc"]', fileName: 'ointment-label.png', width: 640, height: 420, bytes: 12000 },
+    { label: 'emergency-recovery-key-sheet', selector: '[data-testid="emergency-recovery-key-sheet-doc"]', fileName: 'emergency-key-sheet.png', width: 920, height: 1280, bytes: 12000 }
   ]
 };
 
@@ -39,7 +40,8 @@ const requiredDocumentIds: PrintDocumentId[] = [
   'medicine_bag',
   'medicine_notebook_sticker',
   'liquid_label_sheet',
-  'ointment_label_sheet'
+  'ointment_label_sheet',
+  'emergency_recovery_key_sheet'
 ];
 
 function expectedDimensionsFor(documentId: PrintDocumentId): { widthMm: number; heightMm: number } {
@@ -92,10 +94,10 @@ test('buildPrintMediaFieldVerificationReview passes when screenshots and field p
   assert.strictEqual(review.status, 'pass');
   assert.strictEqual(review.evidenceIntegrity?.status, 'pass');
   assert.strictEqual(review.evidenceIntegrity?.realWorldEvidenceRequired, true);
-  assert.strictEqual(review.requiredDocumentCount, 8);
-  assert.strictEqual(review.screenshotDocumentCount, 8);
-  assert.strictEqual(review.fieldEvidenceDocumentCount, 8);
-  assert.strictEqual(review.passedDocumentCount, 8);
+  assert.strictEqual(review.requiredDocumentCount, 9);
+  assert.strictEqual(review.screenshotDocumentCount, 9);
+  assert.strictEqual(review.fieldEvidenceDocumentCount, 9);
+  assert.strictEqual(review.passedDocumentCount, 9);
   assert.ok(review.documents.every((document) => document.status === 'pass'));
 });
 
@@ -143,7 +145,7 @@ test('buildPrintMediaFieldVerificationReview stays attention when real paper evi
   });
 
   assert.strictEqual(review.status, 'attention');
-  assert.strictEqual(review.screenshotDocumentCount, 8);
+  assert.strictEqual(review.screenshotDocumentCount, 9);
   assert.strictEqual(review.fieldEvidenceDocumentCount, 4);
   assert.ok(review.documents.some((document) => (
     document.documentId === 'medicine_bag'
@@ -238,7 +240,7 @@ test('buildPrintMediaFieldEvidenceTemplate provides field check rows without dev
   const json = JSON.stringify(template);
 
   assert.strictEqual(template.type, 'yakureki-print-media-field-evidence-template');
-  assert.strictEqual(template.documents.length, 8);
+  assert.strictEqual(template.documents.length, 9);
   assert.ok(template.documents.every((document) => document.operatorReviewId === ''));
   assert.ok(template.documents.every((document) => document.sourceArtifactSha256 === ''));
   assert.ok(template.documents.every((document) => document.noPatientDataConfirmed === false));
@@ -264,7 +266,7 @@ test('buildPrintMediaFieldCheckRequest describes real paper checks without raw e
   assert.strictEqual(request.type, 'yakureki-print-media-field-check-request');
   assert.strictEqual(request.schemaVersion, 1);
   assert.strictEqual(request.dimensionToleranceMm, 1.5);
-  assert.strictEqual(request.documents.length, 8);
+  assert.strictEqual(request.documents.length, 9);
   assert.ok(request.documents.some((document) => (
     document.documentId === 'medicine_bag'
     && document.mediaType === 'medicine_bag'

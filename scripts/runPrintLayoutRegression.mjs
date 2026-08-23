@@ -18,7 +18,8 @@ const printTargets = [
   { selector: '[data-testid="medicine-bag-doc"]', label: 'medicine-bag', multiple: true },
   { selector: '[data-testid="medicine-notebook-sticker-doc"]', label: 'medicine-notebook-sticker' },
   { selector: '[data-testid="liquid-label-sheet-doc"]', label: 'liquid-label-sheet' },
-  { selector: '[data-testid="ointment-label-sheet-doc"]', label: 'ointment-label-sheet' }
+  { selector: '[data-testid="ointment-label-sheet-doc"]', label: 'ointment-label-sheet' },
+  { selector: '[data-testid="emergency-recovery-key-sheet-doc"]', label: 'emergency-recovery-key-sheet' }
 ];
 
 function assertOk(condition, message) {

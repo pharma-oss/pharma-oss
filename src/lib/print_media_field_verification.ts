@@ -21,7 +21,8 @@ export type PrintDocumentId =
   | 'medicine_bag'
   | 'medicine_notebook_sticker'
   | 'liquid_label_sheet'
-  | 'ointment_label_sheet';
+  | 'ointment_label_sheet'
+  | 'emergency_recovery_key_sheet';
 
 export interface PrintLayoutCaptureInput {
   label?: string;
@@ -181,7 +182,8 @@ const DEFAULT_REQUIRED_DOCUMENT_IDS: PrintDocumentId[] = [
   'medicine_bag',
   'medicine_notebook_sticker',
   'liquid_label_sheet',
-  'ointment_label_sheet'
+  'ointment_label_sheet',
+  'emergency_recovery_key_sheet'
 ];
 
 const DOCUMENT_TITLES: Record<PrintDocumentId, string> = {
@@ -192,7 +194,8 @@ const DOCUMENT_TITLES: Record<PrintDocumentId, string> = {
   medicine_bag: '薬袋',
   medicine_notebook_sticker: 'お薬手帳シール',
   liquid_label_sheet: '水剤ラベル',
-  ointment_label_sheet: '軟膏ラベル'
+  ointment_label_sheet: '軟膏ラベル',
+  emergency_recovery_key_sheet: '緊急復旧用暗号鍵シート'
 };
 
 const LABEL_TO_DOCUMENT_ID: Record<string, PrintDocumentId> = {
@@ -203,7 +206,8 @@ const LABEL_TO_DOCUMENT_ID: Record<string, PrintDocumentId> = {
   'medicine-bag': 'medicine_bag',
   'medicine-notebook-sticker': 'medicine_notebook_sticker',
   'liquid-label-sheet': 'liquid_label_sheet',
-  'ointment-label-sheet': 'ointment_label_sheet'
+  'ointment-label-sheet': 'ointment_label_sheet',
+  'emergency-recovery-key-sheet': 'emergency_recovery_key_sheet'
 };
 
 const DEFAULT_MEDIA_TYPE_BY_DOCUMENT: Record<PrintDocumentId, PrintMediaType> = {
@@ -214,7 +218,8 @@ const DEFAULT_MEDIA_TYPE_BY_DOCUMENT: Record<PrintDocumentId, PrintMediaType> = 
   medicine_bag: 'medicine_bag',
   medicine_notebook_sticker: 'notebook_sticker',
   liquid_label_sheet: 'liquid_label',
-  ointment_label_sheet: 'ointment_label'
+  ointment_label_sheet: 'ointment_label',
+  emergency_recovery_key_sheet: 'a4'
 };
 
 const DEFAULT_DIMENSIONS_BY_DOCUMENT: Record<PrintDocumentId, { widthMm: number; heightMm: number }> = {
@@ -225,7 +230,8 @@ const DEFAULT_DIMENSIONS_BY_DOCUMENT: Record<PrintDocumentId, { widthMm: number;
   medicine_bag: { widthMm: 148, heightMm: 210 },
   medicine_notebook_sticker: { widthMm: 210, heightMm: 297 },
   liquid_label_sheet: { widthMm: 210, heightMm: 297 },
-  ointment_label_sheet: { widthMm: 210, heightMm: 297 }
+  ointment_label_sheet: { widthMm: 210, heightMm: 297 },
+  emergency_recovery_key_sheet: { widthMm: 210, heightMm: 297 }
 };
 
 const STATUS_LABELS: Record<PrintMediaVerificationStatus, string> = {
