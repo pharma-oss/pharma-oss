@@ -1,61 +1,111 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describePatientMasterChanges } from '@/lib/patient_master_update';
+import { buildOcrConfidenceReport } from '@/lib/ocr_confidence';
+import { buildPatientCandidateMatches } from '@/lib/patient_matching';
+import {
+  buildPatientMergePlan,
+  buildPatientMergeExecutionPlan
+} from '@/lib/patient_merge';
+import { toPatientEligibilityStatus } from '@/app/ocr/helpers';
+import type { PatientCandidate } from '@/hooks/useOcrPatientEligibility';
 
-const ocrSource = readFileSync(new URL('./ocr/page.tsx', import.meta.url), 'utf8');
+test('患者マスター更新差分の計算と資格確認ステータス変換が正しく機能する', () => {
+  const current = {
+    name: '山田 太郎',
+    birthDate: '1985-03-15',
+    insuranceInfo: { number: '12345678', burdenRatio: 30 }
+  };
+  const updated = {
+    name: '山田 太郎',
+    birthDate: '1985-03-15',
+    insuranceInfo: { number: '12345678', burdenRatio: 20 }
+  };
 
-test('OCR受付は患者マスター更新差分とロック済み請求数を監査ログに残す', () => {
-  assert.match(ocrSource, /describePatientMasterChanges/);
-  assert.match(ocrSource, /isClaimEditBlocked/);
-  assert.match(ocrSource, /lockedClaimCountForPatient/);
-  assert.match(ocrSource, /toPatientEligibilityStatus/);
-  assert.match(ocrSource, /normalizeOnlineEligibilityResponse/);
-  assert.match(ocrSource, /formatOnlineEligibilityFieldMappingReport/);
-  assert.match(ocrSource, /eligibilityResult/);
-  assert.match(ocrSource, /fieldMapping/);
-  assert.match(ocrSource, /insuranceInfoPatch/);
-  assert.match(ocrSource, /publicInsurancesPayload/);
-  assert.match(ocrSource, /eligibilityCheckedAt/);
-  assert.match(ocrSource, /eligibilityStatus/);
-  assert.match(ocrSource, /eligibilitySource === 'mock'/);
-  assert.match(ocrSource, /デモ用の資格確認結果/);
-  assert.match(ocrSource, /readerMessage/);
-  assert.match(ocrSource, /readerSource === 'mock'/);
-  assert.match(ocrSource, /デモ用のマイナ読取内容/);
-  assert.match(ocrSource, /患者マスター更新/);
-  assert.match(ocrSource, /請求時点スナップショット/);
-  assert.match(ocrSource, /db\.visits\.find\(\{ selector: \{ patientId \} \}\)\.exec\(\)/);
+  const changes = describePatientMasterChanges(current as any, updated as any);
+  assert.ok(changes.some((c) => c.includes('負担割合') || c.includes('30') || c.includes('20')));
+
+  // 資格確認ステータス変換
+  assert.strictEqual(toPatientEligibilityStatus('confirmed'), 'valid');
+  assert.strictEqual(toPatientEligibilityStatus('warning'), 'warning');
+  assert.strictEqual(toPatientEligibilityStatus('unavailable'), 'unavailable');
+  assert.strictEqual(toPatientEligibilityStatus('unchecked'), undefined);
 });
 
-test('OCR受付は信頼度と人手確認ポイントを表示する', () => {
-  assert.match(ocrSource, /buildOcrConfidenceReport/);
-  assert.match(ocrSource, /OcrConfidencePanel/);
-  assert.match(ocrSource, /OCR信頼度/);
-  assert.match(ocrSource, /人手確認ポイント/);
-  assert.match(ocrSource, /ocrConfidenceReport/);
-  assert.match(ocrSource, /report\.reviewPoints/);
-  assert.match(ocrSource, /report\.evidence/);
+test('OCR信頼度レポートが処方データとOCRテキストから正しく生成される', () => {
+  const report = buildOcrConfidenceReport({
+    ocrText: '処方箋\n患者氏名: 山田 太郎\n生年月日: 1985-03-15\n保険者番号: 12345678\nアムロジピン錠5mg 1錠 1日1回朝食後 14日分',
+    patientName: '山田 太郎',
+    patientBirthDate: '1985-03-15',
+    insuranceNumber: '12345678',
+    institutionName: 'テストクリニック',
+    departmentName: '内科',
+    doctorName: 'テスト医師',
+    prescriptions: [
+      {
+        drugName: 'アムロジピン錠5mg',
+        amount: '1',
+        usage: '1日1回朝食後',
+        days: '14'
+      }
+    ]
+  });
+
+  assert.ok(report.score >= 0 && report.score <= 100);
+  assert.ok(['green', 'amber', 'red'].includes(report.tone));
+  assert.ok(Array.isArray(report.evidence));
+  assert.ok(Array.isArray(report.reviewPoints));
 });
 
-test('OCR受付は患者候補の一致理由と要確認メッセージを表示する', () => {
-  assert.match(ocrSource, /buildPatientCandidateMatches/);
-  assert.match(ocrSource, /patientCandidateMatchById/);
-  assert.match(ocrSource, /candidate-reasons/);
-  assert.match(ocrSource, /candidate-warning/);
-  assert.match(ocrSource, /match\.reasonLabels/);
-  assert.match(ocrSource, /match\.warning/);
+test('患者候補の一致理由と要確認メッセージが正しく導出される', () => {
+  const mockCandidates: PatientCandidate[] = [
+    {
+      patientId: 'P001',
+      name: '山田 太郎',
+      kana: 'ヤマダ タロウ',
+      birthDate: '1985-03-15',
+      gender: 'male',
+      insuranceInfo: { number: '12345678' }
+    } as unknown as PatientCandidate
+  ];
+
+  const matches = buildPatientCandidateMatches(mockCandidates, {
+    name: '山田 太郎',
+    birthDate: '1985-03-15',
+    insuranceNumber: '12345678'
+  }, 5);
+
+  assert.strictEqual(matches.length, 1);
+  assert.strictEqual(matches[0].patient.patientId, 'P001');
+  assert.ok(matches[0].reasonLabels.length >= 1);
 });
 
-test('OCR受付は同姓同名患者の統合確認と実行導線を表示する', () => {
-  assert.match(ocrSource, /buildPatientMergePlan/);
-  assert.match(ocrSource, /buildPatientMergeExecutionPlan/);
-  assert.match(ocrSource, /applyPatientMergeExecutionPlan/);
-  assert.match(ocrSource, /PatientMergeExecutionError/);
-  assert.match(ocrSource, /openPatientMergeReview/);
-  assert.match(ocrSource, /handleApplyPatientMerge/);
-  assert.match(ocrSource, /patient-merge-review/);
-  assert.match(ocrSource, /同姓同名の統合確認/);
-  assert.match(ocrSource, /患者統合を実行/);
-  assert.match(ocrSource, /患者統合実行/);
-  assert.match(ocrSource, /適用済みの操作を取り消しました/);
+test('同姓同名患者の統合計画と実行計画が正常に生成される', () => {
+  const source = {
+    patientId: 'P_OLD',
+    name: '山田 太郎',
+    kana: 'ヤマダ タロウ',
+    birthDate: '1985-03-15',
+    gender: 'male'
+  } as any;
+  const target = {
+    patientId: 'P_NEW',
+    name: '山田 太郎',
+    kana: 'ヤマダ タロウ',
+    birthDate: '1985-03-15',
+    gender: 'male'
+  } as any;
+
+  const plan = buildPatientMergePlan({
+    targetPatient: target,
+    sourcePatient: source,
+    sourceVisits: [{ visitId: 'V001' }],
+    sourceAlerts: [{ alertId: 'A001' }]
+  });
+  assert.ok(plan);
+  assert.strictEqual(plan.sourcePatientId, 'P_OLD');
+  assert.strictEqual(plan.targetPatientId, 'P_NEW');
+
+  const executionPlan = buildPatientMergeExecutionPlan(plan);
+  assert.ok(executionPlan.applyOperations.length > 0);
 });

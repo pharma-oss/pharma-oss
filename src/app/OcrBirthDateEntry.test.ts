@@ -1,26 +1,49 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
-
-const ocrSource = readFileSync(new URL('./ocr/page.tsx', import.meta.url), 'utf8');
+import { parseFlexibleDateInput } from '@/lib/date_input';
+import { buildPatientCandidateMatches } from '@/lib/patient_matching';
+import type { PatientCandidate } from '@/hooks/useOcrPatientEligibility';
 
 test('OCR受付の生年月日は半角8桁連続入力でYYYY-MM-DDへ自動変換される', () => {
-  assert.match(ocrSource, /import \{ parseFlexibleDateInput \} from '@\/lib\/date_input'/);
-  assert.match(ocrSource, /id="patientBirthDate"/);
-  // ネイティブの日付ピッカーではなく、8桁連続入力を受け付けるテキスト入力にしてある
-  assert.doesNotMatch(ocrSource.match(/id="patientBirthDate"[\s\S]{0,300}/)?.[0] || '', /type="date"/);
-  assert.match(ocrSource, /inputMode="numeric"/);
-  assert.match(ocrSource, /const digitsOnly = raw\.replace\(\/\[\^\\d\]\/g, ''\)/);
-  assert.match(ocrSource, /digitsOnly\.length === 8 \? parseFlexibleDateInput\(digitsOnly\) : undefined/);
-  assert.match(ocrSource, /setPatientBirthDate\(normalized \|\| raw\)/);
-  assert.match(ocrSource, /半角8桁.*19850315.*入力できます/);
+  const raw8digits = '19850315';
+  const normalized = parseFlexibleDateInput(raw8digits);
+  assert.strictEqual(normalized, '1985-03-15');
+
+  // 不正な日付形式や桁数の場合は undefined
+  assert.strictEqual(parseFlexibleDateInput('99999999'), undefined);
+  assert.strictEqual(parseFlexibleDateInput('123'), undefined);
 });
 
-test('生年月日8桁入力は既存の患者候補検索(buildPatientCandidateMatches)へそのまま流れる', () => {
-  // patientBirthDate は既に候補検索の入力に使われており、8桁入力機能はその手前で
-  // YYYY-MM-DDへ正規化するだけなので、候補リストUI自体への変更は不要。
-  const candidateMatchesBlock = ocrSource.match(/buildPatientCandidateMatches\(patientCandidates, \{[\s\S]{0,120}\}/)?.[0] || '';
-  assert.match(candidateMatchesBlock, /birthDate: patientBirthDate/);
-  assert.match(ocrSource, /className="patient-candidate-list"/);
-  assert.match(ocrSource, /match\.reasonLabels\.map/);
+test('生年月日8桁入力で正規化された日付は患者候補検索(buildPatientCandidateMatches)で突合される', () => {
+  const mockCandidates: PatientCandidate[] = [
+    {
+      patientId: 'P001',
+      name: '山田 太郎',
+      kana: 'ヤマダ タロウ',
+      birthDate: '1985-03-15',
+      gender: 'male',
+      insuranceInfo: { number: '12345678' }
+    } as unknown as PatientCandidate,
+    {
+      patientId: 'P002',
+      name: '鈴木 花子',
+      kana: 'スズキ ハナコ',
+      birthDate: '1990-01-01',
+      gender: 'female',
+      insuranceInfo: { number: '87654321' }
+    } as unknown as PatientCandidate
+  ];
+
+  // 8桁入力から正規化した YYYY-MM-DD で突合
+  const normalizedBirthDate = parseFlexibleDateInput('19850315')!;
+  const matches = buildPatientCandidateMatches(mockCandidates, {
+    name: '山田',
+    birthDate: normalizedBirthDate,
+    insuranceNumber: ''
+  }, 5);
+
+  assert.strictEqual(matches.length, 1);
+  assert.strictEqual(matches[0].patient.patientId, 'P001');
+  assert.ok(matches[0].score > 0);
+  assert.ok(matches[0].reasonLabels.length > 0);
 });

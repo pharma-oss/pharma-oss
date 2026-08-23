@@ -350,7 +350,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
         .prescription-qr-header strong {
           display: block;
           color: var(--text-main);
-          font-size: 0.92rem;
+          font-size: var(--fs-base);
         }
 
         .qr-action-button,
@@ -364,7 +364,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           border-radius: 6px;
           background: #ffffff;
           color: #166534;
-          font-size: 0.78rem;
+          font-size: var(--fs-sm);
           font-weight: 900;
           cursor: pointer;
         }
@@ -429,7 +429,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           align-items: center;
           gap: 0.35rem;
           color: #166534;
-          font-size: 0.78rem;
+          font-size: var(--fs-sm);
           font-weight: 900;
           padding-top: 0.6rem;
         }
@@ -444,7 +444,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           background: #ffffff;
           padding: 0.55rem 0.65rem;
           font-family: inherit;
-          font-size: 0.84rem;
+          font-size: var(--fs-md);
           line-height: 1.35;
         }
 
@@ -468,7 +468,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           background: #ffffff;
           color: #166534;
           padding: 0.08rem 0.42rem;
-          font-size: 0.72rem;
+          font-size: var(--fs-xs);
           font-weight: 850;
         }
 
@@ -476,7 +476,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           min-width: 0;
           overflow-wrap: anywhere;
           color: #166534;
-          font-size: 0.76rem;
+          font-size: var(--fs-xs);
           font-weight: 760;
           line-height: 1.45;
         }

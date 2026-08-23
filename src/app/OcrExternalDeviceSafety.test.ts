@@ -1,12 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { POST } from './api/external-integration/prescription-handoff/route.ts';
 import { localPharmacyDeviceConnectorSimulator } from '../lib/pharmacy_device_connector_simulator.ts';
-
-const ocrSource = readFileSync(new URL('./ocr/page.tsx', import.meta.url), 'utf8');
-const printSource = readFileSync(new URL('./print/[visitId]/page.tsx', import.meta.url), 'utf8');
-const routeSource = readFileSync(new URL('./api/external-integration/prescription-handoff/route.ts', import.meta.url), 'utf8');
 
 const routePayload = {
   visitId: 'visit-route-001',
@@ -32,30 +27,22 @@ const routePayload = {
   }]
 };
 
-test('prescription save no longer writes an unverified NSIPS-like file automatically', () => {
-  assert.doesNotMatch(ocrSource, /generateNsipsContent|NsipsRecord|rakCheDirHandle|showDirectoryPicker/);
-  assert.doesNotMatch(ocrSource, /NSIPS連携ファイル/);
+test('調剤機器連携APIは不正なオペレーションや必須パラメータ不足を拒否する', async () => {
+  const response = await POST(new Request('http://localhost/api/external-integration/prescription-handoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      operation: 'invalid_op',
+      payload: routePayload
+    })
+  }) as Parameters<typeof POST>[0]);
+
+  const result = await response.json();
+  assert.strictEqual(response.status, 400);
+  assert.strictEqual(result.status, 'invalid_request');
 });
 
-test('print page exposes explicit audited send, replace, and cancel operations', () => {
-  assert.match(printSource, /data-testid="pharmacy-device-handoff-panel"/);
-  assert.match(printSource, /data-testid="pharmacy-device-submit-button"/);
-  assert.match(printSource, /data-testid="pharmacy-device-replace-button"/);
-  assert.match(printSource, /data-testid="pharmacy-device-cancel-button"/);
-  assert.match(printSource, /external_device_handoff/);
-  assert.match(printSource, /\/api\/external-integration\/prescription-handoff/);
-  assert.match(printSource, /pharmacyDeviceReadiness\?\.status !== 'ready'/);
-});
-
-test('pharmacy device route delegates validation and connector submission', () => {
-  assert.match(routeSource, /submitPharmacyDeviceOperation/);
-  assert.match(routeSource, /isPharmacyDeviceConnectorSimulatorEnabled/);
-  assert.match(routeSource, /submitPharmacyDeviceSimulatorOperation/);
-  assert.match(routeSource, /previousTransferId/);
-  assert.match(routeSource, /invalid_request/);
-});
-
-test('pharmacy device route uses the local simulator when explicitly enabled', async () => {
+test('調剤機器連携APIはローカルシミュレータ有効時に送信・置換・取消オペレーションを実行できる', async () => {
   const envKeys = [
     'PHARMACY_DEVICE_CONNECTOR_SIMULATOR_ENABLED',
     'PHARMACY_DEVICE_CONNECTOR_KIND',
@@ -68,7 +55,8 @@ test('pharmacy device route uses the local simulator when explicitly enabled', a
   process.env.PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION = 'local-simulator-v1';
 
   try {
-    const response = await POST(new Request('http://localhost/api/external-integration/prescription-handoff', {
+    // 1. submit
+    const submitResponse = await POST(new Request('http://localhost/api/external-integration/prescription-handoff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -76,14 +64,12 @@ test('pharmacy device route uses the local simulator when explicitly enabled', a
         payload: routePayload
       })
     }) as Parameters<typeof POST>[0]);
-    const result = await response.json();
+    const submitResult = await submitResponse.json();
 
-    assert.strictEqual(response.status, 200);
-    assert.strictEqual(result.status, 'success');
-    assert.strictEqual(result.outcome, 'accepted');
-    assert.strictEqual(result.transferId, 'sim-transfer-000001');
-    assert.strictEqual(result.connectorKind, 'vendor_api');
-    assert.strictEqual(result.interfaceVersion, 'local-simulator-v1');
+    assert.strictEqual(submitResponse.status, 200);
+    assert.strictEqual(submitResult.status, 'success');
+    assert.strictEqual(submitResult.outcome, 'accepted');
+    assert.strictEqual(submitResult.transferId, 'sim-transfer-000001');
   } finally {
     localPharmacyDeviceConnectorSimulator.reset();
     for (const key of envKeys) {

@@ -84,14 +84,14 @@ const DrugListItem = React.memo(({
           text-overflow: ellipsis;
           white-space: nowrap;
           color: var(--text-main);
-          font-size: 0.94rem;
+          font-size: var(--fs-base);
           font-weight: 800;
           line-height: 1.35;
         }
 
         .tag-abolished {
           margin-left: 0.45rem;
-          font-size: 0.68rem;
+          font-size: var(--fs-2xs);
           background: #71717a;
           color: white;
           padding: 2px 6px;
@@ -679,7 +679,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
           border-radius: 8px;
           background: #ffffff;
           color: var(--text-main);
-          font-size: 0.95rem;
+          font-size: var(--fs-base);
           font-weight: 700;
           outline: none;
           transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -691,7 +691,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
         .filter-options {
           display: flex;
           align-items: center;
-          font-size: 0.84rem;
+          font-size: var(--fs-md);
         }
         .checkbox-label {
           min-height: 30px;
@@ -731,7 +731,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
           gap: 0.75rem;
         }
         .selected-info {
-          font-size: 0.9rem;
+          font-size: var(--fs-base);
           color: var(--text-main);
           line-height: 1.45;
         }
@@ -741,7 +741,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
           gap: 0.5rem;
         }
         .reason-input-group label {
-          font-size: 0.85rem;
+          font-size: var(--fs-md);
           color: #f59e0b;
           display: flex;
           align-items: center;

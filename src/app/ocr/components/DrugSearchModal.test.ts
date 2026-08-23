@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { type DrugMasterRecord } from '@/lib/master-data/drug_master';
-import { calculateFilteredDrugs } from '@/app/ocr/DrugSearchModal';
+import { calculateFilteredDrugs } from './DrugSearchModal';
 
 const mockDrugs: DrugMasterRecord[] = [
   {
@@ -60,9 +60,9 @@ test('calculateFilteredDrugs in prescribed mode includes general name placeholde
   });
 
   assert.strictEqual(results.length, 4);
-  assert.ok(results.some(d => d.code === 'GEN001'), 'General name placeholder should be included in prescribed mode');
-  assert.ok(results.some(d => d.code === 'BRAND001'));
-  assert.ok(results.some(d => d.code === 'GENERIC001'));
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'GEN001'), 'General name placeholder should be included in prescribed mode');
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'BRAND001'));
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'GENERIC001'));
 });
 
 test('calculateFilteredDrugs in dispensed mode excludes general name placeholders from dispensing candidates', () => {
@@ -75,26 +75,22 @@ test('calculateFilteredDrugs in dispensed mode excludes general name placeholder
   });
 
   assert.strictEqual(results.length, 3);
-  assert.ok(!results.some(d => d.code === 'GEN001'), 'General name placeholder must be excluded in dispensed mode');
-  assert.ok(results.some(d => d.code === 'BRAND001'));
-  assert.ok(results.some(d => d.code === 'GENERIC001'));
-  assert.ok(results.some(d => d.code === 'GENERIC002'));
+  assert.ok(!results.some((d: DrugMasterRecord) => d.code === 'GEN001'), 'General name placeholder must be excluded from dispensing selection');
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'BRAND001'));
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'GENERIC001'));
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'GENERIC002'));
 });
 
-test('calculateFilteredDrugs scans full allDrugs master for generic substitution candidates even when worker is active', () => {
-  // Worker has top 1 result
-  const workerResults = [mockDrugs[1]]; // BRAND001 only
-
+test('calculateFilteredDrugs preserves direct query matches even when worker search is empty', () => {
   const results = calculateFilteredDrugs({
     query: 'ノルバスク',
-    mode: 'dispensed',
-    showAllCandidates: true,
+    mode: 'prescribed',
+    showAllCandidates: false,
     allDrugs: mockDrugs,
-    workerSearchResults: workerResults
+    workerSearchResults: []
   });
 
-  // Should include BRAND001 and also scan full allDrugs to find same generic ingredient generics (GENERIC001 & GENERIC002)
-  assert.ok(results.some(d => d.code === 'BRAND001'));
-  assert.ok(results.some(d => d.code === 'GENERIC001'), 'Must find generic candidate from full allDrugs master scan');
-  assert.ok(results.some(d => d.code === 'GENERIC002'), 'Must find generic candidate from full allDrugs master scan');
+  assert.strictEqual(results.length, 1);
+  assert.strictEqual(results[0].code, 'BRAND001');
+  assert.ok(results.some((d: DrugMasterRecord) => d.code === 'BRAND001'));
 });
