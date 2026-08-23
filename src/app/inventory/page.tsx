@@ -1627,7 +1627,7 @@ export default function InventoryPage() {
             background: white;
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
-            font-size: 0.86rem;
+            font-size: var(--fs-md);
             font-weight: 700;
             white-space: nowrap;
             cursor: pointer;
@@ -1692,7 +1692,7 @@ export default function InventoryPage() {
         }
         .daily-check-header p {
             margin: 0;
-            font-size: 0.86rem;
+            font-size: var(--fs-md);
         }
         .daily-check-actions {
             display: flex;
@@ -1707,7 +1707,7 @@ export default function InventoryPage() {
             justify-content: center;
             gap: 0.35rem;
             padding: 0.4rem 0.65rem;
-            font-size: 0.8rem;
+            font-size: var(--fs-sm);
             white-space: nowrap;
         }
         .daily-check-summary-grid {
@@ -1734,7 +1734,7 @@ export default function InventoryPage() {
             border-right: none;
         }
         .daily-check-summary-item span {
-            font-size: 0.78rem;
+            font-size: var(--fs-sm);
             font-weight: 700;
         }
         .daily-check-summary-item strong {
@@ -1783,7 +1783,7 @@ export default function InventoryPage() {
             border-radius: 6px;
             background: white;
             color: var(--text-dark);
-            font-size: 0.88rem;
+            font-size: var(--fs-md);
         }
         .daily-check-search input:focus,
         .daily-check-filter select:focus,
@@ -1802,7 +1802,7 @@ export default function InventoryPage() {
             display: grid;
             gap: 0.2rem;
             color: var(--text-muted);
-            font-size: 0.72rem;
+            font-size: var(--fs-xs);
             font-weight: 700;
         }
         .daily-check-filter select {
@@ -1812,7 +1812,7 @@ export default function InventoryPage() {
             border-radius: 6px;
             background: white;
             color: var(--text-dark);
-            font-size: 0.85rem;
+            font-size: var(--fs-md);
         }
         .daily-check-filter-count {
             min-height: 40px;
@@ -1820,7 +1820,7 @@ export default function InventoryPage() {
             align-items: center;
             justify-content: flex-end;
             color: var(--text-muted);
-            font-size: 0.8rem;
+            font-size: var(--fs-sm);
             white-space: nowrap;
         }
         .data-table {
@@ -1857,7 +1857,7 @@ export default function InventoryPage() {
             vertical-align: middle;
         }
         .daily-check-table th {
-            font-size: 0.78rem;
+            font-size: var(--fs-sm);
         }
         .daily-check-table th:nth-child(2),
         .daily-check-table td:nth-child(2) {
@@ -1887,7 +1887,7 @@ export default function InventoryPage() {
         }
         .daily-previous-check {
             color: var(--text-muted);
-            font-size: 0.74rem;
+            font-size: var(--fs-xs);
             line-height: 1.35;
             white-space: normal;
         }
@@ -1927,7 +1927,7 @@ export default function InventoryPage() {
             background: white;
             color: var(--text-dark);
             text-align: right;
-            font-size: 0.92rem;
+            font-size: var(--fs-base);
             font-variant-numeric: tabular-nums;
         }
         .daily-count-input input::placeholder {
@@ -1942,7 +1942,7 @@ export default function InventoryPage() {
             border-radius: 5px;
             background: white;
             color: var(--text-dark);
-            font-size: 0.8rem;
+            font-size: var(--fs-sm);
         }
         .daily-reason-select.missing {
             border-color: rgba(220, 38, 38, 0.65);
@@ -2018,7 +2018,7 @@ export default function InventoryPage() {
         }
         .daily-check-save-note {
             color: var(--text-muted);
-            font-size: 0.85rem;
+            font-size: var(--fs-md);
             font-weight: 700;
         }
         .daily-check-save-note.alert {
@@ -2052,7 +2052,7 @@ export default function InventoryPage() {
         }
         .inventory-alert span {
             color: var(--text-muted);
-            font-size: 0.86rem;
+            font-size: var(--fs-md);
         }
         .negative-filter-button {
             white-space: nowrap;
@@ -2067,7 +2067,7 @@ export default function InventoryPage() {
             margin-left: 0.5rem;
             padding: 0.3rem 0.5rem;
             border-radius: 999px;
-            font-size: 0.8rem;
+            font-size: var(--fs-sm);
             color: var(--destructive);
             background: var(--danger-soft, #fef2f2);
             border: 1px solid rgba(220, 38, 38, 0.2);
@@ -2092,7 +2092,7 @@ export default function InventoryPage() {
             background: white;
             border-radius: 6px;
             padding: 0.25rem 0.5rem;
-            font-size: 0.78rem;
+            font-size: var(--fs-sm);
             font-weight: 600;
             cursor: pointer;
             white-space: nowrap;
@@ -2421,7 +2421,7 @@ function OrderWorkbench({
                 }
                 .order-summary-item span {
                     color: var(--text-muted);
-                    font-size: 0.78rem;
+                    font-size: var(--fs-sm);
                     font-weight: 800;
                 }
                 .order-summary-item strong {
@@ -2504,7 +2504,7 @@ function OrderWorkbench({
                     align-items: center;
                     padding: 0.05rem 0.38rem;
                     border-radius: var(--radius-sm);
-                    font-size: 0.7rem;
+                    font-size: var(--fs-xs);
                     font-weight: 850;
                 }
                 .order-priority.high {
@@ -2522,7 +2522,7 @@ function OrderWorkbench({
                     flex-wrap: wrap;
                     gap: 0.35rem;
                     color: var(--text-muted);
-                    font-size: 0.78rem;
+                    font-size: var(--fs-sm);
                     font-weight: 800;
                 }
                 .order-candidate-meta span {
@@ -2535,12 +2535,12 @@ function OrderWorkbench({
                 }
                 .order-candidate-action {
                     color: #0369a1;
-                    font-size: 0.8rem;
+                    font-size: var(--fs-sm);
                     font-weight: 850;
                 }
                 .order-candidate-amounts {
                     color: var(--text-muted);
-                    font-size: 0.8rem;
+                    font-size: var(--fs-sm);
                     font-weight: 800;
                     text-align: right;
                 }
@@ -2565,7 +2565,7 @@ function OrderWorkbench({
                     background: #f0f9ff;
                     color: #0369a1;
                     cursor: pointer;
-                    font-size: 0.78rem;
+                    font-size: var(--fs-sm);
                     font-weight: 850;
                     white-space: nowrap;
                 }
@@ -2588,7 +2588,7 @@ function OrderWorkbench({
                     display: grid;
                     gap: 0.2rem;
                     color: var(--text-muted);
-                    font-size: 0.72rem;
+                    font-size: var(--fs-xs);
                     font-weight: 850;
                 }
                 .receiving-form input {
@@ -2600,7 +2600,7 @@ function OrderWorkbench({
                     padding: 0.35rem 0.45rem;
                     color: var(--text-main);
                     background: #fff;
-                    font-size: 0.85rem;
+                    font-size: var(--fs-md);
                 }
                 .receiving-form input:focus {
                     outline: 2px solid rgba(37, 99, 235, 0.28);
@@ -2618,7 +2618,7 @@ function OrderWorkbench({
                     background: var(--success-soft);
                     color: var(--success);
                     cursor: pointer;
-                    font-size: 0.78rem;
+                    font-size: var(--fs-sm);
                     font-weight: 850;
                     white-space: nowrap;
                 }
@@ -3220,19 +3220,19 @@ function StockTransferPanel({ db, drugs, stockLots, prefill }: { db: any, drugs:
             <style jsx>{`
                 .transfer-panel { display: grid; gap: 1rem; }
                 .transfer-form-card h3, .transfer-history-card h3 { margin-bottom: 0.5rem; }
-                .transfer-note { margin-bottom: 0.9rem; font-size: 0.85rem; }
+                .transfer-note { margin-bottom: 0.9rem; font-size: var(--fs-md); }
                 .transfer-direction { display: flex; gap: 0.6rem; margin-bottom: 0.9rem; }
                 .transfer-direction label {
                     display: inline-flex; align-items: center; gap: 0.4rem;
                     border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.8rem;
-                    cursor: pointer; font-weight: 700; font-size: 0.86rem; background: #fff;
+                    cursor: pointer; font-weight: 700; font-size: var(--fs-md); background: #fff;
                 }
                 .transfer-direction label.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); }
                 .transfer-field { display: grid; gap: 0.3rem; margin-bottom: 0.75rem; min-width: 0; }
-                .transfer-field > span, .transfer-field > label { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+                .transfer-field > span, .transfer-field > label { font-size: var(--fs-sm); font-weight: 700; color: var(--text-muted); }
                 .transfer-field input, .transfer-field select {
                     min-height: 40px; border: 1px solid var(--border); border-radius: 8px;
-                    padding: 0 0.7rem; font-size: 0.9rem; background: #fff; min-width: 0;
+                    padding: 0 0.7rem; font-size: var(--fs-base); background: #fff; min-width: 0;
                 }
                 .transfer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
                 .transfer-selected-drug {
@@ -3240,8 +3240,8 @@ function StockTransferPanel({ db, drugs, stockLots, prefill }: { db: any, drugs:
                     border: 1px solid var(--primary-soft); background: var(--primary-light);
                     border-radius: 8px; padding: 0.6rem 0.8rem;
                 }
-                .transfer-selected-drug strong { display: block; font-size: 0.92rem; }
-                .transfer-selected-drug span { font-size: 0.78rem; color: var(--text-muted); }
+                .transfer-selected-drug strong { display: block; font-size: var(--fs-base); }
+                .transfer-selected-drug span { font-size: var(--fs-sm); color: var(--text-muted); }
                 .transfer-drug-search { position: relative; }
                 .transfer-drug-search input { width: 100%; }
                 .transfer-drug-suggestions {
@@ -3255,10 +3255,10 @@ function StockTransferPanel({ db, drugs, stockLots, prefill }: { db: any, drugs:
                     background: transparent; padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer;
                 }
                 .transfer-drug-suggestions button:hover { background: var(--bg-hover); }
-                .suggestion-name { font-weight: 700; font-size: 0.88rem; }
-                .suggestion-meta { font-size: 0.75rem; color: var(--text-muted); }
+                .suggestion-name { font-weight: 700; font-size: var(--fs-md); }
+                .suggestion-meta { font-size: var(--fs-xs); color: var(--text-muted); }
                 .transfer-actions { margin-top: 0.5rem; }
-                .transfer-history-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+                .transfer-history-table { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
                 .transfer-history-table th, .transfer-history-table td {
                     border-bottom: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left;
                 }
@@ -3266,7 +3266,7 @@ function StockTransferPanel({ db, drugs, stockLots, prefill }: { db: any, drugs:
                 .transfer-history-drug { word-break: break-all; }
                 .transfer-badge {
                     display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px;
-                    font-size: 0.74rem; font-weight: 800; white-space: nowrap;
+                    font-size: var(--fs-xs); font-weight: 800; white-space: nowrap;
                 }
                 .transfer-badge.out { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
                 .transfer-badge.in { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
@@ -3422,18 +3422,18 @@ function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: { db: any, dru
                 .dead-stock-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
                 .dead-stock-header h3 { margin-bottom: 0.25rem; }
                 .dead-stock-controls { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-                .dead-stock-controls label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; font-weight: 700; color: var(--text-muted); }
+                .dead-stock-controls label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--fs-md); font-weight: 700; color: var(--text-muted); }
                 .dead-stock-controls select { min-height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 0.5rem; background: #fff; }
-                .dead-stock-summary { display: flex; gap: 1.25rem; margin-bottom: 0.75rem; font-size: 0.9rem; color: var(--text-muted); }
+                .dead-stock-summary { display: flex; gap: 1.25rem; margin-bottom: 0.75rem; font-size: var(--fs-base); color: var(--text-muted); }
                 .dead-stock-summary strong { color: var(--text-main); font-size: 1.05rem; }
                 .dead-stock-table-wrap { overflow-x: auto; }
-                .dead-stock-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+                .dead-stock-table { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
                 .dead-stock-table th, .dead-stock-table td { border-bottom: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; white-space: nowrap; }
                 .dead-stock-table .text-right { text-align: right; }
                 .dead-stock-drug { white-space: normal; word-break: break-all; min-width: 180px; }
                 .dead-stock-flag {
                     display: inline-block; margin-left: 0.35rem; padding: 0.1rem 0.45rem; border-radius: 999px;
-                    background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 0.72rem; font-weight: 800;
+                    background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: var(--fs-xs); font-weight: 800;
                 }
                 .dead-stock-flag.expiry { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
             `}</style>
@@ -3592,7 +3592,7 @@ function LocationMaster({ db, locations, drugs }: { db: any, locations: Location
         <div className="location-master">
             <div className="add-location card">
                 <h3>棚番の一括作成</h3>
-                <p className="text-muted" style={{ fontSize: '0.83rem', marginBottom: '0.6rem' }}>
+                <p className="text-muted" style={{ fontSize: 'var(--fs-md)', marginBottom: '0.6rem' }}>
                     「A-01 〜 A-10」のような連番の棚番をまとめて作成します。登録済みの棚番はスキップします。
                 </p>
                 <div className="location-inputs">
@@ -3678,7 +3678,7 @@ function LocationMaster({ db, locations, drugs }: { db: any, locations: Location
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.5rem' }}>
                     <h3 style={{ margin: 0 }}>登録済みの棚番地</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <span className="text-muted" style={{ fontSize: '0.83rem' }}>
+                        <span className="text-muted" style={{ fontSize: 'var(--fs-md)' }}>
                             登録 {locations.length}件 / 未使用 {unusedLocations.length}件
                             {unassignedStockedCount > 0 && ` / 棚番未設定の在庫あり薬品 ${unassignedStockedCount}件`}
                         </span>
@@ -3704,7 +3704,7 @@ function LocationMaster({ db, locations, drugs }: { db: any, locations: Location
                                     <span
                                         className="location-usage"
                                         style={{
-                                            fontSize: '0.72rem',
+                                            fontSize: 'var(--fs-xs)',
                                             fontWeight: 800,
                                             padding: '0.1rem 0.45rem',
                                             borderRadius: '999px',
@@ -3799,7 +3799,7 @@ function LocationMaster({ db, locations, drugs }: { db: any, locations: Location
                     color: #ef4444;
                     border-radius: 4px;
                     cursor: pointer;
-                    font-size: 0.8rem;
+                    font-size: var(--fs-sm);
                 }
                 .btn-delete:hover {
                     background: #fef2f2;
@@ -4299,7 +4299,7 @@ function ImportMaster({ db, drugs, activeTab, orderedDrugIds, onDrugsReceived }:
                     background: #eff6ff;
                     color: #1d4ed8;
                     border: 1px solid #bfdbfe;
-                    font-size: 0.72rem;
+                    font-size: var(--fs-xs);
                     font-weight: 800;
                     white-space: nowrap;
                 }
