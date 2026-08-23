@@ -127,11 +127,16 @@ export default function PrintPage() {
   const [isGeneratingEscrow, setIsGeneratingEscrow] = useState(false);
   const [escrowError, setEscrowError] = useState<string | null>(null);
 
+  const isDemoOrE2E = visitId === 'e2e_onboarding_visit' || visitId.startsWith('demo_');
+
   const handleGenerateEscrow = useCallback(async (adminPassword: string) => {
     setIsGeneratingEscrow(true);
     setEscrowError(null);
     try {
-      const dbPassword = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || 'local-demo-encryption-key-2026';
+      const dbPassword = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD;
+      if (!dbPassword) {
+        throw new Error('ローカルDB暗号鍵が見つかりません。エスクロー発行前にDBを初期化してください。');
+      }
       const generated = await createDbKeyEscrow(dbPassword, adminPassword);
       setEscrowPayload(generated);
     } catch (err: any) {
@@ -143,13 +148,14 @@ export default function PrintPage() {
   }, []);
 
   useEffect(() => {
-    if (visitId === 'e2e_onboarding_visit' || visitId.startsWith('demo_')) {
-      const dbPassword = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || 'local-demo-encryption-key-2026';
-      createDbKeyEscrow(dbPassword, 'AdminPassword2026!').then((payload) => {
+    if (isDemoOrE2E) {
+      // E2E / デモ環境では本番鍵を一切使わず、明示的な合成テスト鍵でエスクローを生成
+      const demoSyntheticKey = 'demo-synthetic-ci-e2e-sample-db-key-999';
+      createDbKeyEscrow(demoSyntheticKey, 'DemoAdminPass2026!').then((payload) => {
         setEscrowPayload(payload);
       }).catch(console.error);
     }
-  }, [visitId]);
+  }, [isDemoOrE2E]);
 
   const debounceRef = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -1782,6 +1788,7 @@ export default function PrintPage() {
           onGenerateEscrow={handleGenerateEscrow}
           isGenerating={isGeneratingEscrow}
           errorMessage={escrowError}
+          isDemoOrSample={isDemoOrE2E}
         />
       </div>
     </div>

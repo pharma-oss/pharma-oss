@@ -137,7 +137,7 @@ export async function createDbKeyEscrow(
   );
 
   const ciphertextBytes = new Uint8Array(ciphertextBuffer);
-  const checksum = await sha256Hex(plaintextBytes);
+  const checksum = await sha256Hex(ciphertextBytes);
   const keyFingerprint = await computeKeyFingerprint(dbPassword);
 
   return {
@@ -210,6 +210,12 @@ export async function restoreDbKeyFromEscrow(
       ['decrypt']
     );
 
+    // 暗号文自体の破損・改ざんをチェック
+    const calculatedChecksum = await sha256Hex(ciphertext);
+    if (calculatedChecksum !== payload.checksumSha256) {
+      return { ok: false, reason: '暗号化ペイロードのチェックサムが一致しません。データが破損または改ざんされています。' };
+    }
+
     const decryptedBuffer = await cryptoInstance.subtle.decrypt(
       { name: 'AES-GCM', iv: iv as unknown as BufferSource },
       aesKey,
@@ -217,12 +223,6 @@ export async function restoreDbKeyFromEscrow(
     );
 
     const decryptedBytes = new Uint8Array(decryptedBuffer);
-    const calculatedChecksum = await sha256Hex(decryptedBytes);
-
-    if (calculatedChecksum !== payload.checksumSha256) {
-      return { ok: false, reason: '復号後のチェックサムが一致しません。データが破損または改ざんされています。' };
-    }
-
     const restoredKey = decoder.decode(decryptedBytes);
     const fingerprint = payload.keyFingerprint || await computeKeyFingerprint(restoredKey);
 

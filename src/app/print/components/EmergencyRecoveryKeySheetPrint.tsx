@@ -13,6 +13,7 @@ export interface EmergencyRecoveryKeySheetPrintProps {
   onGenerateEscrow?: (adminPassword: string) => Promise<void>;
   isGenerating?: boolean;
   errorMessage?: string | null;
+  isDemoOrSample?: boolean;
 }
 
 export function EmergencyRecoveryKeySheetPrint({
@@ -23,7 +24,8 @@ export function EmergencyRecoveryKeySheetPrint({
   renderIdentityMark,
   onGenerateEscrow,
   isGenerating = false,
-  errorMessage = null
+  errorMessage = null,
+  isDemoOrSample = false
 }: EmergencyRecoveryKeySheetPrintProps) {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
@@ -139,13 +141,31 @@ export function EmergencyRecoveryKeySheetPrint({
         ) : (
           /* 発行済みの本物シート */
           <>
+            {isDemoOrSample && (
+              <div style={{
+                background: '#fffbeb',
+                border: '2px solid #f59e0b',
+                borderRadius: '8px',
+                padding: '0.6rem 1rem',
+                marginBottom: '0.85rem',
+                color: '#92400e',
+                fontSize: 'var(--fs-xs)',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <ShieldAlert size={16} color="#d97706" />
+                <span>【サンプル / CIデモ用控え】本シートはテスト用合成鍵で生成されています。本番患者データの復旧には使用できません。</span>
+              </div>
+            )}
             <div className="emergency-sheet-header">
               <div className="emergency-title-stack">
-                <div className="emergency-badge">
+                <div className="emergency-badge" style={isDemoOrSample ? { background: '#fef3c7', color: '#92400e', borderColor: '#fde68a' } : undefined}>
                   <ShieldAlert size={16} aria-hidden="true" />
-                  <span>極秘 / 管理者施錠保管</span>
+                  <span>{isDemoOrSample ? 'サンプル / デモ控え' : '極秘 / 管理者施錠保管'}</span>
                 </div>
-                <h2>緊急復旧用 暗号鍵エスクローシート</h2>
+                <h2>緊急復旧用 暗号鍵エスクローシート{isDemoOrSample ? '（サンプル）' : ''}</h2>
                 <p>ブラウザプロファイル破損・端末交換時のデータベース復号鍵エスクロー控え</p>
               </div>
               <div className="emergency-issue-box">
