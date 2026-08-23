@@ -8,6 +8,7 @@ import {
   type PharmacyDeviceOperationResult,
   validatePharmacyDeviceOperationInput
 } from './pharmacy_device_connector';
+import { getAppEnv } from '@/lib/env';
 
 export interface PharmacyDeviceConnectorEnv {
   PHARMACY_DEVICE_CONNECTOR_MODE?: string;
@@ -31,17 +32,18 @@ const DEFAULT_TIMEOUT_MS = 8_000;
 
 function getEnv(env?: PharmacyDeviceConnectorEnv): PharmacyDeviceConnectorEnv {
   if (env) return env;
+  const appEnv = getAppEnv();
   return {
-    PHARMACY_DEVICE_CONNECTOR_MODE: process.env.PHARMACY_DEVICE_CONNECTOR_MODE,
-    PHARMACY_DEVICE_CONNECTOR_ENDPOINT: process.env.PHARMACY_DEVICE_CONNECTOR_ENDPOINT,
-    PHARMACY_DEVICE_CONNECTOR_BEARER_TOKEN: process.env.PHARMACY_DEVICE_CONNECTOR_BEARER_TOKEN,
-    PHARMACY_DEVICE_CONNECTOR_TIMEOUT_MS: process.env.PHARMACY_DEVICE_CONNECTOR_TIMEOUT_MS,
-    PHARMACY_DEVICE_CONNECTOR_KIND: process.env.PHARMACY_DEVICE_CONNECTOR_KIND,
-    PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION: process.env.PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION,
-    PHARMACY_DEVICE_CONNECTOR_FACILITY_LOCAL_ONLY: process.env.PHARMACY_DEVICE_CONNECTOR_FACILITY_LOCAL_ONLY,
-    PHARMACY_DEVICE_CONNECTOR_NSIPS_LICENSE_CONFIRMED: process.env.PHARMACY_DEVICE_CONNECTOR_NSIPS_LICENSE_CONFIRMED,
-    PHARMACY_DEVICE_CONNECTOR_CAPABILITIES: process.env.PHARMACY_DEVICE_CONNECTOR_CAPABILITIES,
-    PHARMACY_DEVICE_CONNECTOR_LAST_ATTEMPT_OUTCOME: process.env.PHARMACY_DEVICE_CONNECTOR_LAST_ATTEMPT_OUTCOME
+    PHARMACY_DEVICE_CONNECTOR_MODE: appEnv.pharmacyDeviceConnectorMode,
+    PHARMACY_DEVICE_CONNECTOR_ENDPOINT: appEnv.pharmacyDeviceConnectorEndpoint,
+    PHARMACY_DEVICE_CONNECTOR_BEARER_TOKEN: appEnv.pharmacyDeviceConnectorBearerToken,
+    PHARMACY_DEVICE_CONNECTOR_TIMEOUT_MS: String(appEnv.pharmacyDeviceConnectorTimeoutMs),
+    PHARMACY_DEVICE_CONNECTOR_KIND: appEnv.pharmacyDeviceConnectorKind,
+    PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION: appEnv.pharmacyDeviceConnectorInterfaceVersion,
+    PHARMACY_DEVICE_CONNECTOR_FACILITY_LOCAL_ONLY: appEnv.pharmacyDeviceConnectorFacilityLocalOnly ? 'true' : 'false',
+    PHARMACY_DEVICE_CONNECTOR_NSIPS_LICENSE_CONFIRMED: appEnv.pharmacyDeviceConnectorNsipsLicenseConfirmed ? 'true' : 'false',
+    PHARMACY_DEVICE_CONNECTOR_CAPABILITIES: appEnv.pharmacyDeviceConnectorCapabilities,
+    PHARMACY_DEVICE_CONNECTOR_LAST_ATTEMPT_OUTCOME: appEnv.pharmacyDeviceConnectorLastAttemptOutcome
   };
 }
 

@@ -7,12 +7,12 @@ const routeSource = readFileSync(new URL('./check/route.ts', import.meta.url), '
 test('eligibility check route emits normalized-compatible qualification fields', () => {
   assert.match(routeSource, /requestOnlineEligibility/);
   assert.match(routeSource, /OnlineEligibilityConnectorError/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_ENDPOINT/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_MODE/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_ALLOW_MOCK/);
-  assert.match(routeSource, /allowMockFallback/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_TIMEOUT_MS/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_BEARER_TOKEN/);
+  assert.match(routeSource, /getAppEnv/);
+  assert.match(routeSource, /onlineEligibilityEndpoint/);
+  assert.match(routeSource, /onlineEligibilityMode/);
+  assert.match(routeSource, /onlineEligibilityAllowMock/);
+  assert.match(routeSource, /onlineEligibilityTimeoutMs/);
+  assert.match(routeSource, /onlineEligibilityBearerToken/);
   assert.match(routeSource, /resultCode/);
   assert.match(routeSource, /qualificationStatus/);
   assert.match(routeSource, /insuredNumber/);

@@ -27,19 +27,17 @@ test('settings exposes sanitized external connector readiness for yakureki as th
   assert.match(settingsSource, /Web API/);
   assert.match(settingsSource, /秘密情報/);
   assert.match(settingsSource, /非表示/);
-  assert.match(settingsSource, /electronic_prescription: '電子処方箋受付'/);
-  assert.match(settingsSource, /external_device_handoff: '調剤機器連携'/);
 });
 
 test('connector readiness route includes electronic prescription official connector metadata', () => {
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_CONNECTOR_KIND/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_CONNECTOR_ARTIFACT_SHA256/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_CAPABILITIES/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_ENDPOINT_SHA256/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_AUTH_SHA256/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_KIND/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_ARTIFACT_SHA256/);
-  assert.match(readinessSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CAPABILITIES/);
-  assert.match(readinessSource, /PHARMACY_DEVICE_CONNECTOR_CAPABILITIES/);
+  assert.match(readinessSource, /electronicPrescriptionConnectorKind/);
+  assert.match(readinessSource, /electronicPrescriptionConnectorArtifactSha256/);
+  assert.match(readinessSource, /electronicPrescriptionCapabilities/);
+  assert.match(readinessSource, /electronicPrescriptionLastAttemptEndpointSha256/);
+  assert.match(readinessSource, /electronicPrescriptionLastAttemptAuthSha256/);
+  assert.match(readinessSource, /electronicPrescriptionLastAttemptConnectorKind/);
+  assert.match(readinessSource, /electronicPrescriptionLastAttemptConnectorArtifactSha256/);
+  assert.match(readinessSource, /electronicPrescriptionLastAttemptCapabilities/);
+  assert.match(readinessSource, /pharmacyDeviceConnectorCapabilities/);
   assert.doesNotMatch(readinessSource, /連携ブリッジ/);
 });

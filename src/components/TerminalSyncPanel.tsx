@@ -273,7 +273,7 @@ export default function TerminalSyncPanel() {
 
         <section className="card glass" style={{ padding: '1.25rem' }}>
           <h3 style={{ margin: '0 0 0.5rem' }}>旧ローカルデータの削除（サテライト化の仕上げ）</h3>
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', lineHeight: 1.8 }}>
+          <p style={{ margin: '0 0 0.75rem', fontSize: 'var(--fs-md)', lineHeight: 1.8 }}>
             この端末が以前に単独動作(standalone)で使われていた場合、暗号化された患者データが
             ブラウザ内(IndexedDB)に残っています。バックアップをメイン端末へ復旧し、
             メイン端末側で全データが揃っていることを確認してから削除してください。
@@ -283,7 +283,7 @@ export default function TerminalSyncPanel() {
             type="button"
             onClick={() => void wipeLegacyLocalData()}
             disabled={busy}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 'var(--fs-md)' }}
           >
             <ShieldOff size={15} aria-hidden="true" /> 旧ローカルデータを完全に削除
           </button>
@@ -298,7 +298,7 @@ export default function TerminalSyncPanel() {
         <h3 style={{ margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Laptop size={18} aria-hidden="true" /> この端末はメイン端末(集約ハブ)です
         </h3>
-        <p style={{ lineHeight: 1.7, margin: 0, fontSize: '0.9rem' }}>
+        <p style={{ lineHeight: 1.7, margin: 0, fontSize: 'var(--fs-base)' }}>
           サテライト端末の入力はこの端末に集約されます。サテライトには患者データが保存されないため、
           追加・廃棄はここでのトークン発行・失効だけで完了します。
         </p>
@@ -309,7 +309,7 @@ export default function TerminalSyncPanel() {
           <KeyRound size={18} aria-hidden="true" /> サテライト端末の登録
         </h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
-          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.85rem' }}>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: 'var(--fs-md)' }}>
             端末ID(英数字・ハイフン)
             <input
               type="text"
@@ -319,7 +319,7 @@ export default function TerminalSyncPanel() {
               style={{ padding: '0.45rem 0.6rem', border: '1px solid var(--border, #e2e8f0)', borderRadius: '8px', minWidth: '180px' }}
             />
           </label>
-          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.85rem' }}>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: 'var(--fs-md)' }}>
             ラベル(設置場所など)
             <input
               type="text"
@@ -336,18 +336,18 @@ export default function TerminalSyncPanel() {
 
         {issuedToken && (
           <div role="alert" style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: '8px', background: 'rgba(254, 249, 195, 0.7)', border: '1px solid #fde68a' }}>
-            <p style={{ margin: '0 0 0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>
+            <p style={{ margin: '0 0 0.5rem', fontWeight: 600, fontSize: 'var(--fs-base)' }}>
               端末 {issuedToken.terminalId} のトークン(この画面にしか表示されません)
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <code style={{ fontSize: '0.8rem', wordBreak: 'break-all', background: 'rgba(255,255,255,0.7)', padding: '0.35rem 0.5rem', borderRadius: '6px' }}>
+              <code style={{ fontSize: 'var(--fs-sm)', wordBreak: 'break-all', background: 'rgba(255,255,255,0.7)', padding: '0.35rem 0.5rem', borderRadius: '6px' }}>
                 {issuedToken.token}
               </code>
-              <button type="button" onClick={() => void copyToken()} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid var(--border, #e2e8f0)', background: 'white', cursor: 'pointer', fontSize: '0.8rem' }}>
+              <button type="button" onClick={() => void copyToken()} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid var(--border, #e2e8f0)', background: 'white', cursor: 'pointer', fontSize: 'var(--fs-sm)' }}>
                 <Copy size={14} aria-hidden="true" /> コピー
               </button>
             </div>
-            <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', lineHeight: 1.7 }}>
+            <p style={{ margin: '0.5rem 0 0', fontSize: 'var(--fs-sm)', lineHeight: 1.7 }}>
               サテライト端末の .env に <code>PHARMACY_SYNC_TERMINAL_ID={issuedToken.terminalId}</code> と
               <code> PHARMACY_SYNC_TERMINAL_TOKEN=(上記トークン)</code> を設定して再起動してください。
             </p>
@@ -358,10 +358,10 @@ export default function TerminalSyncPanel() {
       <section className="card glass" style={{ padding: '1.25rem' }}>
         <h3 style={{ margin: '0 0 0.75rem' }}>登録端末一覧</h3>
         {terminals.length === 0 ? (
-          <p style={{ margin: 0, color: 'var(--muted-foreground, #64748b)', fontSize: '0.9rem' }}>登録済みのサテライト端末はありません。</p>
+          <p style={{ margin: 0, color: 'var(--muted-foreground, #64748b)', fontSize: 'var(--fs-base)' }}>登録済みのサテライト端末はありません。</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-md)' }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
                   <th style={{ padding: '0.5rem' }}>端末ID</th>
@@ -383,11 +383,11 @@ export default function TerminalSyncPanel() {
                         : <span style={{ color: '#15803d', fontWeight: 600 }}>有効</span>}
                     </td>
                     <td style={{ padding: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => void rotateToken(terminal.terminalId)} disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border, #e2e8f0)', background: 'white', cursor: 'pointer', fontSize: '0.78rem' }}>
+                      <button type="button" onClick={() => void rotateToken(terminal.terminalId)} disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border, #e2e8f0)', background: 'white', cursor: 'pointer', fontSize: 'var(--fs-sm)' }}>
                         <RefreshCw size={13} aria-hidden="true" /> トークン再発行
                       </button>
                       {!terminal.revokedAt && (
-                        <button type="button" onClick={() => void revokeTerminal(terminal.terminalId)} disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontSize: '0.78rem' }}>
+                        <button type="button" onClick={() => void revokeTerminal(terminal.terminalId)} disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', cursor: 'pointer', fontSize: 'var(--fs-sm)' }}>
                           <ShieldOff size={13} aria-hidden="true" /> 失効
                         </button>
                       )}
@@ -402,12 +402,12 @@ export default function TerminalSyncPanel() {
 
       <section className="card glass" style={{ padding: '1.25rem' }}>
         <h3 style={{ margin: '0 0 0.5rem' }}>同期競合レビュー</h3>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', lineHeight: 1.7, color: 'var(--muted-foreground, #64748b)' }}>
+        <p style={{ margin: '0 0 0.75rem', fontSize: 'var(--fs-md)', lineHeight: 1.7, color: 'var(--muted-foreground, #64748b)' }}>
           同じデータが複数端末から同時に更新された場合、先に届いた内容が正となり、負けた書き込みがここに記録されます。
           内容を確認し、必要なら該当画面で手動反映してから「確認済み」にしてください。
         </p>
         {conflicts.length === 0 ? (
-          <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#15803d', fontSize: '0.9rem' }}>
+          <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#15803d', fontSize: 'var(--fs-base)' }}>
             <CheckCircle2 size={16} aria-hidden="true" /> 未確認の競合はありません。
           </p>
         ) : (
@@ -415,20 +415,20 @@ export default function TerminalSyncPanel() {
             {conflicts.map((conflict) => (
               <div key={conflict.id} style={{ border: '1px solid #fde68a', borderRadius: '8px', padding: '0.85rem', background: 'rgba(254, 249, 195, 0.45)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <strong style={{ fontSize: '0.9rem' }}>
+                  <strong style={{ fontSize: 'var(--fs-base)' }}>
                     {COLLECTION_LABELS[conflict.collection] || conflict.collection} / ID {conflict.docId}
                   </strong>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground, #64748b)' }}>
+                  <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted-foreground, #64748b)' }}>
                     端末 {conflict.terminalId} ・ {formatDateTime(conflict.occurredAt)}
                   </span>
                 </div>
                 <details style={{ marginBottom: '0.5rem' }}>
-                  <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>反映されなかった内容を表示</summary>
-                  <pre style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', maxHeight: '200px', overflow: 'auto', background: 'rgba(255,255,255,0.7)', padding: '0.5rem', borderRadius: '6px' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 'var(--fs-md)' }}>反映されなかった内容を表示</summary>
+                  <pre style={{ margin: '0.5rem 0 0', fontSize: 'var(--fs-xs)', maxHeight: '200px', overflow: 'auto', background: 'rgba(255,255,255,0.7)', padding: '0.5rem', borderRadius: '6px' }}>
                     {JSON.stringify(conflict.losingDocumentState, null, 2)}
                   </pre>
                 </details>
-                <button type="button" className="btn-primary" onClick={() => void resolveConflict(conflict)} disabled={busy} style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}>
+                <button type="button" className="btn-primary" onClick={() => void resolveConflict(conflict)} disabled={busy} style={{ padding: '0.4rem 0.8rem', fontSize: 'var(--fs-md)' }}>
                   確認済みにする
                 </button>
               </div>

@@ -24,26 +24,7 @@ import {
 import { type PatientMergeExecutionPlan, type PatientMergePlan } from '@/lib/patient_merge';
 import { type AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
 
-const backupDrillStatusStyle = (status: BackupRestoreDrillReport['status']) => {
-  const styles = {
-    pass: { color: '#15803d', background: '#f0fdf4', border: '#86efac' },
-    attention: { color: '#b45309', background: '#fffbeb', border: '#fcd34d' },
-    blocked: { color: '#b91c1c', background: '#fef2f2', border: '#fca5a5' }
-  }[status];
-
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    borderRadius: '999px',
-    border: `1px solid ${styles.border}`,
-    padding: '0.16rem 0.6rem',
-    fontSize: '0.76rem',
-    fontWeight: 800,
-    color: styles.color,
-    background: styles.background,
-    whiteSpace: 'nowrap' as const
-  };
-};
+import { getBackupDrillStatusStyle as backupDrillStatusStyle } from '@/lib/backup_settings_helpers';
 
 interface DuplicateMergeReview {
   groupId: string;
@@ -379,7 +360,7 @@ export default function BackupSettingsTab({
                               <button
                                 type="button"
                                 className="btn-secondary"
-                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}
+                                style={{ padding: '0.25rem 0.6rem', fontSize: 'var(--fs-sm)' }}
                                 onClick={() => openDuplicateMergeReview(group, member.patientId)}
                                 disabled={!canManageBackups || isApplyingDuplicateMerge}
                               >
@@ -441,7 +422,7 @@ export default function BackupSettingsTab({
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>バックアップ世代管理</h3>
-                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                   直近{backupGenerationReview.retentionDays}日 / 必要 {backupGenerationReview.requiredGenerationCount}世代
                 </p>
               </div>
@@ -452,14 +433,14 @@ export default function BackupSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '999px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   {backupGenerationReview.statusLabel}
                 </span>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleExportBackupGenerationReviewCsv}
                   disabled={!canManageBackups || isExportingBackupGenerationReview}
                   title={!canManageBackups ? getPermissionDeniedMessage(currentUser, 'manage_backups') : undefined}
@@ -483,7 +464,7 @@ export default function BackupSettingsTab({
                 ['対応', backupGenerationReview.actionLabel]
               ].map(([label, value]) => (
                 <div key={label} style={{ borderLeft: '3px solid var(--primary)', padding: '0.2rem 0 0.2rem 0.65rem' }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
                   <div style={{ color: label === '保存世代' || label === '外部保存' ? backupGenerationReviewColor : 'var(--text-main)', fontSize: '1.02rem', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
@@ -494,13 +475,13 @@ export default function BackupSettingsTab({
               gap: '0.8rem',
               marginBottom: '0.85rem',
               color: 'var(--text-muted)',
-              fontSize: '0.8rem'
+              fontSize: 'var(--fs-sm)'
             }}>
               <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '0.85rem', background: soapDraftFeedbackBackground }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.7rem' }}>
                   <div>
-                    <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 800 }}>SOAP下書き品質レビュー</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', fontWeight: 700 }}>
+                    <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>SOAP下書き品質レビュー</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>
                       採否 {aiSuggestionFeedbackReview.soapDraftSummary.totalCount}件 / {aiSuggestionFeedbackReview.soapDraftSummary.actionLabel}
                     </div>
                   </div>
@@ -510,7 +491,7 @@ export default function BackupSettingsTab({
                     border: '1px solid rgba(148, 163, 184, 0.35)',
                     borderRadius: '999px',
                     padding: '0.16rem 0.55rem',
-                    fontSize: '0.72rem',
+                    fontSize: 'var(--fs-xs)',
                     fontWeight: 800,
                     whiteSpace: 'nowrap'
                   }}>
@@ -525,17 +506,17 @@ export default function BackupSettingsTab({
                     ['S/O/A/P', `${aiSuggestionFeedbackReview.soapDraftSummary.typeCounts.S}/${aiSuggestionFeedbackReview.soapDraftSummary.typeCounts.O}/${aiSuggestionFeedbackReview.soapDraftSummary.typeCounts.A}/${aiSuggestionFeedbackReview.soapDraftSummary.typeCounts.P}`]
                   ].map(([label, value]) => (
                     <div key={label}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.7rem', fontWeight: 800 }}>{label}</div>
-                      <div style={{ color: 'var(--text-main)', fontSize: '0.94rem', fontWeight: 800 }}>{value}</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
+                      <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                     </div>
                   ))}
                 </div>
-                <div style={{ color: soapDraftFeedbackColor, fontSize: '0.78rem', fontWeight: 700 }}>
+                <div style={{ color: soapDraftFeedbackColor, fontSize: 'var(--fs-sm)', fontWeight: 700 }}>
                   {aiSuggestionFeedbackReview.soapDraftSummary.requiredActions.join(' / ')}
                 </div>
               </div>
               <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '0.85rem', background: '#ffffff' }}>
-                <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 800, marginBottom: '0.7rem' }}>提案種別別</div>
+                <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800, marginBottom: '0.7rem' }}>提案種別別</div>
                 {aiSuggestionFeedbackReview.domainSummaries.length > 0 ? (
                   <div style={{ display: 'grid', gap: '0.55rem' }}>
                     {aiSuggestionFeedbackReview.domainSummaries.map((summary) => (
@@ -554,8 +535,8 @@ export default function BackupSettingsTab({
               <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '0.85rem', background: storeFeedbackBackground }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.7rem' }}>
                   <div>
-                    <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 800 }}>店舗別フィードバック比較</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', fontWeight: 700 }}>
+                    <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>店舗別フィードバック比較</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>
                       {aiSuggestionFeedbackReview.storeComparison.currentStoreName} / 比較店舗 {aiSuggestionFeedbackReview.storeComparison.storeCount}件
                     </div>
                   </div>
@@ -565,7 +546,7 @@ export default function BackupSettingsTab({
                     border: '1px solid rgba(148, 163, 184, 0.35)',
                     borderRadius: '999px',
                     padding: '0.16rem 0.55rem',
-                    fontSize: '0.72rem',
+                    fontSize: 'var(--fs-xs)',
                     fontWeight: 800,
                     whiteSpace: 'nowrap'
                   }}>
@@ -580,8 +561,8 @@ export default function BackupSettingsTab({
                     ['平均との差', aiSuggestionFeedbackReview.storeComparison.currentStore ? `${aiSuggestionFeedbackReview.storeComparison.currentStore.differenceFromAverage > 0 ? '+' : ''}${aiSuggestionFeedbackReview.storeComparison.currentStore.differenceFromAverage}pt` : '-']
                   ].map(([label, value]) => (
                     <div key={label}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.7rem', fontWeight: 800 }}>{label}</div>
-                      <div style={{ color: 'var(--text-main)', fontSize: '0.94rem', fontWeight: 800 }}>{value}</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
+                      <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                     </div>
                   ))}
                 </div>
@@ -596,7 +577,7 @@ export default function BackupSettingsTab({
                     ))}
                   </div>
                 )}
-                <div style={{ color: storeFeedbackColor, fontSize: '0.78rem', fontWeight: 700 }}>
+                <div style={{ color: storeFeedbackColor, fontSize: 'var(--fs-sm)', fontWeight: 700 }}>
                   {aiSuggestionFeedbackReview.storeComparison.requiredActions.join(' / ')}
                 </div>
               </div>
@@ -606,22 +587,22 @@ export default function BackupSettingsTab({
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: '0.8rem',
               color: 'var(--text-muted)',
-              fontSize: '0.8rem'
+              fontSize: 'var(--fs-sm)'
             }}>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新バックアップ</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新バックアップ</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700, wordBreak: 'break-all' }}>{latestBackupGenerationLabel}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新復旧テスト</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新復旧テスト</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700 }}>{latestBackupDrillLabel}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新外部保存確認</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新外部保存確認</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700, wordBreak: 'break-all' }}>{latestBackupExternalStorageLabel}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>必要な対応</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>必要な対応</div>
                 <div style={{ color: backupGenerationReview.status === 'pass' ? 'var(--text-main)' : backupGenerationReviewColor, fontWeight: 700 }}>
                   {backupGenerationReview.requiredActions.join(' / ')}
                 </div>
@@ -635,7 +616,7 @@ export default function BackupSettingsTab({
                 <h3>バックアップを書き出す</h3>
                 <p className="help-text">患者、受付、処方、薬歴、マスタ、設定、スタッフ、操作ログをまとめて保存します。</p>
                 <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--fs-md)', fontWeight: 500 }}>
                     <input
                       type="checkbox"
                       checked={useEncryption}
@@ -659,21 +640,21 @@ export default function BackupSettingsTab({
                         value={exportPassword}
                         onChange={(e) => setExportPassword(e.target.value)}
                         className="form-control"
-                        style={{ margin: 0, padding: '0.4rem 0.6rem', fontSize: '0.88rem', flex: 1 }}
+                        style={{ margin: 0, padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', flex: 1 }}
                         aria-label="暗号化パスワード"
                         data-testid="backup-export-password"
                       />
                       <button
                         type="button"
                         className="btn-secondary"
-                        style={{ padding: '0.4rem 0.6rem', minHeight: 'auto', fontSize: '0.75rem' }}
+                        style={{ padding: '0.4rem 0.6rem', minHeight: 'auto', fontSize: 'var(--fs-xs)' }}
                         onClick={() => setShowExportPassword(!showExportPassword)}
                       >
                         {showExportPassword ? '隠す' : '表示'}
                       </button>
                     </div>
                   )}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--fs-md)', fontWeight: 500 }}>
                     <input
                       type="checkbox"
                       checked={exportBackupExternalTransferManifest}
@@ -685,7 +666,7 @@ export default function BackupSettingsTab({
                     <span>外部保存連携JSONも出力する</span>
                   </label>
                   {exportBackupExternalTransferManifest && (
-                    <label style={{ display: 'grid', gap: '0.25rem', maxWidth: '160px', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                    <label style={{ display: 'grid', gap: '0.25rem', maxWidth: '160px', fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--text-muted)' }}>
                       <span>保存先保持日数</span>
                       <input
                         type="number"
@@ -693,7 +674,7 @@ export default function BackupSettingsTab({
                         className="form-control"
                         value={externalBackupRetentionDays}
                         onChange={(e) => setExternalBackupRetentionDays(Number(e.target.value) || 1)}
-                        style={{ margin: 0, padding: '0.4rem 0.6rem', fontSize: '0.88rem' }}
+                        style={{ margin: 0, padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)' }}
                         data-testid="backup-export-transfer-retention-days"
                       />
                     </label>
@@ -849,7 +830,7 @@ export default function BackupSettingsTab({
                       className={migrationCsvKind === kind ? 'btn-primary' : 'btn-secondary'}
                       onClick={() => handleMigrationCsvKindChange(kind as 'patients' | 'visits' | 'drug_stocks' | 'soap_records')}
                       disabled={isAnalyzingMigrationCsv || isAnalyzingDiff}
-                      style={{ minHeight: 'auto', padding: '0.38rem 0.75rem', fontSize: '0.78rem', boxShadow: 'none' }}
+                      style={{ minHeight: 'auto', padding: '0.38rem 0.75rem', fontSize: 'var(--fs-sm)', boxShadow: 'none' }}
                     >
                       {label}
                     </button>
@@ -897,7 +878,7 @@ export default function BackupSettingsTab({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-                      <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>
+                      <strong style={{ color: 'var(--text-main)', fontSize: 'var(--fs-md)' }}>
                         {migrationCsvKind === 'patients'
                           ? '患者CSV移行マッピング'
                           : migrationCsvKind === 'visits'
@@ -911,7 +892,7 @@ export default function BackupSettingsTab({
                       </span>
                     </div>
                     {migrationCsvPreview.sourceFormat && (
-                      <span style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>
+                      <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>
                         {migrationCsvPreview.sourceFormat.delimiter === 'tab' ? 'TSV' : 'CSV'} / 見出し {migrationCsvPreview.sourceFormat.headerLine}行目
                       </span>
                     )}
@@ -929,18 +910,18 @@ export default function BackupSettingsTab({
                       ['文字化け疑い', `${migrationCsvPreview.diagnostic.mojibakeSuspectCount}件`]
                     ].map(([label, value]) => (
                       <div key={label} style={{ borderLeft: '3px solid rgba(37, 99, 235, 0.35)', paddingLeft: '0.55rem' }}>
-                        <div style={{ color: 'var(--text-ghost)', fontSize: '0.68rem', fontWeight: 800 }}>{label}</div>
-                        <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 800 }}>{value}</div>
+                        <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-2xs)', fontWeight: 800 }}>{label}</div>
+                        <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                       </div>
                     ))}
                   </div>
                   {migrationCsvPreview.sourceFormat && Object.keys(migrationCsvPreview.sourceFormat.recognizedColumns).length > 0 && (
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', fontWeight: 700 }}>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>
                       認識列: {Object.values(migrationCsvPreview.sourceFormat.recognizedColumns).filter(Boolean).join(' / ')}
                     </div>
                   )}
                   {migrationCsvPreview.issues.length > 0 && (
-                    <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.74rem' }}>
+                    <div style={{ display: 'grid', gap: '0.35rem', fontSize: 'var(--fs-xs)' }}>
                       {migrationCsvPreview.issues.slice(0, 4).map((issue) => (
                         <div key={`${issue.code}-${issue.line || 'file'}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 0.35fr) minmax(140px, 0.55fr) minmax(180px, 1fr)', gap: '0.45rem', alignItems: 'center' }}>
                           <span style={backupDrillStatusStyle(issue.severity === 'error' ? 'blocked' : 'attention')}>
@@ -956,7 +937,7 @@ export default function BackupSettingsTab({
                     <button
                       type="button"
                       className="btn-secondary"
-                      style={{ padding: '0.45rem 0.9rem', minHeight: 'auto', fontSize: '0.78rem' }}
+                      style={{ padding: '0.45rem 0.9rem', minHeight: 'auto', fontSize: 'var(--fs-sm)' }}
                       onClick={() => downloadTextFile(
                         `yakureki_${migrationCsvKind === 'patients' ? 'patient' : migrationCsvKind === 'visits' ? 'visit' : migrationCsvKind === 'drug_stocks' ? 'drug_stock' : 'soap'}_migration_${formatDateTimeStamp(new Date())}.json`,
                         JSON.stringify(migrationCsvPreview.backup, null, 2),
@@ -1019,7 +1000,7 @@ export default function BackupSettingsTab({
                   flexDirection: 'column',
                   gap: '0.75rem'
                 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: 'var(--fs-base)', color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>🔑 暗号化されたバックアップファイルです。復号用パスワードを入力してください。</span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', width: '100%', maxWidth: '500px' }}>
@@ -1029,7 +1010,7 @@ export default function BackupSettingsTab({
                       value={importPassword}
                       onChange={(e) => setImportPassword(e.target.value)}
                       className="form-control"
-                      style={{ margin: 0, padding: '0.5rem', fontSize: '0.9rem', flex: 1 }}
+                      style={{ margin: 0, padding: '0.5rem', fontSize: 'var(--fs-base)', flex: 1 }}
                       aria-label="復号用パスワード"
                     />
                     <button
@@ -1065,7 +1046,7 @@ export default function BackupSettingsTab({
                     <ShieldCheck size={20} className="text-success" />
                     <span>復旧前プレビュー（差分解析結果）</span>
                   </h3>
-                  <p className="help-text" style={{ marginBottom: '1rem', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                  <p className="help-text" style={{ marginBottom: '1rem', fontSize: 'var(--fs-md)', color: 'var(--text-muted)' }}>
                     アップロードされたバックアップから差分を検出しました。内容を確認し、問題なければ「復旧を実行する」をクリックしてください。既存IDのデータは上書きされます。
                   </p>
 
@@ -1081,10 +1062,10 @@ export default function BackupSettingsTab({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-                          <strong style={{ color: 'var(--text-main)', fontSize: '0.92rem' }}>復旧テスト（訓練）</strong>
+                          <strong style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)' }}>復旧テスト（訓練）</strong>
                           <span style={backupDrillStatusStyle(backupDrillReport.status)}>{backupDrillReport.statusLabel}</span>
                         </div>
-                        <span style={{ color: 'var(--text-ghost)', fontSize: '0.74rem' }}>
+                        <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)' }}>
                           バックアップ作成 {new Date(backupDrillReport.backupCreatedAt).toLocaleString('ja-JP')}
                         </span>
                       </div>
@@ -1102,14 +1083,14 @@ export default function BackupSettingsTab({
                           ['変更なし', `${backupDrillReport.diffSummary.unchanged}件`]
                         ].map(([label, value]) => (
                           <div key={label} style={{ borderLeft: '3px solid rgba(37, 99, 235, 0.45)', paddingLeft: '0.55rem' }}>
-                            <div style={{ color: 'var(--text-ghost)', fontSize: '0.7rem', fontWeight: 700 }}>{label}</div>
-                            <div style={{ color: 'var(--text-main)', fontSize: '0.98rem', fontWeight: 800 }}>{value}</div>
+                            <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
+                            <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                           </div>
                         ))}
                       </div>
                       <div style={{ display: 'grid', gap: '0.35rem' }}>
                         {backupDrillReport.checks.map((check) => (
-                          <div key={check.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 0.6fr) minmax(70px, 0.35fr) minmax(180px, 1fr)', gap: '0.5rem', alignItems: 'center', fontSize: '0.78rem' }}>
+                          <div key={check.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 0.6fr) minmax(70px, 0.35fr) minmax(180px, 1fr)', gap: '0.5rem', alignItems: 'center', fontSize: 'var(--fs-sm)' }}>
                             <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{check.label}</span>
                             <span style={backupDrillStatusStyle(check.status)}>
                               {check.status === 'pass' ? 'OK' : check.status === 'attention' ? '要確認' : '不可'}
@@ -1127,7 +1108,7 @@ export default function BackupSettingsTab({
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
-                          <strong style={{ color: 'var(--text-main)', fontSize: '0.88rem' }}>導入移行診断</strong>
+                          <strong style={{ color: 'var(--text-main)', fontSize: 'var(--fs-md)' }}>導入移行診断</strong>
                           <span style={backupDrillStatusStyle(backupDrillReport.migrationDiagnostic.status)}>
                             {backupDrillReport.migrationDiagnostic.statusLabel}
                           </span>
@@ -1145,16 +1126,16 @@ export default function BackupSettingsTab({
                             ['必須領域不足', `${backupDrillReport.migrationDiagnostic.missingRequiredCollectionCount}件`]
                           ].map(([label, value]) => (
                             <div key={label} style={{ borderLeft: '3px solid rgba(37, 99, 235, 0.35)', paddingLeft: '0.55rem' }}>
-                              <div style={{ color: 'var(--text-ghost)', fontSize: '0.68rem', fontWeight: 800 }}>{label}</div>
-                              <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', fontWeight: 800 }}>{value}</div>
+                              <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-2xs)', fontWeight: 800 }}>{label}</div>
+                              <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                             </div>
                           ))}
                         </div>
-                        <div style={{ color: backupDrillReport.migrationDiagnostic.status === 'pass' ? 'var(--text-muted)' : 'var(--warning)', fontSize: '0.76rem', fontWeight: 750, marginBottom: backupDrillReport.migrationDiagnostic.issues.length > 0 ? '0.55rem' : 0 }}>
+                        <div style={{ color: backupDrillReport.migrationDiagnostic.status === 'pass' ? 'var(--text-muted)' : 'var(--warning)', fontSize: 'var(--fs-xs)', fontWeight: 750, marginBottom: backupDrillReport.migrationDiagnostic.issues.length > 0 ? '0.55rem' : 0 }}>
                           {backupDrillReport.migrationDiagnostic.requiredActions.join(' / ')}
                         </div>
                         {backupDrillReport.migrationDiagnostic.issues.length > 0 && (
-                          <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.74rem' }}>
+                          <div style={{ display: 'grid', gap: '0.35rem', fontSize: 'var(--fs-xs)' }}>
                             {backupDrillReport.migrationDiagnostic.issues.slice(0, 4).map((issue) => (
                               <div key={issue.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(72px, 0.35fr) minmax(96px, 0.4fr) minmax(180px, 1fr)', gap: '0.45rem', alignItems: 'center' }}>
                                 <span style={backupDrillStatusStyle(issue.severity)}>{issue.severity === 'blocked' ? '不可' : '要確認'}</span>
@@ -1175,7 +1156,7 @@ export default function BackupSettingsTab({
                     borderRadius: '8px',
                     marginBottom: '1.25rem'
                   }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-md)' }}>
                       <thead>
                         <tr style={{ background: 'var(--bg-subtle)', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                           <th style={{ padding: '0.6rem 0.75rem', fontWeight: 600 }}>データ区分</th>
@@ -1266,6 +1247,161 @@ export default function BackupSettingsTab({
               )}
             </section>
           </div>
-        </div>
+
+      <style jsx>{`
+        .backup-workflow {
+          display: grid;
+          gap: 1.5rem;
+          margin-bottom: 2rem;
+        }
+        .backup-workflow-item {
+          display: grid;
+          grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1.2fr);
+          gap: 1.5rem;
+          align-items: start;
+          padding: 1.5rem;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          background: rgba(255, 255, 255, 0.6);
+        }
+        .backup-import-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+        }
+        .backup-alert {
+          border: 1px solid #fecaca;
+          background: #fef2f2;
+          border-radius: 8px;
+          padding: 0.85rem 1rem;
+          margin-bottom: 1rem;
+        }
+        .backup-alert p {
+          margin: 0;
+          color: #991b1b;
+          font-size: var(--fs-sm);
+        }
+        .backup-plain-warning {
+          border: 1px solid #fed7aa;
+          background: #fff7ed;
+          border-radius: 8px;
+          padding: 0.85rem 1rem;
+          margin-bottom: 1rem;
+        }
+        .backup-plain-warning p {
+          margin: 0;
+          color: #9a3412;
+          font-size: var(--fs-sm);
+        }
+        .backup-schedule-section {
+          border: 1px solid rgba(148, 163, 184, 0.35);
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.82);
+          padding: 1rem;
+          margin-bottom: 1.5rem;
+        }
+        .backup-schedule-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 1rem;
+          margin-bottom: 0.75rem;
+        }
+        .backup-schedule-status {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid rgba(148, 163, 184, 0.35);
+          border-radius: 999px;
+          padding: 0.15rem 0.65rem;
+          font-size: var(--fs-xs);
+          font-weight: 800;
+        }
+        .backup-schedule-summary {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+        }
+        .backup-schedule-summary div {
+          padding: 0.5rem 0.65rem;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: rgba(248, 250, 252, 0.7);
+        }
+        .backup-schedule-summary span {
+          display: block;
+          color: var(--text-muted);
+          font-size: var(--fs-xs);
+          font-weight: 700;
+        }
+        .backup-schedule-summary strong {
+          display: block;
+          color: var(--text-main);
+          font-size: 0.98rem;
+          font-weight: 800;
+          margin-top: 0.1rem;
+        }
+        .backup-schedule-form {
+          border-top: 1px solid rgba(148, 163, 184, 0.25);
+          padding-top: 0.75rem;
+        }
+        .backup-external-form {
+          border-top: 1px solid rgba(148, 163, 184, 0.25);
+          padding-top: 0.75rem;
+          margin-top: 0.75rem;
+        }
+        .backup-external-form input.form-control {
+          max-width: 100%;
+        }
+        .backup-external-checks {
+          display: grid;
+          gap: 0.45rem;
+          margin-top: 0.65rem;
+        }
+        .backup-external-item {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 0.65rem;
+          padding: 0.45rem 0.65rem;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.7);
+          font-size: var(--fs-sm);
+        }
+        .backup-external-notes {
+          display: grid;
+          gap: 0.35rem;
+          margin-top: 0.65rem;
+        }
+        .backup-external-notes textarea {
+          width: 100%;
+          min-height: 70px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 0.5rem;
+          font-size: var(--fs-sm);
+        }
+        .backup-external-receipt {
+          border: 1px dashed var(--border);
+          border-radius: 6px;
+          padding: 0.65rem;
+          background: rgba(248, 250, 252, 0.85);
+          margin-top: 0.65rem;
+        }
+        @media (max-width: 700px) {
+          .backup-workflow-item {
+            grid-template-columns: 1fr;
+          }
+          .backup-import-controls {
+            justify-content: flex-start;
+            max-width: none;
+          }
+        }
+      `}</style>
+    </div>
   );
 }
+

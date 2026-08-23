@@ -1,19 +1,15 @@
 import { NextResponse } from 'next/server';
 import { MynaCardReaderError, readMynaCard, type MynaCardReaderMode } from '@/lib/myna_card_reader';
-
-function allowsMockFallback(value?: string) {
-  return process.env.NODE_ENV !== 'production' || ['1', 'true', 'yes'].includes((value || '').toLowerCase());
-}
+import { getAppEnv } from '@/lib/env';
 
 export async function GET() {
+  const env = getAppEnv();
   try {
-    const mode = (process.env.MYNA_CARD_READER_MODE || 'auto') as MynaCardReaderMode;
-    const timeoutMs = Number(process.env.MYNA_CARD_READER_TIMEOUT_MS || 8000);
     const result = await readMynaCard({
-      endpoint: process.env.MYNA_CARD_READER_ENDPOINT,
-      mode,
-      allowMockFallback: allowsMockFallback(process.env.MYNA_CARD_READER_ALLOW_MOCK),
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 8000
+      endpoint: env.mynaCardReaderEndpoint || undefined,
+      mode: env.mynaCardReaderMode as MynaCardReaderMode,
+      allowMockFallback: env.nodeEnv !== 'production' && env.mynaCardReaderAllowMock,
+      timeoutMs: env.mynaCardReaderTimeoutMs
     });
 
     return NextResponse.json(result);

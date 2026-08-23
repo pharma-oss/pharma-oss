@@ -30,7 +30,7 @@ test('DatabaseProvider starts replication for hub/satellite and gates satellite 
 test('DatabaseProvider exposes onboarding E2E seed bridge only outside production', () => {
   assert.match(source, /__yakurekiSeedOnboardingE2E/);
   assert.match(source, /__yakurekiSeedReturnCorrectionE2E/);
-  assert.match(source, /process\.env\.NODE_ENV === 'production'/);
+  assert.match(source, /isProduction\(\)/);
   assert.match(source, /seedOnboardingE2EData/);
   assert.match(source, /seedReturnCorrectionE2EData/);
 });

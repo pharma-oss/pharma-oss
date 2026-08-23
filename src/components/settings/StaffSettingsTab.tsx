@@ -33,7 +33,7 @@ const ROLE_PERMISSION_SETTING_ROLES: User['role'][] = ['admin', 'pharmacist', 'c
       borderRadius: '999px',
       border: `1px solid ${styles.border}`,
       padding: '0.14rem 0.55rem',
-      fontSize: '0.74rem',
+      fontSize: 'var(--fs-xs)',
       fontWeight: 800,
       color: styles.color,
       background: styles.background,
@@ -142,7 +142,7 @@ export default function StaffSettingsTab({
             </div>
             <button
               className="btn-primary flex-center gap-2"
-              style={{ padding: '0.6rem 1.2rem', fontSize: '0.88rem' }}
+              style={{ padding: '0.6rem 1.2rem', fontSize: 'var(--fs-md)' }}
               onClick={() => setIsAddStaffOpen(true)}
               disabled={!canManageStaff}
               title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -172,7 +172,7 @@ export default function StaffSettingsTab({
                 <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
                   {shouldPromptCurrentStaffPasskey ? 'パスキーを登録しましょう' : '次にスタッフを追加しましょう'}
                 </strong>
-                <span style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
+                <span style={{ fontSize: 'var(--fs-base)', lineHeight: 1.6 }}>
                   {shouldPromptCurrentStaffPasskey
                     ? 'パスワードでも使えますが、日々のログインはパスキーにすると速く安全です。'
                     : '管理者の認証設定は完了しています。受付や調剤で使うスタッフを追加できます。'}
@@ -218,7 +218,7 @@ export default function StaffSettingsTab({
               <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div className="form-grid" style={{ gap: '1rem' }}>
                   <div className="form-group">
-                    <label htmlFor="new-staff-name" style={{ fontWeight: 600, fontSize: '0.88rem' }}>スタッフ氏名</label>
+                    <label htmlFor="new-staff-name" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>スタッフ氏名</label>
                     <input
                       id="new-staff-name"
                       type="text"
@@ -232,7 +232,7 @@ export default function StaffSettingsTab({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="new-staff-role" style={{ fontWeight: 600, fontSize: '0.88rem' }}>職種・権限</label>
+                    <label htmlFor="new-staff-role" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>職種・権限</label>
                     <select
                       id="new-staff-role"
                       className="form-control"
@@ -247,7 +247,7 @@ export default function StaffSettingsTab({
                   </div>
 
                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label htmlFor="new-staff-password" style={{ fontWeight: 600, fontSize: '0.88rem' }}>
+                    <label htmlFor="new-staff-password" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>
                       ログインパスワード（任意）
                     </label>
                     <input
@@ -308,7 +308,7 @@ export default function StaffSettingsTab({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 700 }}>権限ロール設定</h3>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.55 }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
                   管理者は全権限固定。薬剤師・事務は店舗の運用に合わせて保存されます。
                 </p>
               </div>
@@ -316,7 +316,7 @@ export default function StaffSettingsTab({
                 <button
                   type="button"
                   className="btn-secondary"
-                  style={{ padding: '0.45rem 0.85rem', fontSize: '0.82rem' }}
+                  style={{ padding: '0.45rem 0.85rem', fontSize: 'var(--fs-md)' }}
                   onClick={handleResetRolePermissionPolicy}
                   disabled={!canManageStaff || isSavingRolePermissionPolicy}
                   title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -326,7 +326,7 @@ export default function StaffSettingsTab({
                 <button
                   type="button"
                   className="btn-primary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.95rem', fontSize: '0.82rem' }}
+                  style={{ padding: '0.45rem 0.95rem', fontSize: 'var(--fs-md)' }}
                   onClick={handleSaveRolePermissionPolicy}
                   disabled={!canManageStaff || isSavingRolePermissionPolicy}
                   title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -361,12 +361,12 @@ export default function StaffSettingsTab({
                         background: isAdminRole ? '#faf5ff' : role === 'pharmacist' ? '#eff6ff' : '#f0fdf4',
                         color: isAdminRole ? '#6b21a8' : role === 'pharmacist' ? '#1d4ed8' : '#15803d',
                         fontWeight: 800,
-                        fontSize: '0.88rem'
+                        fontSize: 'var(--fs-md)'
                       }}
                     >
                       <span>{getRoleLabel(role)}</span>
                       {isAdminRole && (
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6b21a8' }}>
+                        <span style={{ fontSize: 'var(--fs-xs)', fontWeight: 800, color: '#6b21a8' }}>
                           固定
                         </span>
                       )}
@@ -385,7 +385,7 @@ export default function StaffSettingsTab({
                               gap: '0.45rem',
                               minHeight: '28px',
                               color: disabled && !checked ? 'var(--text-ghost)' : 'var(--text-main)',
-                              fontSize: '0.82rem',
+                              fontSize: 'var(--fs-md)',
                               fontWeight: checked ? 700 : 500,
                               cursor: disabled ? 'not-allowed' : 'pointer'
                             }}
@@ -422,7 +422,7 @@ export default function StaffSettingsTab({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 700 }}>復旧・退職対応</h3>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.55 }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
                   端末移行、退職、パスキー紛失時に、対象スタッフと確認事項をそろえてから認証情報を復旧します。
                 </p>
               </div>
@@ -446,7 +446,7 @@ export default function StaffSettingsTab({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '0.9rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.84rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
                 対象スタッフ
                 <select
                   className="form-control"
@@ -464,7 +464,7 @@ export default function StaffSettingsTab({
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.84rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
                 理由
                 <select
                   className="form-control"
@@ -479,7 +479,7 @@ export default function StaffSettingsTab({
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.84rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
                 再設定パスワード
                 <input
                   type="password"
@@ -495,7 +495,7 @@ export default function StaffSettingsTab({
               </label>
             </div>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: '0.84rem', marginBottom: '0.9rem' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)', marginBottom: '0.9rem' }}>
               対応メモ
               <textarea
                 className="form-control"
@@ -520,7 +520,7 @@ export default function StaffSettingsTab({
                     border: '1px solid #fed7aa',
                     borderRadius: '8px',
                     background: 'rgba(255, 255, 255, 0.82)',
-                    fontSize: '0.82rem'
+                    fontSize: 'var(--fs-md)'
                   }}
                 >
                   <strong style={{ color: 'var(--text-main)' }}>{step.label}</strong>
@@ -576,11 +576,11 @@ export default function StaffSettingsTab({
             <table className="audit-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>氏名</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>職種・権限</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>パスワード</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>パスキーデバイス</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>操作</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>氏名</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>職種・権限</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>パスワード</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>パスキーデバイス</th>
+                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -588,7 +588,7 @@ export default function StaffSettingsTab({
                   const isLastCredentialedAdmin = staff.role === 'admin' && hasLoginCredential(staff) && credentialedAdminCount <= 1;
                   return (
                   <tr key={staff.userId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '1rem', fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    <td style={{ padding: '1rem', fontSize: 'var(--fs-base)', fontWeight: 600, color: 'var(--text-main)' }}>
                       {staff.name}
                       {isInitialAdminUser(staff) && (
                         <span
@@ -598,7 +598,7 @@ export default function StaffSettingsTab({
                             borderRadius: '4px',
                             background: '#fef3c7',
                             color: '#92400e',
-                            fontSize: '0.72rem',
+                            fontSize: 'var(--fs-xs)',
                             fontWeight: 700
                           }}
                         >
@@ -606,12 +606,12 @@ export default function StaffSettingsTab({
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.88rem' }}>
+                    <td style={{ padding: '1rem', fontSize: 'var(--fs-md)' }}>
                       <span 
                         style={{
                           padding: '0.2rem 0.5rem',
                           borderRadius: '4px',
-                          fontSize: '0.8rem',
+                          fontSize: 'var(--fs-sm)',
                           fontWeight: 600,
                           background: staff.role === 'pharmacist' ? '#eff6ff' : staff.role === 'clerk' ? '#f0fdf4' : '#faf5ff',
                           color: staff.role === 'pharmacist' ? '#1d4ed8' : staff.role === 'clerk' ? '#15803d' : '#6b21a8'
@@ -623,21 +623,21 @@ export default function StaffSettingsTab({
                     <td
                       style={{
                         padding: '1rem',
-                        fontSize: '0.88rem',
+                        fontSize: 'var(--fs-md)',
                         color: staff.passwordHash && staff.salt ? '#16a34a' : 'var(--text-ghost)',
                         fontWeight: 500
                       }}
                     >
                       {staff.passwordHash && staff.salt ? '● 設定済み (PBKDF2-SHA-256)' : '未設定'}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: '0.88rem' }}>
+                    <td style={{ padding: '1rem', fontSize: 'var(--fs-md)' }}>
                       {staff.passkeyCredentialId ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#2563eb', fontWeight: 500 }}>
                           <Fingerprint size={14} />
                           <span>登録済み (WebAuthn)</span>
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-ghost)', fontSize: '0.85rem' }}>未登録</span>
+                        <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-md)' }}>未登録</span>
                       )}
                     </td>
                     <td style={{ padding: '1rem', textAlign: 'right' }}>
@@ -646,7 +646,7 @@ export default function StaffSettingsTab({
                           className="btn-secondary flex-center gap-1"
                           style={{
                             padding: '0.35rem 0.75rem',
-                            fontSize: '0.8rem',
+                            fontSize: 'var(--fs-sm)',
                             borderColor: staff.passkeyCredentialId ? '#d1d5db' : '#3b82f6',
                             color: staff.passkeyCredentialId ? 'var(--text-main)' : '#2563eb',
                             background: staff.passkeyCredentialId ? 'transparent' : 'rgba(37, 99, 235, 0.03)'
@@ -659,7 +659,7 @@ export default function StaffSettingsTab({
                           <span>{staff.passkeyCredentialId ? '再登録' : 'パスキーを登録'}</span>
                         </button>
                         {!hasLoginCredential(staff) && (
-                          <span style={{ color: '#b45309', fontSize: '0.78rem', fontWeight: 700 }}>
+                          <span style={{ color: '#b45309', fontSize: 'var(--fs-sm)', fontWeight: 700 }}>
                             要登録
                           </span>
                         )}

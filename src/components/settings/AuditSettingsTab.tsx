@@ -6,43 +6,7 @@ import { type AuditIntegrityReport, type AuditLogRetentionMonthlyReview } from '
 import { type OperationalClosingMonthlyReview, type OperationalClosingStoreBenchmarkActionTemplate } from '@/lib/operational_closing_review';
 import { type AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
 
-  const auditActionLabel = (actionType: AuditLog['actionType']) => {
-    const labels: Record<AuditLog['actionType'], string> = {
-      login: 'ログイン',
-      prescription_ocr: '処方箋OCR読込',
-      prescription_edit: '薬歴完了・変更',
-      billing_toggle: '点数算定切替',
-      claim_lifecycle: '請求状態変更',
-      daily_closing_approval: '日次締め承認',
-      daily_closing_kpi_action: 'KPI改善アクション',
-      session_lock: 'セッションロック',
-      print: '印刷実行',
-      uke_export: 'レセプト出力',
-      stock_update: '在庫更新',
-      user_switch: '操作者切替',
-      facility_settings_update: '施設基準設定変更',
-      drug_master_update: '医薬品マスタ更新',
-      patient_medication_info_template: '薬情テンプレ承認',
-      follow_up_record: '服薬フォロー記録',
-      ai_suggestion_review: 'AI補助提案確認',
-      electronic_prescription: '電子処方箋受付',
-      external_device_handoff: '調剤機器連携',
-      staff_create: 'スタッフ追加',
-      staff_delete: 'スタッフ削除',
-      staff_credential_recovery: 'スタッフ認証復旧',
-      passkey_register: 'パスキー登録',
-      audit_export: '監査ログ書出',
-      audit_retention_approval: '監査ログ保全確認',
-      backup_export: 'バックアップ書出',
-      backup_schedule_update: 'バックアップ予定変更',
-      backup_external_storage: '外部保存確認',
-      backup_external_transfer_manifest: '外部保存連携JSON',
-      backup_drill: '復旧テスト',
-      backup_import: 'バックアップ復旧',
-      official_spec_review: '公式仕様点検'
-    };
-    return labels[actionType] || actionType;
-  };
+import { auditActionLabel } from '@/lib/audit_settings_helpers';
 
 interface AuditSettingsTabProps {
   currentUser: User;
@@ -195,26 +159,26 @@ export default function AuditSettingsTab({
                   gap: '0.35rem',
                   color: auditIntegrityColor,
                   fontWeight: 800,
-                  fontSize: '0.92rem'
+                  fontSize: 'var(--fs-base)'
                 }}
               >
                 {isCheckingAuditIntegrity ? <Loader2 size={17} className="animate-spin" /> : auditIntegrity?.invalid ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
                 監査ログ整合性: {auditIntegrityStatus}
               </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                 総数 {auditIntegrity?.total ?? auditLogs.length} / 署名済み {auditIntegrity?.signed ?? 0} / 未署名 {auditIntegrity?.unsigned ?? 0} / 異常 {auditIntegrity?.invalid ?? 0}
               </span>
-              <span style={{ color: 'var(--text-ghost)', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+              <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-sm)', fontFamily: 'monospace' }}>
                 最新 {latestAuditHashPreview}
               </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>
                 JSONは責任者保全欄付き
               </span>
             </div>
             <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
                 className="btn-secondary flex-center gap-2"
-                style={{ padding: '0.55rem 0.85rem', fontSize: '0.84rem' }}
+                style={{ padding: '0.55rem 0.85rem', fontSize: 'var(--fs-md)' }}
                 onClick={handleExportAuditLogs}
                 disabled={!canViewAuditLogs || isExportingAuditLogs || auditLogs.length === 0}
                 title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -224,7 +188,7 @@ export default function AuditSettingsTab({
               </button>
               <button
                 className="btn-secondary flex-center gap-2"
-                style={{ padding: '0.55rem 0.85rem', fontSize: '0.84rem' }}
+                style={{ padding: '0.55rem 0.85rem', fontSize: 'var(--fs-md)' }}
                 onClick={handleExportAnonymousDiagnostic}
                 disabled={!canViewAuditLogs || isExportingAnonymousDiagnostic}
                 title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : '患者情報などを含めないサポート用JSONを出力'}
@@ -235,7 +199,7 @@ export default function AuditSettingsTab({
               </button>
               <button
                 className="btn-secondary flex-center gap-2"
-                style={{ padding: '0.55rem 0.85rem', fontSize: '0.84rem' }}
+                style={{ padding: '0.55rem 0.85rem', fontSize: 'var(--fs-md)' }}
                 onClick={handleExportAuditRetentionLedgerCsv}
                 disabled={!canViewAuditLogs || isExportingAuditRetentionLedger || auditLogs.length === 0}
                 title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -257,7 +221,7 @@ export default function AuditSettingsTab({
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>監査ログ保全月次棚卸</h3>
-                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                   {auditRetentionReview.monthLabel} / 最新ハッシュ {latestAuditHashPreview}
                 </p>
               </div>
@@ -268,7 +232,7 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '999px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   {auditRetentionReview.statusLabel}
@@ -279,14 +243,14 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '999px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   {auditRetentionReview.managerReviewLabel}
                 </span>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleRecordAuditRetentionManagerReview}
                   disabled={!canViewAuditLogs || isRecordingAuditRetentionManagerReview || auditLogs.length === 0}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : auditRetentionReview.managerReviewRequiredActions[0]}
@@ -297,7 +261,7 @@ export default function AuditSettingsTab({
                 </button>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleExportAuditRetentionMonthlyReviewCsv}
                   disabled={!canViewAuditLogs || isExportingAuditRetentionReview || auditLogs.length === 0}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -321,7 +285,7 @@ export default function AuditSettingsTab({
                 ['対応', auditRetentionReview.actionLabel]
               ].map(([label, value]) => (
                 <div key={label} style={{ borderLeft: '3px solid var(--primary)', padding: '0.2rem 0 0.2rem 0.65rem' }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
                   <div style={{ color: label === '差し戻し' ? auditRetentionReviewColor : label === '責任者確認' ? auditRetentionManagerReviewColor : 'var(--text-main)', fontSize: '1.02rem', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
@@ -331,18 +295,18 @@ export default function AuditSettingsTab({
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: '0.8rem',
               color: 'var(--text-muted)',
-              fontSize: '0.8rem'
+              fontSize: 'var(--fs-sm)'
             }}>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新JSON</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新JSON</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700, wordBreak: 'break-all' }}>{latestRetentionJsonLabel}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新保全台帳</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新保全台帳</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700, wordBreak: 'break-all' }}>{latestRetentionLedgerLabel}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>差し戻し理由</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>差し戻し理由</div>
                 <div style={{ color: auditRetentionReview.returnReasons.length > 0 ? auditRetentionReviewColor : 'var(--text-main)', fontWeight: 700 }}>
                   {auditRetentionReview.returnReasons.length > 0 ? auditRetentionReview.returnReasons.join(' / ') : 'なし'}
                 </div>
@@ -361,7 +325,7 @@ export default function AuditSettingsTab({
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>AI補助フィードバック月次レビュー</h3>
-                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                   {aiSuggestionFeedbackReview.monthLabel} / 採否ログ {aiSuggestionFeedbackReview.totalCount}件
                 </p>
               </div>
@@ -372,7 +336,7 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '8px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   品質ゲート: {aiSuggestionFeedbackReview.qualityGate.statusLabel}
@@ -383,14 +347,14 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '8px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   {aiSuggestionFeedbackReview.statusLabel}
                 </span>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleExportAiSuggestionFeedbackReviewCsv}
                   disabled={!canViewAuditLogs || isExportingAiSuggestionFeedbackReview || isExportingAiSuggestionFeedbackBi}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -400,7 +364,7 @@ export default function AuditSettingsTab({
                 </button>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleExportAiSuggestionFeedbackBiJson}
                   disabled={!canViewAuditLogs || isExportingAiSuggestionFeedbackReview || isExportingAiSuggestionFeedbackBi}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -410,7 +374,7 @@ export default function AuditSettingsTab({
                 </button>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleApplyAiQualityRecommendation}
                   disabled={
                     !canManageFacility
@@ -455,18 +419,18 @@ export default function AuditSettingsTab({
                   ['モード確認', aiSuggestionFeedbackReview.qualityGate.modeAlignmentLabel]
                 ].map(([label, value]) => (
                   <div key={label}>
-                    <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>{label}</div>
-                    <div style={{ color: 'var(--text-main)', fontSize: '0.96rem', fontWeight: 800, overflowWrap: 'anywhere' }}>{value}</div>
+                    <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
+                    <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 800, overflowWrap: 'anywhere' }}>{value}</div>
                   </div>
                 ))}
               </div>
-              <div style={{ color: aiSuggestionQualityGateColor, fontSize: '0.8rem', fontWeight: 750, marginBottom: '0.45rem' }}>
+              <div style={{ color: aiSuggestionQualityGateColor, fontSize: 'var(--fs-sm)', fontWeight: 750, marginBottom: '0.45rem' }}>
                 {aiSuggestionFeedbackReview.qualityGate.reasons.join(' / ')}
               </div>
-              <div style={{ color: 'var(--text-main)', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.45rem' }}>
+              <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-sm)', fontWeight: 700, marginBottom: '0.45rem' }}>
                 {aiSuggestionFeedbackReview.qualityGate.requiredActions.join(' / ')}
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', fontWeight: 650 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 650 }}>
                 {aiSuggestionFeedbackReview.qualityGate.evaluationNote}
               </div>
             </div>
@@ -487,7 +451,7 @@ export default function AuditSettingsTab({
                 ['対応', aiSuggestionFeedbackReview.actionLabel]
               ].map(([label, value]) => (
                 <div key={label} style={{ borderLeft: '3px solid #7c3aed', padding: '0.2rem 0 0.2rem 0.65rem' }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
                   <div style={{ color: label === '対応' ? aiSuggestionFeedbackColor : 'var(--text-main)', fontSize: '1.02rem', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
@@ -497,10 +461,10 @@ export default function AuditSettingsTab({
               gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: '0.8rem',
               color: 'var(--text-muted)',
-              fontSize: '0.8rem'
+              fontSize: 'var(--fs-sm)'
             }}>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新採否</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新採否</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700 }}>
                   {aiSuggestionFeedbackReview.latestRecord
                     ? `${aiSuggestionFeedbackReview.latestRecord.dateLabel} ${aiSuggestionFeedbackReview.latestRecord.decisionLabel}`
@@ -508,13 +472,13 @@ export default function AuditSettingsTab({
                 </div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>最新提案</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>最新提案</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 700 }}>
                   {aiSuggestionFeedbackReview.latestRecord?.suggestionTitle || '未記録'}
                 </div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.73rem', fontWeight: 800 }}>次の対応</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>次の対応</div>
                 <div style={{ color: aiSuggestionFeedbackColor, fontWeight: 700 }}>
                   {aiSuggestionFeedbackReview.requiredActions.join(' / ')}
                 </div>
@@ -533,7 +497,7 @@ export default function AuditSettingsTab({
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>日次締め月次レビュー</h3>
-                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                   {dailyClosingReview.monthLabel} / 最新承認ハッシュ {latestClosingHashPreview}
                 </p>
               </div>
@@ -544,14 +508,14 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '999px',
                   padding: '0.18rem 0.65rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800
                 }}>
                   {dailyClosingReviewStatus}
                 </span>
                 <button
                   className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.7rem', fontSize: '0.8rem' }}
+                  style={{ padding: '0.45rem 0.7rem', fontSize: 'var(--fs-sm)' }}
                   onClick={handleExportDailyClosingReviewCsv}
                   disabled={!canViewAuditLogs || isExportingDailyClosingReview}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -576,7 +540,7 @@ export default function AuditSettingsTab({
                 ['残タスク合計', `${dailyClosingReview.totalClosingBlockers}件`]
               ].map(([label, value]) => (
                 <div key={label} style={{ borderLeft: '3px solid var(--primary)', padding: '0.2rem 0 0.2rem 0.65rem' }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
                   <div style={{ color: 'var(--text-main)', fontSize: '1.05rem', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
@@ -601,7 +565,7 @@ export default function AuditSettingsTab({
                 ['問い合わせ負荷合計', `${dailyClosingReview.totalSupportCaseCount}件`, '#7c3aed']
               ].map(([label, value, color]) => (
                 <div key={label} style={{ borderLeft: `3px solid ${color}`, padding: '0.2rem 0 0.2rem 0.65rem', minWidth: 0 }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
                   <div style={{ color, fontSize: '1.05rem', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
@@ -618,8 +582,8 @@ export default function AuditSettingsTab({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap', marginBottom: '0.7rem' }}>
                 <div>
-                  <div style={{ color: 'var(--text-main)', fontSize: '0.92rem', fontWeight: 850 }}>店舗別KPIベンチマーク</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', fontWeight: 700 }}>
+                  <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 850 }}>店舗別KPIベンチマーク</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>
                     {dailyClosingReview.storeBenchmark.currentStoreName} / 比較店舗 {dailyClosingReview.storeBenchmark.storeCount}件
                   </div>
                 </div>
@@ -630,14 +594,14 @@ export default function AuditSettingsTab({
                     border: '1px solid rgba(148, 163, 184, 0.35)',
                     borderRadius: '999px',
                     padding: '0.16rem 0.55rem',
-                    fontSize: '0.72rem',
+                    fontSize: 'var(--fs-xs)',
                     fontWeight: 800
                   }}>
                     {dailyClosingReview.storeBenchmark.statusLabel}
                   </span>
                   <button
                     className="btn-secondary flex-center gap-2"
-                    style={{ padding: '0.35rem 0.55rem', fontSize: '0.74rem' }}
+                    style={{ padding: '0.35rem 0.55rem', fontSize: 'var(--fs-xs)' }}
                     onClick={handleExportDailyClosingStoreBenchmarkJson}
                     disabled={!canViewAuditLogs || isExportingDailyClosingStoreBenchmark}
                     title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : '患者情報なしの店舗別KPI JSONを書き出します'}
@@ -660,8 +624,8 @@ export default function AuditSettingsTab({
                     : '比較不可']
                 ].map(([label, value]) => (
                   <div key={label}>
-                    <div style={{ color: 'var(--text-ghost)', fontSize: '0.7rem', fontWeight: 800 }}>{label}</div>
-                    <div style={{ color: 'var(--text-main)', fontSize: '0.96rem', fontWeight: 850 }}>{value}</div>
+                    <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
+                    <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', fontWeight: 850 }}>{value}</div>
                   </div>
                 ))}
               </div>
@@ -676,7 +640,7 @@ export default function AuditSettingsTab({
                   borderBottom: '1px solid rgba(148, 163, 184, 0.28)'
                 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(126px, 1.2fr) repeat(3, minmax(92px, 1fr))', gap: '0.55rem', minWidth: '430px', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(126px, 1.2fr) repeat(3, minmax(92px, 1fr))', gap: '0.55rem', minWidth: '430px', color: 'var(--text-muted)', fontSize: 'var(--fs-xs)' }}>
                   <strong style={{ color: 'var(--text-main)' }}>現場KPI（日平均）</strong>
                   <span>自店</span>
                   <span>全店</span>
@@ -695,7 +659,7 @@ export default function AuditSettingsTab({
                 </div>
               </div>
               {dailyClosingReview.storeBenchmark.storeSummaries.length > 0 && (
-                <div style={{ display: 'grid', gap: '0.4rem', marginBottom: '0.65rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                <div style={{ display: 'grid', gap: '0.4rem', marginBottom: '0.65rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>
                   {dailyClosingReview.storeBenchmark.storeSummaries.slice(0, 3).map((summary) => (
                     <div key={summary.storeKey} style={{ display: 'grid', gridTemplateColumns: 'minmax(94px, 1fr) auto auto auto', gap: '0.55rem', alignItems: 'center' }}>
                       <span style={{ color: 'var(--text-main)', fontWeight: 800 }}>{summary.storeName}</span>
@@ -706,45 +670,45 @@ export default function AuditSettingsTab({
                   ))}
                 </div>
               )}
-              <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.78rem', fontWeight: 750 }}>
+              <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-sm)', fontWeight: 750 }}>
                 {dailyClosingReview.storeBenchmark.requiredActions.join(' / ')}
               </div>
               <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.28)', marginTop: '0.65rem', paddingTop: '0.65rem', display: 'grid', gap: '0.25rem' }}>
-                <div style={{ color: 'var(--text-main)', fontSize: '0.78rem', fontWeight: 850 }}>
+                <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-sm)', fontWeight: 850 }}>
                   効果測定
                 </div>
-                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.74rem', fontWeight: 750 }}>
+                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-xs)', fontWeight: 750 }}>
                   {dailyClosingReview.storeBenchmark.actionEffectSummary.statusLabel}
                   {dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution
                     ? ` / ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.title} / 実行後 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.measurementApprovedDayCount}/${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.measurementRequiredDayCount}日 / 完了率差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.completionRateDeltaLabel} / 残タスク平均差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.closingBlockerAverageDeltaLabel} / 在庫不足差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.inventoryShortageDeltaLabel} / 入庫差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.inventoryReceivingDeltaLabel} / フォロー差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.followUpDueDeltaLabel} / 問い合わせ差 ${dailyClosingReview.storeBenchmark.actionEffectSummary.latestExecution.supportCaseDeltaLabel}`
                     : ' / 実行記録なし'}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', lineHeight: 1.5 }}>
                   {dailyClosingReview.storeBenchmark.actionEffectSummary.requiredActions.join(' / ')}
                 </div>
               </div>
               <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.28)', marginTop: '0.65rem', paddingTop: '0.65rem', display: 'grid', gap: '0.35rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--text-main)', fontSize: '0.78rem', fontWeight: 850 }}>
+                  <span style={{ color: 'var(--text-main)', fontSize: 'var(--fs-sm)', fontWeight: 850 }}>
                     未実施フォロー
                   </span>
-                  <span style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.72rem', fontWeight: 850 }}>
+                  <span style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-xs)', fontWeight: 850 }}>
                     {dailyClosingReview.storeBenchmark.actionFollowUpSummary.statusLabel}
                   </span>
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', lineHeight: 1.5 }}>
                   未実施 {dailyClosingReview.storeBenchmark.actionFollowUpSummary.pendingCount}件 / 期限超過 {dailyClosingReview.storeBenchmark.actionFollowUpSummary.overdueCount}件 / 期限間近 {dailyClosingReview.storeBenchmark.actionFollowUpSummary.dueSoonCount}件
                   {dailyClosingReview.storeBenchmark.actionFollowUpSummary.nextDue
                     ? ` / 次期限 ${dailyClosingReview.storeBenchmark.actionFollowUpSummary.nextDue.dueDateLabel}`
                     : ''}
                 </div>
-                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.72rem', fontWeight: 750, lineHeight: 1.5 }}>
+                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-xs)', fontWeight: 750, lineHeight: 1.5 }}>
                   担当者・横断フォロー {dailyClosingReview.storeBenchmark.actionAssignmentSummary.statusLabel} / 未完了 {dailyClosingReview.storeBenchmark.actionAssignmentSummary.openAssignmentCount}件 / 店舗横断 {dailyClosingReview.storeBenchmark.actionAssignmentSummary.openCrossStoreFollowUpCount}件
                 </div>
-                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.7rem', fontWeight: 750, lineHeight: 1.5 }}>
+                <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-xs)', fontWeight: 750, lineHeight: 1.5 }}>
                   エスカレーション {dailyClosingReview.storeBenchmark.actionAssignmentSummary.escalationLabel} / 延期中 {dailyClosingReview.storeBenchmark.actionAssignmentSummary.activePostponementCount}件
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', lineHeight: 1.5 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', lineHeight: 1.5 }}>
                   担当 {dailyClosingReview.storeBenchmark.actionAssignmentSummary.assigneeLabels.join(' / ') || '未設定'}
                   {dailyClosingReview.storeBenchmark.actionAssignmentSummary.crossStoreTargetStoreNames.length > 0
                     ? ` / 横断先 ${dailyClosingReview.storeBenchmark.actionAssignmentSummary.crossStoreTargetStoreNames.join('、')}`
@@ -752,7 +716,7 @@ export default function AuditSettingsTab({
                 </div>
                 <div style={{ display: 'grid', gap: '0.28rem' }}>
                   {dailyClosingReview.storeBenchmark.actionFollowUps.slice(0, 2).map((followUp) => (
-                    <div key={followUp.templateId} style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                    <div key={followUp.templateId} style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap', color: 'var(--text-muted)', fontSize: 'var(--fs-xs)' }}>
                       <span style={{ color: 'var(--text-main)', fontWeight: 800 }}>{followUp.title}</span>
                       <span>{followUp.statusLabel}</span>
                       <span>担当 {followUp.assigneeLabel}</span>
@@ -772,7 +736,7 @@ export default function AuditSettingsTab({
               </div>
               {dailyClosingReview.storeBenchmark.actionTemplates.length > 0 && (
                 <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.28)', marginTop: '0.65rem', paddingTop: '0.65rem' }}>
-                  <div style={{ color: 'var(--text-main)', fontSize: '0.78rem', fontWeight: 850, marginBottom: '0.45rem' }}>
+                  <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-sm)', fontWeight: 850, marginBottom: '0.45rem' }}>
                     改善アクション
                   </div>
                   <div style={{ display: 'grid', gap: '0.55rem' }}>
@@ -791,21 +755,21 @@ export default function AuditSettingsTab({
                       return (
                         <div key={template.id} style={{ display: 'grid', gap: '0.28rem', borderLeft: `3px solid ${priorityColor}`, paddingLeft: '0.6rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                            <span style={{ color: 'var(--text-main)', fontSize: '0.8rem', fontWeight: 850 }}>
+                            <span style={{ color: 'var(--text-main)', fontSize: 'var(--fs-sm)', fontWeight: 850 }}>
                               {template.title}
                             </span>
-                            <span style={{ color: priorityColor, fontSize: '0.68rem', fontWeight: 850 }}>
+                            <span style={{ color: priorityColor, fontSize: 'var(--fs-2xs)', fontWeight: 850 }}>
                               優先度 {priorityLabel}
                             </span>
                           </div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem', lineHeight: 1.55 }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', lineHeight: 1.55 }}>
                             {template.steps.join(' / ')}
                           </div>
-                          <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: '0.72rem', fontWeight: 750 }}>
+                          <div style={{ color: dailyClosingStoreBenchmarkColor, fontSize: 'var(--fs-xs)', fontWeight: 750 }}>
                             {template.expectedOutcome}
                           </div>
                           {followUp && (
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 750 }}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 750 }}>
                               期限 {followUp.dueDateLabel} / {followUp.statusLabel} / 担当 {followUp.assigneeLabel}
                               {followUp.crossStoreTargetStoreNames.length > 0
                                 ? ` / 横断 ${followUp.crossStoreTargetStoreNames.join('、')}`
@@ -818,7 +782,7 @@ export default function AuditSettingsTab({
                           <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                             <button
                               className="btn-secondary flex-center gap-2"
-                              style={{ padding: '0.32rem 0.55rem', fontSize: '0.72rem' }}
+                              style={{ padding: '0.32rem 0.55rem', fontSize: 'var(--fs-xs)' }}
                               onClick={() => handleRecordDailyClosingKpiAction(template)}
                               disabled={!canApproveDailyClosing || recordingDailyClosingKpiActionId === template.id}
                               title={!canApproveDailyClosing ? getPermissionDeniedMessage(currentUser, 'approve_daily_closing') : 'この改善アクションを監査ログに記録します'}
@@ -828,7 +792,7 @@ export default function AuditSettingsTab({
                             </button>
                             <button
                               className="btn-secondary flex-center gap-2"
-                              style={{ padding: '0.32rem 0.55rem', fontSize: '0.72rem' }}
+                              style={{ padding: '0.32rem 0.55rem', fontSize: 'var(--fs-xs)' }}
                               onClick={() => handlePostponeDailyClosingKpiAction(template)}
                               disabled={!canApproveDailyClosing || followUp?.status === 'completed' || postponingDailyClosingKpiActionId === template.id}
                               title={!canApproveDailyClosing ? getPermissionDeniedMessage(currentUser, 'approve_daily_closing') : '延期理由と再期限を監査ログに記録します'}
@@ -859,7 +823,7 @@ export default function AuditSettingsTab({
               }}
             >
               <div style={{ minWidth: '150px' }}>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.74rem', fontWeight: 700 }}>前月比較</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>前月比較</div>
                 <div style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -868,13 +832,13 @@ export default function AuditSettingsTab({
                   border: '1px solid rgba(148, 163, 184, 0.35)',
                   borderRadius: '999px',
                   padding: '0.16rem 0.58rem',
-                  fontSize: '0.78rem',
+                  fontSize: 'var(--fs-sm)',
                   fontWeight: 800,
                   marginTop: '0.2rem'
                 }}>
                   {dailyClosingComparison.statusLabel}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.25rem' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', marginTop: '0.25rem' }}>
                   {dailyClosingComparison.previousMonth.monthLabel}比
                 </div>
               </div>
@@ -889,15 +853,15 @@ export default function AuditSettingsTab({
                 ['問い合わせ負荷', dailyClosingComparison.supportCaseDeltaLabel]
               ].map(([label, value]) => (
                 <div key={label} style={{ minWidth: '120px', borderLeft: '3px solid rgba(37, 99, 235, 0.45)', padding: '0.1rem 0 0.1rem 0.55rem' }}>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 700 }}>{label}</div>
-                  <div style={{ color: dailyClosingComparisonColor, fontSize: '0.98rem', fontWeight: 800 }}>{value}</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 700 }}>{label}</div>
+                  <div style={{ color: dailyClosingComparisonColor, fontSize: 'var(--fs-base)', fontWeight: 800 }}>{value}</div>
                 </div>
               ))}
             </div>
             <div style={{ marginBottom: '0.95rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
-                <div style={{ color: 'var(--text-main)', fontSize: '0.84rem', fontWeight: 800 }}>複数月KPI比較</div>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.75rem' }}>
+                <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-md)', fontWeight: 800 }}>複数月KPI比較</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)' }}>
                   直近{dailyClosingReview.monthlyKpiHistory.length}か月
                 </div>
               </div>
@@ -930,7 +894,7 @@ export default function AuditSettingsTab({
                         background: month.approvalCount > 0 ? '#ffffff' : '#f8fafc'
                       }}
                     >
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 800 }}>{month.monthLabel}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{month.monthLabel}</div>
                       <div style={{ height: '58px', display: 'flex', alignItems: 'flex-end', gap: '0.45rem', marginTop: '0.35rem' }}>
                         <div style={{
                           width: '18px',
@@ -940,15 +904,15 @@ export default function AuditSettingsTab({
                           border: '1px solid rgba(15, 23, 42, 0.08)'
                         }} />
                         <div>
-                          <div style={{ color: blockerTone, fontSize: '0.98rem', fontWeight: 850 }}>{month.averageCompletionRateLabel}</div>
-                          <div style={{ color: 'var(--text-ghost)', fontSize: '0.68rem' }}>{month.approvedDayCount}日承認</div>
+                          <div style={{ color: blockerTone, fontSize: 'var(--fs-base)', fontWeight: 850 }}>{month.averageCompletionRateLabel}</div>
+                          <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-2xs)' }}>{month.approvedDayCount}日承認</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.45rem', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 700 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.45rem', marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: 'var(--fs-2xs)', fontWeight: 700 }}>
                         <span>残日 {month.daysWithBlockers}</span>
                         <span>残 {month.totalClosingBlockers}</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.25rem', marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.66rem', fontWeight: 700 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '0.25rem', marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: 'var(--fs-2xs)', fontWeight: 700 }}>
                         <span title="在庫不足品目数">不足 {month.totalInventoryShortages}</span>
                         <span title="入庫登録件数">入庫 {month.totalInventoryReceivings}</span>
                         <span title="服薬フォロー候補数">フォロー {month.totalFollowUpDueCount}</span>
@@ -962,8 +926,8 @@ export default function AuditSettingsTab({
             {dailyClosingReview.allApprovals.length > 0 && (
               <div style={{ marginBottom: '0.95rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
-                  <div style={{ color: 'var(--text-main)', fontSize: '0.84rem', fontWeight: 800 }}>KPI推移</div>
-                  <div style={{ color: 'var(--text-ghost)', fontSize: '0.75rem' }}>
+                  <div style={{ color: 'var(--text-main)', fontSize: 'var(--fs-md)', fontWeight: 800 }}>KPI推移</div>
+                  <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)' }}>
                     完了率 {dailyClosingReview.completionTrendLabel} / 残タスク {dailyClosingReview.blockerTrendLabel}
                   </div>
                 </div>
@@ -1004,10 +968,10 @@ export default function AuditSettingsTab({
                             border: '1px solid rgba(15, 23, 42, 0.08)'
                           }} />
                         </div>
-                        <span style={{ color: blockerCount > 0 ? '#b45309' : '#15803d', fontSize: '0.68rem', fontWeight: 800 }}>
+                        <span style={{ color: blockerCount > 0 ? '#b45309' : '#15803d', fontSize: 'var(--fs-2xs)', fontWeight: 800 }}>
                           {approval.completionRate === undefined ? '-' : `${approval.completionRate}%`}
                         </span>
-                        <span style={{ color: 'var(--text-ghost)', fontSize: '0.66rem' }}>
+                        <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-2xs)' }}>
                           {approval.dateKey.slice(-2)}日
                         </span>
                       </div>
@@ -1018,7 +982,7 @@ export default function AuditSettingsTab({
             )}
             <div style={{ display: 'grid', gap: '0.45rem' }}>
               {dailyClosingReview.recentApprovals.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>今月の日次締め承認は未記録です。</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>今月の日次締め承認は未記録です。</div>
               ) : (
                 dailyClosingReview.recentApprovals.map((approval) => (
                   <div
@@ -1030,7 +994,7 @@ export default function AuditSettingsTab({
                       alignItems: 'center',
                       padding: '0.45rem 0',
                       borderTop: '1px solid rgba(148, 163, 184, 0.22)',
-                      fontSize: '0.82rem'
+                      fontSize: 'var(--fs-md)'
                     }}
                   >
                     <span style={{ fontWeight: 700, color: 'var(--text-main)', minWidth: '7rem' }}>{approval.dateLabel}</span>
@@ -1059,21 +1023,21 @@ export default function AuditSettingsTab({
 
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>操作ユーザーで絞り込み</label>
+              <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 600 }}>操作ユーザーで絞り込み</label>
               <input
                 type="text"
                 placeholder="例: 山田"
                 value={filterUser}
                 onChange={(e) => setFilterUser(e.target.value)}
-                style={{ padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.9rem' }}
+                style={{ padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: 'var(--fs-base)' }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', width: '200px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600 }}>操作種別</label>
+              <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 600 }}>操作種別</label>
               <select
                 value={filterAction}
                 onChange={(e) => setFilterAction(e.target.value)}
-                style={{ padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'white', fontSize: '0.9rem' }}
+                style={{ padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '6px', background: 'white', fontSize: 'var(--fs-base)' }}
               >
                 <option value="">全種別</option>
                 <option value="login">ログイン</option>
@@ -1111,7 +1075,7 @@ export default function AuditSettingsTab({
           </div>
 
           <div className="table-wrapper" style={{ maxHeight: '500px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-md)' }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border)', background: 'var(--bg-muted)' }}>
                   <th style={{ padding: '0.75rem' }}>日時</th>
@@ -1173,7 +1137,7 @@ export default function AuditSettingsTab({
                           </td>
                           <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--text-main)' }}>
                             {log.userName}
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-ghost)', marginLeft: '0.25rem' }}>
+                            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-ghost)', marginLeft: '0.25rem' }}>
                               ({log.userRole === 'pharmacist' ? '薬剤師' : log.userRole === 'clerk' ? '事務' : '管理'})
                             </span>
                           </td>
@@ -1182,7 +1146,7 @@ export default function AuditSettingsTab({
                               padding: '2px 6px',
                               borderRadius: '4px',
                               color: 'white',
-                              fontSize: '0.75rem',
+                              fontSize: 'var(--fs-xs)',
                               background: actionBadgeColor,
                               fontWeight: 600
                             }}>

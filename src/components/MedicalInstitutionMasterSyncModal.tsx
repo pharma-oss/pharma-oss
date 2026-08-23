@@ -190,12 +190,12 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
         >
           <Database size={32} style={{ color: 'var(--primary)' }} />
           <div>
-            <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>現在の登録施設数</div>
+            <div style={{ fontSize: 'var(--fs-md)', color: 'var(--text-muted)' }}>現在の登録施設数</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              {stats.totalCount.toLocaleString()} <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>施設</span>
+              {stats.totalCount.toLocaleString()} <span style={{ fontSize: 'var(--fs-base)', fontWeight: 600 }}>施設</span>
             </div>
             {stats.lastSyncTimestamp && (
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-ghost)', marginTop: '0.2rem' }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-ghost)', marginTop: '0.2rem' }}>
                 最終更新: {new Date(stats.lastSyncTimestamp).toLocaleString('ja-JP')}
               </div>
             )}
@@ -209,7 +209,7 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
               borderRadius: '8px',
               background: 'var(--warning-soft)',
               color: 'var(--warning)',
-              fontSize: '0.85rem',
+              fontSize: 'var(--fs-md)',
               fontWeight: 700,
               display: 'flex',
               alignItems: 'flex-start',
@@ -233,10 +233,10 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
         >
           <label style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
             <Upload size={28} style={{ color: 'var(--primary)' }} />
-            <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>
+            <span style={{ fontSize: 'var(--fs-base)', fontWeight: 700 }}>
               {isProcessing ? '更新・解析中...' : '地方厚生局「コード内容別医療機関一覧表」(ZIP / Excel) を取り込む'}
             </span>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>
               各地方厚生局サイトの「医科」または「歯科」の一覧表(.zip / .xlsx)をそのままアップロードできます。
               病院・診療所・歯科のみ取り込み、薬局データは自動的に除外されます。
               都道府県ごとに既存データのみ置き換わり、他都道府県分は保持されます。
@@ -263,7 +263,7 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
         >
           <label style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
             <FileText size={22} style={{ color: 'var(--text-muted)' }} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--text-muted)' }}>
               {isProcessing ? '更新・解析中...' : '独自整形済みのCSV / JSONを取り込む(上級者向け)'}
             </span>
             <input
@@ -283,7 +283,7 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
               borderRadius: '8px',
               background: message.isError ? 'var(--danger-soft)' : 'var(--success-soft)',
               color: message.isError ? 'var(--danger)' : 'var(--success)',
-              fontSize: '0.88rem',
+              fontSize: 'var(--fs-md)',
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',

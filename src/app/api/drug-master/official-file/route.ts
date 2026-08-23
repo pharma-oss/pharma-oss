@@ -3,17 +3,17 @@ import {
   DrugMasterOfficialFileFetchError,
   fetchDrugMasterOfficialFile
 } from '@/lib/drug_master_official_file';
+import { getAppEnv } from '@/lib/env';
 
 export async function GET(request: NextRequest) {
   const fileUrl = request.nextUrl.searchParams.get('url') || '';
-  const timeoutMs = Number(process.env.DRUG_MASTER_OFFICIAL_FILE_TIMEOUT_MS || 20000);
-  const maxBytes = Number(process.env.DRUG_MASTER_OFFICIAL_FILE_MAX_BYTES || 64 * 1024 * 1024);
+  const env = getAppEnv();
 
   try {
     const result = await fetchDrugMasterOfficialFile({
       fileUrl,
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 20000,
-      maxBytes: Number.isFinite(maxBytes) ? maxBytes : undefined
+      timeoutMs: env.drugMasterOfficialFileTimeoutMs,
+      maxBytes: env.drugMasterOfficialFileMaxBytes
     });
     return new NextResponse(result.arrayBuffer, {
       status: 200,

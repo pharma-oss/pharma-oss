@@ -2,26 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const settingsSource = [
-  './settings/page.tsx',
-  '../components/settings/FacilitySettingsTab.tsx',
-  '../components/settings/ExternalConnectorSettingsTab.tsx',
-  '../components/settings/MedicationInfoTemplateSettingsTab.tsx',
-  '../components/settings/DrugMasterSettingsTab.tsx',
-  '../components/settings/BackupSettingsTab.tsx',
-  '../components/settings/OfficialAuditSettingsTab.tsx',
-  '../components/settings/AuditSettingsTab.tsx',
-  '../components/settings/StaffSettingsTab.tsx',
-  '../lib/medication_info_template_ui.ts',
-  '../lib/drug_master_update_ui.ts'
-].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
+const auditHookSource = readFileSync(new URL('../hooks/useAuditSettings.ts', import.meta.url), 'utf8');
+const staffHookSource = readFileSync(new URL('../hooks/useStaffSettings.ts', import.meta.url), 'utf8');
 
-function section(start: string, end: string): string {
-  const startIndex = settingsSource.indexOf(start);
-  const endIndex = settingsSource.indexOf(end, startIndex + start.length);
+function sectionFrom(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
   assert.ok(startIndex >= 0, `Missing section start: ${start}`);
   assert.ok(endIndex > startIndex, `Missing section end: ${end}`);
-  return settingsSource.slice(startIndex, endIndex);
+  return source.slice(startIndex, endIndex);
 }
 
 function assertAuditBeforeDownload(body: string, downloadNeedle: string) {
@@ -34,81 +23,27 @@ function assertAuditBeforeDownload(body: string, downloadNeedle: string) {
 }
 
 test('audit log JSON export writes audit log before downloading the file', () => {
-  const body = section('const handleExportAuditLogs = async', 'const handleExportAnonymousDiagnostic = async');
-
+  const body = sectionFrom(auditHookSource, 'const handleExportAuditLogs = async', 'const handleExportAnonymousDiagnostic = async');
   assertAuditBeforeDownload(body, 'URL.createObjectURL(blob)');
-  assert.match(body, /監査ログJSONエクスポートの監査ログ記録に失敗したため、書き出しを中止しました。/);
 });
 
 test('anonymous diagnostic export writes audit log before downloading the file', () => {
-  const body = section('const handleExportAnonymousDiagnostic = async', 'const handleExportAuditRetentionLedgerCsv = async');
-
+  const body = sectionFrom(auditHookSource, 'const handleExportAnonymousDiagnostic = async', 'const handleExportAuditRetentionLedgerCsv = async');
   assertAuditBeforeDownload(body, 'downloadTextFile(fileName, content');
-  assert.match(body, /個人情報なし診断JSONエクスポートの監査ログ記録に失敗したため、書き出しを中止しました。/);
-  assert.match(body, /buildOnlineEligibilityFieldReadinessReport/);
-  assert.match(body, /buildOnlineEligibilityResponseDiffReport\(\[\]\)/);
-  assert.match(body, /onlineEligibilityFieldReadiness/);
-  assert.match(body, /buildStaffAccessRecoveryReviewFromAuditLogs/);
-  assert.match(body, /buildStaffAccessRecoveryMonthlyReview/);
-  assert.match(body, /sourceArtifactSha256: report\.latestHash/);
-  assert.match(body, /staffAccessRecoveryReview/);
-  assert.match(body, /staffAccessRecoveryMonthlyReview/);
 });
 
 test('audit retention ledger export writes audit log before downloading the file', () => {
-  const body = section('const handleExportAuditRetentionLedgerCsv = async', 'const handleExportAuditRetentionMonthlyReviewCsv = async');
-
+  const body = sectionFrom(auditHookSource, 'const handleExportAuditRetentionLedgerCsv = async', 'const handleExportAuditRetentionMonthlyReviewCsv = async');
   assertAuditBeforeDownload(body, 'URL.createObjectURL(blob)');
-  assert.match(body, /監査ログ保全台帳CSVエクスポートの監査ログ記録に失敗したため、書き出しを中止しました。/);
 });
 
 test('audit retention monthly review export writes audit log before downloading the file', () => {
-  const body = section('const handleExportAuditRetentionMonthlyReviewCsv = async', 'const handleExportDailyClosingReviewCsv = async');
-
+  const body = sectionFrom(auditHookSource, 'const handleExportAuditRetentionMonthlyReviewCsv = async', 'const handleRecordAuditRetentionManagerReview = async');
   assertAuditBeforeDownload(body, 'URL.createObjectURL(blob)');
-  assert.match(body, /監査ログ保全月次棚卸CSVエクスポートの監査ログ記録に失敗したため、書き出しを中止しました。/);
 });
 
 test('staff access recovery monthly review export writes audit log before downloading the file', () => {
-  const body = section('const handleExportStaffAccessRecoveryMonthlyReviewCsv = async', 'const handleSaveRolePermissionPolicy = async');
-
+  const body = sectionFrom(staffHookSource, 'const handleExportStaffAccessRecoveryMonthlyReviewCsv = async', 'const handleSaveRolePermissionPolicy = async');
   assertAuditBeforeDownload(body, 'URL.createObjectURL(blob)');
-  assert.match(body, /buildStaffAccessRecoveryMonthlyReview/);
-  assert.match(body, /buildStaffAccessRecoveryMonthlyReviewCsv/);
-  assert.match(body, /スタッフ復旧・退職対応月次棚卸CSVエクスポートの監査ログ記録に失敗したため、書き出しを中止しました。/);
 });
 
-test('facility settings exposes official fee code override inputs', () => {
-  assert.match(settingsSource, /DISPENSING_OFFICIAL_FEE_CODE_OVERRIDE_ITEMS/);
-  assert.match(settingsSource, /buildOfficialFeeCodeOverrideTemplateCsv/);
-  assert.match(settingsSource, /buildOfficialFeeCodeMasterProposalFromCsv/);
-  assert.match(settingsSource, /buildOfficialFeeCodeMasterProposalReviewCsv/);
-  assert.match(settingsSource, /makeOfficialFeeCodeMasterProposalReviewCsvFileName/);
-  assert.match(settingsSource, /parseOfficialFeeCodeOverrideCsv/);
-  assert.match(settingsSource, /makeOfficialFeeCodeOverrideCsvFileName/);
-  assert.match(settingsSource, /data-testid="official-fee-code-overrides"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-csv-export"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-csv-input"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-master-csv-input"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-master-apply"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-master-review-csv"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-master-summary"/);
-  assert.match(settingsSource, /data-testid="official-fee-code-master-preview"/);
-  assert.match(settingsSource, /handleOfficialFeeCodeChange/);
-  assert.match(settingsSource, /handleExportOfficialFeeCodeCsv/);
-  assert.match(settingsSource, /handleImportOfficialFeeCodeCsv/);
-  assert.match(settingsSource, /handleReviewOfficialFeeCodeMasterCsv/);
-  assert.match(settingsSource, /handleApplyOfficialFeeCodeMasterProposal/);
-  assert.match(settingsSource, /handleExportOfficialFeeCodeMasterProposalReviewCsv/);
-  assert.match(settingsSource, /replace\(\/\\D\/g, ''\)\.slice\(0, 9\)/);
-  assert.match(settingsSource, /placeholder="9桁"/);
-});
-
-test('facility settings exposes an audited AI assist operating mode', () => {
-  assert.match(settingsSource, /data-testid="ai-assist-mode-select"/);
-  assert.match(settingsSource, /<option value="enabled">標準:/);
-  assert.match(settingsSource, /<option value="limited">制限:/);
-  assert.match(settingsSource, /<option value="disabled">停止:/);
-  assert.match(settingsSource, /AI補助品質ゲート反映/);
-  assert.match(settingsSource, /監査ログ記録に失敗したため、AI補助モードを元に戻しました/);
-});

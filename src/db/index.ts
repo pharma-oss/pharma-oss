@@ -27,11 +27,13 @@ import {
 } from './schema';
 
 
+import { isDevelopment, getDbPassword } from '@/lib/env';
+
 // Add migration plugin
 addRxPlugin(RxDBMigrationSchemaPlugin);
 
 // In development, add dev-mode plugin for helpful errors
-if (process.env.NODE_ENV === 'development') {
+if (isDevelopment()) {
     addRxPlugin(RxDBDevModePlugin);
 }
 
@@ -84,7 +86,7 @@ function getOrCreateLocalDbPassword(): string {
 }
 
 function resolveDbPassword(): string {
-    const configured = process.env.NEXT_PUBLIC_DB_PASSWORD;
+    const configured = getDbPassword();
     if (configured) return configured;
     console.warn(
         'NEXT_PUBLIC_DB_PASSWORD is not set. Using a randomly generated, ' +
@@ -100,7 +102,7 @@ function resolveDbPassword(): string {
 const LEGACY_FIXED_DB_PASSWORD = 'secure-default-pharmacy-os-local-key-2026';
 
 function persistResolvedDbPassword(password: string) {
-    if (process.env.NEXT_PUBLIC_DB_PASSWORD) return;
+    if (getDbPassword()) return;
     try {
         window.localStorage.setItem(LOCAL_DB_PASSWORD_KEY, password);
     } catch {
@@ -237,7 +239,7 @@ async function createSatelliteDatabase(collectionDefinitions: CollectionDefiniti
         name: 'pharmacy_os_db_satellite',
         password: generateRandomPassword(),
         storage: storageWithEncryption,
-        ignoreDuplicate: process.env.NODE_ENV === 'development'
+        ignoreDuplicate: isDevelopment()
     });
     await db.addCollections(collectionDefinitions);
     return db;
@@ -556,7 +558,7 @@ const create = async () => {
         name: 'pharmacy_os_db',
         password: candidatePassword,
         storage: storageWithEncryption,
-        ignoreDuplicate: process.env.NODE_ENV === 'development'
+        ignoreDuplicate: isDevelopment()
     });
 
     // 鍵不一致(RxDBのDB1)はcreateRxDatabaseではなくaddCollections時に検出されるため、

@@ -1,4 +1,5 @@
 import type { DrugMasterRecord, ElectronicUsageOption, MasterDataBackendStatus, MasterDataSeedPayload } from './types';
+import { getAppEnv } from '@/lib/env';
 
 type SQLiteMasterRequestType =
   | 'init'
@@ -48,19 +49,16 @@ const SEED_TIMEOUT_MS = 120000;
 let storePromise: Promise<SQLiteMasterDataStore | null> | null = null;
 
 function getConfiguredSqliteModuleUrl() {
-  return (
-    process.env.NEXT_PUBLIC_SQLITE_WASM_MODULE_URL ||
-    process.env.NEXT_PUBLIC_SQLITE_WASM_SCRIPT_URL ||
-    DEFAULT_SQLITE_MODULE_URL
-  );
+  const env = getAppEnv();
+  return env.sqliteWasmModuleUrl || env.sqliteWasmScriptUrl || DEFAULT_SQLITE_MODULE_URL;
 }
 
 function getConfiguredSqliteWasmUrl() {
-  return process.env.NEXT_PUBLIC_SQLITE_WASM_BINARY_URL || DEFAULT_SQLITE_WASM_URL;
+  return getAppEnv().sqliteWasmBinaryUrl || DEFAULT_SQLITE_WASM_URL;
 }
 
 function getConfiguredWorkerUrl() {
-  return process.env.NEXT_PUBLIC_SQLITE_MASTER_WORKER_URL || DEFAULT_WORKER_URL;
+  return getAppEnv().sqliteMasterWorkerUrl || DEFAULT_WORKER_URL;
 }
 
 export function canUseSQLiteMasterDataStore() {

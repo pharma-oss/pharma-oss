@@ -4,12 +4,9 @@ import {
   requestOnlineEligibility,
   type OnlineEligibilityConnectorMode
 } from '@/lib/online_eligibility_client';
+import { getAppEnv } from '@/lib/env';
 
 const INSURANCE_NUMBER_REGEX = /^\d{6,10}$/;
-
-function allowsMockFallback(value?: string) {
-  return process.env.NODE_ENV !== 'production' || ['1', 'true', 'yes'].includes((value || '').toLowerCase());
-}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
@@ -39,9 +36,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const env = getAppEnv();
+
   try {
-    const mode = (process.env.ONLINE_ELIGIBILITY_MODE || 'auto') as OnlineEligibilityConnectorMode;
-    const timeoutMs = Number(process.env.ONLINE_ELIGIBILITY_TIMEOUT_MS || 8000);
     const result = await requestOnlineEligibility({
       patientName: String(body.patientName || '').trim(),
       birthDate: String(body.birthDate || '').trim(),
@@ -49,11 +46,11 @@ export async function POST(request: NextRequest) {
       insuredNumber,
       burdenRatio
     }, {
-      endpoint: process.env.ONLINE_ELIGIBILITY_ENDPOINT,
-      bearerToken: process.env.ONLINE_ELIGIBILITY_BEARER_TOKEN,
-      mode,
-      allowMockFallback: allowsMockFallback(process.env.ONLINE_ELIGIBILITY_ALLOW_MOCK),
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 8000
+      endpoint: env.onlineEligibilityEndpoint || undefined,
+      bearerToken: env.onlineEligibilityBearerToken || undefined,
+      mode: env.onlineEligibilityMode as OnlineEligibilityConnectorMode,
+      allowMockFallback: env.nodeEnv !== 'production' && env.onlineEligibilityAllowMock,
+      timeoutMs: env.onlineEligibilityTimeoutMs
     });
 
     return NextResponse.json(result);

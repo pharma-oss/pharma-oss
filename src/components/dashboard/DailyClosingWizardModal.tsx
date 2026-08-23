@@ -222,7 +222,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
           <div style={{ padding: '1.5rem 0', textAlign: 'center' }}>
             <AlertTriangle size={36} style={{ color: '#dc2626', marginBottom: '0.5rem' }} />
             <p style={{ fontWeight: 600, color: '#b91c1c' }}>権限エラー</p>
-            <p style={{ fontSize: '0.85rem', color: '#475569' }}>{permissionError}</p>
+            <p style={{ fontSize: 'var(--fs-md)', color: '#475569' }}>{permissionError}</p>
             <button
               onClick={onClose}
               style={{
@@ -239,7 +239,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
           </div>
         ) : step === 1 ? (
           <div>
-            <p style={{ fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: '#475569', lineHeight: 1.5 }}>
               本日の受付・薬歴データの整合性をリアルタイム計測し、パスワード暗号化を適用した上で外部保存（NAS / USB）と監査ログ記録を完遂します。
             </p>
 
@@ -250,7 +250,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                 borderRadius: '8px',
                 padding: '1rem',
                 margin: '1rem 0',
-                fontSize: '0.8rem',
+                fontSize: 'var(--fs-sm)',
               }}
             >
               <p style={{ margin: '0 0 0.5rem 0', fontWeight: 600, color: '#334155' }}>【本日のデータ実測状況】</p>
@@ -279,7 +279,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.35rem', color: '#334155' }}>
+              <label style={{ display: 'block', fontSize: 'var(--fs-sm)', fontWeight: 600, marginBottom: '0.35rem', color: '#334155' }}>
                 暗号化パスワード (AES-256) <span style={{ color: '#dc2626' }}>*必須</span>
               </label>
               <input
@@ -292,7 +292,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                   padding: '0.5rem',
                   borderRadius: '6px',
                   border: '1px solid #cbd5e1',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-md)',
                   boxSizing: 'border-box',
                 }}
               />
@@ -309,7 +309,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                   border: '1px solid #cbd5e1',
                   background: '#ffffff',
                   cursor: 'pointer',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-md)',
                 }}
               >
                 キャンセル
@@ -329,7 +329,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                   color: '#ffffff',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-md)',
                   opacity: isChecking || isProcessing ? 0.6 : 1,
                 }}
               >
@@ -340,15 +340,15 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
         ) : step === 2 ? (
           <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
             <FileCheck size={36} style={{ color: 'var(--primary, #2563eb)', marginBottom: '1rem' }} />
-            <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>{saveStatus}</p>
-            <p style={{ fontSize: '0.8rem', color: '#64748b' }}>暗号化処理および検証記録を実行中です…</p>
+            <p style={{ fontWeight: 600, fontSize: 'var(--fs-base)' }}>{saveStatus}</p>
+            <p style={{ fontSize: 'var(--fs-sm)', color: '#64748b' }}>暗号化処理および検証記録を実行中です…</p>
           </div>
         ) : (
           <div>
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
               <CheckCircle2 size={44} style={{ color: '#16a34a', marginBottom: '0.5rem' }} />
               <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.05rem', fontWeight: 600 }}>日次締め・暗号化外部保存が完了しました</h4>
-              <p style={{ fontSize: '0.85rem', color: '#475569' }}>
+              <p style={{ fontSize: 'var(--fs-md)', color: '#475569' }}>
                 AES-256 暗号化バックアップおよび店舗設定は外部保存先へ正しく書き出され、監査ログへ記録されました。
               </p>
             </div>
@@ -367,7 +367,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                   color: '#ffffff',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  fontSize: '0.85rem',
+                  fontSize: 'var(--fs-md)',
                 }}
               >
                 確認して閉じる

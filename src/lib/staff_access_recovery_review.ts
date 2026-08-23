@@ -1067,10 +1067,12 @@ export function buildStaffAccessRecoveryCheckRequestChecklist(request: StaffAcce
     lines.push(`  サポートへ共有してよい: ${item.supportShare}`);
     lines.push('');
   }
-  lines.push('確認事項:');
-  for (const check of request.operatorChecks) lines.push(`  - ${check}`);
-  lines.push('');
   lines.push('取扱いルール:');
   for (const rule of request.privacyRules) lines.push(`  - ${rule}`);
   return lines.join('\n');
 }
+
+export function makeStaffAccessRecoveryMonthlyReviewCsvFileName(monthKey: string): string {
+  return `staff_access_recovery_monthly_review_${monthKey}.csv`;
+}
+

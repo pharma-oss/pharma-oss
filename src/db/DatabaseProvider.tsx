@@ -5,6 +5,7 @@ import { DatabaseContext } from './DatabaseContext';
 import type { PharmacyDatabase } from './types';
 import type { OnboardingE2ESeedResult } from '@/lib/onboarding_e2e_seed';
 import type { ReturnCorrectionE2ESeedResult } from '@/lib/return_correction_e2e_seed';
+import { isProduction } from '@/lib/env';
 
 export { useDatabase } from './DatabaseContext';
 
@@ -68,7 +69,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!db || process.env.NODE_ENV === 'production') return;
+    if (!db || isProduction()) return;
 
     const seedOnboardingE2E = async () => {
       const { seedOnboardingE2EData } = await import('@/lib/onboarding_e2e_seed');
@@ -99,7 +100,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           <p style={{ margin: '0 0 0.75rem', lineHeight: 1.7 }}>
             患者データ保護のため、アプリは自動削除や自動初期化を実行していません。バックアップの有無を確認し、管理者の復旧手順に従ってください。
           </p>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: '#7f1d1d' }}>エラー: {dbError}</p>
+          <p style={{ margin: 0, fontSize: 'var(--fs-md)', color: '#7f1d1d' }}>エラー: {dbError}</p>
         </div>
       </div>
     );

@@ -255,10 +255,10 @@ export default function DrugMasterSettingsTab({
                     <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
                       {drugMasterCandidateKindLabel[candidate.kind]} {candidate.fileType || ''}
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', lineHeight: 1.4 }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.4 }}>
                       {candidate.title}
                     </span>
-                    <span style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', lineHeight: 1.35 }}>
+                    <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', lineHeight: 1.35 }}>
                       {[candidate.updateDate, candidate.sizeLabel].filter(Boolean).join(' / ') || '日付・サイズ未記載'}
                     </span>
                   </button>
@@ -332,7 +332,7 @@ export default function DrugMasterSettingsTab({
                 gap: '0.35rem',
                 marginTop: '0.75rem',
                 color: 'var(--text-muted)',
-                fontSize: '0.78rem'
+                fontSize: 'var(--fs-sm)'
               }}>
                 {drugMasterSpecPdfReview.parseIssues.slice(0, 3).map((issue) => (
                   <span key={issue}>読取確認: {issue}</span>
@@ -513,7 +513,7 @@ export default function DrugMasterSettingsTab({
                               <button
                                 type="button"
                                 className="btn-secondary"
-                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}
+                                style={{ padding: '0.25rem 0.6rem', fontSize: 'var(--fs-sm)' }}
                                 onClick={() => openDrugMergeReview(group, member.code)}
                                 disabled={!canUpdateDrugMaster || isApplyingDrugMerge || group.hasYjConflict}
                                 title={group.hasYjConflict ? 'YJコードが異なるため統合できません' : undefined}

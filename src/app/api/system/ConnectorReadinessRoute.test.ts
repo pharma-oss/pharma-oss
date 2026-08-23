@@ -1,41 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { GET } from './connector-readiness/route.ts';
 
-const routeSource = readFileSync(new URL('./connector-readiness/route.ts', import.meta.url), 'utf8');
+test('connector readiness route reports sanitized external integration configuration', async () => {
+  const response = await GET();
+  assert.strictEqual(response.status, 200);
 
-test('connector readiness route reports sanitized external integration configuration', () => {
-  assert.match(routeSource, /buildExternalConnectorReadinessReport/);
-  assert.match(routeSource, /MYNA_CARD_READER_MODE/);
-  assert.match(routeSource, /MYNA_CARD_READER_ENDPOINT/);
-  assert.match(routeSource, /MYNA_CARD_READER_ALLOW_MOCK/);
-  assert.match(routeSource, /MYNA_CARD_READER_TIMEOUT_MS/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_MODE/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_ENDPOINT/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_ALLOW_MOCK/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_BEARER_TOKEN/);
-  assert.match(routeSource, /ONLINE_ELIGIBILITY_TIMEOUT_MS/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_MODE/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_ENDPOINT/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_BEARER_TOKEN/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_TIMEOUT_MS/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_CONNECTOR_KIND/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_CONNECTOR_ARTIFACT_SHA256/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_CAPABILITIES/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_MODE/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_ENDPOINT/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_KIND/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_INTERFACE_VERSION/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_FACILITY_LOCAL_ONLY/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_NSIPS_LICENSE_CONFIRMED/);
-  assert.match(routeSource, /PHARMACY_DEVICE_CONNECTOR_CAPABILITIES/);
-  assert.match(routeSource, /LAST_ATTEMPT_OUTCOME/);
-  assert.match(routeSource, /LAST_ATTEMPT_STATUS_CODE/);
-  assert.match(routeSource, /LAST_ATTEMPT_RESPONSE_SHAPE/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_ENDPOINT_SHA256/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_AUTH_SHA256/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_KIND/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_ARTIFACT_SHA256/);
-  assert.match(routeSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CAPABILITIES/);
-  assert.match(routeSource, /allowMockFallback/);
+  const report = await response.json() as Record<string, any>;
+  assert.ok(report);
+  assert.strictEqual(report.type, 'yakureki-external-connector-readiness');
+  assert.ok(Array.isArray(report.checks));
+  assert.strictEqual(report.checks.length, 4);
+
+  const checkIds = report.checks.map((c: { id: string }) => c.id);
+  assert.ok(checkIds.includes('myna_card_reader'));
+  assert.ok(checkIds.includes('online_eligibility'));
+  assert.ok(checkIds.includes('electronic_prescription'));
+  assert.ok(checkIds.includes('pharmacy_device'));
 });

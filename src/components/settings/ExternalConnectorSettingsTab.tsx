@@ -49,7 +49,7 @@ export default function ExternalConnectorSettingsTab({
               ['秘密情報', externalConnectorReadiness.privacy.containsEndpointUrl || externalConnectorReadiness.privacy.containsBearerToken ? '要確認' : '非表示']
             ].map(([label, value]) => (
               <div key={label} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: '#fff', padding: '0.8rem' }}>
-                <div style={{ color: 'var(--text-ghost)', fontSize: '0.75rem', fontWeight: 800 }}>{label}</div>
+                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
                 <strong style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-main)' }}>{value}</strong>
               </div>
             ))}
@@ -77,7 +77,7 @@ export default function ExternalConnectorSettingsTab({
                 {check.id === 'electronic_prescription' && check.electronicPrescription && (
                   <div data-testid="electronic-prescription-connector-capabilities" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.55rem' }}>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>公式接続方式</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>公式接続方式</div>
                       <strong>
                         {check.electronicPrescription.connectorKind === 'qualification_terminal'
                           ? '資格確認端末経由'
@@ -87,14 +87,14 @@ export default function ExternalConnectorSettingsTab({
                       </strong>
                     </div>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>必須機能</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>必須機能</div>
                       <strong>
                         {check.electronicPrescription.configuredCapabilities.length}
                         /{check.electronicPrescription.configuredCapabilities.length + check.electronicPrescription.missingCapabilities.length}
                       </strong>
                     </div>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>未確認</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>未確認</div>
                       <strong>{check.electronicPrescription.missingCapabilities.length}件</strong>
                     </div>
                   </div>
@@ -103,7 +103,7 @@ export default function ExternalConnectorSettingsTab({
                 {check.id === 'pharmacy_device' && check.pharmacyDevice && (
                   <div data-testid="pharmacy-device-connector-capabilities" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.55rem' }}>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>接続方式</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>接続方式</div>
                       <strong>
                         {check.pharmacyDevice.connectorKind === 'nsips_gateway'
                           ? '許諾済みNSIPSゲートウェイ'
@@ -113,11 +113,11 @@ export default function ExternalConnectorSettingsTab({
                       </strong>
                     </div>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>連携仕様版</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>連携仕様版</div>
                       <strong>{check.pharmacyDevice.interfaceVersion || '未設定'}</strong>
                     </div>
                     <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: '0.72rem', fontWeight: 800 }}>必須機能</div>
+                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>必須機能</div>
                       <strong>
                         {check.pharmacyDevice.configuredCapabilities.length}
                         /{check.pharmacyDevice.configuredCapabilities.length + check.pharmacyDevice.missingCapabilities.length}
@@ -127,7 +127,7 @@ export default function ExternalConnectorSettingsTab({
                 )}
 
                 {check.evidence.length > 0 && (
-                  <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                  <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
                     {check.evidence.slice(0, 4).map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -135,8 +135,8 @@ export default function ExternalConnectorSettingsTab({
                 )}
                 {check.requiredActions.length > 0 && (
                   <div style={{ display: 'grid', gap: '0.35rem' }}>
-                    <strong style={{ color: '#92400e', fontSize: '0.82rem' }}>残対応</strong>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#92400e', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                    <strong style={{ color: '#92400e', fontSize: 'var(--fs-md)' }}>残対応</strong>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#92400e', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
                       {check.requiredActions.slice(0, 5).map((action) => (
                         <li key={action}>{action}</li>
                       ))}

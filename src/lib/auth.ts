@@ -1,6 +1,7 @@
 import { User } from '@/db/types';
+import { isDevelopment } from '@/lib/env';
 
-const ALLOW_DEV_FALLBACK_AUTH = process.env.NODE_ENV === 'development';
+const ALLOW_DEV_FALLBACK_AUTH = isDevelopment();
 const PASSWORD_DERIVE_ITERATIONS = 120000;
 
 function bytesToHex(bytes: Uint8Array): string {

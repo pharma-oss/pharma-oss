@@ -1,4 +1,4 @@
-import { PatientMedicationInfoTemplate, PatientMedicationInfoTemplateStatus } from '@/db/types';
+import type { PatientMedicationInfoTemplate, PatientMedicationInfoTemplateStatus } from '../db/types.ts';
 
 export type MedicationInfoSourceType = NonNullable<PatientMedicationInfoTemplate['sourceType']>;
 export type MedicationInfoTemplateStatusFilter = 'all' | PatientMedicationInfoTemplateStatus;
@@ -62,3 +62,40 @@ export const createEmptyMedicationInfoTemplateForm = (): MedicationInfoTemplateF
   sourceHash: '',
   needsReviewReason: ''
 });
+
+export const trimOrUndefined = (value: string): string | undefined => {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const makeMedicationInfoTemplateId = (drugCode: string, date = new Date()): string => {
+  const normalizedDrugCode = drugCode.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'drug';
+  return `pmit_${normalizedDrugCode}_${date.getTime()}`;
+};
+
+export const medicationInfoTemplateToForm = (template: PatientMedicationInfoTemplate): MedicationInfoTemplateForm => ({
+  templateId: template.templateId,
+  drugCode: template.drugCode,
+  drugName: template.drugName,
+  genericName: template.genericName || '',
+  status: template.status,
+  sideEffectText: template.sideEffectText || '',
+  counselingText: template.counselingText || '',
+  sourceType: template.sourceType || 'pharmacy_authored',
+  sourceUrl: template.sourceUrl || '',
+  sourceRevisionDate: template.sourceRevisionDate || '',
+  sourceHash: template.sourceHash || '',
+  needsReviewReason: template.needsReviewReason || ''
+});
+
+export const sortMedicationInfoTemplates = (templates: PatientMedicationInfoTemplate[]): PatientMedicationInfoTemplate[] => (
+  [...templates].sort((a, b) => {
+    const aTimestamp = a.updatedAt || a.approvedAt || a.createdAt || '';
+    const bTimestamp = b.updatedAt || b.approvedAt || b.createdAt || '';
+    if (aTimestamp !== bTimestamp) {
+      return bTimestamp.localeCompare(aTimestamp);
+    }
+    return a.drugCode.localeCompare(b.drugCode);
+  })
+);
+

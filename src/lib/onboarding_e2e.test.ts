@@ -7,13 +7,20 @@ import {
   buildOnboardingE2EReport
 } from './onboarding_e2e.ts';
 
+import { readdirSync } from 'node:fs';
+
 const dashboardSource = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
 const dashboardRowsSource = readFileSync(new URL('../components/dashboard/DashboardRows.tsx', import.meta.url), 'utf8');
 const printSource = readFileSync(new URL('../app/print/[visitId]/page.tsx', import.meta.url), 'utf8');
+const printComponentsDir = new URL('../app/print/components/', import.meta.url);
+const printComponentsSources = readdirSync(printComponentsDir)
+  .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
+  .map((f) => readFileSync(new URL(f, printComponentsDir), 'utf8'))
+  .join('\n');
 const settingsSource = readFileSync(new URL('../app/settings/page.tsx', import.meta.url), 'utf8');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const onboardingE2EScript = readFileSync(new URL('../../scripts/runOnboardingE2E.mjs', import.meta.url), 'utf8');
-const onboardingSources = [dashboardSource, dashboardRowsSource, printSource, settingsSource].join('\n');
+const onboardingSources = [dashboardSource, dashboardRowsSource, printSource, printComponentsSources, settingsSource].join('\n');
 
 function auditLog(actionType: AuditLog['actionType']): AuditLog {
   return {

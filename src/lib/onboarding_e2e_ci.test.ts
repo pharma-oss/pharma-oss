@@ -19,8 +19,8 @@ test('onboarding E2E GitHub Actions workflow runs the full quality gate', () => 
   assert.match(workflow, /TZ: 'Asia\/Tokyo'/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /npm run lint/);
-  assert.match(workflow, /npx tsc --noEmit/);
-  assert.match(workflow, /npx tsx --test \$\(find src -name "\*\.test\.ts"\)/);
+  assert.match(workflow, /npm run typecheck/);
+  assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run build/);
 });
 

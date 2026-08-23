@@ -314,7 +314,7 @@ export default function FacilitySettingsTab({
               gap: '0.5rem',
               marginBottom: '0.75rem',
               color: 'var(--text-muted)',
-              fontSize: '0.82rem'
+              fontSize: 'var(--fs-md)'
             }}
           >
             <span>候補 {officialFeeCodeMasterProposal.matchedCount}件</span>
@@ -338,7 +338,7 @@ export default function FacilitySettingsTab({
                   gridTemplateColumns: 'minmax(0, 1.3fr) minmax(86px, 0.6fr) minmax(0, 1.2fr) minmax(56px, 0.5fr)',
                   gap: '0.5rem',
                   alignItems: 'center',
-                  fontSize: '0.8rem',
+                  fontSize: 'var(--fs-sm)',
                   color: 'var(--text-muted)',
                   wordBreak: 'break-word'
                 }}
@@ -357,7 +357,7 @@ export default function FacilitySettingsTab({
                   gridTemplateColumns: 'minmax(0, 1.3fr) minmax(86px, 0.6fr) minmax(0, 1.2fr) minmax(56px, 0.5fr)',
                   gap: '0.5rem',
                   alignItems: 'center',
-                  fontSize: '0.8rem',
+                  fontSize: 'var(--fs-sm)',
                   color: 'var(--text-muted)',
                   wordBreak: 'break-word'
                 }}

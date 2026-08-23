@@ -76,7 +76,7 @@ export function LoginModal({
               borderRadius: 'var(--radius-md)',
               padding: '0.75rem',
               color: '#dc2626',
-              fontSize: '0.85rem',
+              fontSize: 'var(--fs-md)',
               fontWeight: 500
             }}
           >
@@ -88,7 +88,7 @@ export function LoginModal({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <label
               htmlFor="staff-password"
-              style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}
+              style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text-muted)' }}
             >
               パスワード
             </label>
@@ -102,7 +102,7 @@ export function LoginModal({
                   padding: '0.65rem 0.75rem 0.65rem 2.25rem',
                   border: '1px solid var(--border)',
                   borderRadius: 'var(--radius-md)',
-                  fontSize: '0.9rem',
+                  fontSize: 'var(--fs-base)',
                   outline: 'none',
                   background: 'rgba(255, 255, 255, 0.8)',
                   color: 'var(--foreground)'

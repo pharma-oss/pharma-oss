@@ -3,12 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Lock } from 'lucide-react';
 
+import { getDbPassword } from '@/lib/env';
+
 export function DbSecurityBanner() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
     // NEXT_PUBLIC_DB_PASSWORD 未設定時かつブラウザ環境で警告を表示
-    if (typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_DB_PASSWORD) {
+    if (typeof window !== 'undefined' && !getDbPassword()) {
       setShowBanner(true);
     }
   }, []);
@@ -25,7 +27,7 @@ export function DbSecurityBanner() {
         justifyContent: 'space-between',
         gap: '0.75rem',
         padding: '0.6rem 1rem',
-        fontSize: '0.75rem',
+        fontSize: 'var(--fs-xs)',
         background: 'var(--warning-soft)',
         color: 'var(--warning)',
         borderBottom: '1px solid var(--warning)'

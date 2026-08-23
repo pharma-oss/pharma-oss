@@ -3,15 +3,16 @@ import {
   DrugMasterOfficialPageFetchError,
   fetchDrugMasterOfficialPage
 } from '@/lib/drug_master_official_page';
+import { getAppEnv } from '@/lib/env';
 
 export async function GET(request: NextRequest) {
   const pageUrl = request.nextUrl.searchParams.get('pageUrl') || undefined;
-  const timeoutMs = Number(process.env.DRUG_MASTER_OFFICIAL_PAGE_TIMEOUT_MS || 10000);
+  const env = getAppEnv();
 
   try {
     const result = await fetchDrugMasterOfficialPage({
       pageUrl,
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 10000
+      timeoutMs: env.drugMasterOfficialPageTimeoutMs
     });
     return NextResponse.json(result);
   } catch (error) {

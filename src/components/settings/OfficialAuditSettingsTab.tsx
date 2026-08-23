@@ -42,7 +42,7 @@ import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/
       borderRadius: '999px',
       border: `1px solid ${styles.border}`,
       padding: '0.15rem 0.55rem',
-      fontSize: '0.76rem',
+      fontSize: 'var(--fs-xs)',
       fontWeight: 700,
       background: styles.background,
       color: styles.color,
@@ -63,7 +63,7 @@ import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/
         display: 'inline-flex',
         borderRadius: '6px',
         padding: '0.12rem 0.45rem',
-        fontSize: '0.72rem',
+        fontSize: 'var(--fs-xs)',
         fontWeight: 700,
         color: styles.color,
         background: styles.background,
@@ -414,6 +414,257 @@ export default function OfficialAuditSettingsTab({
               );
             })}
           </div>
-        </div>
+
+      <style jsx>{`
+        .official-audit-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+        }
+        .official-audit-score {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 0.9rem;
+          border-radius: 999px;
+          background: #dcfce7;
+          color: #166534;
+          border: 1px solid #86efac;
+          font-size: 1rem;
+          font-weight: 800;
+        }
+        .official-audit-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          overflow: hidden;
+          margin-bottom: 1rem;
+        }
+        .official-audit-metrics div {
+          padding: 0.75rem 0.85rem;
+          border-right: 1px solid var(--border);
+          background: rgba(248, 250, 252, 0.7);
+        }
+        .official-audit-metrics div:last-child {
+          border-right: none;
+        }
+        .official-audit-metrics span {
+          display: block;
+          color: var(--text-muted);
+          font-size: var(--fs-xs);
+          font-weight: 700;
+        }
+        .official-audit-metrics strong {
+          display: block;
+          color: var(--text-main);
+          font-size: 1.15rem;
+          font-weight: 800;
+          margin-top: 0.15rem;
+        }
+        .official-audit-alert {
+          border: 1px solid #fecaca;
+          background: #fef2f2;
+          border-radius: 8px;
+          padding: 0.9rem 1rem;
+          margin-bottom: 1.5rem;
+        }
+        .official-audit-alert-title {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          font-size: var(--fs-base);
+          font-weight: 800;
+          color: #991b1b;
+          margin-bottom: 0.45rem;
+        }
+        .official-audit-alert ul {
+          margin: 0;
+          padding-left: 1.25rem;
+          color: #7f1d1d;
+          font-size: var(--fs-base);
+        }
+        .official-audit-review-workspace {
+          border: 1px solid rgba(148, 163, 184, 0.45);
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.82);
+          padding: 1rem;
+          margin-bottom: 1.5rem;
+        }
+        .official-audit-review-header {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 0.75rem;
+          margin-bottom: 0.85rem;
+        }
+        .official-audit-review-label {
+          margin: 0 0 0.2rem;
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          color: var(--primary);
+          letter-spacing: 0.04em;
+        }
+        .official-audit-review-header h3 {
+          margin: 0;
+          font-size: 1.05rem;
+          color: var(--text-main);
+        }
+        .official-audit-review-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          overflow: hidden;
+          margin-bottom: 0.85rem;
+        }
+        .official-audit-review-metrics div {
+          padding: 0.65rem 0.75rem;
+          border-right: 1px solid var(--border);
+          background: rgba(248, 250, 252, 0.7);
+        }
+        .official-audit-review-metrics div:last-child {
+          border-right: none;
+        }
+        .official-audit-review-metrics span {
+          display: block;
+          color: var(--text-muted);
+          font-size: var(--fs-xs);
+          font-weight: 700;
+        }
+        .official-audit-review-metrics strong {
+          display: block;
+          color: var(--text-main);
+          font-size: 1.05rem;
+          font-weight: 800;
+          margin-top: 0.12rem;
+        }
+        .metric-danger strong {
+          color: #b91c1c;
+        }
+        .official-audit-review-blockers {
+          display: grid;
+          gap: 0.45rem;
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          background: #fef2f2;
+          padding: 0.75rem;
+          margin-bottom: 0.85rem;
+        }
+        .official-audit-review-blockers > div {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.45rem;
+          color: #7f1d1d;
+          font-size: var(--fs-base);
+          line-height: 1.45;
+        }
+        .official-audit-review-actions {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.65rem;
+        }
+        .review-status-ok {
+          color: #166534;
+          font-size: var(--fs-sm);
+          font-weight: 700;
+        }
+        .review-status-pending {
+          color: #b45309;
+          font-size: var(--fs-sm);
+          font-weight: 700;
+        }
+        .official-audit-list {
+          display: flex;
+          flex-direction: column;
+        }
+        .official-audit-row {
+          padding: 1.15rem 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .official-audit-row-main {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+        }
+        .official-audit-titleline {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .official-audit-titleline h3 {
+          margin: 0;
+          font-size: 1rem;
+          color: var(--text-main);
+          line-height: 1.35;
+        }
+        .official-audit-basis {
+          margin: 0;
+          color: var(--text-muted);
+          font-size: var(--fs-md);
+          line-height: 1.55;
+        }
+        .official-audit-detail-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1rem;
+          margin-top: 0.85rem;
+        }
+        .official-audit-detail-grid h4 {
+          margin: 0 0 0.35rem;
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+        }
+        .official-audit-detail-grid ul {
+          margin: 0;
+          padding-left: 1.15rem;
+          color: var(--text-main);
+          font-size: var(--fs-md);
+          line-height: 1.55;
+        }
+        .official-audit-sources {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+          margin-top: 0.85rem;
+        }
+        .official-audit-sources a {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 0.25rem 0.5rem;
+          color: var(--primary);
+          background: rgba(255, 255, 255, 0.7);
+          font-size: var(--fs-sm);
+          text-decoration: none;
+        }
+        @media (max-width: 700px) {
+          .official-audit-header {
+            flex-direction: column;
+          }
+          .official-audit-metrics,
+          .official-audit-detail-grid,
+          .official-audit-review-metrics {
+            grid-template-columns: 1fr;
+          }
+          .official-audit-metrics div,
+          .official-audit-review-metrics div {
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+          }
+          .official-audit-metrics div:last-child,
+          .official-audit-review-metrics div:last-child {
+            border-bottom: none;
+          }
+        }
+      `}</style>
+    </div>
   );
 }
+

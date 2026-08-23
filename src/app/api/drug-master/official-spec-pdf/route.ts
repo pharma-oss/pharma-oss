@@ -4,6 +4,7 @@ import {
   fetchDrugMasterOfficialSpecPdf,
   reviewDrugMasterOfficialSpecPdfExternalText
 } from '@/lib/drug_master_official_spec_pdf';
+import { getAppEnv } from '@/lib/env';
 
 function jsonError(error: unknown) {
   if (error instanceof DrugMasterOfficialSpecPdfFetchError) {
@@ -27,14 +28,13 @@ function jsonError(error: unknown) {
 
 export async function GET(request: NextRequest) {
   const fileUrl = request.nextUrl.searchParams.get('url') || undefined;
-  const timeoutMs = Number(process.env.DRUG_MASTER_OFFICIAL_SPEC_PDF_TIMEOUT_MS || 20000);
-  const maxBytes = Number(process.env.DRUG_MASTER_OFFICIAL_SPEC_PDF_MAX_BYTES || 16 * 1024 * 1024);
+  const env = getAppEnv();
 
   try {
     const result = await fetchDrugMasterOfficialSpecPdf({
       fileUrl,
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 20000,
-      maxBytes: Number.isFinite(maxBytes) ? maxBytes : undefined
+      timeoutMs: env.drugMasterOfficialSpecPdfTimeoutMs,
+      maxBytes: env.drugMasterOfficialSpecPdfMaxBytes
     });
     return NextResponse.json({
       sourceUrl: result.sourceUrl,

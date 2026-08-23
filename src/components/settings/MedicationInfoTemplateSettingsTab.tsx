@@ -111,7 +111,7 @@ export default function MedicationInfoTemplateSettingsTab({
                 color: '#991b1b',
                 background: '#fef2f2',
                 fontWeight: 700,
-                fontSize: '0.84rem'
+                fontSize: 'var(--fs-md)'
               }}
             >
               <AlertTriangle size={17} aria-hidden="true" />
@@ -153,7 +153,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     textAlign: 'left'
                   }}
                 >
-                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>{label}</div>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontWeight: 700 }}>{label}</div>
                   <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>
                     {count}
                   </div>
@@ -188,7 +188,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     background: isActive ? '#eff6ff' : 'white',
                     color: 'var(--text-main)',
                     cursor: 'pointer',
-                    fontSize: '0.78rem',
+                    fontSize: 'var(--fs-sm)',
                     fontWeight: 800
                   }}
                 >
@@ -222,7 +222,7 @@ export default function MedicationInfoTemplateSettingsTab({
               <div
                 role="status"
                 data-testid="medication-info-template-result-count"
-                style={{ marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700 }}
+                style={{ marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', fontWeight: 700 }}
               >
                 {filteredMedicationInfoTemplates.length.toLocaleString()}件
                 {filteredMedicationInfoTemplates.length > 80
@@ -232,11 +232,11 @@ export default function MedicationInfoTemplateSettingsTab({
 
               <div style={{ display: 'grid', gap: '0.5rem', maxHeight: '560px', overflowY: 'auto' }}>
                 {isLoadingMedicationInfoTemplates ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem', padding: '0.75rem' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)', padding: '0.75rem' }}>
                     読み込み中...
                   </div>
                 ) : filteredMedicationInfoTemplates.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem', padding: '0.75rem' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)', padding: '0.75rem' }}>
                     {medicationInfoTemplates.length === 0
                       ? 'テンプレはまだありません。'
                       : '条件に一致するテンプレはありません。'}
@@ -276,7 +276,7 @@ export default function MedicationInfoTemplateSettingsTab({
                         <span style={{ fontWeight: 800, color: 'var(--text-main)', wordBreak: 'break-word' }}>
                           {template.drugName}
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>
                           {template.drugCode}
                           {template.genericName ? ` / ${template.genericName}` : ''}
                         </span>
@@ -286,7 +286,7 @@ export default function MedicationInfoTemplateSettingsTab({
                               width: 'fit-content',
                               borderRadius: '999px',
                               padding: '0.12rem 0.5rem',
-                              fontSize: '0.72rem',
+                              fontSize: 'var(--fs-xs)',
                               fontWeight: 800,
                               color: statusColor,
                               background: '#f8fafc',
@@ -303,7 +303,7 @@ export default function MedicationInfoTemplateSettingsTab({
                               width: 'fit-content',
                               borderRadius: '999px',
                               padding: '0.12rem 0.5rem',
-                              fontSize: '0.72rem',
+                              fontSize: 'var(--fs-xs)',
                               fontWeight: 800,
                               color: isReadyForApproval ? '#047857' : '#b45309',
                               background: isReadyForApproval ? '#ecfdf5' : '#fffbeb',
@@ -414,7 +414,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     borderRadius: '8px',
                     background: '#eff6ff',
                     color: '#1e40af',
-                    fontSize: '0.82rem',
+                    fontSize: 'var(--fs-md)',
                     fontWeight: 700,
                     lineHeight: 1.45
                   }}
@@ -427,7 +427,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     承認準備OK {medicationInfoCsvImportSummary.readyForApprovalCount.toLocaleString()}件 /
                     不足・警告 {medicationInfoCsvImportSummary.warningCount.toLocaleString()}件
                   </span>
-                  <span style={{ color: '#1d4ed8', fontSize: '0.76rem' }}>
+                  <span style={{ color: '#1d4ed8', fontSize: 'var(--fs-xs)' }}>
                     取込日時 {new Date(medicationInfoCsvImportSummary.importedAt).toLocaleString('ja-JP')}
                   </span>
                 </div>
@@ -444,7 +444,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     borderRadius: '8px',
                     background: isEditingImmutableMedicationInfoRevision ? '#fffbeb' : '#eff6ff',
                     color: isEditingImmutableMedicationInfoRevision ? '#92400e' : '#1e40af',
-                    fontSize: '0.82rem',
+                    fontSize: 'var(--fs-md)',
                     fontWeight: 700,
                     lineHeight: 1.5
                   }}
@@ -609,7 +609,7 @@ export default function MedicationInfoTemplateSettingsTab({
                   borderRadius: '8px',
                   background: currentMedicationInfoApprovalIssues.length > 0 ? '#fffbeb' : '#f0fdf4',
                   color: currentMedicationInfoApprovalIssues.length > 0 ? '#92400e' : '#166534',
-                  fontSize: '0.82rem',
+                  fontSize: 'var(--fs-md)',
                   fontWeight: 700
                 }}
               >
@@ -689,6 +689,36 @@ export default function MedicationInfoTemplateSettingsTab({
               </div>
             </div>
           </div>
-        </div>
+
+      <style jsx>{`
+        .medication-info-template-layout {
+          display: grid;
+          grid-template-columns: minmax(260px, 0.9fr) minmax(0, 2fr);
+          gap: 1rem;
+          align-items: start;
+        }
+        .medication-info-template-actions {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-top: 0;
+          margin-bottom: 0.75rem;
+        }
+        .medication-info-template-draft-note {
+          flex: 1 1 220px;
+          min-width: 0;
+          color: var(--text-muted);
+          font-size: var(--fs-md);
+          overflow-wrap: anywhere;
+        }
+        @media (max-width: 800px) {
+          .medication-info-template-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+    </div>
   );
 }
+

@@ -110,7 +110,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
     <div className="medical-inst-autocomplete" ref={containerRef}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.75rem' }}>
         <div>
-          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text-muted)' }}>
             医療機関コード (10桁)
           </label>
           <input
@@ -119,12 +119,12 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
             value={code}
             onChange={handleCodeChange}
             placeholder={placeholderCode}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.88rem', marginTop: '0.2rem' }}
+            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.2rem' }}
           />
         </div>
 
         <div style={{ position: 'relative' }} role="combobox" aria-expanded={isOpen} aria-haspopup="listbox" aria-controls="med-inst-suggestions-list">
-          <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text-muted)' }}>
             医療機関名
           </label>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -142,7 +142,7 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                 }
               }}
               placeholder={placeholderName}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.88rem', marginTop: '0.2rem' }}
+              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.2rem' }}
             />
           </div>
 
@@ -187,15 +187,15 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                   }}
                   className="suggestion-item"
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 'var(--fs-md)', color: 'var(--text-main)' }}>
                     {inst.name}
                     {isUsingSeedMedicalInstitutionData() && (
-                      <span style={{ marginLeft: '0.4rem', fontSize: '0.68rem', fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-soft)', padding: '1px 6px', borderRadius: '4px' }}>
+                      <span style={{ marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)', fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-soft)', padding: '1px 6px', borderRadius: '4px' }}>
                         サンプル
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
                     コード: <strong>{inst.code}</strong> (点数表: {inst.scoreCode}) {inst.address ? ` / ${inst.address}` : ''}
                   </div>
                 </button>

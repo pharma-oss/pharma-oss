@@ -165,7 +165,7 @@ export function SyncStatusIndicator() {
         gap: '0.35rem',
         padding: '0.35rem 0.7rem',
         borderRadius: '999px',
-        fontSize: '0.75rem',
+        fontSize: 'var(--fs-xs)',
         fontWeight: 600,
         whiteSpace: 'nowrap',
         background: config.background,

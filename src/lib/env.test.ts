@@ -33,3 +33,19 @@ test('isMockFallbackAllowed strictly disallows mocks in production environment',
 
   assert.strictEqual(isMockFallbackAllowed(devConfig), true);
 });
+
+test('parseEnvConfig parses newly added API timeouts, limits, and SQLite WASM URLs', () => {
+  const customConfig = parseEnvConfig({
+    DISPENSING_UKE_OFFICIAL_SPEC_PDF_TIMEOUT_MS: '15000',
+    DISPENSING_UKE_OFFICIAL_SPEC_PDF_MAX_BYTES: '10485760',
+    DRUG_MASTER_OFFICIAL_FILE_TIMEOUT_MS: '45000',
+    NEXT_PUBLIC_SQLITE_WASM_MODULE_URL: '/custom-wasm/index.mjs',
+    ELECTRONIC_PRESCRIPTION_SHARED_FOLDER_RETRY_POLICY_CONFIRMED: '1'
+  });
+
+  assert.strictEqual(customConfig.dispensingUkeOfficialSpecPdfTimeoutMs, 15000);
+  assert.strictEqual(customConfig.dispensingUkeOfficialSpecPdfMaxBytes, 10485760);
+  assert.strictEqual(customConfig.drugMasterOfficialFileTimeoutMs, 45000);
+  assert.strictEqual(customConfig.sqliteWasmModuleUrl, '/custom-wasm/index.mjs');
+  assert.strictEqual(customConfig.electronicPrescriptionSharedFolderRetryPolicyConfirmed, true);
+});
