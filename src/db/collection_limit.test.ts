@@ -1,19 +1,46 @@
-import { test } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  DRUG_STOCK_SCHEMA,
+  LOCATION_SCHEMA,
+  FACILITY_SETTINGS_SCHEMA,
+  PATIENT_SCHEMA,
+  VISIT_SCHEMA,
+  PRESCRIPTION_ITEM_SCHEMA,
+  SOAP_RECORD_SCHEMA,
+  MEDICATION_GUIDANCE_SCHEMA,
+  PATIENT_MEDICATION_INFO_TEMPLATE_SCHEMA,
+  USER_SCHEMA,
+  ALERT_SCHEMA,
+  INTERVENTION_SCHEMA,
+  DRUG_SCHEMA,
+  AUDIT_LOG_SCHEMA
+} from './schema';
 
-const databaseSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+describe('RxDB schema collection limit contracts', () => {
+  it('defines valid RxDB schemas within open-core collection limits', () => {
+    const activeSchemas = [
+      DRUG_STOCK_SCHEMA,
+      LOCATION_SCHEMA,
+      FACILITY_SETTINGS_SCHEMA,
+      PATIENT_SCHEMA,
+      VISIT_SCHEMA,
+      PRESCRIPTION_ITEM_SCHEMA,
+      SOAP_RECORD_SCHEMA,
+      MEDICATION_GUIDANCE_SCHEMA,
+      PATIENT_MEDICATION_INFO_TEMPLATE_SCHEMA,
+      USER_SCHEMA,
+      ALERT_SCHEMA,
+      INTERVENTION_SCHEMA,
+      DRUG_SCHEMA,
+      AUDIT_LOG_SCHEMA
+    ];
 
-test('active RxDB collections stay within the open-core runtime limit', () => {
-  const definitions = databaseSource.match(
-    /const collectionDefinitions = \{([\s\S]*?)\n    \};\n    const activeCollectionCount/
-  );
-  assert.ok(definitions, 'collection definitions block was not found');
-  const collectionNames = Array.from(
-    definitions[1].matchAll(/^        ([a-z_]+): \{$/gm),
-    (match) => match[1]
-  );
-  assert.ok(collectionNames.includes('patient_medication_info_templates'));
-  assert.ok(collectionNames.length <= 14, `found ${collectionNames.length} active collections`);
-  assert.doesNotMatch(definitions[1], /^        drug_infos: \{$/m);
+    assert.ok(activeSchemas.length <= 14, `Active schemas must not exceed 14, found ${activeSchemas.length}`);
+    for (const schema of activeSchemas) {
+      assert.ok(schema.version >= 0);
+      assert.equal(schema.type, 'object');
+      assert.ok(schema.primaryKey);
+    }
+  });
 });

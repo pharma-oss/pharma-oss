@@ -16,7 +16,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-const PRE_LOGIN_TOUR_FIXTURE = {
+export const PRE_LOGIN_TOUR_FIXTURE = {
   medicationRecord: {
     patientName: 'デモ患者 さくら',
     reviewPoints: 2,
@@ -37,7 +37,7 @@ type PreLoginTourProps = {
   onStartGuestDemo: () => void;
 };
 
-type PreLoginTourStep = {
+export type PreLoginTourStep = {
   label: string;
   title: string;
   description: string;
@@ -93,7 +93,7 @@ function ReceptionDemoPreview() {
   );
 }
 
-const PRE_LOGIN_TOUR_STEPS: PreLoginTourStep[] = [
+export const PRE_LOGIN_TOUR_STEPS: PreLoginTourStep[] = [
   {
     label: '薬歴デモ',
     title: '前回との差分から見て、薬歴を仕上げます',

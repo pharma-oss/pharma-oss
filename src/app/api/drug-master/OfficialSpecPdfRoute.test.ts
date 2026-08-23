@@ -1,18 +1,35 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { POST } from './official-spec-pdf/route';
+import { NextRequest } from 'next/server';
 
-const routeSource = readFileSync(new URL('./official-spec-pdf/route.ts', import.meta.url), 'utf8');
+describe('Drug master official spec PDF route contracts', () => {
+  it('POST reviews extracted PDF text and returns review object', async () => {
+    const validSpecText = `
+      医薬品マスター仕様書
+      項番 項目名 モード 桁数 バイト数 変更区分 医薬品コード 選定療養区分
+      1 変更区分 数字 1 1 必須
+      2 マスター種別 英数 2 2 必須
+      3 医薬品コード 数字 9 9 必須
+      4 漢字名称 漢字 100 200
+      5 カナ名称 カナ 100 100
+      薬価基準収載医薬品コード規格定義
+    `;
 
-test('official spec PDF route fetches and returns extracted PDF review', () => {
-  assert.match(routeSource, /fetchDrugMasterOfficialSpecPdf/);
-  assert.match(routeSource, /reviewDrugMasterOfficialSpecPdfExternalText/);
-  assert.match(routeSource, /DrugMasterOfficialSpecPdfFetchError/);
-  assert.match(routeSource, /getAppEnv/);
-  assert.match(routeSource, /drugMasterOfficialSpecPdfTimeoutMs/);
-  assert.match(routeSource, /drugMasterOfficialSpecPdfMaxBytes/);
-  assert.match(routeSource, /export async function POST/);
-  assert.match(routeSource, /extractedText/);
-  assert.match(routeSource, /reviewLabel/);
-  assert.match(routeSource, /official_drug_master_spec_pdf_unexpected_error/);
+    const req = new NextRequest('http://localhost/api/drug-master/official-spec-pdf', {
+      method: 'POST',
+      body: JSON.stringify({
+        extractedText: validSpecText,
+        fileName: 'spec.pdf'
+      })
+    });
+
+    const res = await POST(req);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.ok(body);
+    assert.equal(body.fileName, 'spec.pdf');
+    assert.ok(body.review);
+  });
 });

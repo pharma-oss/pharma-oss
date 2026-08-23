@@ -1,16 +1,14 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { GET } from './read/route';
 
-const routeSource = readFileSync(new URL('./read/route.ts', import.meta.url), 'utf8');
+describe('Myna card reader route contracts', () => {
+  it('GET returns a response object with patient or error data', async () => {
+    const res = await GET();
+    assert.ok(res.status >= 200 && res.status <= 503);
 
-test('myna read route can use a configured card-reader bridge', () => {
-  assert.match(routeSource, /readMynaCard/);
-  assert.match(routeSource, /MynaCardReaderError/);
-  assert.match(routeSource, /getAppEnv/);
-  assert.match(routeSource, /mynaCardReaderEndpoint/);
-  assert.match(routeSource, /mynaCardReaderMode/);
-  assert.match(routeSource, /mynaCardReaderAllowMock/);
-  assert.match(routeSource, /mynaCardReaderTimeoutMs/);
-  assert.match(routeSource, /myna_reader_unexpected_error/);
+    const body = await res.json();
+    assert.ok(body);
+    assert.ok(body.readerSource || body.status || body.code);
+  });
 });

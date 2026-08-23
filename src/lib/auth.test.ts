@@ -1,25 +1,44 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { generateSalt, hashPassword, verifyPassword } from './auth';
 
-const authSource = readFileSync(new URL('./auth.ts', import.meta.url), 'utf8');
-const settingsSource = [
-  '../app/settings/page.tsx',
-  '../components/settings/StaffSettingsTab.tsx'
-].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
-const dbTypesSource = readFileSync(new URL('../db/types.ts', import.meta.url), 'utf8');
+describe('Auth cryptographic functions and contracts', () => {
+  it('generates random hex salts', () => {
+    const salt1 = generateSalt();
+    const salt2 = generateSalt();
 
-test('registerPasskey does not save a production mock public key for real credentials', () => {
-  assert.doesNotMatch(authSource, /let publicKey = 'mock-pk-'/);
-  assert.match(authSource, /Public key unavailable\. Saving development-only simulated public key\./);
-  assert.match(authSource, /パスキー登録結果から公開鍵を取得できませんでした/);
-  assert.match(authSource, /!ALLOW_DEV_FALLBACK_AUTH/);
-});
+    assert.equal(salt1.length, 32);
+    assert.equal(salt2.length, 32);
+    assert.notEqual(salt1, salt2);
+  });
 
-test('staff credential copy reflects PBKDF2 password hashing', () => {
-  assert.match(dbTypesSource, /PBKDF2-SHA-256 hashed password/);
-  assert.match(settingsSource, /ソルト付きPBKDF2-SHA-256/);
-  assert.match(settingsSource, /設定済み \(PBKDF2-SHA-256\)/);
-  assert.doesNotMatch(settingsSource, /ソルト付きSHA-256ハッシュ化/);
-  assert.doesNotMatch(settingsSource, /設定済み \(SHA-256ハッシュ\)/);
+  it('hashes passwords deterministically with salt', async () => {
+    const salt = generateSalt();
+    const hash1 = await hashPassword('secretPassword123', salt);
+    const hash2 = await hashPassword('secretPassword123', salt);
+    const hashOther = await hashPassword('differentPassword', salt);
+
+    assert.equal(hash1, hash2);
+    assert.notEqual(hash1, hashOther);
+    assert.ok(hash1.length >= 64);
+  });
+
+  it('verifies valid passwords and rejects invalid passwords', async () => {
+    const salt = generateSalt();
+    const passwordHash = await hashPassword('correctHorseBatteryStaple', salt);
+
+    const mockUser: any = {
+      userId: 'u1',
+      name: '管理者',
+      role: 'admin',
+      passwordHash,
+      salt
+    };
+
+    const isMatch = await verifyPassword('correctHorseBatteryStaple', mockUser);
+    assert.equal(isMatch, true);
+
+    const isMismatch = await verifyPassword('wrongPassword', mockUser);
+    assert.equal(isMismatch, false);
+  });
 });

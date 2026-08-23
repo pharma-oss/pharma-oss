@@ -25,9 +25,9 @@ const navItems = [
   { href: '/inventory', label: '在庫管理', icon: Package },
 ];
 
-const STAFF_LOAD_TIMEOUT_MS = 8000;
+export const STAFF_LOAD_TIMEOUT_MS = 8000;
 // 初期管理者パスワード設定より前に、未ログインのまま体験できるデモの既読状態
-const PRE_LOGIN_TOUR_STORAGE_KEY = 'yakureki:pre-login-tour:v1';
+export const PRE_LOGIN_TOUR_STORAGE_KEY = 'yakureki:pre-login-tour:v1';
 
 const toUser = (doc: any): User => {
   const data = typeof doc?.toJSON === 'function' ? doc.toJSON() : doc;

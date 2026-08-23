@@ -1,46 +1,63 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { DailyCheckPanel } from './inventory/components/DailyCheckPanel';
+import {
+  DAILY_CONTROLLED_DRUG_DIFFERENCE_REASONS,
+  DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY,
+  hasDailyControlledDrugActualCount,
+  getDailyControlledDrugCheckSummary,
+  getDailyControlledDrugMissingReasonRows,
+  type DailyControlledDrugCheckRow
+} from '@/lib/inventory_daily_check';
 
-const inventorySource = readFileSync(new URL('./inventory/page.tsx', import.meta.url), 'utf8');
+describe('InventoryDailyCheck components and pure contracts', () => {
+  it('exports DailyCheckPanel as a callable React component function', () => {
+    assert.equal(typeof DailyCheckPanel, 'function');
+  });
 
-test('controlled drug daily check keeps unentered counts distinct from system stock', () => {
-  assert.match(inventorySource, /actualCount: hasActualCount \? actualCounts\[drug\.code\] : undefined/);
-  assert.match(inventorySource, /differenceReason: dailyCheckReasons\[drug\.code\]/);
-  assert.match(inventorySource, /value=\{row\.actualCount \?\? ''\}/);
-  assert.match(inventorySource, /未入力のみ/);
-  assert.match(inventorySource, /差異ありのみ/);
-  assert.match(inventorySource, /dailyCheckSummary\.unenteredCount/);
-});
+  it('defines structured difference reasons and storage key', () => {
+    assert.ok(DAILY_CONTROLLED_DRUG_DIFFERENCE_REASONS.length >= 4);
+    assert.equal(DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY, 'yakureki_controlled_drug_daily_check_latest_v1');
+  });
 
-test('controlled drug daily check supports quick entry, filters, and CSV export', () => {
-  assert.match(inventorySource, /表示中を一致/);
-  assert.match(inventorySource, /handleAdjustDailyCheckCount/);
-  assert.match(inventorySource, /dailyCheckKindFilter/);
-  assert.match(inventorySource, /dailyCheckStatusFilter/);
-  assert.match(inventorySource, /buildDailyControlledDrugCheckCsv/);
-  assert.match(inventorySource, /yakureki-controlled-drug-daily-check/);
-});
+  it('correctly calculates summary and identifies missing reason rows', () => {
+    const rows: DailyControlledDrugCheckRow[] = [
+      {
+        drugCode: 'd1',
+        drugName: '麻薬A',
+        kind: 'narcotic',
+        systemStock: 10,
+        pendingStock: 0,
+        shelfStockSystem: 10,
+        actualCount: 10
+      },
+      {
+        drugCode: 'd2',
+        drugName: '向精神薬B',
+        kind: 'psychotropic',
+        systemStock: 20,
+        pendingStock: 0,
+        shelfStockSystem: 20,
+        actualCount: 18 // mismatch without reason
+      },
+      {
+        drugCode: 'd3',
+        drugName: '麻薬C',
+        kind: 'narcotic',
+        systemStock: 5,
+        pendingStock: 0,
+        shelfStockSystem: 5 // unentered
+      }
+    ];
 
-test('controlled drug daily check requires mismatch reasons and preserves previous results', () => {
-  assert.match(inventorySource, /DAILY_CONTROLLED_DRUG_DIFFERENCE_REASONS/);
-  assert.match(inventorySource, /差異理由を選択/);
-  assert.match(inventorySource, /getDailyControlledDrugMissingReasonRows/);
-  assert.match(inventorySource, /previousDailyCheckSnapshot/);
-  assert.match(inventorySource, /DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY/);
-  assert.match(inventorySource, /前回なし/);
-});
+    const summary = getDailyControlledDrugCheckSummary(rows);
+    assert.equal(summary.totalCount, 3);
+    assert.equal(summary.enteredCount, 2);
+    assert.equal(summary.unenteredCount, 1);
+    assert.equal(summary.mismatchCount, 1);
 
-test('controlled drug daily check warns on partial save and audits reasoned checks', () => {
-  assert.match(inventorySource, /未入力が \$\{unenteredCount\} 件あります/);
-  assert.match(inventorySource, /buildDailyControlledDrugCheckAuditDetail/);
-  assert.match(inventorySource, /persistDailyCheckSnapshot\(dailyCheckRows\)/);
-});
-
-test('controlled drug daily check supports Enter flow to the next unentered row', () => {
-  assert.match(inventorySource, /dailyCountInputRefs/);
-  assert.match(inventorySource, /dailyReasonSelectRefs/);
-  assert.match(inventorySource, /handleDailyCheckInputKeyDown/);
-  assert.match(inventorySource, /onKeyDown=\{\(event\) => handleDailyCheckInputKeyDown\(row, event\)\}/);
-  assert.match(inventorySource, /focusNextDailyCheckInput/);
+    const missingReasonRows = getDailyControlledDrugMissingReasonRows(rows);
+    assert.equal(missingReasonRows.length, 1);
+    assert.equal(missingReasonRows[0].drugCode, 'd2');
+  });
 });

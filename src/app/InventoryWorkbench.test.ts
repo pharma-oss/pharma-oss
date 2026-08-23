@@ -1,32 +1,65 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { OrderWorkbench } from './inventory/components/OrderWorkbench';
+import {
+  formatInventoryAmount,
+  choosePrimarySupplier,
+  getInventoryOrderPriority,
+  getInventoryOrderActionLabel,
+  buildInventoryOrderCsv,
+  buildInventoryOrderMemo,
+  type InventoryOrderRisk
+} from '@/lib/inventory_order';
 
-const inventorySource = readFileSync(new URL('./inventory/page.tsx', import.meta.url), 'utf8');
+describe('InventoryWorkbench components and pure order helpers', () => {
+  it('exports OrderWorkbench as a callable React component function', () => {
+    assert.equal(typeof OrderWorkbench, 'function');
+  });
 
-test('inventory page exposes an order workbench for active shortages', () => {
-  assert.match(inventorySource, /order-workbench/);
-  assert.match(inventorySource, /発注ワークベンチ/);
-  assert.match(inventorySource, /OrderWorkbench/);
-  assert.match(inventorySource, /orderCandidates/);
-  assert.match(inventorySource, /pendingVisitCountMap/);
-  assert.match(inventorySource, /isClaimEditBlocked/);
-  assert.match(inventorySource, /filter\(\(visit\) => !isClaimEditBlocked\(visit\.claimLifecycle\)\)/);
-  assert.match(inventorySource, /stockLotsByDrugCode/);
-  assert.match(inventorySource, /db\.drug_stocks\.find/);
-  assert.match(inventorySource, /choosePrimarySupplier/);
-  assert.match(inventorySource, /getInventoryOrderPriority/);
-  assert.match(inventorySource, /getInventoryOrderActionLabel/);
-});
+  it('formats inventory amount with commas and fractions', () => {
+    assert.equal(formatInventoryAmount(1000), '1,000');
+    assert.equal(formatInventoryAmount(12.5), '12.5');
+  });
 
-test('inventory order workbench supports export, memo copy, and same-day ordered state', () => {
-  assert.match(inventorySource, /ORDER_WORKBENCH_STORAGE_PREFIX/);
-  assert.match(inventorySource, /orderedDrugIds/);
-  assert.match(inventorySource, /localStorage\.setItem/);
-  assert.match(inventorySource, /buildInventoryOrderCsv/);
-  assert.match(inventorySource, /buildInventoryOrderMemo/);
-  assert.match(inventorySource, /yakureki-order-workbench/);
-  assert.match(inventorySource, /未対応メモ/);
-  assert.match(inventorySource, /発注済みにする/);
-  assert.match(inventorySource, /発注済みチェックを解除/);
+  it('selects primary supplier by weight from stock lots', () => {
+    const lots = [
+      { supplier: 'スズケン', quantity: 10 },
+      { supplier: 'アルフレッサ', quantity: 50 },
+      { supplier: 'スズケン', quantity: 20 }
+    ];
+    assert.equal(choosePrimarySupplier(lots), 'アルフレッサ');
+  });
+
+  it('calculates order priority and labels based on shortage', () => {
+    assert.equal(getInventoryOrderPriority({ availableAmount: 0, isHighRiskMedication: false, affectedVisitCount: 1 }), 'high');
+    assert.equal(getInventoryOrderPriority({ availableAmount: 50, isHighRiskMedication: false, affectedVisitCount: 1 }), 'medium');
+    assert.equal(getInventoryOrderActionLabel({ availableAmount: 0, isHighRiskMedication: false, pickingShortageAmount: 10 }), '棚不足の報告あり・現物確認と至急手配');
+    assert.equal(getInventoryOrderActionLabel({ availableAmount: 0, isHighRiskMedication: false }), '至急発注・融通確認');
+    assert.equal(getInventoryOrderActionLabel({ availableAmount: 50, isHighRiskMedication: false }), '不足数を発注・代替候補を確認');
+  });
+
+  it('builds CSV and memo representation for order candidates', () => {
+    const candidates: InventoryOrderRisk[] = [
+      {
+        drugId: 'd1',
+        drugName: 'ロキソニン錠60mg',
+        location: 'A-01',
+        supplierName: 'スズケン',
+        requiredAmount: 100,
+        availableAmount: 20,
+        shortageAmount: 80,
+        recommendedOrderAmount: 100,
+        affectedVisitCount: 2,
+        priority: 'high',
+        actionLabel: '至急発注'
+      }
+    ];
+
+    const csv = buildInventoryOrderCsv(candidates);
+    assert.ok(csv.includes('ロキソニン錠60mg'));
+    assert.ok(csv.includes('スズケン'));
+
+    const memo = buildInventoryOrderMemo(candidates);
+    assert.ok(memo.includes('ロキソニン錠60mg'));
+  });
 });

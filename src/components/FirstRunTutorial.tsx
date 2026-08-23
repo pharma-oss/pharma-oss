@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom';
 
 const TUTORIAL_VERSION = 'v1';
-const DEMO_TUTORIAL_FIXTURE = {
+export const DEMO_TUTORIAL_FIXTURE = {
   dashboard: {
     receivedToday: 12,
     waiting: 3,

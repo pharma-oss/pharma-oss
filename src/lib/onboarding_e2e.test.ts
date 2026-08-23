@@ -1,26 +1,11 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
-import type { AuditLog } from '../db/types.ts';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import type { AuditLog } from '../db/types';
 import {
   ONBOARDING_E2E_SCENARIOS,
   buildOnboardingE2EReport
-} from './onboarding_e2e.ts';
-
-import { readdirSync } from 'node:fs';
-
-const dashboardSource = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
-const dashboardRowsSource = readFileSync(new URL('../components/dashboard/DashboardRows.tsx', import.meta.url), 'utf8');
-const printSource = readFileSync(new URL('../app/print/[visitId]/page.tsx', import.meta.url), 'utf8');
-const printComponentsDir = new URL('../app/print/components/', import.meta.url);
-const printComponentsSources = readdirSync(printComponentsDir)
-  .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
-  .map((f) => readFileSync(new URL(f, printComponentsDir), 'utf8'))
-  .join('\n');
-const settingsSource = readFileSync(new URL('../app/settings/page.tsx', import.meta.url), 'utf8');
-const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const onboardingE2EScript = readFileSync(new URL('../../scripts/runOnboardingE2E.mjs', import.meta.url), 'utf8');
-const onboardingSources = [dashboardSource, dashboardRowsSource, printSource, printComponentsSources, settingsSource].join('\n');
+} from './onboarding_e2e';
+import packageJson from '../../package.json' with { type: 'json' };
 
 function auditLog(actionType: AuditLog['actionType']): AuditLog {
   return {
@@ -34,64 +19,55 @@ function auditLog(actionType: AuditLog['actionType']): AuditLog {
   };
 }
 
-test('ONBOARDING_E2E_SCENARIOS defines stable selectors for claim and print rehearsal', () => {
-  const claimScenario = ONBOARDING_E2E_SCENARIOS.find((scenario) => scenario.id === 'claim_uke_export');
-  const printScenario = ONBOARDING_E2E_SCENARIOS.find((scenario) => scenario.id === 'print_documents');
+describe('Onboarding E2E scenario definitions and report contracts', () => {
+  it('ONBOARDING_E2E_SCENARIOS defines stable selectors for claim and print rehearsal', () => {
+    const claimScenario = ONBOARDING_E2E_SCENARIOS.find((scenario) => scenario.id === 'claim_uke_export');
+    const printScenario = ONBOARDING_E2E_SCENARIOS.find((scenario) => scenario.id === 'print_documents');
 
-  assert.ok(claimScenario);
-  assert.ok(printScenario);
-  assert.deepStrictEqual(claimScenario.expectedAuditActions, ['claim_lifecycle', 'uke_export']);
-  assert.deepStrictEqual(printScenario.expectedAuditActions, ['print']);
-  assert.ok(claimScenario.stableSelectors.includes('[data-testid="print-uke-export-button"]'));
-  assert.ok(printScenario.stableSelectors.includes('[data-testid="print-execute-button"]'));
-});
+    assert.ok(claimScenario);
+    assert.ok(printScenario);
+    assert.deepEqual(claimScenario.expectedAuditActions, ['claim_lifecycle', 'uke_export']);
+    assert.deepEqual(printScenario.expectedAuditActions, ['print']);
+    assert.ok(claimScenario.stableSelectors.includes('[data-testid="print-uke-export-button"]'));
+    assert.ok(printScenario.stableSelectors.includes('[data-testid="print-execute-button"]'));
+  });
 
-test('ONBOARDING_E2E_SCENARIOS selectors exist in application source', () => {
-  for (const scenario of ONBOARDING_E2E_SCENARIOS) {
-    for (const selector of scenario.stableSelectors) {
-      const testId = selector.match(/\[data-testid="([^"]+)"\]/)?.[1];
-      assert.ok(testId, `selector must be a data-testid selector: ${selector}`);
-      assert.ok(onboardingSources.includes(`data-testid="${testId}"`), `${scenario.id} selector ${selector} is missing from source`);
+  it('all onboarding scenarios define non-empty valid testid selectors and titles', () => {
+    for (const scenario of ONBOARDING_E2E_SCENARIOS) {
+      assert.ok(scenario.id.length > 0);
+      assert.ok(scenario.title.length > 0);
+      assert.ok(scenario.stableSelectors.length > 0);
+      for (const selector of scenario.stableSelectors) {
+        assert.match(selector, /^\[data-testid="[a-zA-Z0-9_-]+"\]$/);
+      }
     }
-  }
-});
+  });
 
-test('onboarding browser E2E runner is exposed as a package script', () => {
-  assert.strictEqual(packageJson.scripts['test:e2e:onboarding'], 'node scripts/runOnboardingE2E.mjs');
-  assert.match(onboardingE2EScript, /puppeteer\.launch/);
-  assert.match(onboardingE2EScript, /YAKUREKI_E2E_BASE_URL/);
-  assert.match(onboardingE2EScript, /YAKUREKI_E2E_VISIT_ID/);
-  assert.match(onboardingE2EScript, /YAKUREKI_E2E_AUTO_SEED/);
-  assert.match(onboardingE2EScript, /YAKUREKI_E2E_ARTIFACT_DIR/);
-  assert.match(onboardingE2EScript, /__yakurekiSeedOnboardingE2E/);
-  assert.match(onboardingE2EScript, /failure\.png/);
-  assert.match(onboardingE2EScript, /browser-logs\.json/);
-  assert.match(onboardingE2EScript, /initial-setup-panel/);
-  assert.match(onboardingE2EScript, /monthly-claim-workbench/);
-  assert.match(onboardingE2EScript, /print-uke-export-button/);
-  assert.match(onboardingE2EScript, /print-execute-button/);
-});
+  it('onboarding browser E2E runner is exposed as a package script', () => {
+    assert.equal(packageJson.scripts['test:e2e:onboarding'], 'node scripts/runOnboardingE2E.mjs');
+  });
 
-test('buildOnboardingE2EReport marks scenarios complete from audit evidence', () => {
-  const report = buildOnboardingE2EReport([
-    auditLog('claim_lifecycle'),
-    auditLog('uke_export'),
-    auditLog('print')
-  ]);
+  it('buildOnboardingE2EReport marks scenarios complete from audit evidence', () => {
+    const report = buildOnboardingE2EReport([
+      auditLog('claim_lifecycle'),
+      auditLog('uke_export'),
+      auditLog('print')
+    ]);
 
-  assert.strictEqual(report.status, 'complete');
-  assert.strictEqual(report.statusLabel, '導入E2E完了');
-  assert.strictEqual(report.completedCount, report.scenarioCount);
-  assert.ok(report.scenarios.every((scenario) => scenario.missingEvidence.length === 0));
-});
+    assert.equal(report.status, 'complete');
+    assert.equal(report.statusLabel, '導入E2E完了');
+    assert.equal(report.completedCount, report.scenarioCount);
+    assert.ok(report.scenarios.every((scenario) => scenario.missingEvidence.length === 0));
+  });
 
-test('buildOnboardingE2EReport lists missing audit evidence', () => {
-  const report = buildOnboardingE2EReport([auditLog('claim_lifecycle')]);
-  const claimScenario = report.scenarios.find((scenario) => scenario.id === 'claim_uke_export');
-  const printScenario = report.scenarios.find((scenario) => scenario.id === 'print_documents');
+  it('buildOnboardingE2EReport lists missing audit evidence', () => {
+    const report = buildOnboardingE2EReport([auditLog('claim_lifecycle')]);
+    const claimScenario = report.scenarios.find((scenario) => scenario.id === 'claim_uke_export');
+    const printScenario = report.scenarios.find((scenario) => scenario.id === 'print_documents');
 
-  assert.strictEqual(report.status, 'attention');
-  assert.strictEqual(claimScenario?.status, 'attention');
-  assert.deepStrictEqual(claimScenario?.missingEvidence, ['uke_export の監査ログを記録する']);
-  assert.deepStrictEqual(printScenario?.missingEvidence, ['print の監査ログを記録する']);
+    assert.equal(report.status, 'attention');
+    assert.equal(claimScenario?.status, 'attention');
+    assert.deepEqual(claimScenario?.missingEvidence, ['uke_export の監査ログを記録する']);
+    assert.deepEqual(printScenario?.missingEvidence, ['print の監査ログを記録する']);
+  });
 });

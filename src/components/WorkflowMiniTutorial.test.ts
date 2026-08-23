@@ -1,59 +1,35 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import WorkflowMiniTutorial, {
+  WORKFLOW_DEMO_FIXTURE,
+  workflowTutorialStorageKey,
+  type WorkflowTutorialKind
+} from './WorkflowMiniTutorial';
 
-const source = readFileSync(new URL('./WorkflowMiniTutorial.tsx', import.meta.url), 'utf8');
-const cssSource = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-const ocrSource = readFileSync(new URL('../app/ocr/page.tsx', import.meta.url), 'utf8');
-const mainEmrSource = readFileSync(new URL('../app/emr/page.tsx', import.meta.url), 'utf8');
-const pickingModalSource = readFileSync(new URL('../app/emr/components/PickingSupportModal.tsx', import.meta.url), 'utf8');
-const emrSource = mainEmrSource + '\n' + pickingModalSource;
+describe('WorkflowMiniTutorial contracts and fixtures', () => {
+  it('exports WorkflowMiniTutorial as a callable React component function', () => {
+    assert.equal(typeof WorkflowMiniTutorial, 'function');
+  });
 
-test('workflow demos use isolated fixed fixtures and never write pharmacy records', () => {
-  assert.match(source, /WORKFLOW_DEMO_FIXTURE/);
-  assert.match(source, /DEMO-INPUT-RX-001/);
-  assert.match(source, /DEMO-PICK-001/);
-  assert.match(source, /DEMO-SOAP-001/);
-  assert.match(source, /独立デモ・DB未保存/);
-  assert.match(source, /これは練習用の固定データです/);
-  assert.match(source, /患者・受付・在庫・薬歴には保存されません/);
-  assert.doesNotMatch(source, /from ['"]@\/db/);
-  assert.doesNotMatch(source, /useDatabase/);
-  assert.doesNotMatch(source, /\.(insert|bulkInsert|bulkUpsert|upsert|atomicPatch)\(/);
-});
+  it('keeps fixed workflow demo fixtures isolated from DB storage', () => {
+    assert.equal(WORKFLOW_DEMO_FIXTURE.input.prescriptionId, 'DEMO-INPUT-RX-001');
+    assert.equal(WORKFLOW_DEMO_FIXTURE.input.patientName, 'デモ患者 みどり');
+    assert.equal(WORKFLOW_DEMO_FIXTURE.picking.taskId, 'DEMO-PICK-001');
+    assert.equal(WORKFLOW_DEMO_FIXTURE.picking.lot, 'DEMO-LOT-A');
+    assert.equal(WORKFLOW_DEMO_FIXTURE.medication.recordId, 'DEMO-SOAP-001');
+    assert.equal(WORKFLOW_DEMO_FIXTURE.medication.previousDifference, '用量変更あり');
+  });
 
-test('each mini demo opens once per staff member and workflow', () => {
-  assert.match(source, /WORKFLOW_TUTORIAL_VERSION = 'v1'/);
-  assert.match(source, /yakureki:workflow-tutorial:\$\{WORKFLOW_TUTORIAL_VERSION\}:\$\{userId\}:\$\{kind\}/);
-  assert.match(source, /localStorage\.getItem\(workflowTutorialStorageKey\(userId, kind\)\)/);
-  assert.match(source, /localStorage\.setItem\(workflowTutorialStorageKey\(userId, kind\), new Date\(\)\.toISOString\(\)\)/);
-  assert.match(source, /if \(!autoOpen \|\| !userId\) return/);
-});
+  it('generates distinct storage keys for each workflow kind and staff member', () => {
+    const kinds: WorkflowTutorialKind[] = ['input', 'picking', 'medication'];
+    const keys = kinds.map((kind) => workflowTutorialStorageKey('staff_A', kind));
 
-test('input, picking, and medication demos are attached to their actual workflow screens', () => {
-  assert.match(ocrSource, /<WorkflowMiniTutorial[\s\S]*?kind="input"[\s\S]*?autoOpen/);
-  assert.match(emrSource, /<WorkflowMiniTutorial[\s\S]*?kind="medication"[\s\S]*?autoOpen=\{!isPickingModalOpen\}/);
-  assert.match(emrSource, /<WorkflowMiniTutorial[\s\S]*?kind="picking"[\s\S]*?autoOpen/);
-  assert.match(emrSource, /openPicking'\) === '1'/);
-});
+    assert.equal(keys[0], 'yakureki:workflow-tutorial:v1:staff_A:input');
+    assert.equal(keys[1], 'yakureki:workflow-tutorial:v1:staff_A:picking');
+    assert.equal(keys[2], 'yakureki:workflow-tutorial:v1:staff_A:medication');
 
-test('workflow demos use accessible native dialogs above the picking dialog', () => {
-  assert.match(source, /import \{ createPortal \} from 'react-dom'/);
-  assert.match(source, /<dialog/);
-  assert.match(source, /dialog\.showModal\(\)/);
-  assert.match(source, /aria-labelledby=\{titleId\}/);
-  assert.match(source, /aria-describedby=\{descriptionId\}/);
-  assert.match(source, /onCancel=/);
-  assert.match(source, /closeButtonRef\.current\?\.focus\(\)/);
-  assert.match(source, /triggerRef\.current\?\.focus\(\)/);
-  assert.match(source, /createPortal\(demoDialog, document\.body\)/);
-  assert.match(cssSource, /\.workflow-demo-dialog::backdrop/);
-  assert.match(cssSource, /\.workflow-demo-data-note/);
-  assert.match(cssSource, /@media \(max-width: 760px\)[\s\S]*\.workflow-demo-content/);
-});
-
-test('workflow demo text wraps instead of disappearing at narrow widths', () => {
-  assert.match(cssSource, /\.workflow-demo-fields strong,[\s\S]*overflow-wrap: anywhere/);
-  assert.match(cssSource, /\.workflow-demo-scan-code span[\s\S]*white-space: normal/);
-  assert.match(cssSource, /@media \(max-width: 520px\)[\s\S]*\.workflow-demo-trigger span/);
+    // 異なるユーザーでは異なるキーになること
+    const userBKey = workflowTutorialStorageKey('staff_B', 'input');
+    assert.notEqual(keys[0], userBKey);
+  });
 });

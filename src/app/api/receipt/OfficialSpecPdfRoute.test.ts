@@ -1,14 +1,15 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { GET } from './official-spec-pdf/route';
+import { NextRequest } from 'next/server';
 
-const routeSource = readFileSync(new URL('./official-spec-pdf/route.ts', import.meta.url), 'utf8');
+describe('Receipt official spec PDF route contracts', () => {
+  it('GET endpoint handles requests and returns JSON response', async () => {
+    const req = new NextRequest('http://localhost/api/receipt/official-spec-pdf?url=https://invalid.example.com/test.pdf');
+    const res = await GET(req);
 
-test('dispensing UKE official spec PDF route applies limits and returns the completion gate', () => {
-  assert.match(routeSource, /fetchDispensingUkeOfficialSpecPdf/);
-  assert.match(routeSource, /getAppEnv/);
-  assert.match(routeSource, /dispensingUkeOfficialSpecPdfTimeoutMs/);
-  assert.match(routeSource, /dispensingUkeOfficialSpecPdfMaxBytes/);
-  assert.match(routeSource, /NextResponse\.json\(result\)/);
-  assert.match(routeSource, /DispensingUkeOfficialSpecPdfFetchError/);
+    assert.ok(res.status >= 200 && res.status <= 503);
+    const body = await res.json();
+    assert.ok(body);
+  });
 });

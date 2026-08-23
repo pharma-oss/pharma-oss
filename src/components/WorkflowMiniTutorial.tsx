@@ -22,7 +22,7 @@ import { createPortal } from 'react-dom';
 
 const WORKFLOW_TUTORIAL_VERSION = 'v1';
 
-const WORKFLOW_DEMO_FIXTURE = {
+export const WORKFLOW_DEMO_FIXTURE = {
   input: {
     prescriptionId: 'DEMO-INPUT-RX-001',
     patientName: 'デモ患者 みどり',
@@ -69,7 +69,7 @@ type WorkflowConfig = {
   preview: ReactNode;
 };
 
-function workflowTutorialStorageKey(userId: string, kind: WorkflowTutorialKind): string {
+export function workflowTutorialStorageKey(userId: string, kind: WorkflowTutorialKind): string {
   return `yakureki:workflow-tutorial:${WORKFLOW_TUTORIAL_VERSION}:${userId}:${kind}`;
 }
 

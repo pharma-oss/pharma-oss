@@ -9,8 +9,8 @@ import {
   UNAUTHENTICATED_USER
 } from '@/lib/audit';
 
-const SESSION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
-const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'focus'] as const;
+export const SESSION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
+export const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'focus'] as const;
 
 export function useSessionLock({
   isAuthenticated,
