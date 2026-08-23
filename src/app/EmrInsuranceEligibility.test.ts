@@ -1,17 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { toDateInputValue } from '../lib/emr_helpers';
+import { formatPatientInsuranceInfo } from '../lib/myna_read_display';
+import { PatientBanner } from './emr/components/PatientBanner';
 
-const emrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
-
-test('emr insurance modal stores eligibility dates and public expense monthly limit', () => {
-  assert.match(emrSource, /editEligibilityStatus/);
-  assert.match(emrSource, /eligibilityCheckedAt/);
-  assert.match(emrSource, /validFrom/);
-  assert.match(emrSource, /validTo/);
-  assert.match(emrSource, /monthlyLimitYen/);
-  assert.match(emrSource, /資格確認・有効期間/);
-  assert.match(emrSource, /公費有効期限/);
-  assert.match(emrSource, /月額負担上限/);
-  assert.match(emrSource, /toDateInputValue/);
+test('toDateInputValue handles dates and timestamps correctly', () => {
+  assert.strictEqual(toDateInputValue('2026-08-22T00:00:00.000Z'), '2026-08-22');
+  assert.strictEqual(toDateInputValue('2026-08-22'), '2026-08-22');
+  assert.strictEqual(toDateInputValue(''), '');
+  assert.strictEqual(toDateInputValue(undefined), '');
 });
+
+test('formatPatientInsuranceInfo correctly formats insurance display', () => {
+  const info = {
+    provider: '06139999',
+    number: '記号123 番号456',
+    burdenRatio: 30,
+    insuranceType: '社保',
+    relationship: '本人'
+  };
+  const formatted = formatPatientInsuranceInfo(info as any);
+  assert.ok(formatted.includes('社保'));
+  assert.ok(formatted.includes('3割'));
+});
+
+test('PatientBanner component is properly exported as React component', () => {
+  assert.strictEqual(typeof PatientBanner, 'object'); // React.memo
+});
+

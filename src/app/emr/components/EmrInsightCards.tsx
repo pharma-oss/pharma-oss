@@ -106,14 +106,14 @@ export const CareChecklistCard = React.memo(function CareChecklistCard({
 
         .care-check-label {
           color: var(--text-muted);
-          font-size: 0.74rem;
+          font-size: var(--fs-xs);
           font-weight: 800;
           overflow-wrap: anywhere;
         }
 
         .care-check-value {
           color: var(--text-main);
-          font-size: 0.98rem;
+          font-size: var(--fs-base);
           font-weight: 850;
         }
 
@@ -158,7 +158,7 @@ export const WarningInsightCard = React.memo(function WarningInsightCard({
           <CheckCircle2 size={18} color="var(--green-600)" />
           <h3 style={{ color: 'var(--green-700)' }}>相互作用・注意なし</h3>
         </div>
-        <p style={{ fontSize: '0.85rem', color: 'var(--green-700)', marginTop: '0.5rem' }}>
+        <p style={{ fontSize: 'var(--fs-md)', color: 'var(--green-700)', marginTop: '0.5rem' }}>
           併用禁忌や用法用量の警告は検出されませんでした。
         </p>
       </div>
@@ -272,7 +272,7 @@ export const VitalInsightCard = React.memo(function VitalInsightCard() {
       <div className="insight-header">
         <h3>バイタル・臨床検査値</h3>
       </div>
-      <p style={{ fontSize: '0.82rem', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
+      <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
         最新の検査値（eGFR / Blood Pressure等）は未登録です
       </p>
     </div>
@@ -293,7 +293,7 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
         <h3>指導文・患者説明資料</h3>
       </div>
       {!prescribedDrugs || prescribedDrugs.length === 0 ? (
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
+        <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
           処方薬を読み込み中...
         </p>
       ) : (
@@ -312,6 +312,61 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
           ))}
         </div>
       )}
+
+      <style jsx>{`
+        .insight-card {
+          background: var(--bg-card);
+          border-radius: var(--radius-md);
+          padding: 1.25rem;
+          border: 1px solid var(--border);
+          box-shadow: var(--shadow-sm);
+        }
+        .insight-card.warning { border-left: 4px solid #f59e0b; }
+        .insight-card.info { border-left: 4px solid #3b82f6; }
+        .insight-card.default { border-left: 4px solid var(--text-ghost); }
+        .insight-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+        .insight-header h3 {
+          font-size: 1rem;
+          margin: 0;
+        }
+        .icon-warning { color: #f59e0b; }
+        .icon-info { color: #3b82f6; }
+        .icon-default { color: var(--text-ghost); }
+        .insight-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          font-size: var(--fs-base);
+        }
+        .insight-list li {
+          padding-bottom: 0.5rem;
+          border-bottom: 1px dashed var(--border);
+        }
+        .insight-list li:last-child { border-bottom: none; padding-bottom: 0; }
+        .doc-links {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .doc-link {
+          font-size: var(--fs-base);
+          color: var(--primary);
+          text-decoration: none;
+          padding: 0.5rem;
+          background: var(--bg-base);
+          border-radius: var(--radius-sm);
+          transition: background var(--transition-fast);
+        }
+        .doc-link:hover { background: var(--primary-light); }
+      `}</style>
     </div>
   );
 });

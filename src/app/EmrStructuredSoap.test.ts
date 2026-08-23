@@ -1,21 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import {
+  createDefaultSoapStructuredAssessment,
+  normalizeSoapStructuredAssessment,
+  getMissingSoapStructuredAssessmentFields
+} from '../lib/soap_structured_assessment';
+import { SoapStructuredAssessmentPanel } from './emr/components/SoapComponents';
 
-const mainEmrSource = readFileSync(new URL('./emr/page.tsx', import.meta.url), 'utf8');
-const soapCompSource = readFileSync(new URL('./emr/components/SoapComponents.tsx', import.meta.url), 'utf8');
-const structLibSource = readFileSync(new URL('../lib/soap_structured_assessment.ts', import.meta.url), 'utf8');
-const emrSource = mainEmrSource + '\n' + soapCompSource + '\n' + structLibSource;
-
-test('EMR SOAP editor stores structured medication guidance fields and warns on completion', () => {
-  assert.match(emrSource, /SoapStructuredAssessmentPanel/);
-  assert.match(emrSource, /structuredAssessment/);
-  assert.match(emrSource, /getMissingSoapStructuredAssessmentFields/);
-  assert.match(emrSource, /missingStructuredFields/);
-  assert.match(emrSource, /薬歴の構造化チェックに未確認項目があります/);
-  assert.match(emrSource, /服薬状況/);
-  assert.match(emrSource, /残薬/);
-  assert.match(emrSource, /副作用・有害事象/);
-  assert.match(emrSource, /後発品変更意向/);
-  assert.match(emrSource, /お薬手帳/);
+test('createDefaultSoapStructuredAssessment creates expected defaults', () => {
+  const assessment = createDefaultSoapStructuredAssessment();
+  assert.strictEqual(assessment.adherence, 'unknown');
+  assert.strictEqual(assessment.leftoverMedicine, 'unknown');
+  assert.strictEqual(assessment.adverseEvent, 'unknown');
+  assert.strictEqual(assessment.genericChangePreference, 'unknown');
+  assert.strictEqual(assessment.medicationNotebook, 'unknown');
 });
+
+test('getMissingSoapStructuredAssessmentFields identifies unchecked fields', () => {
+  const assessment = createDefaultSoapStructuredAssessment();
+  const missing = getMissingSoapStructuredAssessmentFields(assessment);
+  assert.ok(missing.length >= 5);
+  assert.ok(missing.includes('服薬状況'));
+  assert.ok(missing.includes('残薬'));
+  assert.ok(missing.includes('副作用・有害事象'));
+  assert.ok(missing.includes('後発品変更意向'));
+  assert.ok(missing.includes('お薬手帳'));
+});
+
+test('SoapStructuredAssessmentPanel is exported as React component', () => {
+  assert.ok(SoapStructuredAssessmentPanel);
+});
+

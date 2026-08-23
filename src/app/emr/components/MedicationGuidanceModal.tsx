@@ -118,7 +118,7 @@ export const MedicationGuidanceModal = ({
           ) : (
             <>
               <p
-                style={{ fontSize: '0.85rem', color: 'var(--text-ghost)', marginBottom: '1rem' }}
+                style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', marginBottom: '1rem' }}
               >
                 この薬剤に関する指導ポイントやヒントを登録できます。
               </p>
@@ -182,7 +182,7 @@ export const MedicationGuidanceModal = ({
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <span
                   style={{
-                    fontSize: '0.85rem',
+                    fontSize: 'var(--fs-md)',
                     color: 'var(--text-ghost)',
                     alignSelf: 'center',
                     marginRight: '0.5rem'
@@ -200,7 +200,7 @@ export const MedicationGuidanceModal = ({
                       border: '1px solid var(--border)',
                       padding: '0.2rem 0.6rem',
                       borderRadius: '4px',
-                      fontSize: '0.8rem',
+                      fontSize: 'var(--fs-sm)',
                       fontWeight: 600,
                       cursor: 'pointer'
                     }}

@@ -250,7 +250,7 @@ export default function DrugHistoryModal({
         }
         .dh-title { display: flex; gap: 0.6rem; color: var(--primary-dark); min-width: min(220px, 100%); flex: 1 1 220px; }
         .dh-title h3 { font-size: 1.05rem; margin: 0; color: var(--text-main); }
-        .dh-title span { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
+        .dh-title span { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 600; }
         .dh-close {
           width: 34px; height: 34px; min-height: 34px; flex: 0 0 auto;
           display: inline-flex; align-items: center; justify-content: center;
@@ -260,7 +260,7 @@ export default function DrugHistoryModal({
         .dh-close:hover { background: var(--bg-subtle); color: var(--text-main); }
         .dh-empty {
           display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-          padding: 2.5rem 1rem; color: var(--text-muted); font-size: 0.9rem;
+          padding: 2.5rem 1rem; color: var(--text-muted); font-size: var(--fs-base);
         }
         .dh-body { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; flex: 1; }
         .dh-druglist {
@@ -275,38 +275,38 @@ export default function DrugHistoryModal({
         }
         .dh-drug:hover { background: var(--bg-hover); }
         .dh-drug.active { background: var(--primary-soft); border-color: var(--primary); }
-        .dh-drug-name { font-size: 0.84rem; font-weight: 700; color: var(--text-main); overflow-wrap: anywhere; }
-        .dh-drug-meta { grid-column: 2; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+        .dh-drug-name { font-size: var(--fs-md); font-weight: 700; color: var(--text-main); overflow-wrap: anywhere; }
+        .dh-drug-meta { grid-column: 2; font-size: var(--fs-xs); color: var(--text-muted); font-weight: 600; }
         .dh-timeline { padding: 1rem 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem; }
         .dh-anchor {
           display: flex; flex-direction: column; gap: 0.15rem; padding-bottom: 0.4rem;
           border-bottom: 1px solid var(--border);
         }
         .dh-anchor strong { font-size: 1rem; color: var(--text-main); }
-        .dh-anchor span { font-size: 0.76rem; color: var(--text-muted); font-weight: 600; }
+        .dh-anchor span { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 600; }
         .dh-entry {
           border: 1px solid var(--border); border-left: 4px solid var(--primary);
           border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: 0.75rem 0.9rem;
           display: flex; flex-direction: column; gap: 0.55rem; background: #fff;
         }
         .dh-entry-head { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; }
-        .dh-date { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 800; color: var(--text-main); font-size: 0.92rem; }
-        .dh-doctor { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; }
+        .dh-date { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 800; color: var(--text-main); font-size: var(--fs-base); }
+        .dh-doctor { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: var(--fs-sm); font-weight: 700; }
         .dh-rx { display: flex; flex-direction: column; gap: 0.3rem; }
-        .dh-rx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.82rem; }
+        .dh-rx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: var(--fs-md); }
         .dh-rx-name { font-weight: 800; color: var(--text-main); }
         .dh-rx-detail { color: var(--text-muted); font-weight: 600; }
         .dh-rx-sub {
-          font-size: 0.72rem; font-weight: 700; color: var(--accent);
+          font-size: var(--fs-xs); font-weight: 700; color: var(--accent);
           background: var(--accent-soft); padding: 0.05rem 0.4rem; border-radius: var(--radius-sm);
         }
         .dh-soap { border-top: 1px dashed var(--border); padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; }
-        .dh-soap-head { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; font-weight: 800; color: var(--text-muted); }
+        .dh-soap-head { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-xs); font-weight: 800; color: var(--text-muted); }
         .dh-problem { display: flex; flex-direction: column; gap: 0.2rem; }
-        .dh-problem-title { font-size: 0.8rem; font-weight: 800; color: var(--text-main); }
-        .dh-soap-line { display: grid; grid-template-columns: 16px 1fr; gap: 0.45rem; font-size: 0.82rem; color: var(--text-main); line-height: 1.5; }
+        .dh-problem-title { font-size: var(--fs-sm); font-weight: 800; color: var(--text-main); }
+        .dh-soap-line { display: grid; grid-template-columns: 16px 1fr; gap: 0.45rem; font-size: var(--fs-md); color: var(--text-main); line-height: 1.5; }
         .dh-soap-letter { font-weight: 900; text-align: center; }
-        .dh-soap-empty { font-size: 0.78rem; color: var(--text-ghost); font-weight: 600; }
+        .dh-soap-empty { font-size: var(--fs-sm); color: var(--text-ghost); font-weight: 600; }
         @media (max-width: 760px) {
           .dh-body { grid-template-columns: 1fr; }
           .dh-druglist { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }

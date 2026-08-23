@@ -60,7 +60,12 @@ import {
   tracingStatusLabel,
   type ReversiblePatch
 } from '@/lib/emr_helpers';
-import DrugHistoryModal from './DrugHistoryModal';
+import DrugHistoryModal from './components/DrugHistoryModal';
+import PatientBanner from './components/PatientBanner';
+import SoapEditor from './components/SoapEditor';
+import EmrInterventionModal from './components/EmrInterventionModal';
+import { useEmrIntervention } from '@/hooks/useEmrIntervention';
+import { useEmrTracingReport } from '@/hooks/useEmrTracingReport';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 import {
   SoapHistoryQuickCard,
@@ -86,11 +91,11 @@ import { TracingReportModal } from './components/TracingReportModal';
 
 const TimelineItem = ({ date, drug, detail, change, active }: { date: string; drug: string; detail: string; change?: string; active?: boolean }) => (
   <div className={`timeline-item ${active ? 'active' : ''}`} style={{ display: 'flex', gap: '0.6rem', padding: '0.4rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
-    <div className="item-date" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', minWidth: '70px' }}>{date}</div>
+    <div className="item-date" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', minWidth: '70px' }}>{date}</div>
     <div className="item-content" style={{ flex: 1 }}>
-      <div className="item-drug" style={{ fontSize: '0.85rem', fontWeight: 700 }}>{drug}</div>
-      <div className="item-detail" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{detail}</div>
-      {change && <div className="item-change" style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>{change}</div>}
+      <div className="item-drug" style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{drug}</div>
+      <div className="item-detail" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>{detail}</div>
+      {change && <div className="item-change" style={{ fontSize: 'var(--fs-xs)', color: 'var(--primary)' }}>{change}</div>}
     </div>
   </div>
 );
@@ -178,36 +183,9 @@ export default function EmrPage() {
   }, [db]);
 
 
-  // States for Interventions
-  const [interventions, setInterventions] = useState<any[]>([]);
-  const [tracingReports, setTracingReports] = useState<VisitTracingReport[]>([]);
   const [initialQuestionnaire, setInitialQuestionnaire] = useState<VisitInitialQuestionnaire | null>(null);
   const [mynaClinicalImports, setMynaClinicalImports] = useState<VisitMynaClinicalImport[]>([]);
-  const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
-  const [isTracingModalOpen, setIsTracingModalOpen] = useState(false);
   const [isDrugHistoryOpen, setIsDrugHistoryOpen] = useState(false);
-  const [intDoctor, setIntDoctor] = useState('');
-  const [intReason, setIntReason] = useState('');
-  const [intBefore, setIntBefore] = useState('');
-  const [intAfter, setIntAfter] = useState('');
-  const [intResult, setIntResult] = useState('');
-  const [intStatus, setIntStatus] = useState<'pending' | 'completed'>('completed');
-  const [intMethod, setIntMethod] = useState<'phone' | 'fax' | 'in_person' | 'other'>('phone');
-  const [intResponseDueDate, setIntResponseDueDate] = useState('');
-  const [intNote, setIntNote] = useState('');
-  const [intConsented, setIntConsented] = useState(true);
-  const [tracingReportDate, setTracingReportDate] = useState(() => todayDateInputValue());
-  const [tracingStatus, setTracingStatus] = useState<TracingReportStatus>('draft');
-  const [tracingDestinationInstitution, setTracingDestinationInstitution] = useState('');
-  const [tracingDestinationDepartment, setTracingDestinationDepartment] = useState('');
-  const [tracingDestinationDoctor, setTracingDestinationDoctor] = useState('');
-  const [tracingSubject, setTracingSubject] = useState('');
-  const [tracingMedicationSummary, setTracingMedicationSummary] = useState('');
-  const [tracingPatientCondition, setTracingPatientCondition] = useState('');
-  const [tracingAssessment, setTracingAssessment] = useState('');
-  const [tracingProposal, setTracingProposal] = useState('');
-  const [tracingFollowUpPlan, setTracingFollowUpPlan] = useState('');
-  const [tracingResponseSummary, setTracingResponseSummary] = useState('');
   const unpickedPickingCount = useMemo(() => {
     let count = 0;
     for (let i = 0; i < pickingItems.length; i++) {
@@ -324,185 +302,50 @@ export default function EmrPage() {
     }
   }, [db, ensureActiveVisitEditable]);
 
-  const handleAddIntervention = async (input: {
-    reason: string;
-    beforeSnapshot: string;
-    afterSnapshot: string;
-    inquiryStatus: 'pending' | 'completed';
-    inquiryMethod: 'phone' | 'fax' | 'in_person' | 'other';
-    inquiryDoctor: string;
-    inquiryResult: string;
-    responseDueDate: string;
-    note: string;
-    patientConsented: boolean;
-  }) => {
-    if (!db) return;
-    try {
-      const visit = await findActiveVisit();
-      if (!visit) return;
-      if (isClaimEditBlocked(visit.claimLifecycle)) {
-        toast.error(getClaimEditBlockedMessage(visit.claimLifecycle, 'prescription'));
-        return;
-      }
+  const {
+    interventions,
+    setInterventions,
+    isInterventionModalOpen,
+    setIsInterventionModalOpen,
+    intDoctor,
+    setIntDoctor,
+    intReason,
+    setIntReason,
+    intBefore,
+    setIntBefore,
+    intAfter,
+    setIntAfter,
+    intResult,
+    setIntResult,
+    intStatus,
+    setIntStatus,
+    intMethod,
+    setIntMethod,
+    intResponseDueDate,
+    setIntResponseDueDate,
+    intNote,
+    setIntNote,
+    intConsented,
+    setIntConsented,
+    handleAddIntervention,
+    handleDeleteIntervention,
+    resetInterventionForm
+  } = useEmrIntervention({
+    db,
+    findActiveVisit
+  });
 
-      const newId = `int_${uuidv4()}`;
-      const now = new Date().toISOString();
-      const newRecord = {
-        interventionId: newId,
-        visitId: visit.visitId,
-        beforeSnapshot: input.beforeSnapshot,
-        afterSnapshot: input.afterSnapshot,
-        reason: input.reason,
-        inquiryStatus: input.inquiryStatus,
-        inquiryMethod: input.inquiryMethod,
-        inquiryDoctor: input.inquiryDoctor,
-        inquiryResult: input.inquiryResult,
-        responseDueDate: input.responseDueDate || undefined,
-        contactedAt: now,
-        respondedAt: input.inquiryStatus === 'completed' ? now : undefined,
-        handledBy: getCurrentUser().name,
-        note: input.note,
-        patientConsented: input.patientConsented,
-        createdAt: now,
-        updatedAt: now
-      };
-
-      const insertedDoc = await db.interventions.insert(newRecord);
-
-      // 監査ログの記録
-      const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-      const patientName = patients[0]?.name || '不明';
-      const auditOk = await logAuditAction(
-        db,
-        'prescription_edit',
-        `疑義照会登録: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`,
-        visit.patientId,
-        patientName
-      );
-      if (!auditOk) {
-        await insertedDoc.remove();
-        throw new Error('疑義照会記録の監査ログ記録に失敗したため、記録を元に戻しました。');
-      }
-
-      setInterventions(prev => [...prev, newRecord]);
-      toast.success(input.inquiryStatus === 'pending' ? '疑義照会を照会中として記録しました' : '疑義照会・処方変更を記録しました');
-    } catch (err) {
-      console.error('Failed to save intervention:', err);
-      toast.error('保存に失敗しました');
-    }
-  };
-
-  const resetInterventionForm = useCallback(() => {
-    setIntDoctor('');
-    setIntReason('');
-    setIntBefore('');
-    setIntAfter('');
-    setIntResult('');
-    setIntStatus('completed');
-    setIntMethod('phone');
-    setIntResponseDueDate('');
-    setIntNote('');
-    setIntConsented(true);
-  }, []);
-
-  const resetTracingForm = useCallback(() => {
-    setTracingReportDate(todayDateInputValue());
-    setTracingStatus('draft');
-    setTracingDestinationInstitution('');
-    setTracingDestinationDepartment('');
-    setTracingDestinationDoctor('');
-    setTracingSubject('');
-    setTracingMedicationSummary('');
-    setTracingPatientCondition('');
-    setTracingAssessment('');
-    setTracingProposal('');
-    setTracingFollowUpPlan('');
-    setTracingResponseSummary('');
-  }, []);
-
-  const handleAddTracingReport = useCallback(async () => {
-    if (!db) return;
-    const visit = await findActiveVisit();
-    if (!visit) {
-      toast.error('処理中の患者が見つかりません');
-      return;
-    }
-    if (!tracingSubject.trim()) {
-      alert('件名を入力してください。');
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const currentVisit = visit.toJSON() as Visit;
-    const currentCareCommunication = currentVisit.careCommunication || {};
-    const report: VisitTracingReport = {
-      reportId: `tr_${uuidv4()}`,
-      status: tracingStatus,
-      reportDate: tracingReportDate || todayDateInputValue(),
-      destinationInstitution: tracingDestinationInstitution.trim() || currentVisit.institutionName || '',
-      destinationDepartment: tracingDestinationDepartment.trim() || currentVisit.departmentName || '',
-      destinationDoctor: tracingDestinationDoctor.trim() || currentVisit.doctorName || '',
-      subject: tracingSubject.trim(),
-      medicationSummary: tracingMedicationSummary.trim(),
-      patientCondition: tracingPatientCondition.trim(),
-      assessment: tracingAssessment.trim(),
-      proposal: tracingProposal.trim(),
-      followUpPlan: tracingFollowUpPlan.trim(),
-      sentAt: tracingStatus === 'sent' || tracingStatus === 'closed' ? now : undefined,
-      sentBy: tracingStatus === 'sent' || tracingStatus === 'closed' ? getCurrentUser().name : undefined,
-      responseSummary: tracingResponseSummary.trim(),
-      createdAt: now,
-      updatedAt: now
-    };
-
-    try {
-      const nextReports = [report, ...(currentCareCommunication.tracingReports || [])];
-      await visit.patch({
-        careCommunication: {
-          ...currentCareCommunication,
-          tracingReports: nextReports,
-          updatedAt: now
-        }
-      });
-      setTracingReports(nextReports);
-
-      const patients = await db.patients.find({ selector: { patientId: currentVisit.patientId } }).exec();
-      const patientName = patients[0]?.name || '不明';
-      const auditOk = await logAuditAction(
-        db,
-        'follow_up_record',
-        `トレーシングレポート記録: ${tracingStatusLabel[report.status]} / ${report.subject} / 宛先 ${report.destinationInstitution || '未指定'} ${report.destinationDoctor || ''}`,
-        currentVisit.patientId,
-        patientName
-      );
-      if (!auditOk) {
-        toast.warning('レポートは保存しましたが、監査ログ記録に失敗しました。');
-      } else {
-        toast.success('トレーシングレポートを記録しました');
-      }
-      setIsTracingModalOpen(false);
-      resetTracingForm();
-    } catch (error) {
-      console.error('Failed to save tracing report:', error);
-      toast.error('トレーシングレポートの保存に失敗しました');
-    }
-  }, [
+  const {
+    tracingReports,
+    setTracingReports,
+    isTracingModalOpen,
+    setIsTracingModalOpen,
+    handleSaveTracingReport
+  } = useEmrTracingReport({
     db,
     findActiveVisit,
-    resetTracingForm,
-    tracingAssessment,
-    tracingDestinationDepartment,
-    tracingDestinationDoctor,
-    tracingDestinationInstitution,
-    tracingFollowUpPlan,
-    tracingMedicationSummary,
-    tracingPatientCondition,
-    tracingProposal,
-    tracingReportDate,
-    tracingResponseSummary,
-    tracingStatus,
-    tracingSubject
-  ]);
+    currentPatientName
+  });
 
   useEffect(() => {
     async function fetchInterventions() {
@@ -511,7 +354,7 @@ export default function EmrPage() {
         const visit = await findActiveVisit();
         if (visit) {
           const list = await db.interventions.find({ selector: { visitId: visit.visitId } }).exec();
-          setInterventions(list.map(d => d.toJSON()));
+          setInterventions(list.map((d: any) => d.toJSON()));
           const visitJson = visit.toJSON() as Visit;
           setTracingReports(visitJson.careCommunication?.tracingReports || []);
           setInitialQuestionnaire(visitJson.initialQuestionnaire || null);
@@ -531,7 +374,7 @@ export default function EmrPage() {
     return () => {
       document.removeEventListener('visit-care-communication-updated', fetchInterventions);
     };
-  }, [db, findActiveVisit]);
+  }, [db, findActiveVisit, setInterventions, setTracingReports]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1726,7 +1569,7 @@ useEffect(() => {
                 <AlertTriangle size={18} aria-hidden="true" />
                 <h3>AI補助は「{AI_ASSIST_MODE_LABELS[aiAssistMode]}」です</h3>
               </div>
-              <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, lineHeight: 1.5 }}>
+              <p style={{ margin: 0, fontSize: 'var(--fs-md)', fontWeight: 700, lineHeight: 1.5 }}>
                 {aiAssistMode === 'disabled'
                   ? 'SOAP下書き候補を停止しています。通常の薬歴入力は継続できます。'
                   : `要修正以外の下書き候補 ${allSoapAiDraftSuggestions.length - soapAiDraftSuggestions.length}件を非表示にしています。`}
@@ -1749,13 +1592,13 @@ useEffect(() => {
         <aside className="history-aside" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>初回質問表</h3>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>初回質問表</h3>
               {initialQuestionnaire && (
                 <span className="status-chip compact confirmed">OCR取込済</span>
               )}
             </div>
             {!initialQuestionnaire ? (
-              <span className="text-muted" style={{ fontSize: '0.82rem', color: 'var(--text-ghost)' }}>
+              <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>
                 この受付には初回質問表が保存されていません。
               </span>
             ) : (
@@ -1795,13 +1638,13 @@ useEffect(() => {
 
           <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>マイナ取込</h3>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>マイナ取込</h3>
               {mynaClinicalImports.length > 0 && (
                 <span className="status-chip compact confirmed">{mynaClinicalImports.length}件</span>
               )}
             </div>
             {mynaClinicalImports.length === 0 ? (
-              <span className="text-muted" style={{ fontSize: '0.82rem', color: 'var(--text-ghost)' }}>
+              <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>
                 特定健診情報・薬剤履歴はまだ取り込まれていません。
               </span>
             ) : (
@@ -1835,10 +1678,10 @@ useEffect(() => {
 
           <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>疑義照会</h3>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>疑義照会</h3>
               <button
                 className="btn-primary"
-                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--fs-sm)', borderRadius: '6px' }}
                 onClick={() => setIsInterventionModalOpen(true)}
               >
                 新規記録
@@ -1846,10 +1689,10 @@ useEffect(() => {
             </div>
             <div className="intervention-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '180px', overflowY: 'auto' }}>
               {interventions.length === 0 ? (
-                <span className="text-muted" style={{ fontSize: '0.82rem', color: 'var(--text-ghost)' }}>記録されている履歴はありません。</span>
+                <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>記録されている履歴はありません。</span>
               ) : (
                 interventions.map((inv) => (
-                  <div key={inv.interventionId} className="glass" style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.8rem', background: 'rgba(255,255,255,0.45)' }}>
+                  <div key={inv.interventionId} className="glass" style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: 'var(--fs-sm)', background: 'rgba(255,255,255,0.45)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.25rem' }}>
                       <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
                         {inv.inquiryDoctor || '未指定'}医師
@@ -1862,7 +1705,7 @@ useEffect(() => {
                     {inv.inquiryResult && (
                       <div style={{ marginBottom: '0.2rem', color: 'var(--text-main)' }}><strong>回答:</strong> {inv.inquiryResult}</div>
                     )}
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-ghost)' }}>
+                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-ghost)' }}>
                       {inv.beforeSnapshot || '変更前未入力'} &rarr; {inv.afterSnapshot || '変更後未入力'}
                       {inv.responseDueDate ? ` / 期限 ${inv.responseDueDate}` : ''}
                     </div>
@@ -1874,10 +1717,10 @@ useEffect(() => {
 
           <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>トレーシングレポート</h3>
+              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>トレーシングレポート</h3>
               <button
                 className="btn-primary"
-                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--fs-sm)', borderRadius: '6px' }}
                 onClick={() => setIsTracingModalOpen(true)}
               >
                 新規作成
@@ -1885,7 +1728,7 @@ useEffect(() => {
             </div>
             <div className="tracing-report-list">
               {tracingReports.length === 0 ? (
-                <span className="text-muted" style={{ fontSize: '0.82rem', color: 'var(--text-ghost)' }}>記録されているレポートはありません。</span>
+                <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>記録されているレポートはありません。</span>
               ) : (
                 tracingReports.map((report) => (
                   <div key={report.reportId} className="tracing-report-item">
@@ -1981,209 +1824,47 @@ useEffect(() => {
         </div>
       )}
 
-      {isInterventionModalOpen && (
-        <div className="insurance-modal-overlay">
-          <div className="insurance-modal animate-scale" style={{ width: '500px' }}>
-            <div className="modal-header">
-              <div className="modal-title-row">
-                <MessageSquare size={20} />
-                <h3>疑義照会・処方変更を記録</h3>
-              </div>
-              <span className="modal-subtitle">変更理由と医師の回答結果をレセプト(UKE)に自動連携します。</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
-                <div className="form-group flex-1">
-                  <label>照会状態</label>
-                  <select
-                    value={intStatus}
-                    onChange={(e) => setIntStatus(e.target.value as 'pending' | 'completed')}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
-                  >
-                    <option value="completed">回答済</option>
-                    <option value="pending">照会中</option>
-                  </select>
-                </div>
-                <div className="form-group flex-1">
-                  <label>照会方法</label>
-                  <select
-                    value={intMethod}
-                    onChange={(e) => setIntMethod(e.target.value as 'phone' | 'fax' | 'in_person' | 'other')}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
-                  >
-                    <option value="phone">電話</option>
-                    <option value="fax">FAX</option>
-                    <option value="in_person">対面</option>
-                    <option value="other">その他</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label>照会先医師名</label>
-                <input
-                  type="text"
-                  placeholder="例: 山田"
-                  value={intDoctor}
-                  onChange={(e) => setIntDoctor(e.target.value)}
-                  style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                />
-              </div>
-              <div className="form-group">
-                <label>疑義照会・変更の理由</label>
-                <textarea
-                  placeholder="例: 重複投薬防止のため / 後発品への変更"
-                  value={intReason}
-                  onChange={(e) => setIntReason(e.target.value)}
-                  style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', minHeight: '60px' }}
-                />
-              </div>
-              <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
-                <div className="form-group flex-1">
-                  <label>変更前の薬品名</label>
-                  <input
-                    type="text"
-                    placeholder="例: ロキソニン錠60mg"
-                    value={intBefore}
-                    onChange={(e) => setIntBefore(e.target.value)}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                  />
-                </div>
-                <div className="form-group flex-1">
-                  <label>変更後の薬品名</label>
-                  <input
-                    type="text"
-                    placeholder="例: ロキソプロフェンNa塩錠60mg"
-                    value={intAfter}
-                    onChange={(e) => setIntAfter(e.target.value)}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                  />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>{intStatus === 'pending' ? '照会内容・未回答メモ' : '照会・回答結果'}</label>
-                <input
-                  type="text"
-                  placeholder={intStatus === 'pending' ? '例: 医師不在。折り返し待ち' : '例: 了承、削除、一般名処方へ変更'}
-                  value={intResult}
-                  onChange={(e) => setIntResult(e.target.value)}
-                  style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                />
-              </div>
-              <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
-                <div className="form-group flex-1">
-                  <label>回答期限</label>
-                  <input
-                    type="date"
-                    value={intResponseDueDate}
-                    onChange={(e) => setIntResponseDueDate(e.target.value)}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                  />
-                </div>
-                <div className="form-group flex-1">
-                  <label>記録メモ</label>
-                  <input
-                    type="text"
-                    placeholder="例: FAX送信済み"
-                    value={intNote}
-                    onChange={(e) => setIntNote(e.target.value)}
-                    style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
-                  />
-                </div>
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                <input
-                  type="checkbox"
-                  checked={intConsented}
-                  onChange={(e) => setIntConsented(e.target.checked)}
-                />
-                患者の同意を得ている
-              </label>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
-              <button className="btn-secondary" onClick={() => setIsInterventionModalOpen(false)}>キャンセル</button>
-              <button
-                className="btn-primary"
-                onClick={async () => {
-                  if (!intReason.trim()) {
-                    alert('理由を入力してください。');
-                    return;
-                  }
-                  await handleAddIntervention({
-                    reason: intReason,
-                    beforeSnapshot: intBefore,
-                    afterSnapshot: intAfter,
-                    inquiryStatus: intStatus,
-                    inquiryMethod: intMethod,
-                    inquiryDoctor: intDoctor,
-                    inquiryResult: intResult,
-                    responseDueDate: intResponseDueDate,
-                    note: intNote,
-                    patientConsented: intConsented
-                  });
-                  setIsInterventionModalOpen(false);
-                  resetInterventionForm();
-                }}
-              >
-                登録
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EmrInterventionModal
+        isOpen={isInterventionModalOpen}
+        onClose={() => setIsInterventionModalOpen(false)}
+        intStatus={intStatus}
+        setIntStatus={setIntStatus}
+        intMethod={intMethod}
+        setIntMethod={setIntMethod}
+        intDoctor={intDoctor}
+        setIntDoctor={setIntDoctor}
+        intReason={intReason}
+        setIntReason={setIntReason}
+        intBefore={intBefore}
+        setIntBefore={setIntBefore}
+        intAfter={intAfter}
+        setIntAfter={setIntAfter}
+        intResult={intResult}
+        setIntResult={setIntResult}
+        intResponseDueDate={intResponseDueDate}
+        setIntResponseDueDate={setIntResponseDueDate}
+        intNote={intNote}
+        setIntNote={setIntNote}
+        intConsented={intConsented}
+        setIntConsented={setIntConsented}
+        onSave={async (input) => {
+          if (!input.reason.trim()) {
+            alert('理由を入力してください。');
+            return;
+          }
+          await handleAddIntervention(input);
+          setIsInterventionModalOpen(false);
+          resetInterventionForm();
+        }}
+        resetForm={resetInterventionForm}
+      />
 
       <TracingReportModal
         isOpen={isTracingModalOpen}
         onClose={() => setIsTracingModalOpen(false)}
         patientName={currentPatientName}
         pharmacyInfo={facilitySettings || {}}
-        onSaveReport={async (report) => {
-          if (!db) return;
-          const visit = await findActiveVisit();
-          if (!visit) {
-            toast.error('処理中の受付が見つかりません');
-            return;
-          }
-          const currentVisit = visit.toJSON() as Visit;
-          const currentCare = currentVisit.careCommunication || {};
-          const now = new Date().toISOString();
-
-          const finalReport: VisitTracingReport = {
-            ...report,
-            sentAt: report.status === 'sent' || report.status === 'closed' ? report.sentAt || now : undefined,
-            sentBy: report.status === 'sent' || report.status === 'closed' ? getCurrentUser().name : undefined,
-            createdAt: report.createdAt || now,
-            updatedAt: now
-          };
-
-          try {
-            const nextReports = [finalReport, ...(currentCare.tracingReports || []).filter((r) => r.reportId !== finalReport.reportId)];
-            await visit.patch({
-              careCommunication: {
-                ...currentCare,
-                tracingReports: nextReports,
-                updatedAt: now
-              }
-            });
-            setTracingReports(nextReports);
-
-            const instCodeInfo = finalReport.destinationInstitutionCode ? `[${finalReport.destinationInstitutionCode}] ` : '';
-            const auditOk = await logAuditAction(
-              db,
-              'follow_up_record',
-              `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${instCodeInfo}${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`,
-              currentVisit.patientId,
-              currentPatientName
-            );
-            if (!auditOk) {
-              toast.warning('レポートは保存しましたが、監査ログ記録に失敗しました。');
-            } else {
-              toast.success('トレーシングレポートを保存しました');
-            }
-          } catch (error) {
-            console.error('Failed to save tracing report:', error);
-            toast.error('トレーシングレポートの保存に失敗しました');
-          }
-        }}
+        onSaveReport={handleSaveTracingReport}
       />
 
       <PickingSupportModal
@@ -2206,294 +1887,10 @@ useEffect(() => {
       />
 
       <style jsx>{`
-
-        .insurance-modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.35);
-          backdrop-filter: blur(8px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-        }
-
-        .insurance-modal {
-          width: 520px;
-          max-width: 90%;
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(25px);
-          border: 1px solid rgba(255, 255, 255, 0.45);
-          border-radius: 16px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-          padding: 2rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-        }
-
-        .animate-scale {
-          animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-
-        @keyframes scaleIn {
-          from { transform: scale(0.95); opacity: 0; }
-          to { transform: scale(1); opacity: 1; }
-        }
-
-        .modal-header {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          border-bottom: 1px solid var(--border);
-          padding-bottom: 1rem;
-        }
-
-        .modal-title-row {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          color: var(--primary);
-        }
-
-        .modal-title-row h3 {
-          margin: 0;
-          font-size: 1.25rem;
-          font-weight: 700;
-        }
-
-        .modal-subtitle {
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          margin: 0;
-        }
-
-        .modal-body {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          max-height: 60vh;
-          overflow-y: auto;
-          padding-right: 4px;
-        }
-
-        .questionnaire-summary-list,
-        .tracing-report-list,
-        .myna-clinical-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.65rem;
-        }
-
-        .questionnaire-summary-item,
-        .tracing-report-item,
-        .myna-clinical-item {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          padding: 0.65rem;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.52);
-          font-size: 0.8rem;
-        }
-
-        .questionnaire-summary-item span,
-        .tracing-report-item span,
-        .myna-clinical-item span {
-          color: var(--text-ghost);
-          font-size: 0.74rem;
-        }
-
-        .questionnaire-summary-item strong,
-        .tracing-report-item strong,
-        .myna-clinical-item strong {
-          color: var(--text-main);
-          white-space: pre-wrap;
-          overflow-wrap: anywhere;
-        }
-
-        .questionnaire-image-details {
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: #fff;
-          padding: 0.6rem;
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-
-        .questionnaire-image-details img {
-          display: block;
-          width: 100%;
-          height: auto;
-          max-height: 260px;
-          object-fit: contain;
-          margin-top: 0.55rem;
-          border-radius: 6px;
-          background: #f8fafc;
-        }
-
-        .questionnaire-raw-text {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-
-        .questionnaire-raw-text pre {
-          margin-top: 0.5rem;
-          padding: 0.6rem;
-          max-height: 140px;
-          overflow: auto;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: #fff;
-          color: var(--text-main);
-          white-space: pre-wrap;
-          overflow-wrap: anywhere;
-        }
-
-        .tracing-report-title-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 0.5rem;
-        }
-        .tracing-report-title-row > :first-child {
-          min-width: min(180px, 100%);
-        }
-
-        .tracing-report-item p {
-          margin: 0;
-          color: var(--text-muted);
-          overflow-wrap: anywhere;
-        }
-
-        .myna-clinical-item p {
-          margin: 0;
-          color: var(--text-main);
-          font-size: 0.8rem;
-          font-weight: 800;
-        }
-
-        .modal-section-title {
-          font-size: 0.9rem;
-          font-weight: 700;
-          color: var(--text-muted);
-          border-left: 3px solid var(--primary);
-          padding-left: 0.5rem;
-          margin-bottom: 0.5rem;
-        }
-
-        .form-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.35rem;
-        }
-
-        .form-group.full-width {
-          grid-column: span 2;
-        }
-
-        .form-group label {
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: var(--text-muted);
-        }
-
-        .form-group input, .form-group select {
-          padding: 0.6rem 0.75rem;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.9);
-          font-size: 0.9rem;
-          outline: none;
-          transition: all 0.2s;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-        }
-
-        .modal-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 1rem;
-          border-top: 1px solid var(--border);
-          padding-top: 1rem;
-          margin-top: 0.5rem;
-        }
-
         .emr-page {
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
-          /* ページ全体を自然に流し、内部スクロールとの二重スクロールを避ける。
-             操作ボタンは .emr-actions の sticky で常時見える。 */
-        }
-
-        .patient-banner {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-          padding: 1.25rem 2rem;
-          border-radius: var(--radius-lg);
-          border: 1px solid var(--border);
-          flex-wrap: wrap;
-        }
-
-        .avatar.large {
-          width: 64px;
-          height: 64px;
-          font-size: 1.5rem;
-          background: linear-gradient(135deg, var(--primary), var(--accent));
-          color: white;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-        }
-
-        .patient-summary {
-          min-width: min(100%, 340px);
-          flex: 1 1 340px;
-        }
-        .patient-summary h2 { margin-bottom: 0.2rem; }
-        .id-tag { color: var(--text-ghost); font-family: var(--font-outfit), var(--font-noto-sans-jp), sans-serif; font-size: 0.9rem; }
-
-        .patient-alerts {
-          margin-left: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          min-width: min(100%, 280px);
-        }
-
-        .badge {
-          padding: 4px 12px;
-          border-radius: 6px;
-          font-size: 0.8rem;
-          font-weight: 600;
-        }
-        .badge.red { background: #fee2e2; color: #dc2626; }
-        .badge.orange { background: #fef3c7; color: #d97706; }
-        .badge.blue { background: #dbeafe; color: #2563eb; }
-        .badge-outline {
-          border: 1px solid var(--border);
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-size: 0.8rem;
-          color: var(--text-muted);
         }
 
         .emr-workspace {
@@ -2510,12 +1907,12 @@ useEffect(() => {
           border-right: 1px solid var(--border);
           border-radius: var(--radius-lg);
           background: var(--bg-card);
-          min-width: 0; /* グリッド内で内容幅より縮められるようにし、モバイルのはみ出しを防ぐ */
+          min-width: 0;
         }
 
         .section-tabs {
           display: flex;
-          flex-wrap: wrap; /* 幅が足りない画面ではタブとボタンを折り返す */
+          flex-wrap: wrap;
           padding: 0.75rem 1.5rem;
           border-bottom: 1px solid var(--border);
           background: #fdfdfd;
@@ -2523,10 +1920,9 @@ useEffect(() => {
           border-radius: var(--radius-lg) var(--radius-lg) 0 0;
         }
 
-
         .tab-pill {
           padding: 0.5rem 1.25rem;
-          font-size: 0.9rem;
+          font-size: var(--fs-base);
           font-weight: 600;
           color: var(--text-muted);
           display: flex;
@@ -2555,7 +1951,7 @@ useEffect(() => {
           border: 1px solid rgba(37, 99, 235, 0.2);
           padding: 0.5rem 1rem;
           border-radius: 8px;
-          font-size: 0.85rem;
+          font-size: var(--fs-md);
           font-weight: 600;
           cursor: pointer;
           display: flex;
@@ -2574,6 +1970,7 @@ useEffect(() => {
           gap: 1rem;
           background: #fdfdfd;
           min-width: 0;
+          padding-bottom: 5.5rem;
         }
 
         .emr-actions {
@@ -2581,13 +1978,14 @@ useEffect(() => {
           bottom: 0;
           z-index: 20;
           padding: 1rem 2rem;
-          border-top: 1px solid var(--border);
+          border-top: 2px solid var(--border-strong);
           display: flex;
           justify-content: flex-end;
           gap: 1rem;
-          background: white;
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(6px);
           border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-          box-shadow: 0 -8px 20px rgb(15 23 42 / 0.06);
+          box-shadow: 0 -12px 28px rgb(15 23 42 / 0.12);
         }
 
         .emr-actions .btn-tooltip-wrapper {
@@ -2608,7 +2006,7 @@ useEffect(() => {
         }
 
         .emr-actions .btn-label-sub {
-          font-size: 0.66rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
           opacity: 0.82;
           line-height: 1;
@@ -2628,7 +2026,7 @@ useEffect(() => {
           color: #92400e;
           border-radius: var(--radius-sm);
           padding: 0.6rem 0.75rem;
-          font-size: 0.85rem;
+          font-size: var(--fs-md);
           font-weight: 700;
           line-height: 1.55;
         }
@@ -2640,7 +2038,7 @@ useEffect(() => {
           color: var(--green-700);
           border-radius: var(--radius-sm);
           padding: 0.6rem 0.75rem;
-          font-size: 0.85rem;
+          font-size: var(--fs-md);
           font-weight: 700;
         }
 
@@ -2651,100 +2049,11 @@ useEffect(() => {
           margin-top: 1.25rem;
         }
 
-        /* Reference Section */
         .reference-section {
           display: flex;
           flex-direction: column;
           gap: 1rem;
         }
-
-        .insight-card {
-          background: var(--bg-card);
-          border-radius: var(--radius-md);
-          padding: 1.25rem;
-          border: 1px solid var(--border);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .insight-card.warning { border-left: 4px solid #f59e0b; }
-        .insight-card.info { border-left: 4px solid #3b82f6; }
-        .insight-card.default { border-left: 4px solid var(--text-ghost); }
-
-        .insight-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
-        }
-
-        .insight-header h3 {
-          font-size: 1rem;
-          margin: 0;
-        }
-
-        .icon-warning { color: #f59e0b; }
-        .icon-info { color: #3b82f6; }
-        .icon-default { color: var(--text-ghost); }
-
-        .insight-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          font-size: 0.9rem;
-        }
-
-        .insight-list li {
-          padding-bottom: 0.5rem;
-          border-bottom: 1px dashed var(--border);
-        }
-        .insight-list li:last-child { border-bottom: none; padding-bottom: 0; }
-
-        .trend-graph-placeholder {
-          background: var(--bg-base);
-          padding: 1rem;
-          border-radius: var(--radius-sm);
-          text-align: center;
-        }
-
-        .trend-line {
-          font-size: 1.25rem;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 1rem;
-        }
-
-        .arrow-down { color: #10b981; }
-        .arrow-flat { color: var(--text-ghost); }
-
-        .trend-label {
-          font-size: 0.8rem;
-          color: var(--text-muted);
-          margin-top: 0.25rem;
-        }
-
-        .doc-links {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .doc-link {
-          font-size: 0.9rem;
-          color: var(--primary);
-          text-decoration: none;
-          padding: 0.5rem;
-          background: var(--bg-base);
-          border-radius: var(--radius-sm);
-          transition: background var(--transition-fast);
-        }
-        .doc-link:hover { background: var(--primary-light); }
-
-        .mt-2 { margin-top: 0.5rem; }
 
         .history-aside {
           display: flex;
@@ -2777,7 +2086,7 @@ useEffect(() => {
           border-radius: 8px;
           background: #ffffff;
           color: var(--text-muted);
-          font-size: 0.82rem;
+          font-size: var(--fs-md);
           font-weight: 800;
           line-height: 1.5;
           padding: 0.85rem;
@@ -2812,7 +2121,6 @@ useEffect(() => {
           }
 
           .emr-workspace {
-            /* min-width:auto による内容幅までの拡張を抑え、375px幅でもはみ出させない */
             grid-template-columns: minmax(0, 1fr);
             overflow: visible;
           }
@@ -2831,1729 +2139,3 @@ useEffect(() => {
     </div>
   );
 }
-
-
-// ⚡ Bolt: Wrap PatientBanner with React.memo to prevent unnecessary re-renders when parent states change
-const PatientBanner = React.memo(function PatientBanner({
-  patientAlerts,
-  targetVisitId,
-  onOpenPicking
-}: {
-  patientAlerts: Alert[],
-  targetVisitId: string | null,
-  onOpenPicking: () => void
-}) {
-  const db = useDatabase();
-  const [patientData, setPatientData] = useState<any>(null);
-
-  useEffect(() => {
-    async function fetchPatientData() {
-      if (!db) return;
-      try {
-        const visit = targetVisitId
-          ? await db.visits.findOne(targetVisitId).exec()
-          : (await db.visits.find({ selector: { status: 'processing' } }).exec())
-              .slice()
-              .sort((a: any, b: any) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
-        if (visit) {
-          const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-          if (patients.length > 0) {
-            setPatientData(patients[0].toJSON());
-          } else {
-            setPatientData(null);
-          }
-        } else {
-          setPatientData(null);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    fetchPatientData();
-  }, [db, targetVisitId]);
-
-  const calcAge = useMemo(() => {
-    if (!patientData || !patientData.birthDate) return null;
-    const birth = new Date(patientData.birthDate);
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
-        age--;
-    }
-    return age;
-  }, [patientData]);
-
-  const calcBirthDate = patientData?.birthDate ? patientData.birthDate.replace(/-/g, '/') + '生' : '生年月日未登録';
-  const patientName = patientData?.name || '患者未選択';
-  const patientGender = patientData?.gender === 'female' ? '女性' : patientData?.gender === 'male' ? '男性' : '';
-  const patientTitle = patientData
-    ? `${patientName} (${[calcAge !== null ? `${calcAge}歳` : '年齢不明', patientGender].filter(Boolean).join(' / ')})`
-    : patientName;
-  const patientInitials = patientName
-    .split(/\s|　/)
-    .filter(Boolean)
-    .map((part: string) => part[0])
-    .join('')
-    .slice(0, 2) || 'PT';
-  const activePatientAlerts = patientAlerts.filter(isActivePatientAlert).slice(0, 4);
-
-  const [isReading, setIsReading] = useState(false);
-  const [isReadingClinical, setIsReadingClinical] = useState(false);
-  const [mynaReadDisplay, setMynaReadDisplay] = useState<MynaReadInsuranceDisplay | null>(null);
-  const [mynaClinicalMessage, setMynaClinicalMessage] = useState('');
-  const patientInsuranceInfo = formatPatientInsuranceInfo(patientData?.insuranceInfo);
-  const displayedInsuranceInfo = mynaReadDisplay?.label || patientInsuranceInfo;
-  const insuranceBadgeClass = mynaReadDisplay?.status === 'verified'
-    ? 'green'
-    : mynaReadDisplay?.status === 'warning'
-      ? 'orange'
-      : 'blue';
-
-  // Premium Insurance Modal States
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [hasOpenedInsuranceFromQuery, setHasOpenedInsuranceFromQuery] = useState(false);
-  const [editPatientName, setEditPatientName] = useState('');
-  const [editPatientBirthDate, setEditPatientBirthDate] = useState('');
-  const [editProvider, setEditProvider] = useState('');
-  const [editNumber, setEditNumber] = useState('');
-  const [editBurden, setEditBurden] = useState(30);
-  const [editType, setEditType] = useState('社保');
-  const [editRel, setEditRel] = useState('本人');
-  const [editValidFrom, setEditValidFrom] = useState('');
-  const [editValidTo, setEditValidTo] = useState('');
-  const [editEligibilityCheckedAt, setEditEligibilityCheckedAt] = useState('');
-  const [editEligibilityStatus, setEditEligibilityStatus] = useState<InsuranceEligibilityStatus>('unchecked');
-  const [editPub1Provider, setEditPub1Provider] = useState('');
-  const [editPub1Recipient, setEditPub1Recipient] = useState('');
-  const [editPub1Burden, setEditPub1Burden] = useState(10);
-  const [editPub1StartDate, setEditPub1StartDate] = useState('');
-  const [editPub1EndDate, setEditPub1EndDate] = useState('');
-  const [editPub1MonthlyLimitYen, setEditPub1MonthlyLimitYen] = useState('');
-  const [questionnaireImageDataUrl, setQuestionnaireImageDataUrl] = useState('');
-  const [questionnaireImageName, setQuestionnaireImageName] = useState('');
-  const [questionnaireImageByteSize, setQuestionnaireImageByteSize] = useState(0);
-  const [questionnaireCapturedAt, setQuestionnaireCapturedAt] = useState('');
-  const [questionnaireRawText, setQuestionnaireRawText] = useState('');
-  const [questionnaireAllergies, setQuestionnaireAllergies] = useState('');
-  const [questionnaireAdverseDrugReactions, setQuestionnaireAdverseDrugReactions] = useState('');
-  const [questionnaireMedicalHistory, setQuestionnaireMedicalHistory] = useState('');
-  const [questionnaireCurrentSymptoms, setQuestionnaireCurrentSymptoms] = useState('');
-  const [questionnairePregnancyLactation, setQuestionnairePregnancyLactation] = useState('');
-  const [questionnaireLifestyle, setQuestionnaireLifestyle] = useState('');
-  const [questionnaireNotes, setQuestionnaireNotes] = useState('');
-  const [questionnaireSourceType, setQuestionnaireSourceType] = useState<'camera' | 'image' | 'manual'>('manual');
-  const [questionnaireWarnings, setQuestionnaireWarnings] = useState<string[]>([]);
-  const [isQuestionnaireProcessing, setIsQuestionnaireProcessing] = useState(false);
-
-  const findBannerVisit = useCallback(async () => {
-    if (!db) return null;
-    if (targetVisitId) {
-      return db.visits.findOne(targetVisitId).exec();
-    }
-    const visits = await db.visits.find({ selector: { status: 'processing' } }).exec();
-    return visits[0] || null;
-  }, [db, targetVisitId]);
-
-  const loadVisitQuestionnaireIntoModal = useCallback(async () => {
-    const visit = await findBannerVisit();
-    const visitJson = visit?.toJSON() as Visit | undefined;
-    const questionnaire = visitJson?.initialQuestionnaire;
-    setQuestionnaireImageDataUrl(questionnaire?.imageDataUrl || '');
-    setQuestionnaireImageName(questionnaire?.imageOriginalName || '');
-    setQuestionnaireImageByteSize(questionnaire?.imageByteSize || 0);
-    setQuestionnaireCapturedAt(questionnaire?.capturedAt || '');
-    setQuestionnaireRawText(questionnaire?.rawText || '');
-    setQuestionnaireAllergies(questionnaire?.allergies || '');
-    setQuestionnaireAdverseDrugReactions(questionnaire?.adverseDrugReactions || '');
-    setQuestionnaireMedicalHistory(questionnaire?.medicalHistory || '');
-    setQuestionnaireCurrentSymptoms(questionnaire?.currentSymptoms || '');
-    setQuestionnairePregnancyLactation(questionnaire?.pregnancyLactation || '');
-    setQuestionnaireLifestyle(questionnaire?.lifestyle || '');
-    setQuestionnaireNotes(questionnaire?.notes || '');
-    setQuestionnaireSourceType(questionnaire?.sourceType || 'manual');
-    setQuestionnaireWarnings([]);
-    setMynaClinicalMessage('');
-  }, [findBannerVisit]);
-
-  const hasQuestionnaireInput = useMemo(() => (
-    [
-      questionnaireImageDataUrl,
-      questionnaireRawText,
-      questionnaireAllergies,
-      questionnaireAdverseDrugReactions,
-      questionnaireMedicalHistory,
-      questionnaireCurrentSymptoms,
-      questionnairePregnancyLactation,
-      questionnaireLifestyle,
-      questionnaireNotes
-    ].some((value) => value.trim().length > 0)
-  ), [
-    questionnaireAdverseDrugReactions,
-    questionnaireAllergies,
-    questionnaireCurrentSymptoms,
-    questionnaireImageDataUrl,
-    questionnaireLifestyle,
-    questionnaireMedicalHistory,
-    questionnaireNotes,
-    questionnairePregnancyLactation,
-    questionnaireRawText
-  ]);
-
-  const applyQuestionnaireOcrText = useCallback((text: string) => {
-    const draft = extractInitialQuestionnaireOcrDraft(text);
-    setQuestionnaireRawText(draft.rawText);
-    setQuestionnaireAllergies((current) => draft.allergies || current);
-    setQuestionnaireAdverseDrugReactions((current) => draft.adverseDrugReactions || current);
-    setQuestionnaireMedicalHistory((current) => draft.medicalHistory || current);
-    setQuestionnaireCurrentSymptoms((current) => draft.currentSymptoms || current);
-    setQuestionnairePregnancyLactation((current) => draft.pregnancyLactation || current);
-    setQuestionnaireLifestyle((current) => draft.lifestyle || current);
-    setQuestionnaireNotes((current) => draft.notes || current);
-    setQuestionnaireWarnings(draft.warnings);
-  }, []);
-
-  const handleQuestionnaireFileSelection = useCallback(async (file: File, sourceType: 'camera' | 'image') => {
-    setIsQuestionnaireProcessing(true);
-    setQuestionnaireSourceType(sourceType);
-    setQuestionnaireCapturedAt(new Date().toISOString());
-    setQuestionnaireWarnings([]);
-
-    try {
-      const [compressed, { processPrescription }] = await Promise.all([
-        compressQuestionnaireImage(file),
-        import('@/lib/ocr/processor')
-      ]);
-      setQuestionnaireImageDataUrl(compressed.dataUrl);
-      setQuestionnaireImageByteSize(compressed.byteSize);
-      setQuestionnaireImageName(file.name || 'questionnaire.jpg');
-      const text = await processPrescription(file);
-      applyQuestionnaireOcrText(text);
-      toast.success(`初回質問表をOCR入力しました（保存画像 ${Math.round(compressed.byteSize / 1024)}KB）。`);
-    } catch (error) {
-      console.error('Failed to process initial questionnaire image:', error);
-      toast.error(error instanceof Error ? error.message : '初回質問表のOCRに失敗しました。');
-    } finally {
-      setIsQuestionnaireProcessing(false);
-    }
-  }, [applyQuestionnaireOcrText]);
-
-  const handleQuestionnaireFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, sourceType: 'camera' | 'image') => {
-    const file = event.target.files?.[0];
-    if (file) {
-      handleQuestionnaireFileSelection(file, sourceType);
-    }
-    event.target.value = '';
-  }, [handleQuestionnaireFileSelection]);
-
-  const openModal = useCallback(() => {
-    if (patientData) {
-      setEditPatientName(patientData.name || '');
-      setEditPatientBirthDate(toDateInputValue(patientData.birthDate));
-      setEditProvider(patientData.insuranceInfo?.provider || '');
-      setEditNumber(patientData.insuranceInfo?.number || '');
-      setEditBurden(patientData.insuranceInfo?.burdenRatio ?? 30);
-      setEditType(patientData.insuranceInfo?.insuranceType || '社保');
-      setEditRel(patientData.insuranceInfo?.relationship || '本人');
-      setEditValidFrom(toDateInputValue(patientData.insuranceInfo?.validFrom));
-      setEditValidTo(toDateInputValue(patientData.insuranceInfo?.validTo));
-      setEditEligibilityCheckedAt(toDateInputValue(patientData.insuranceInfo?.eligibilityCheckedAt));
-      setEditEligibilityStatus(patientData.insuranceInfo?.eligibilityStatus || 'unchecked');
-
-      const pub1 = patientData.publicInsurances?.[0];
-      setEditPub1Provider(pub1?.provider || '');
-      setEditPub1Recipient(pub1?.recipient || '');
-      setEditPub1Burden(pub1?.burdenRatio ?? 10);
-      setEditPub1StartDate(toDateInputValue(pub1?.startDate));
-      setEditPub1EndDate(toDateInputValue(pub1?.endDate));
-      setEditPub1MonthlyLimitYen(pub1?.monthlyLimitYen !== undefined ? String(pub1.monthlyLimitYen) : '');
-    }
-    loadVisitQuestionnaireIntoModal().catch((error) => {
-      console.error('Failed to load initial questionnaire:', error);
-    });
-    setIsModalOpen(true);
-  }, [loadVisitQuestionnaireIntoModal, patientData]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || hasOpenedInsuranceFromQuery || !patientData) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get('openInsurance') !== '1') return;
-    setHasOpenedInsuranceFromQuery(true);
-    openModal();
-  }, [hasOpenedInsuranceFromQuery, openModal, patientData]);
-
-  useEffect(() => {
-    setMynaReadDisplay(null);
-  }, [patientData?.patientId]);
-
-  const handleSaveInsurance = async () => {
-    if (!db || !patientData) return;
-    try {
-      const patientDoc = await db.patients.findOne(patientData.patientId).exec();
-      if (patientDoc) {
-        const publicInsurances: PublicInsurance[] = [];
-        if (editPub1Provider && editPub1Recipient) {
-          publicInsurances.push({
-            provider: editPub1Provider,
-            recipient: editPub1Recipient,
-            burdenRatio: Number(editPub1Burden),
-            startDate: editPub1StartDate || undefined,
-            endDate: editPub1EndDate || undefined,
-            monthlyLimitYen: editPub1MonthlyLimitYen.trim() ? Number(editPub1MonthlyLimitYen) : undefined
-          });
-        }
-
-        const nextInsuranceInfo = {
-          provider: editProvider,
-          number: editNumber,
-          burdenRatio: Number(editBurden),
-          insuranceType: editType,
-          relationship: editRel,
-          validFrom: editValidFrom || undefined,
-          validTo: editValidTo || undefined,
-          eligibilityCheckedAt: editEligibilityCheckedAt || undefined,
-          eligibilityStatus: editEligibilityStatus
-        };
-        const now = new Date().toISOString();
-        const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
-          ? {
-              sourceType: questionnaireSourceType,
-              capturedAt: questionnaireCapturedAt || now,
-              imageDataUrl: questionnaireImageDataUrl || undefined,
-              imageOriginalName: questionnaireImageName || undefined,
-              imageByteSize: questionnaireImageByteSize || undefined,
-              imageCompressedAt: questionnaireImageDataUrl ? now : undefined,
-              rawText: questionnaireRawText.trim() || undefined,
-              allergies: questionnaireAllergies.trim() || undefined,
-              adverseDrugReactions: questionnaireAdverseDrugReactions.trim() || undefined,
-              medicalHistory: questionnaireMedicalHistory.trim() || undefined,
-              currentSymptoms: questionnaireCurrentSymptoms.trim() || undefined,
-              pregnancyLactation: questionnairePregnancyLactation.trim() || undefined,
-              lifestyle: questionnaireLifestyle.trim() || undefined,
-              notes: questionnaireNotes.trim() || undefined,
-              reviewedAt: now,
-              reviewedBy: getCurrentUser().name
-            }
-          : undefined;
-
-        await patientDoc.patch({
-          name: editPatientName.trim() || patientData.name,
-          birthDate: editPatientBirthDate || patientData.birthDate,
-          insuranceInfo: nextInsuranceInfo,
-          publicInsurances
-        });
-        if (questionnairePayload) {
-          const visit = await findBannerVisit();
-          if (visit) {
-            await visit.patch({ initialQuestionnaire: questionnairePayload });
-            document.dispatchEvent(new CustomEvent('visit-care-communication-updated'));
-          }
-        }
-
-        toast.success(questionnairePayload
-          ? '患者・保険・公費情報と初回質問表を保存しました。'
-          : '患者・保険・公費情報を保存しました。');
-        setIsModalOpen(false);
-
-        // Update local memory state to re-render PatientBanner
-        setPatientData((prev: any) => ({
-          ...prev,
-          name: editPatientName.trim() || prev?.name,
-          birthDate: editPatientBirthDate || prev?.birthDate,
-          insuranceInfo: nextInsuranceInfo,
-          publicInsurances
-        }));
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error('保存に失敗しました。');
-    }
-  };
-
-  const handleMynaRead = useCallback(async () => {
-    if (!patientData) {
-      toast.warning('患者を選択してからマイナ読取を実行してください。');
-      return;
-    }
-
-    setIsReading(true);
-
-    try {
-      const response = await fetch('/api/myna/read');
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.message || 'マイナ読取に失敗しました。');
-      }
-
-      const nextDisplay = buildMynaReadInsuranceDisplay({
-        patientInsuranceInfo: patientData.insuranceInfo,
-        readerResult: payload as MynaCardReaderResult
-      });
-      setMynaReadDisplay(nextDisplay);
-
-      if (nextDisplay.status === 'warning') {
-        toast.warning(nextDisplay.message);
-      } else if (nextDisplay.status === 'demo') {
-        toast.info(nextDisplay.message);
-      } else {
-        toast.success(nextDisplay.message);
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'マイナ読取に失敗しました。');
-    } finally {
-      setIsReading(false);
-    }
-  }, [patientData]);
-
-  const handleMynaClinicalImport = useCallback(async () => {
-    if (!db || !patientData) {
-      toast.warning('患者を選択してからマイナ取込を実行してください。');
-      return;
-    }
-
-    setIsReadingClinical(true);
-    setMynaClinicalMessage('');
-
-    try {
-      const response = await fetch('/api/myna/read');
-      const payload = await response.json().catch(() => null) as MynaCardReaderResult | null;
-      if (!response.ok || !payload) {
-        throw new Error((payload as any)?.message || 'マイナ取込に失敗しました。');
-      }
-
-      const healthCheckups = payload.specificHealthCheckups || [];
-      const medicationHistory = payload.medicationHistory || [];
-      if (healthCheckups.length === 0 && medicationHistory.length === 0) {
-        setMynaClinicalMessage('特定健診情報・薬剤履歴は取得結果に含まれていませんでした。');
-        toast.info('特定健診情報・薬剤履歴は取得結果に含まれていませんでした。');
-        return;
-      }
-
-      const visit = await findBannerVisit();
-      if (!visit) {
-        throw new Error('保存先の来局レコードが見つかりません。');
-      }
-
-      const now = new Date().toISOString();
-      const visitJson = visit.toJSON() as Visit;
-      const currentCareCommunication = visitJson.careCommunication || {};
-      const importRecord: VisitMynaClinicalImport = {
-        importId: `myna_${Date.now()}`,
-        importedAt: now,
-        readerSource: payload.readerSource,
-        readerCheckedAt: payload.readerCheckedAt,
-        specificHealthCheckups: healthCheckups,
-        medicationHistory,
-        note: `特定健診 ${healthCheckups.length}件 / 薬剤履歴 ${medicationHistory.length}件`
-      };
-
-      await visit.patch({
-        careCommunication: {
-          ...currentCareCommunication,
-          mynaClinicalImports: [importRecord, ...(currentCareCommunication.mynaClinicalImports || [])].slice(0, 20),
-          updatedAt: now
-        }
-      });
-      document.dispatchEvent(new CustomEvent('visit-care-communication-updated'));
-
-      const message = `特定健診 ${healthCheckups.length}件 / 薬剤履歴 ${medicationHistory.length}件を取り込みました。`;
-      setMynaClinicalMessage(message);
-      toast.success(message);
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'マイナ取込に失敗しました。');
-    } finally {
-      setIsReadingClinical(false);
-    }
-  }, [db, findBannerVisit, patientData]);
-
-  return (
-    <div id="emr-patient-alerts" className="patient-banner glass">
-      <div className="avatar large">{patientInitials}</div>
-      <div className="patient-summary">
-        <div className="row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <h2>{patientTitle}</h2>
-          <span className="id-tag">ID: {patientData?.patientId || '-'}</span>
-          <span className="badge-outline">処理中</span>
-        </div>
-        <p className="text-muted">{calcBirthDate}</p>
-        <div
-          className="patient-actions"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}
-        >
-          <button
-            className="btn-edit-insurance flex align-center gap-1"
-            onClick={openModal}
-            title="患者・保険・公費情報を編集"
-            style={{
-              background: 'rgba(37, 99, 235, 0.08)',
-              color: 'var(--primary)',
-              border: '1px solid rgba(37, 99, 235, 0.15)',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <CreditCard size={12} />
-            <span>患者・保険・公費編集</span>
-          </button>
-          <button
-            className="btn-picking flex align-center gap-1"
-            onClick={onOpenPicking}
-            title="ピッキング支援モードを開始"
-            style={{
-              background: 'rgba(16, 185, 129, 0.08)',
-              color: 'var(--success, #10b981)',
-              border: '1px solid rgba(16, 185, 129, 0.15)',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <Activity size={12} />
-            <span>ピッキング支援</span>
-          </button>
-        </div>
-
-      </div>
-      <div className="patient-alerts">
-        <div className="flex gap-2 patient-alert-badges">
-          {activePatientAlerts.length > 0 ? (
-            activePatientAlerts.map((alert) => (
-              <span
-                key={alert.alertId}
-                className={`badge ${alert.type === 'allergy' ? 'red' : alert.type === 'side_effect' ? 'orange' : 'blue'}`}
-              >
-                {formatPatientAlertLabel(alert)}
-              </span>
-            ))
-          ) : (
-            <span className="badge blue">患者アラートなし</span>
-          )}
-        </div>
-        <div className="flex align-center gap-2" style={{ justifyContent: 'flex-end', marginTop: '4px' }}>
-          <span className={`badge ${insuranceBadgeClass}`}>
-            {mynaReadDisplay?.status === 'verified' && <CheckCircle2 size={12} className="inline-icon" aria-hidden="true" />}
-            保険: {displayedInsuranceInfo}
-          </span>
-          <span
-            className="btn-tooltip-wrapper"
-            data-disabled={isReading || !patientData}
-            title={isReading ? '読み取り中...' : !patientData ? '患者を選択してください' : ''}
-          >
-            <button
-              className="btn-myna"
-              onClick={handleMynaRead}
-              disabled={isReading || !patientData}
-              aria-label="マイナンバーカードを読み取る"
-            >
-              {isReading ? (
-                <><Loader2 size={14} className="spin" aria-hidden="true" /> 読取中...</>
-              ) : (
-                <><CreditCard size={14} aria-hidden="true" /> マイナ読取</>
-              )}
-            </button>
-          </span>
-        </div>
-      </div>
-
-      {/* Premium Insurance/Public Support Editor Modal */}
-      {isModalOpen && (
-        <div className="insurance-modal-overlay">
-          <div className="insurance-modal card glass animate-scale">
-            <div className="modal-header">
-              <div className="modal-title-row">
-                <CreditCard className="icon-primary" size={20} />
-                <h3>患者・保険・公費情報の構造化登録</h3>
-              </div>
-              <p className="modal-subtitle">{patientName} 様の請求保険者・公費負担情報を設定します。</p>
-            </div>
-            
-            <div className="modal-body">
-              <div className="modal-section-title">患者基本情報</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="m-patient-name">患者名</label>
-                  <input
-                    id="m-patient-name"
-                    type="text"
-                    maxLength={100}
-                    value={editPatientName}
-                    onChange={(e) => setEditPatientName(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-patient-birth-date">生年月日</label>
-                  <input
-                    id="m-patient-birth-date"
-                    type="date"
-                    value={editPatientBirthDate}
-                    onChange={(e) => setEditPatientBirthDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-section-title mt-4">初回質問表 OCR</div>
-              <div className="questionnaire-intake-panel" data-testid="emr-initial-questionnaire-ocr-panel">
-                <div className="questionnaire-actions">
-                  <label className="btn-secondary flex align-center gap-2 questionnaire-upload-button">
-                    {isQuestionnaireProcessing ? <Loader2 size={16} className="spin" /> : <Camera size={16} />}
-                    <span>{isQuestionnaireProcessing ? '読取中...' : 'カメラで撮影'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden-input"
-                      disabled={isQuestionnaireProcessing}
-                      onChange={(event) => handleQuestionnaireFileUpload(event, 'camera')}
-                      data-testid="emr-initial-questionnaire-camera-input"
-                    />
-                  </label>
-                  <label className="btn-secondary flex align-center gap-2 questionnaire-upload-button">
-                    <Upload size={16} />
-                    <span>画像を選択</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden-input"
-                      disabled={isQuestionnaireProcessing}
-                      onChange={(event) => handleQuestionnaireFileUpload(event, 'image')}
-                      data-testid="emr-initial-questionnaire-image-input"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-secondary flex align-center gap-2"
-                    onClick={() => {
-                      setQuestionnaireSourceType('manual');
-                      setQuestionnaireCapturedAt((current) => current || new Date().toISOString());
-                      applyQuestionnaireOcrText(questionnaireRawText);
-                    }}
-                    disabled={!questionnaireRawText.trim() || isQuestionnaireProcessing}
-                  >
-                    <ClipboardList size={16} />
-                    全文から再抽出
-                  </button>
-                  {questionnaireImageByteSize > 0 && (
-                    <span className="questionnaire-size-chip">
-                      保存画像 {Math.round(questionnaireImageByteSize / 1024)}KB
-                    </span>
-                  )}
-                </div>
-                {questionnaireImageDataUrl && (
-                  <div className="questionnaire-preview">
-                    <img src={questionnaireImageDataUrl} alt="初回質問表の軽量保存画像" />
-                  </div>
-                )}
-                {questionnaireWarnings.length > 0 && (
-                  <ul className="questionnaire-warning-list">
-                    {questionnaireWarnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                )}
-                <div className="questionnaire-field-grid">
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-allergies">アレルギー</label>
-                    <textarea
-                      id="m-questionnaire-allergies"
-                      value={questionnaireAllergies}
-                      onChange={(e) => setQuestionnaireAllergies(e.target.value)}
-                      placeholder="薬・食物・花粉など"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-adverse">副作用歴</label>
-                    <textarea
-                      id="m-questionnaire-adverse"
-                      value={questionnaireAdverseDrugReactions}
-                      onChange={(e) => setQuestionnaireAdverseDrugReactions(e.target.value)}
-                      placeholder="過去に合わなかった薬、症状"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-history">既往歴・治療中</label>
-                    <textarea
-                      id="m-questionnaire-history"
-                      value={questionnaireMedicalHistory}
-                      onChange={(e) => setQuestionnaireMedicalHistory(e.target.value)}
-                      placeholder="持病、治療中の疾患"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-symptoms">症状・相談内容</label>
-                    <textarea
-                      id="m-questionnaire-symptoms"
-                      value={questionnaireCurrentSymptoms}
-                      onChange={(e) => setQuestionnaireCurrentSymptoms(e.target.value)}
-                      placeholder="今回困っていること"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-pregnancy">妊娠・授乳</label>
-                    <input
-                      id="m-questionnaire-pregnancy"
-                      type="text"
-                      value={questionnairePregnancyLactation}
-                      onChange={(e) => setQuestionnairePregnancyLactation(e.target.value)}
-                      placeholder="該当なし / 妊娠中 / 授乳中"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="m-questionnaire-lifestyle">生活情報</label>
-                    <input
-                      id="m-questionnaire-lifestyle"
-                      type="text"
-                      value={questionnaireLifestyle}
-                      onChange={(e) => setQuestionnaireLifestyle(e.target.value)}
-                      placeholder="飲酒、喫煙、運転など"
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-questionnaire-notes">備考</label>
-                  <textarea
-                    id="m-questionnaire-notes"
-                    value={questionnaireNotes}
-                    onChange={(e) => setQuestionnaireNotes(e.target.value)}
-                    placeholder="薬剤師確認メモ"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-questionnaire-raw">OCR全文</label>
-                  <textarea
-                    id="m-questionnaire-raw"
-                    className="questionnaire-raw-textarea"
-                    value={isQuestionnaireProcessing ? '解析中...' : questionnaireRawText}
-                    readOnly={isQuestionnaireProcessing}
-                    onChange={(e) => {
-                      setQuestionnaireRawText(e.target.value);
-                      setQuestionnaireSourceType('manual');
-                      setQuestionnaireCapturedAt((current) => current || new Date().toISOString());
-                    }}
-                    placeholder="撮影後にOCR全文が入ります。手入力・貼り付けもできます。"
-                  />
-                </div>
-              </div>
-
-              <div className="modal-section-title mt-4">マイナ臨床情報</div>
-              <div className="myna-clinical-import-panel" data-testid="myna-clinical-import-panel">
-                <button
-                  type="button"
-                  className="btn-secondary flex align-center gap-2"
-                  onClick={handleMynaClinicalImport}
-                  disabled={isReadingClinical || !patientData}
-                  data-testid="myna-clinical-import-button"
-                >
-                  {isReadingClinical ? <Loader2 size={16} className="spin" /> : <History size={16} />}
-                  {isReadingClinical ? '取込中...' : '特定健診・薬剤履歴を取込'}
-                </button>
-                {mynaClinicalMessage && (
-                  <span className="myna-clinical-message">{mynaClinicalMessage}</span>
-                )}
-              </div>
-
-              <div className="modal-section-title mt-4">保険情報 (HOレコード用)</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="m-ins-type">保険種別</label>
-                  <select id="m-ins-type" value={editType} onChange={(e) => setEditType(e.target.value)}>
-                    <option value="社保">社保 (健康保険)</option>
-                    <option value="国保">国保 (国民健康保険)</option>
-                    <option value="後期高齢">後期高齢</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-rel">本人・家族区分</label>
-                  <select id="m-ins-rel" value={editRel} onChange={(e) => setEditRel(e.target.value)}>
-                    <option value="本人">本人</option>
-                    <option value="家族">家族</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-provider">保険者番号 (8桁/6桁)</label>
-                  <input 
-                    id="m-ins-provider"
-                    type="text" 
-                    maxLength={8}
-                    placeholder="例: 06139999" 
-                    value={editProvider} 
-                    onChange={(e) => setEditProvider(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-number">記号番号</label>
-                  <input 
-                    id="m-ins-number"
-                    type="text" 
-                    placeholder="例: 記号123 番号456" 
-                    value={editNumber} 
-                    onChange={(e) => setEditNumber(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label htmlFor="m-ins-burden">自己負担割合 (%)</label>
-                  <select id="m-ins-burden" value={editBurden} onChange={(e) => setEditBurden(Number(e.target.value))}>
-                    <option value={30}>30 % (3割)</option>
-                    <option value={20}>20 % (2割)</option>
-                    <option value={10}>10 % (1割)</option>
-                    <option value={0}>0 % (無償/公費全額)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="modal-section-title mt-4">資格確認・有効期間</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="m-ins-eligibility-status">資格確認状態</label>
-                  <select
-                    id="m-ins-eligibility-status"
-                    value={editEligibilityStatus}
-                    onChange={(e) => setEditEligibilityStatus(e.target.value as InsuranceEligibilityStatus)}
-                  >
-                    <option value="unchecked">未確認</option>
-                    <option value="valid">有効</option>
-                    <option value="warning">要確認</option>
-                    <option value="invalid">無効</option>
-                    <option value="unavailable">確認不可</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-eligibility-checked-at">資格確認日</label>
-                  <input
-                    id="m-ins-eligibility-checked-at"
-                    type="date"
-                    value={editEligibilityCheckedAt}
-                    onChange={(e) => setEditEligibilityCheckedAt(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-valid-from">保険有効開始日</label>
-                  <input
-                    id="m-ins-valid-from"
-                    type="date"
-                    value={editValidFrom}
-                    onChange={(e) => setEditValidFrom(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-ins-valid-to">保険有効期限</label>
-                  <input
-                    id="m-ins-valid-to"
-                    type="date"
-                    value={editValidTo}
-                    onChange={(e) => setEditValidTo(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-section-title mt-4">公費情報 (KOレコード用)</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="m-pub-provider">公費負担者番号 (8桁)</label>
-                  <input 
-                    id="m-pub-provider"
-                    type="text" 
-                    maxLength={8}
-                    placeholder="例: 51136018 (難病)" 
-                    value={editPub1Provider} 
-                    onChange={(e) => setEditPub1Provider(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-recipient">公費受給者番号 (7桁)</label>
-                  <input 
-                    id="m-pub-recipient"
-                    type="text" 
-                    maxLength={7}
-                    placeholder="例: 1234567" 
-                    value={editPub1Recipient} 
-                    onChange={(e) => setEditPub1Recipient(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label htmlFor="m-pub-burden">公費自己負担割合 (%)</label>
-                  <select id="m-pub-burden" value={editPub1Burden} onChange={(e) => setEditPub1Burden(Number(e.target.value))}>
-                    <option value={10}>10 % (1割負担)</option>
-                    <option value={0}>0 % (自己負担なし)</option>
-                    <option value={20}>20 % (2割負担)</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-start-date">公費開始日</label>
-                  <input
-                    id="m-pub-start-date"
-                    type="date"
-                    value={editPub1StartDate}
-                    onChange={(e) => setEditPub1StartDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-end-date">公費有効期限</label>
-                  <input
-                    id="m-pub-end-date"
-                    type="date"
-                    value={editPub1EndDate}
-                    onChange={(e) => setEditPub1EndDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label htmlFor="m-pub-monthly-limit">月額負担上限 (円)</label>
-                  <input
-                    id="m-pub-monthly-limit"
-                    type="number"
-                    min={0}
-                    placeholder="例: 5000"
-                    value={editPub1MonthlyLimitYen}
-                    onChange={(e) => setEditPub1MonthlyLimitYen(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsModalOpen(false)}>キャンセル</button>
-              <button className="btn-primary" onClick={handleSaveInsurance} disabled={isQuestionnaireProcessing}>
-                {isQuestionnaireProcessing ? 'OCR中...' : '保存して適用'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <style jsx>{`
-        .flex { display: flex; }
-        .align-center { align-items: center; }
-        .gap-2 { gap: 0.5rem; }
-        .badge.green { background: #d1fae5; color: #059669; display: flex; align-items: center; gap: 4px; }
-        .inline-icon { display: inline-block; }
-        .patient-alert-badges {
-          justify-content: flex-end;
-          flex-wrap: wrap;
-          max-width: 420px;
-        }
-
-        .btn-myna {
-          background: #fdf2f8;
-          color: #db2777;
-          border: 1px solid #fbcfe8;
-          padding: 2px 8px;
-          border-radius: 6px;
-          font-size: 0.8rem;
-          font-weight: 600;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          transition: all var(--transition-fast);
-        }
-        .btn-myna:hover:not(:disabled) {
-          background: #fce7f3;
-        }
-        .btn-myna:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-        }
-
-        .hidden-input {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          opacity: 0;
-          pointer-events: none;
-        }
-
-        .questionnaire-intake-panel,
-        .myna-clinical-import-panel {
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: #f8fafc;
-          padding: 0.85rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .questionnaire-actions,
-        .myna-clinical-import-panel {
-          display: flex;
-          flex-direction: row;
-          flex-wrap: wrap;
-          align-items: center;
-        }
-
-        .questionnaire-upload-button {
-          position: relative;
-          cursor: pointer;
-          min-height: 38px;
-          padding: 0.45rem 0.65rem;
-        }
-
-        .questionnaire-size-chip,
-        .myna-clinical-message {
-          border-radius: 999px;
-          background: #ecfeff;
-          color: #0f766e;
-          padding: 0.2rem 0.55rem;
-          font-size: 0.75rem;
-          font-weight: 800;
-        }
-
-        .questionnaire-preview {
-          width: min(100%, 360px);
-          max-height: 240px;
-          overflow: auto;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          background: white;
-        }
-
-        .questionnaire-preview img {
-          display: block;
-          width: 100%;
-          height: auto;
-        }
-
-        .questionnaire-field-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 0.75rem;
-        }
-
-        .questionnaire-intake-panel textarea {
-          min-height: 76px;
-          resize: vertical;
-        }
-
-        .questionnaire-raw-textarea {
-          min-height: 112px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 0.78rem;
-          line-height: 1.5;
-        }
-
-        .questionnaire-warning-list {
-          display: grid;
-          gap: 0.35rem;
-          margin: 0;
-          padding-left: 1.1rem;
-          color: #92400e;
-          font-size: 0.78rem;
-          font-weight: 700;
-        }
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-});
-
-
-const SoapEditor = ({ targetVisitId, registerFlush, onResolvedVisitChange }: {
-  targetVisitId: string | null;
-  registerFlush?: (fn: (() => Promise<{ hasContent: boolean; missingStructuredFields: string[] }>) | null) => void;
-  onResolvedVisitChange?: (visitId: string | null) => void;
-}) => {
-  const db = useDatabase();
-  // null=解決中。false=受付なし(入力しても保存されないため、エディタの代わりに案内を表示する)。
-  const [hasResolvedVisit, setHasResolvedVisit] = useState<boolean | null>(null);
-  const [problems, setProblems] = useState<SoapProblem[]>([
-    {
-      id: uuidv4(),
-      title: '#1 ',
-      entries: [
-        { id: uuidv4(), type: 'S', text: '' },
-        { id: uuidv4(), type: 'O', text: '' },
-        { id: uuidv4(), type: 'A', text: '' },
-        { id: uuidv4(), type: 'P', text: '' }
-      ]
-    }
-  ]);
-
-  const [activeProblemId, setActiveProblemId] = useState<string | null>(null);
-  const [pastProblemSuggestions, setPastProblemSuggestions] = useState<string[]>([]);
-  const [structuredAssessment, setStructuredAssessment] = useState<SoapStructuredAssessment>(() => createDefaultSoapStructuredAssessment());
-  const [saveStatus, setSaveStatus] = useState<SoapSaveStatus>('loading');
-  const [lastSavedAt, setLastSavedAt] = useState('');
-
-  // Persistence: resolve the active visit, load its saved SOAP on mount, and
-  // autosave edits to db.soap_records so nothing the pharmacist writes is lost.
-  const resolvedVisitIdRef = React.useRef<string | null>(null);
-  const soapIdRef = React.useRef<string | null>(null);
-  const loadedRef = React.useRef(false);
-  const dirtyRef = React.useRef(false);
-  const problemsRef = React.useRef(problems);
-  const structuredAssessmentRef = React.useRef(structuredAssessment);
-  problemsRef.current = problems;
-  structuredAssessmentRef.current = structuredAssessment;
-
-  useEffect(() => {
-    let cancelled = false;
-    loadedRef.current = false;
-    dirtyRef.current = false;
-    setSaveStatus('loading');
-    setLastSavedAt('');
-    setHasResolvedVisit(null);
-    setStructuredAssessment(createDefaultSoapStructuredAssessment());
-    (async () => {
-      if (!db) return;
-      let visitId = targetVisitId;
-      if (!visitId) {
-        const processing = await db.visits.find({ selector: { status: 'processing' } }).exec();
-        visitId = processing[0]?.visitId ?? null;
-      }
-      if (cancelled) return;
-      resolvedVisitIdRef.current = visitId;
-      setHasResolvedVisit(!!visitId);
-      onResolvedVisitChange?.(visitId);
-      if (!visitId) {
-        loadedRef.current = true;
-        setSaveStatus('saved');
-        return;
-      }
-      try {
-        const existing = await db.soap_records.find({ selector: { visitId } }).exec();
-        if (cancelled) return;
-        const record = existing[0]?.toJSON?.() ?? existing[0];
-        soapIdRef.current = record?.soapId ?? `soap_${visitId}`;
-        if (record && Array.isArray(record.problems) && record.problems.length > 0) {
-          setProblems(record.problems.map((p: any) => ({
-            id: p.id || uuidv4(),
-            title: p.title || '',
-            entries: (p.entries || []).map((e: any) => ({ id: uuidv4(), type: e.type as SoapEntryType, text: e.text || '' }))
-          })));
-          setActiveProblemId(null);
-        }
-        setStructuredAssessment(normalizeSoapStructuredAssessment(record?.structuredAssessment));
-        setLastSavedAt(record?.updatedAt || '');
-        setSaveStatus('saved');
-      } catch (err) {
-        console.error('Failed to load SOAP record:', err);
-        if (!cancelled) setSaveStatus('error');
-      } finally {
-        if (!cancelled) loadedRef.current = true;
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [db, targetVisitId, onResolvedVisitChange]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPastProblemSuggestions() {
-      if (!db) {
-        setPastProblemSuggestions([]);
-        return;
-      }
-
-      try {
-        let visitId = targetVisitId;
-        if (!visitId) {
-          const processing = await db.visits.find({ selector: { status: 'processing' } }).exec();
-          visitId = processing[0]?.visitId ?? null;
-        }
-        if (!visitId) {
-          if (!cancelled) setPastProblemSuggestions([]);
-          return;
-        }
-
-        const currentVisitDoc = await db.visits.findOne(visitId).exec();
-        const currentVisit = currentVisitDoc?.toJSON?.() ?? currentVisitDoc;
-        if (!currentVisit?.patientId) {
-          if (!cancelled) setPastProblemSuggestions([]);
-          return;
-        }
-
-        const visitDocs = await db.visits.find({ selector: { patientId: currentVisit.patientId } }).exec();
-        const pastVisitIds = visitDocs
-          .map((visitDoc) => visitDoc.toJSON() as Visit)
-          .map((visit) => visit.visitId)
-          .filter((id) => id !== visitId);
-
-        const soapDocs = pastVisitIds.length > 0
-          ? await db.soap_records.find({ selector: { visitId: { $in: pastVisitIds } } }).exec()
-          : [];
-        const soapRecords = soapDocs.map((soapDoc) => soapDoc.toJSON()) as DbSoapRecord[];
-
-        if (!cancelled) {
-          setPastProblemSuggestions(buildPastProblemSuggestions(soapRecords));
-        }
-      } catch (error) {
-        console.error('Failed to load past problem suggestions:', error);
-        if (!cancelled) setPastProblemSuggestions([]);
-      }
-    }
-
-    loadPastProblemSuggestions();
-    return () => { cancelled = true; };
-  }, [db, targetVisitId]);
-
-  const persistSoap = useCallback(async (): Promise<{ hasContent: boolean; missingStructuredFields: string[] }> => {
-    const current = problemsRef.current;
-    const assessment = normalizeSoapStructuredAssessment(structuredAssessmentRef.current);
-    const hasContent = current.some(p => p.entries.some(e => e.text.trim().length > 0));
-    const missingStructuredFields = getMissingSoapStructuredAssessmentFields(assessment);
-    const visitId = resolvedVisitIdRef.current;
-    if (!db || !visitId) return { hasContent, missingStructuredFields };
-    const soapId = soapIdRef.current || `soap_${visitId}`;
-    soapIdRef.current = soapId;
-    setSaveStatus('saving');
-    const updatedAt = new Date().toISOString();
-    try {
-      await db.soap_records.upsert({
-        soapId,
-        visitId,
-        authorId: getCurrentUser().userId,
-        problems: current.map(p => ({
-          id: p.id,
-          title: p.title,
-          entries: p.entries.map(e => ({ type: e.type, text: e.text }))
-        })),
-        structuredAssessment: assessment,
-        updatedAt
-      });
-      setLastSavedAt(updatedAt);
-      setSaveStatus(dirtyRef.current ? 'dirty' : 'saved');
-    } catch (err) {
-      console.error('Failed to save SOAP record:', err);
-      dirtyRef.current = true;
-      setSaveStatus('error');
-      throw err;
-    }
-    return { hasContent, missingStructuredFields };
-  }, [db]);
-
-  // Debounced autosave once the existing record has loaded and the user edited.
-  useEffect(() => {
-    if (!loadedRef.current || !dirtyRef.current) return;
-    const handle = setTimeout(() => {
-      dirtyRef.current = false;
-      void persistSoap().catch(() => undefined);
-    }, 700);
-    return () => clearTimeout(handle);
-  }, [problems, structuredAssessment, persistSoap]);
-
-  // Expose an immediate flush so the parent can guarantee a save before completing.
-  useEffect(() => {
-    if (!registerFlush) return;
-    registerFlush(async () => {
-      dirtyRef.current = false;
-      return persistSoap();
-    });
-    return () => registerFlush(null);
-  }, [registerFlush, persistSoap]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirtyRef.current && saveStatus !== 'saving') return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveStatus]);
-
-  const markSoapDirty = useCallback(() => {
-    dirtyRef.current = true;
-    setSaveStatus('dirty');
-  }, []);
-
-  useEffect(() => {
-    if (problems.length > 0 && !activeProblemId) {
-      setActiveProblemId(problems[0].id);
-    }
-  }, [problems, activeProblemId]);
-
-  useEffect(() => {
-    const handleInsert = (e: Event) => {
-      const { type, text } = (e as CustomEvent).detail;
-      markSoapDirty();
-      setProblems(prev => {
-        const targetId = activeProblemId || prev[0]?.id;
-        if (!targetId) return prev;
-
-        return prev.map(p => {
-          if (p.id !== targetId) return p;
-          // 同種の空欄エントリがあればそこへ入れ、空箱を増やさない。
-          const emptyIndex = p.entries.findIndex(entry => entry.type === type && entry.text.trim() === '');
-          if (emptyIndex >= 0) {
-            const entries = [...p.entries];
-            entries[emptyIndex] = { ...entries[emptyIndex], text };
-            return { ...p, entries };
-          }
-          return { ...p, entries: [...p.entries, { id: uuidv4(), type: type as SoapEntryType, text }] };
-        });
-      });
-      toast.success(`${type}に指導項目を追記しました`);
-    };
-    document.addEventListener('insert-soap-guidance', handleInsert);
-    return () => document.removeEventListener('insert-soap-guidance', handleInsert);
-  }, [activeProblemId, markSoapDirty]);
-
-  const addProblem = (title: string = '') => {
-    markSoapDirty();
-    setProblems([...problems, { id: uuidv4(), title: `#${problems.length + 1} ${title}`, entries: [{ id: uuidv4(), type: 'S', text: '' }] }]);
-  };
-
-  const removeProblem = useCallback((probId: string) => {
-    markSoapDirty();
-    setProblems(prev => prev.filter(p => p.id !== probId));
-  }, [markSoapDirty]);
-
-  const updateProblemTitle = useCallback((probId: string, title: string) => {
-    markSoapDirty();
-    setProblems(prev => prev.map(p => p.id === probId ? { ...p, title } : p));
-  }, [markSoapDirty]);
-
-  const addEntry = useCallback((probId: string, type: SoapEntryType) => {
-    markSoapDirty();
-    setProblems(prev => prev.map(p => {
-      if (p.id === probId) {
-        return { ...p, entries: [...p.entries, { id: uuidv4(), type, text: '' }] };
-      }
-      return p;
-    }));
-  }, [markSoapDirty]);
-
-  const updateEntry = useCallback((probId: string, entryId: string, text: string) => {
-    markSoapDirty();
-    setProblems(prev => prev.map(p => {
-      if (p.id === probId) {
-        return { ...p, entries: p.entries.map(e => e.id === entryId ? { ...e, text } : e) };
-      }
-      return p;
-    }));
-  }, [markSoapDirty]);
-
-  const removeEntry = useCallback((probId: string, entryId: string) => {
-    markSoapDirty();
-    setProblems(prev => prev.map(p => {
-      if (p.id === probId) {
-        return { ...p, entries: p.entries.filter(e => e.id !== entryId) };
-      }
-      return p;
-    }));
-  }, [markSoapDirty]);
-
-  const updateStructuredAssessment = useCallback(<K extends keyof SoapStructuredAssessment>(
-    field: K,
-    value: NonNullable<SoapStructuredAssessment[K]>
-  ) => {
-    markSoapDirty();
-    setStructuredAssessment(prev => normalizeSoapStructuredAssessment({
-      ...prev,
-      [field]: value
-    }));
-  }, [markSoapDirty]);
-
-  const handleImmediateSave = useCallback(() => {
-    dirtyRef.current = false;
-    void persistSoap()
-      .then(() => {
-        if (resolvedVisitIdRef.current) toast.success('薬歴を保存しました');
-      })
-      .catch(() => undefined);
-  }, [persistSoap]);
-
-  const handleEditorKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault();
-      handleImmediateSave();
-    }
-  }, [handleImmediateSave]);
-
-  const [isPastMenuOpen, setIsPastMenuOpen] = useState(false);
-  const pastMenuRef = React.useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isPastMenuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!pastMenuRef.current?.contains(event.target as Node)) {
-        setIsPastMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsPastMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isPastMenuOpen]);
-
-  if (hasResolvedVisit === false) {
-    return (
-      <div className="soap-editor-empty" role="status">
-        <MessageSquare size={26} aria-hidden="true" />
-        <h3>受付が選択されていません</h3>
-        <p>
-          薬歴を記録するには処理中の受付が必要です。
-          受付がない状態では入力内容は保存されません。
-        </p>
-        <div className="empty-actions">
-          <a className="btn-secondary" href="/ocr">処方箋OCRで受付を開始</a>
-          <a className="btn-secondary" href="/">ダッシュボードで受付を確認</a>
-        </div>
-        <style jsx>{`
-          .soap-editor-empty {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.6rem;
-            padding: 2.5rem 1.5rem;
-            text-align: center;
-            color: var(--text-muted);
-            border: 1px dashed var(--border-strong);
-            border-radius: var(--radius-md);
-            background: var(--bg-card);
-          }
-
-          .soap-editor-empty h3 {
-            margin: 0;
-            color: var(--text-main);
-            font-size: 1.02rem;
-            font-weight: 800;
-          }
-
-          .soap-editor-empty p {
-            margin: 0;
-            font-size: 0.85rem;
-            line-height: 1.7;
-            max-width: 420px;
-          }
-
-          .empty-actions {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 0.6rem;
-            margin-top: 0.5rem;
-          }
-
-          .empty-actions a {
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  return (
-    <div className="soap-editor-container" onKeyDown={handleEditorKeyDown}>
-      <div className="soap-editor-toolbar">
-        <span className="keyboard-hint">Ctrl(⌘)+Enter で即時保存</span>
-        <SoapSaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
-      </div>
-      <SoapStructuredAssessmentPanel
-        assessment={structuredAssessment}
-        onChange={updateStructuredAssessment}
-      />
-      {problems.map(problem => (
-        <div key={problem.id} className={`problem-block ${activeProblemId === problem.id ? 'active' : ''}`} onClick={() => setActiveProblemId(problem.id)}>
-          <div className="problem-header">
-            <input
-              type="text"
-              value={problem.title}
-              onChange={(e) => updateProblemTitle(problem.id, e.target.value)}
-              placeholder="#1 プロブレム名（例: 高血圧、副作用フォロー）"
-              className="problem-title-input"
-            />
-            {activeProblemId === problem.id && problems.length > 1 && (
-              <span className="active-target-badge" title="指導文・AI下書きはこのプロブレムへ挿入されます">挿入先</span>
-            )}
-            {problems.length > 1 && (
-              <button onClick={() => removeProblem(problem.id)} className="btn-remove-problem" aria-label="プロブレムを削除" title="プロブレムを削除">
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-          <div className="problem-entries">
-            {problem.entries.map(entry => (
-              <SoapEntryBox
-                key={entry.id}
-                entry={entry}
-                onChange={(text) => updateEntry(problem.id, entry.id, text)}
-                onRemove={() => removeEntry(problem.id, entry.id)}
-              />
-            ))}
-          </div>
-          <div className="problem-actions">
-            <span className="actions-label">追加:</span>
-            {(['S', 'O', 'A', 'P'] as SoapEntryType[]).map(type => (
-              <button
-                key={type}
-                className={`btn-add-entry ${type.toLowerCase()}`}
-                onClick={() => addEntry(problem.id, type)}
-              >
-                <strong>+ {type}</strong> {soapEntryTypeMeta[type].subLabel}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-      <div className="soap-editor-footer">
-        <button className="btn-secondary btn-new-problem" onClick={() => addProblem()}>
-          <Plus size={14} className="icon-plus" /> 新規プロブレム
-        </button>
-        <div className="past-problem-menu-wrap" ref={pastMenuRef}>
-          <button
-            type="button"
-            className="past-problem-trigger"
-            aria-haspopup="menu"
-            aria-expanded={isPastMenuOpen}
-            disabled={pastProblemSuggestions.length === 0}
-            title={pastProblemSuggestions.length === 0 ? 'この患者の過去プロブレムはまだありません' : ''}
-            onClick={() => setIsPastMenuOpen(open => !open)}
-          >
-            <History size={14} aria-hidden="true" />
-            過去のプロブレムから追加
-            <ChevronDown size={14} aria-hidden="true" />
-          </button>
-          {isPastMenuOpen && (
-            <div className="past-problem-menu" role="menu" aria-label="過去のプロブレム候補">
-              {pastProblemSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  role="menuitem"
-                  className="past-problem-item"
-                  onClick={() => {
-                    addProblem(suggestion);
-                    setIsPastMenuOpen(false);
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <style jsx>{`
-        .soap-editor-container {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .soap-editor-toolbar {
-          display: flex;
-          flex-wrap: wrap; /* 狭い画面ではヒントと保存ステータスを折り返す */
-          align-items: center;
-          justify-content: flex-end;
-          gap: 0.75rem;
-          position: sticky;
-          top: 0; /* ページスクロール(.content-scroll)の上端に固定 */
-          z-index: 5;
-          background: #fdfdfd;
-          padding: 0.3rem 0;
-        }
-        .keyboard-hint {
-          font-size: 0.72rem;
-          font-weight: 700;
-          color: var(--text-ghost);
-        }
-        .problem-block {
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          padding: 0.85rem;
-          background: var(--bg-subtle);
-          transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
-        }
-        .problem-block.active {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 2px var(--primary-light);
-          background: var(--bg-card);
-        }
-        .problem-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 0.75rem;
-        }
-        .problem-title-input {
-          flex: 1;
-          min-width: 0;
-          font-weight: 600;
-          font-size: 1.05rem;
-          color: var(--text-main);
-          border: none;
-          background: transparent;
-          border-bottom: 1px solid transparent;
-          padding: 0.2rem;
-        }
-        .problem-title-input:focus {
-          outline: none;
-          border-bottom: 1px solid var(--primary);
-        }
-        .active-target-badge {
-          flex-shrink: 0;
-          border-radius: 999px;
-          background: var(--primary-light);
-          color: var(--primary-dark);
-          border: 1px solid var(--primary-soft);
-          padding: 0.1rem 0.55rem;
-          font-size: 0.7rem;
-          font-weight: 850;
-          white-space: nowrap;
-        }
-        .btn-remove-problem {
-          flex-shrink: 0;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px;
-          border-radius: var(--radius-sm);
-          color: var(--text-ghost);
-          opacity: 0;
-          transition: opacity var(--transition-fast), color var(--transition-fast);
-        }
-        .problem-block:hover .btn-remove-problem,
-        .problem-block:focus-within .btn-remove-problem,
-        .btn-remove-problem:focus-visible {
-          opacity: 1;
-        }
-        .btn-remove-problem:hover {
-          background: var(--danger-soft);
-          color: var(--danger);
-        }
-        .problem-entries {
-          display: flex;
-          flex-direction: column;
-          gap: 0.6rem;
-          margin-bottom: 0.75rem;
-        }
-        .problem-actions {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 0.4rem;
-          padding-top: 0.5rem;
-          border-top: 1px dashed var(--border);
-        }
-        .actions-label {
-          font-size: 0.78rem;
-          color: var(--text-ghost);
-          font-weight: 700;
-          margin-right: 0.25rem;
-        }
-        .btn-add-entry {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.28rem;
-          background: var(--bg-card);
-          border: 1px solid var(--border);
-          border-radius: 999px;
-          padding: 0.22rem 0.7rem;
-          font-size: 0.78rem;
-          font-weight: 700;
-          color: var(--text-muted);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-        .btn-add-entry strong {
-          font-weight: 850;
-        }
-        .btn-add-entry:hover { background: var(--bg-hover); }
-        .btn-add-entry.s strong { color: var(--status-blue); }
-        .btn-add-entry.o strong { color: var(--status-green); }
-        .btn-add-entry.a strong { color: var(--status-orange); }
-        .btn-add-entry.p strong { color: var(--status-purple); }
-        .btn-add-entry.s:hover { border-color: var(--status-blue); }
-        .btn-add-entry.o:hover { border-color: var(--status-green); }
-        .btn-add-entry.a:hover { border-color: var(--status-orange); }
-        .btn-add-entry.p:hover { border-color: var(--status-purple); }
-        .soap-editor-footer {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          margin-top: 0.25rem;
-        }
-        .past-problem-menu-wrap {
-          position: relative;
-        }
-        .past-problem-trigger {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: var(--text-muted);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-sm);
-          background: var(--bg-card);
-          padding: 0.4rem 0.7rem;
-          cursor: pointer;
-          transition: all var(--transition-fast);
-        }
-        .past-problem-trigger:hover:not(:disabled) {
-          border-color: var(--primary);
-          color: var(--primary-dark);
-          background: var(--primary-light);
-        }
-        .past-problem-trigger:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-        .past-problem-trigger:focus-visible {
-          outline: none;
-          border-color: var(--border-focus);
-          box-shadow: 0 0 0 3px var(--primary-light);
-        }
-        .past-problem-menu {
-          position: absolute;
-          bottom: calc(100% + 6px);
-          left: 0;
-          min-width: 240px;
-          max-width: 340px;
-          max-height: 260px;
-          overflow-y: auto;
-          background: var(--bg-card);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          box-shadow: var(--shadow-md);
-          padding: 0.35rem;
-          display: grid;
-          gap: 0.15rem;
-          z-index: 30;
-        }
-        .past-problem-item {
-          text-align: left;
-          border: none;
-          background: transparent;
-          border-radius: var(--radius-sm);
-          padding: 0.45rem 0.6rem;
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: var(--text-main);
-          cursor: pointer;
-          overflow-wrap: anywhere;
-        }
-        .past-problem-item:hover,
-        .past-problem-item:focus-visible {
-          background: var(--primary-light);
-          color: var(--primary-dark);
-          outline: none;
-        }
-      `}</style>
-    </div>
-  );
-}
-
-
-

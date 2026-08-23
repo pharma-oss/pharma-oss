@@ -151,7 +151,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           </button>
         </div>
 
-        <div className="patient-prescription-info" style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+        <div className="patient-prescription-info" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-muted)' }}>
           患者: <strong style={{ color: 'var(--text-main)' }}>{patientName}</strong> 様 / 処方ID: {prescriptionId}
         </div>
         <WorkflowMiniTutorial kind="picking" userId={userId || ''} autoOpen={isOpen} />
@@ -159,7 +159,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
 
       <div className="modal-body" style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <form onSubmit={handleScanSubmit} className="scan-form-box" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <label style={{ fontSize: 'var(--fs-md)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <Barcode size={16} />
             GS1バーコード / JANコード スキャン
           </label>
@@ -170,7 +170,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
               onChange={(e) => setScanInput(e.target.value)}
               placeholder="バーコードリーダーの入力を受け付けます..."
               className="input-field"
-              style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: '0.95rem' }}
+              style={{ flex: 1, padding: '0.5rem 0.75rem', fontSize: 'var(--fs-base)' }}
               autoFocus
             />
             <button
@@ -185,7 +185,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           {scanMessage && (
             <div
               style={{
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 color: scanMessage.isError ? 'var(--danger)' : 'var(--success)',
                 fontWeight: 600,
                 display: 'flex',
@@ -199,7 +199,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           )}
         </form>
 
-        <div className="picking-status-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
+        <div className="picking-status-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--fs-base)' }}>
           <div>
             進捗: <strong>{pickedItems}</strong> / {totalItems} 調剤完了
           </div>
@@ -227,20 +227,20 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
               }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.drugName}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <div style={{ fontWeight: 700, fontSize: 'var(--fs-base)' }}>{item.drugName}</div>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>
                   必要量: <strong>{item.totalQuantity}</strong> | 棚: {item.location || '未設定'}
                 </div>
 
                 {item.shortageQuantity > 0 && (
-                  <div style={{ color: 'var(--warning)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <div style={{ color: 'var(--warning)', fontSize: 'var(--fs-sm)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     <AlertTriangle size={14} />
                     <span>不足数: {item.shortageQuantity} {item.shortageNote ? `(${item.shortageNote})` : ''}</span>
                   </div>
                 )}
 
                 {item.pickedGtin && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--success)', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--success)', fontFamily: 'monospace' }}>
                     GTIN: {item.pickedGtin} {item.pickedLotNumber ? ` / Lot: ${item.pickedLotNumber}` : ''}
                   </div>
                 )}
@@ -250,13 +250,13 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                 {editingShortageItemId === item.itemId ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.8rem' }}>不足量:</span>
+                      <span style={{ fontSize: 'var(--fs-sm)' }}>不足量:</span>
                       <input
                         type="number"
                         min={0}
                         value={shortageQtyInput}
                         onChange={(e) => setShortageQtyInput(Number(e.target.value))}
-                        style={{ width: '60px', padding: '0.2rem 0.4rem', fontSize: '0.85rem' }}
+                        style={{ width: '60px', padding: '0.2rem 0.4rem', fontSize: 'var(--fs-md)' }}
                       />
                     </div>
                     <input
@@ -264,13 +264,13 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                       placeholder="メモ (任意)"
                       value={shortageNoteInput}
                       onChange={(e) => setShortageNoteInput(e.target.value)}
-                      style={{ fontSize: '0.8rem', padding: '0.2rem 0.4rem', width: '140px' }}
+                      style={{ fontSize: 'var(--fs-sm)', padding: '0.2rem 0.4rem', width: '140px' }}
                     />
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
                       <button
                         type="button"
                         className="btn-primary"
-                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: 'var(--fs-xs)' }}
                         onClick={() => void saveShortage(item.itemId)}
                       >
                         保存
@@ -278,7 +278,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                       <button
                         type="button"
                         className="btn-secondary"
-                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.75rem' }}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: 'var(--fs-xs)' }}
                         onClick={() => setEditingShortageItemId(null)}
                       >
                         取消
@@ -291,7 +291,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                       type="button"
                       className="btn-secondary"
                       onClick={() => openShortageEditor(item)}
-                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                      style={{ padding: '0.3rem 0.5rem', fontSize: 'var(--fs-sm)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
                     >
                       <Edit2 size={13} />
                       <span>不足記録</span>
@@ -302,12 +302,12 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                         type="button"
                         className="btn-secondary"
                         onClick={() => onResetPick(item.itemId)}
-                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: 'var(--danger)' }}
+                        style={{ padding: '0.3rem 0.6rem', fontSize: 'var(--fs-sm)', color: 'var(--danger)' }}
                       >
                         解除
                       </button>
                     ) : (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                         未照合
                       </div>
                     )}

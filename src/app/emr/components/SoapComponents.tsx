@@ -43,8 +43,8 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
   return (
     <div className={`soap-entry-box ${meta.className}`}>
       <div className="entry-header" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-        <span className="entry-badge" style={{ fontWeight: 850, fontSize: '0.85rem' }}>{entry.type}</span>
-        <span className="entry-sublabel" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{meta.subLabel}</span>
+        <span className="entry-badge" style={{ fontWeight: 850, fontSize: 'var(--fs-md)' }}>{entry.type}</span>
+        <span className="entry-sublabel" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{meta.subLabel}</span>
         <button
           type="button"
           onClick={onRemove}
@@ -66,7 +66,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
           padding: '0.5rem',
           borderRadius: '6px',
           border: '1px solid var(--border)',
-          fontSize: '0.9rem',
+          fontSize: 'var(--fs-base)',
           fontFamily: 'inherit',
           resize: 'vertical'
         }}
@@ -141,7 +141,7 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 
         .quick-empty {
           margin: 0;
-          font-size: 0.82rem;
+          font-size: var(--fs-md);
           color: var(--text-ghost);
           font-weight: 700;
         }
@@ -173,14 +173,14 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 
         .quick-date {
           color: var(--text-ghost);
-          font-size: 0.75rem;
+          font-size: var(--fs-xs);
           font-weight: 800;
           white-space: nowrap;
         }
 
         .quick-visit {
           color: var(--text-main);
-          font-size: 0.8rem;
+          font-size: var(--fs-sm);
           font-weight: 750;
           text-align: right;
           overflow-wrap: anywhere;
@@ -194,7 +194,7 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 
         .quick-problem h4 {
           margin: 0 0 0.25rem;
-          font-size: 0.8rem;
+          font-size: var(--fs-sm);
           color: var(--text-main);
         }
 
@@ -208,7 +208,7 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
         .quick-snippet span {
           flex-shrink: 0;
           width: 18px;
-          font-size: 0.72rem;
+          font-size: var(--fs-xs);
           font-weight: 850;
           text-align: center;
         }
@@ -228,7 +228,7 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 
         .quick-snippet p {
           margin: 0;
-          font-size: 0.78rem;
+          font-size: var(--fs-sm);
           line-height: 1.55;
           color: var(--text-muted);
           overflow-wrap: anywhere;
@@ -241,7 +241,7 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
           border-radius: var(--radius-sm);
           background: var(--bg-card);
           color: var(--primary-dark);
-          font-size: 0.8rem;
+          font-size: var(--fs-sm);
           font-weight: 800;
           padding: 0.45rem;
           cursor: pointer;
@@ -347,14 +347,14 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
 
         .soap-history-entry-header span {
           color: var(--text-ghost);
-          font-size: 0.78rem;
+          font-size: var(--fs-sm);
           font-weight: 800;
           white-space: nowrap;
         }
 
         .soap-history-entry-header strong {
           color: var(--text-main);
-          font-size: 0.86rem;
+          font-size: var(--fs-md);
           text-align: right;
           overflow-wrap: anywhere;
         }
@@ -373,7 +373,7 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
         .soap-history-problem h4 {
           margin: 0;
           color: var(--text-main);
-          font-size: 0.9rem;
+          font-size: var(--fs-base);
         }
 
         .soap-history-snippets {
@@ -400,7 +400,7 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
           border-radius: 6px;
           color: #ffffff;
           background: var(--primary);
-          font-size: 0.74rem;
+          font-size: var(--fs-xs);
           font-weight: 900;
         }
 
@@ -421,7 +421,7 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
         .soap-history-empty {
           margin: 0;
           color: var(--text-muted);
-          font-size: 0.82rem;
+          font-size: var(--fs-md);
           line-height: 1.55;
           overflow-wrap: anywhere;
         }
@@ -542,7 +542,7 @@ export const SoapStructuredAssessmentPanel = React.memo(
           .soap-structured-header h3 {
             margin: 0;
             color: var(--text-main);
-            font-size: 0.92rem;
+            font-size: var(--fs-base);
             font-weight: 850;
           }
 
@@ -551,7 +551,7 @@ export const SoapStructuredAssessmentPanel = React.memo(
             background: var(--warning-soft);
             color: var(--warning);
             padding: 0.16rem 0.6rem;
-            font-size: 0.72rem;
+            font-size: var(--fs-xs);
             font-weight: 850;
             white-space: nowrap;
           }
@@ -566,12 +566,15 @@ export const SoapStructuredAssessmentPanel = React.memo(
             gap: 0.45rem;
           }
 
+          /* 項目名とチップを横並びにすると「服薬コンプライアンス」のような
+             長いラベルが省略されるため、ラベルは常に上に置いて全文を出す。 */
           .soap-structured-field {
             display: flex;
-            align-items: center;
-            gap: 0.6rem;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
             min-width: 0;
-            padding: 0.3rem 0.45rem;
+            padding: 0.45rem 0.5rem;
             border-radius: var(--radius-sm);
             transition: background var(--transition-fast);
           }
@@ -581,13 +584,9 @@ export const SoapStructuredAssessmentPanel = React.memo(
           }
 
           .field-label {
-            flex: 0 0 128px;
             color: var(--text-muted);
-            font-size: 0.78rem;
+            font-size: var(--fs-sm);
             font-weight: 800;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
           }
 
           .soap-structured-field.confirmed .field-label {
@@ -606,7 +605,7 @@ export const SoapStructuredAssessmentPanel = React.memo(
             background: var(--bg-card);
             color: var(--text-muted);
             padding: 0.22rem 0.66rem;
-            font-size: 0.76rem;
+            font-size: var(--fs-xs);
             font-weight: 760;
             cursor: pointer;
             transition: all var(--transition-fast);
@@ -632,17 +631,6 @@ export const SoapStructuredAssessmentPanel = React.memo(
             color: var(--warning);
           }
 
-          @media (max-width: 980px) {
-            .soap-structured-field {
-              flex-direction: column;
-              align-items: flex-start;
-              gap: 0.3rem;
-            }
-
-            .field-label {
-              flex: none;
-            }
-          }
         `}</style>
       </section>
     );
@@ -688,7 +676,7 @@ export const SoapSaveStatusIndicator = React.memo(function SoapSaveStatusIndicat
           background: #ffffff;
           color: var(--text-muted);
           padding: 0 0.7rem;
-          font-size: 0.78rem;
+          font-size: var(--fs-sm);
           font-weight: 800;
         }
 
@@ -706,7 +694,7 @@ export const SoapSaveStatusIndicator = React.memo(function SoapSaveStatusIndicat
 
         .soap-save-status small {
           color: var(--text-ghost);
-          font-size: 0.72rem;
+          font-size: var(--fs-xs);
           font-weight: 760;
         }
 
