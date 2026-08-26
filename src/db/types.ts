@@ -368,6 +368,7 @@ export interface Visit {
     acceptanceReceiptNumber?: string;
     returnedAt?: string;
     returnReason?: string;
+    returnReasonCode?: string;
     rebillingAt?: string;
     rebillingReason?: string;
     closedAt?: string;
@@ -379,6 +380,7 @@ export interface Visit {
       note?: string;
       totalPoints?: number;
       fileName?: string;
+      reasonCode?: string;
     }[];
   };
   followUp?: {

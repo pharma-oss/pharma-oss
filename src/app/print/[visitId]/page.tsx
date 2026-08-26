@@ -51,6 +51,13 @@ import {
   type ClaimLifecycleState
 } from '@/lib/claim_lifecycle';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
+import {
+  DEFAULT_CLAIM_RETURN_REASON_CODE,
+  OFFICIAL_CLAIM_RETURN_REASONS,
+  buildReturnCorrectionSummary,
+  formatClaimReturnReasonLabel,
+  getClaimReturnReasonByCode
+} from '@/lib/claim_return_manager';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import { buildPrescriptionInputAudit, type PrescriptionInputAuditItem } from '@/lib/prescription_input_audit';
@@ -131,6 +138,8 @@ export default function PrintPage() {
   const db = useDatabase();
   const visitId = params.visitId as string;
 
+  const [returnReasonCode, setReturnReasonCode] = useState<string>(OFFICIAL_CLAIM_RETURN_REASONS[0].code);
+  const [returnReasonNote, setReturnReasonNote] = useState('');
   const [escrowPayload, setEscrowPayload] = useState<DbKeyEscrowPayload | null>(null);
   const [isGeneratingEscrow, setIsGeneratingEscrow] = useState(false);
   const [escrowError, setEscrowError] = useState<string | null>(null);
@@ -835,16 +844,30 @@ export default function PrintPage() {
 
   const handleRegisterReturn = async () => {
     if (!ensurePermission('change_billing')) return;
-    const reason = window.prompt('返戻理由を入力してください (例: 保険者番号不一致、用法不備等):');
-    if (!reason?.trim()) return;
+    const note = returnReasonNote.trim();
+    // 返戻理由は自由記述ではなくコードで残す。集計・オンライン請求の突合・
+    // 監査ログのいずれも、患者情報を含まないコードで揃える必要がある。
+    const summary = buildReturnCorrectionSummary({
+      reasonCode: returnReasonCode,
+      customNote: note || undefined,
+      operatorName: currentUser?.name || '担当者'
+    });
+    const reasonText = note
+      ? `${summary.reason.code} ${summary.reason.title} / ${note}`
+      : `${summary.reason.code} ${summary.reason.title}`;
     const nextLifecycle = markClaimReturned({
       current: claimLifecycle,
       at: new Date().toISOString(),
       by: currentUser?.name || '担当者',
-      reason: reason.trim()
+      reason: reasonText,
+      reasonCode: summary.reason.code
     });
-    await persistClaimLifecycle(nextLifecycle, `返戻登録 (${reason.trim()})`);
+    await persistClaimLifecycle(nextLifecycle, summary.auditDetails);
+    setReturnReasonNote('');
   };
+
+  const selectedReturnReason = getClaimReturnReasonByCode(returnReasonCode)
+    || getClaimReturnReasonByCode(DEFAULT_CLAIM_RETURN_REASON_CODE);
 
   const handlePrepareRebilling = async () => {
     if (!ensurePermission('change_billing')) return;
@@ -1365,6 +1388,43 @@ export default function PrintPage() {
                   ? `${new Date(latestClaimLifecycleEvent.at).toLocaleString('ja-JP')} / ${latestClaimLifecycleEvent.by || '担当者未記録'}`
                   : 'UKE出力後に履歴が作成されます。'}
               </p>
+              {claimLifecycle?.returnReasonCode && (
+                <p className="claim-lifecycle-return-code" data-testid="claim-registered-return-reason">
+                  記録済みの返戻理由: {formatClaimReturnReasonLabel(claimLifecycle.returnReasonCode)}
+                </p>
+              )}
+            </div>
+
+            <div className="claim-lifecycle-return-reason" data-testid="claim-return-reason-picker">
+              <label htmlFor="claim-return-reason-code">返戻理由</label>
+              <select
+                id="claim-return-reason-code"
+                data-testid="claim-return-reason-code"
+                value={returnReasonCode}
+                onChange={(event) => setReturnReasonCode(event.target.value)}
+                disabled={!canChangeBilling || claimLifecycleStatus === 'draft'}
+              >
+                {OFFICIAL_CLAIM_RETURN_REASONS.map((reason) => (
+                  <option key={reason.code} value={reason.code}>
+                    {reason.code} {reason.title}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                id="claim-return-reason-note"
+                data-testid="claim-return-reason-note"
+                value={returnReasonNote}
+                onChange={(event) => setReturnReasonNote(event.target.value)}
+                placeholder="補足メモ（任意）"
+                maxLength={200}
+                disabled={!canChangeBilling || claimLifecycleStatus === 'draft'}
+              />
+              {selectedReturnReason && (
+                <p className="claim-return-reason-hint" data-testid="claim-return-reason-hint">
+                  {selectedReturnReason.suggestedAction}
+                </p>
+              )}
             </div>
 
             <div className="claim-lifecycle-actions">

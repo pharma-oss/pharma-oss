@@ -1277,6 +1277,48 @@
           align-content: center;
         }
 
+        .claim-lifecycle-return-reason {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: auto minmax(0, 260px) minmax(0, 1fr);
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 0.85rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background: #f8fafc;
+        }
+
+        .claim-lifecycle-return-reason label {
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          color: var(--text-muted);
+        }
+
+        .claim-lifecycle-return-reason select,
+        .claim-lifecycle-return-reason input {
+          font-size: var(--fs-sm);
+          padding: 0.4rem 0.5rem;
+          border: 1px solid #cbd5f5;
+          border-radius: 6px;
+          background: #fff;
+          min-width: 0;
+        }
+
+        .claim-lifecycle-status-card .claim-lifecycle-return-code {
+          margin: 0.4rem 0 0;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+          color: var(--text-strong, #0f172a);
+        }
+
+        .claim-lifecycle-return-reason .claim-return-reason-hint {
+          grid-column: 1 / -1;
+          margin: 0;
+          font-size: var(--fs-xs);
+          color: var(--text-muted);
+        }
+
         .electronic-prescription-actions {
           min-width: 188px;
         }
@@ -3082,6 +3124,10 @@
           .electronic-prescription-actions {
             grid-column: 1 / -1;
             grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .claim-lifecycle-return-reason {
+            grid-template-columns: minmax(0, 1fr);
           }
 
           .record-titlebar,

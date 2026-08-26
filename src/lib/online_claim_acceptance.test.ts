@@ -234,3 +234,40 @@ test('reconcileOnlineClaimAcceptanceResults blocks patient mismatches and warns 
   assert.ok(reconciliation.issues.some((issue) => issue.code === 'acceptance_points_mismatch'));
   assert.strictEqual(reconciliation.items[0].nextLifecycle, undefined);
 });
+
+test('reconcileOnlineClaimAcceptanceResults stores a return reason code for returned rows', () => {
+  const rows = parseOnlineClaimAcceptanceResults([
+    '受付ID,患者ID,患者名,受付結果,点数,返戻理由',
+    'visit_1,pt_1,山田 太郎,返戻,147,公費受給者番号が一致しません'
+  ].join('\n')).rows;
+
+  const reconciliation = reconcileOnlineClaimAcceptanceResults({
+    rows,
+    visits: [makeVisit()],
+    importedAt: '2026-06-20T09:00:00.000Z',
+    importedBy: '薬剤師 一郎'
+  });
+
+  const item = reconciliation.items[0];
+  assert.strictEqual(reconciliation.returnedCount, 1);
+  assert.strictEqual(item.nextLifecycle?.status, 'returned');
+  // 施設ごとに文言が揺れる返戻事由を、集計できるコードへ寄せる。
+  assert.strictEqual(item.nextLifecycle?.returnReasonCode, 'R03');
+  assert.match(String(item.nextLifecycle?.returnReason), /公費受給者番号/);
+});
+
+test('reconcileOnlineClaimAcceptanceResults falls back to R99 when the reason is unrecognized', () => {
+  const rows = parseOnlineClaimAcceptanceResults([
+    '受付ID,患者ID,患者名,受付結果,点数,返戻理由',
+    'visit_1,pt_1,山田 太郎,返戻,147,審査支払機関からの照会'
+  ].join('\n')).rows;
+
+  const reconciliation = reconcileOnlineClaimAcceptanceResults({
+    rows,
+    visits: [makeVisit()],
+    importedAt: '2026-06-20T09:00:00.000Z',
+    importedBy: '薬剤師 一郎'
+  });
+
+  assert.strictEqual(reconciliation.items[0].nextLifecycle?.returnReasonCode, 'R99');
+});

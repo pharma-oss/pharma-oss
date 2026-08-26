@@ -177,7 +177,35 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithSpecialPublicExpense);
       assert.strictEqual(errors, null);
-      assert.strictEqual(VISIT_SCHEMA.version, 20);
+      assert.strictEqual(VISIT_SCHEMA.version, 21);
+    });
+
+    test('should validate a returned claim carrying a return reason code', () => {
+      // 返戻理由コードは集計とオンライン請求の突合に使うため、
+      // 状態と履歴の両方へ保存できる必要がある (schema v21 で追加)。
+      const returnedVisit = {
+        visitId: 'v_returned',
+        patientId: 'pt_123',
+        issueDate: '2026-06-14T09:00:00Z',
+        status: 'completed',
+        claimLifecycle: {
+          status: 'returned',
+          returnedAt: '2026-06-20T09:00:00.000Z',
+          returnReason: 'R03 公費負担者・受給者番号不一致 / 受給者証を再確認',
+          returnReasonCode: 'R03',
+          history: [
+            {
+              type: 'returned',
+              at: '2026-06-20T09:00:00.000Z',
+              by: '薬剤師 一郎',
+              note: 'R03 公費負担者・受給者番号不一致',
+              reasonCode: 'R03'
+            }
+          ]
+        }
+      };
+
+      assert.strictEqual(getErrors(VISIT_SCHEMA, returnedVisit), null);
     });
 
     test('should validate initial questionnaire and tracing report records on a visit', () => {

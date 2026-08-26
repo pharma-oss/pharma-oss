@@ -112,3 +112,37 @@ test('markClaimClosed locks completed claims', () => {
   assert.strictEqual(isClaimLifecycleLocked(closed), true);
   assert.strictEqual(closed.history?.[0].type, 'closed');
 });
+
+test('markClaimReturned records the return reason code on the state and the history event', () => {
+  const exported = markClaimExported({
+    at: '2026-06-14T09:00:00.000Z',
+    by: '薬剤師 一郎',
+    fileName: 'RECEIPT_123.uke',
+    totalPoints: 147
+  });
+  const returned = markClaimReturned({
+    current: exported,
+    at: '2026-06-15T09:00:00.000Z',
+    by: '薬剤師 二郎',
+    reason: 'R02 被保険者記号・番号誤り / 枝番01を追記',
+    reasonCode: 'R02'
+  });
+
+  // 集計とオンライン請求の突合は、患者情報を含まないコードで行う。
+  assert.strictEqual(returned.returnReasonCode, 'R02');
+  const lastEvent = returned.history?.[returned.history.length - 1];
+  assert.strictEqual(lastEvent?.type, 'returned');
+  assert.strictEqual(lastEvent?.reasonCode, 'R02');
+});
+
+test('markClaimReturned omits the reason code key when no code is given', () => {
+  // 旧データやコード無しの取込経路で undefined を書き込まない (RxDB の任意項目)。
+  const returned = markClaimReturned({
+    at: '2026-06-15T09:00:00.000Z',
+    reason: '保険番号相違'
+  });
+
+  assert.ok(!('returnReasonCode' in returned));
+  const lastEvent = returned.history?.[returned.history.length - 1];
+  assert.ok(lastEvent && !('reasonCode' in lastEvent));
+});

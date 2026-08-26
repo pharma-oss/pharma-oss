@@ -104,6 +104,27 @@ test('print page delegates item-level claim flags to the audited claim action', 
   assert.doesNotMatch(body, /const auditOk = await logAuditAction\(/);
 });
 
+test('print page registers returns with a reason code, not free text', () => {
+  const body = section(printSource, 'const handleRegisterReturn = async', 'const selectedReturnReason =');
+
+  // 返戻理由は集計・突合できるコードで残す。自由記述の prompt へ戻さないこと。
+  assert.doesNotMatch(body, /window\.prompt\(/);
+  assert.match(body, /buildReturnCorrectionSummary\(/);
+  assert.match(body, /reasonCode: summary\.reason\.code/);
+  assert.match(body, /persistClaimLifecycle\(nextLifecycle, summary\.auditDetails\)/);
+
+  // 選択 UI が消えると、コードは既定値のまま固定されてしまう。
+  assert.match(printSource, /data-testid="claim-return-reason-picker"/);
+  assert.match(printSource, /data-testid="claim-return-reason-code"/);
+  assert.match(printSource, /data-testid="claim-return-reason-note"/);
+  assert.match(printSource, /OFFICIAL_CLAIM_RETURN_REASONS\.map\(/);
+
+  // 記録済みのコードが画面に出ないと、どの理由で返戻登録したのかを
+  // 監査ログを開くまで確認できない。
+  assert.match(printSource, /data-testid="claim-registered-return-reason"/);
+  assert.match(printSource, /formatClaimReturnReasonLabel\(claimLifecycle\.returnReasonCode\)/);
+});
+
 test('print page delegates claim lifecycle transitions to the audited claim action', () => {
   const body = section(printSource, 'const persistClaimLifecycle = async', 'const handleDownloadUke = async');
 

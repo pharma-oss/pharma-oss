@@ -337,7 +337,10 @@ const create = async () => {
                     return oldDoc;
                 },
                 18: keepDocument,
-                19: keepDocument
+                19: keepDocument,
+                // v20 -> v21: claimLifecycle.returnReasonCode と history[].reasonCode を追加。
+                // どちらも任意項目なので、既存ドキュメントはそのまま持ち上げる。
+                20: keepDocument
             })
         },
         prescription_items: {

@@ -5,6 +5,7 @@ import {
   markClaimReturned,
   type ClaimLifecycleState
 } from '@/lib/claim_lifecycle';
+import { inferClaimReturnReasonCode } from '@/lib/claim_return_manager';
 
 export type OnlineClaimAcceptanceStatus = 'accepted' | 'returned';
 export type OnlineClaimAcceptanceIssueSeverity = 'error' | 'warning';
@@ -768,11 +769,14 @@ export function reconcileOnlineClaimAcceptanceResults({
         });
         acceptedCount++;
       } else {
+        // 受付結果ファイルの返戻事由は施設ごとに文言が揺れる。
+        // 集計と突合は患者情報を含まないコードで行うため、ここでコードへ寄せる。
         nextLifecycle = markClaimReturned({
           current: visit.claimLifecycle,
           at: importedAt,
           by: importedBy,
-          reason: row.reason || 'オンライン請求受付結果で要修正として取り込みました。'
+          reason: row.reason || 'オンライン請求受付結果で要修正として取り込みました。',
+          reasonCode: inferClaimReturnReasonCode(row.reason)
         });
         returnedCount++;
       }

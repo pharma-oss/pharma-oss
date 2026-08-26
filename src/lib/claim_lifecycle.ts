@@ -15,6 +15,8 @@ export interface ClaimLifecycleEvent {
   note?: string;
   totalPoints?: number;
   fileName?: string;
+  /** 返戻イベントの返戻理由コード (claim_return_manager.ts の R コード) */
+  reasonCode?: string;
 }
 
 export interface ClaimExportSnapshotItem {
@@ -80,6 +82,11 @@ export interface ClaimLifecycleState {
   acceptanceReceiptNumber?: string;
   returnedAt?: string;
   returnReason?: string;
+  /**
+   * 返戻理由コード (claim_return_manager.ts の OFFICIAL_CLAIM_RETURN_REASONS)。
+   * 集計とオンライン請求の突合は患者情報を含まないコードで行う。
+   */
+  returnReasonCode?: string;
   rebillingAt?: string;
   rebillingReason?: string;
   closedAt?: string;
@@ -152,12 +159,14 @@ export function markClaimReturned({
   current,
   at,
   by,
-  reason
+  reason,
+  reasonCode
 }: {
   current?: ClaimLifecycleState | null;
   at: string;
   by?: string;
   reason: string;
+  reasonCode?: string;
 }): ClaimLifecycleState {
   const base = current || {};
   return {
@@ -165,12 +174,14 @@ export function markClaimReturned({
     status: 'returned',
     returnedAt: at,
     returnReason: reason,
+    ...(reasonCode ? { returnReasonCode: reasonCode } : {}),
     lockedAt: undefined,
     history: appendLifecycleEvent(base, {
       type: 'returned',
       at,
       by,
-      note: reason
+      note: reason,
+      ...(reasonCode ? { reasonCode } : {})
     })
   };
 }

@@ -153,7 +153,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 20,
+  version: 21,
   primaryKey: 'visitId',
   type: 'object',
   properties: {
@@ -585,6 +585,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
         acceptanceReceiptNumber: { type: 'string', maxLength: 100 },
         returnedAt: { type: 'string', format: 'date-time', maxLength: 50 },
         returnReason: { type: 'string', maxLength: 2000 },
+        returnReasonCode: { type: 'string', maxLength: 20 },
         rebillingAt: { type: 'string', format: 'date-time', maxLength: 50 },
         rebillingReason: { type: 'string', maxLength: 2000 },
         closedAt: { type: 'string', format: 'date-time', maxLength: 50 },
@@ -599,7 +600,8 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
               by: { type: 'string', maxLength: 100 },
               note: { type: 'string', maxLength: 2000 },
               totalPoints: { type: 'number', minimum: 0 },
-              fileName: { type: 'string', maxLength: 200 }
+              fileName: { type: 'string', maxLength: 200 },
+              reasonCode: { type: 'string', maxLength: 20 }
             },
             required: ['type', 'at']
           }

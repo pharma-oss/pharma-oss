@@ -185,15 +185,18 @@ export interface Drug {
 
 依存の小さい順です。1 と 2 は互いに独立しています。
 
-### P3-A 返戻理由コードの接続（最小・既存資産あり）
+### P3-A 返戻理由コードの接続 — **完了（2026-08-27）**
 
-1. `handleRegisterReturn` の `window.prompt` を、`OFFICIAL_CLAIM_RETURN_REASONS` からの選択 UI に置き換える
-2. `ClaimLifecycleState` に `returnReasonCode` を追加し、`markClaimReturned` で保存する
-3. 監査ログの詳細を `buildReturnCorrectionSummary` の `auditDetails` に統一する
-4. `online_claim_acceptance.ts` が取り込む外部の返戻事由を、R コードへマッピングする
+1. ~~`handleRegisterReturn` の `window.prompt`~~ → 返戻理由コードの選択 UI ＋ 補足メモ欄に置き換え
+2. `ClaimLifecycleState.returnReasonCode` と履歴イベントの `reasonCode` を追加（visits schema v20 → v21）
+3. 監査ログを `buildReturnCorrectionSummary` の `auditDetails` に統一
+   （実測: `レセプト返戻処理: [R03] 公費負担者・受給者番号不一致 (対応者: … / メモ: …)`）
+4. `online_claim_acceptance.ts` の取込に `inferClaimReturnReasonCode` を接続し、
+   施設ごとに揺れる自由記述を R コードへ寄せる（該当なしは R99）
+5. 記録済みの返戻理由コードを請求ライフサイクルパネルに表示
 
-新規仕様は不要です。既存の体系を配線するだけで、`monthly_claim_uke.ts:2404` が要求する
-「患者情報を含まないコード」の要件も満たせます。
+実ブラウザで、R03 を選んで登録 → リロードしても DB から `返戻対応` と
+`記録済みの返戻理由: R03 公費負担者・受給者番号不一致` が復元されることを確認済み。
 
 ### P3-B RE / HO / KO の任意項目出力（高額療養費・減免はここに集約）
 
