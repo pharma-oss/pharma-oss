@@ -19,6 +19,10 @@ import {
   type DispensingUkeRecordSpec,
   type DispensingUkeValidationIssue
 } from '@/lib/receipt/dispensing_uke_validation';
+import {
+  buildHighCostSpecialNoteCode,
+  type HighCostSpecialNoteResult
+} from '@/lib/receipt/dispensing_uke_code_tables';
 import { generateUkeContent, type UkeRecord } from '@/lib/receipt/uke_generator';
 import {
   buildEvidenceIntegrityReview,
@@ -135,7 +139,8 @@ export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_patient_gender_missing'
   | 'official_uke_prescription_date_missing'
   | 'official_uke_dispensing_date_missing'
-  | 'official_uke_multiple_prescription_group_unconfirmed';
+  | 'official_uke_multiple_prescription_group_unconfirmed'
+  | 'official_uke_high_cost_special_note_unrecordable';
 
 export interface MonthlyClaimUkeOfficialReadinessIssue {
   severity: MonthlyClaimUkeBatchCheckSeverity;
@@ -1503,6 +1508,35 @@ function buildMonthlyClaimOfficialBodyRecords(claim: MonthlyClaimUkeCase): UkeRe
   ];
 }
 
+function isLateElderlyClaim(claim: MonthlyClaimUkeCase, dispensingDate: string): boolean {
+  // 既存のレセプト種別判定 (deriveOfficialClaimTypeCode) と同じ見分け方に合わせる。
+  const insuranceType = claim.patient.insuranceInfo?.insuranceType || '';
+  return /後期高齢/.test(insuranceType) || ageOnDate(claim.patient.birthDate, dispensingDate) >= 75;
+}
+
+/**
+ * 高額療養費の適用区分から、REレコードのレセプト特記事項コードを決める。
+ * 区分が未設定なら undefined (特記事項は省略)。
+ * 区分はあるが記録条件を満たさない場合は ok:false を返し、
+ * buildMonthlyClaimUkeOfficialReadinessReport が理由付きで指摘する。
+ */
+function resolveOfficialHighCostSpecialNote(
+  claim: MonthlyClaimUkeCase,
+  dispensingDate: string,
+  dispensingMonth: string
+): HighCostSpecialNoteResult | undefined {
+  const insuranceInfo = claim.patient.insuranceInfo;
+  const category = insuranceInfo?.highCostLimitCategory;
+  if (!category) return undefined;
+
+  return buildHighCostSpecialNoteCode({
+    category,
+    multipleOccurrence: insuranceInfo?.highCostMultipleOccurrence,
+    dispensingMonth,
+    lateElderly: isLateElderlyClaim(claim, dispensingDate)
+  });
+}
+
 function buildMonthlyClaimOfficialClaimInput(
   claim: MonthlyClaimUkeCase,
   result: MonthlyClaimUkeBuildResult,
@@ -1511,22 +1545,39 @@ function buildMonthlyClaimOfficialClaimInput(
   const dispensingDate = calendarDate(firstDateLike(claim.visit.dispensingDate, claim.visit.issueDate), '調剤年月日');
   const insuranceInfo = claim.patient.insuranceInfo;
   const prescriptionCount = officialPrescriptionCount(claim);
+  const dispensingMonth = calendarMonth(dispensingDate, '調剤年月');
+  const specialNote = resolveOfficialHighCostSpecialNote(claim, dispensingDate, dispensingMonth);
+  const reduction = insuranceInfo?.copaymentReduction;
 
   return {
     common: {
       claimNumber,
       claimTypeCode: deriveOfficialClaimTypeCode(claim),
-      dispensingMonth: calendarMonth(dispensingDate, '調剤年月'),
+      dispensingMonth,
       patientName: claim.patient.name,
       genderCode: toOfficialGenderCode(claim.patient),
-      birthDate: calendarDate(claim.patient.birthDate, '生年月日')
+      birthDate: calendarDate(claim.patient.birthDate, '生年月日'),
+      ...(specialNote?.ok ? { specialNoteCodes: [specialNote.code] } : {}),
+      ...(insuranceInfo?.copaymentCategoryCode
+        ? { copaymentCategoryCode: insuranceInfo.copaymentCategoryCode }
+        : {})
     },
     insurances: insuranceInfo?.provider
       ? [{
           insurerNumber: requireDigits(insuranceInfo.provider, '保険者番号', [6, 8]),
           number: insuranceInfo.number || '',
           prescriptionCount,
-          totalPoints: result.totalPoints
+          totalPoints: result.totalPoints,
+          ...(reduction?.certificateNumber ? { certificateNumber: reduction.certificateNumber } : {}),
+          ...(reduction
+            ? {
+                copaymentReduction: {
+                  code: reduction.code,
+                  ...(reduction.ratioPercent === undefined ? {} : { ratioPercent: reduction.ratioPercent }),
+                  ...(reduction.reducedYen === undefined ? {} : { reducedYen: reduction.reducedYen })
+                }
+              }
+            : {})
         }]
       : [],
     publicExpenses: (claim.patient.publicInsurances || []).map((insurance) => ({
@@ -1554,6 +1605,27 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
     && MONTHLY_CLAIM_UKE_OFFICIAL_FEE_RECORD_TYPES[fee.code] !== undefined
   ));
   const checkedDrugItems = claim.items.filter((item) => item.claimDrugFee !== false);
+
+  if (dispensingDateSource) {
+    // 適用区分はあるのに特記事項として記録できない場合、黙って落とすと
+    // 高額療養費の区分が抜けたレセプトが出てしまう。理由を出して止める。
+    const dispensingDate = calendarDate(dispensingDateSource, '調剤年月日');
+    const specialNote = resolveOfficialHighCostSpecialNote(
+      claim,
+      dispensingDate,
+      calendarMonth(dispensingDate, '調剤年月')
+    );
+    if (specialNote && !specialNote.ok) {
+      addOfficialReadinessIssue(issues, {
+        severity: 'error',
+        code: 'official_uke_high_cost_special_note_unrecordable',
+        title: '高額療養費の適用区分をレセプト特記事項にできません',
+        message: `${patientName} の適用区分「区${claim.patient.insuranceInfo?.highCostLimitCategory}」を記録できません。${specialNote.reason}`,
+        visitId,
+        patientName
+      });
+    }
+  }
 
   if (claim.patient.gender !== 'male' && claim.patient.gender !== 'female') {
     addOfficialReadinessIssue(issues, {

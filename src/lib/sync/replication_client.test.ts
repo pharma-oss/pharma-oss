@@ -30,7 +30,10 @@ async function createPatientsOnlyDatabase(): Promise<PharmacyDatabase> {
   await db.addCollections({
     patients: {
       schema: PATIENT_SCHEMA,
-      migrationStrategies: { 1: keepDocument, 2: keepDocument, 3: keepDocument }
+      // スキーマ版を上げるたびにここが古くなるので、版数から生成する
+      migrationStrategies: Object.fromEntries(
+        Array.from({ length: PATIENT_SCHEMA.version }, (_, index) => [index + 1, keepDocument])
+      )
     }
   });
   return db as unknown as PharmacyDatabase;

@@ -271,7 +271,10 @@ const create = async () => {
                     oldDoc.publicInsurances = oldDoc.publicInsurances || [];
                     return oldDoc;
                 },
-                2: keepDocument
+                2: keepDocument,
+                // v3 -> v4: 高額療養費の適用区分と一部負担金の減免を insuranceInfo へ追加。
+                // いずれも任意項目なので、既存ドキュメントはそのまま持ち上げる。
+                3: keepDocument
             })
         },
         visits: {

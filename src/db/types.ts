@@ -1,4 +1,5 @@
 import type { RxCollection, RxDatabase } from 'rxdb';
+import type { HighCostLimitCategory } from '../lib/receipt/dispensing_uke_code_tables';
 
 export type AiAssistMode = 'enabled' | 'limited' | 'disabled';
 
@@ -256,6 +257,25 @@ export interface Patient {
     validTo?: string;
     eligibilityCheckedAt?: string;
     eligibilityStatus?: InsuranceEligibilityStatus;
+    /**
+     * 高額療養費の適用区分。限度額適用認定証またはオンライン資格確認で得た区分を、
+     * レセプト特記事項（別表7 区ア〜区キ）として記録するために保持する。
+     */
+    highCostLimitCategory?: HighCostLimitCategory;
+    /** 多数回該当（直近12か月に3回以上該当した場合の4回目以降） */
+    highCostMultipleOccurrence?: boolean;
+    /** 別表8 一部負担金区分コード。高額療養費が現物給付された場合のみ */
+    copaymentCategoryCode?: string;
+    /** 一部負担金の減免（別表10） */
+    copaymentReduction?: {
+      code: string;
+      /** 「割」単位で減額される場合の減額割合（百分率） */
+      ratioPercent?: number;
+      /** 「円」単位で減額される場合の減額金額 */
+      reducedYen?: number;
+      /** 国民健康保険一部負担金減額、免除、徴収猶予証明書の証明書番号 */
+      certificateNumber?: string;
+    };
   };
   publicInsurances?: PublicInsurance[];
 }

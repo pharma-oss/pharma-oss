@@ -7,6 +7,7 @@ import type { CalculationResultItem } from './calculator.ts';
 import { DISPENSING_UKE_KNOWN_RECORD_SPEC, DISPENSING_UKE_RECORD_SPEC_SOURCE } from './receipt/dispensing_uke_validation.ts';
 import {
   buildMonthlyClaimOfficialUkeBundle,
+  buildMonthlyClaimUkeOfficialReadinessReport,
   buildMonthlyClaimOfficialResubmissionRegressionCsv,
   buildMonthlyClaimOfficialResubmissionRegressionReport,
   buildMonthlyClaimOfficialSubmissionTrialCsv,
@@ -1370,4 +1371,111 @@ test('validateMonthlyClaimUkeBatch warns when claim months are mixed', () => {
 
   const bundle = buildMonthlyClaimUkeBundle(results, 'MONTHLY_CLAIM_MIXED.uke');
   assert.strictEqual(bundle.batchIssues.length, 1);
+});
+
+
+// 高額療養費の適用区分・一部負担金の減免を、患者マスターから公式UKEへ流す部分。
+
+function highCostClaim(insuranceOverrides: Record<string, unknown>): MonthlyClaimUkeCase {
+  return makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    },
+    patient: {
+      insuranceInfo: {
+        provider: '06139999',
+        number: '12345678',
+        burdenRatio: 30,
+        relationship: '本人',
+        ...insuranceOverrides
+      }
+    } as Partial<Patient>
+  });
+}
+
+function officialRecordFields(claim: MonthlyClaimUkeCase, type: string): string[] {
+  const results = buildMonthlyClaimUkeResults([claim], new Date('2026-06-14T09:00:00.000Z'));
+  const bundle = buildMonthlyClaimOfficialUkeBundle([claim], results);
+  const record = bundle.records.find((item) => item.type === type);
+  assert.ok(record, `${type} レコードがありません`);
+  return record.fields;
+}
+
+test('high-cost limit category from the patient master reaches the RE special note field', () => {
+  const fields = officialRecordFields(highCostClaim({ highCostLimitCategory: 'ウ' }), 'RE');
+  assert.strictEqual(fields[7], '28', '区ウ = 28');
+});
+
+test('multiple occurrence switches the special note to the 多 code', () => {
+  const fields = officialRecordFields(
+    highCostClaim({ highCostLimitCategory: 'ウ', highCostMultipleOccurrence: true }),
+    'RE'
+  );
+  assert.strictEqual(fields[7], '33', '多ウ = 33');
+});
+
+test('copayment category from the patient master reaches the RE record', () => {
+  const fields = officialRecordFields(
+    highCostClaim({ highCostLimitCategory: 'ウ', copaymentCategoryCode: '1' }),
+    'RE'
+  );
+  assert.strictEqual(fields[39], '1');
+});
+
+test('claims without high-cost data keep the RE record unchanged', () => {
+  const fields = officialRecordFields(highCostClaim({}), 'RE');
+  assert.strictEqual(fields.length, 6, '任意項目が無ければ項目を増やさない');
+});
+
+test('copayment reduction from the patient master reaches the HO record', () => {
+  const fields = officialRecordFields(
+    highCostClaim({
+      copaymentReduction: {
+        code: '1',
+        ratioPercent: 30,
+        reducedYen: 1200,
+        certificateNumber: '012'
+      }
+    }),
+    'HO'
+  );
+
+  assert.strictEqual(fields[7], '012', '証明書番号');
+  assert.strictEqual(fields[10], '1', '減免区分');
+  assert.strictEqual(fields[11], '30', '減額割合');
+  assert.strictEqual(fields[12], '1200', '減額金額');
+});
+
+test('late-elderly-only category is reported instead of silently dropped', () => {
+  // 区カ は後期高齢者医療のみ。社保の患者に付いていたら、
+  // 黙って落とさずに理由を出す (落とすと区分の無いレセプトが出る)。
+  const claim = highCostClaim({ highCostLimitCategory: 'カ', insuranceType: '社保' });
+  const report = buildMonthlyClaimUkeOfficialReadinessReport(claim);
+  const issue = report.issues.find(
+    (item) => item.code === 'official_uke_high_cost_special_note_unrecordable'
+  );
+
+  assert.ok(issue, '指摘が出ること');
+  assert.strictEqual(issue.severity, 'error');
+  assert.match(issue.message, /後期高齢者医療のみ/);
+
+  // 区分が抜けたレセプトを出すのではなく、公式提出そのものを止める
+  const results = buildMonthlyClaimUkeResults([claim], new Date('2026-06-14T09:00:00.000Z'));
+  assert.throws(
+    () => buildMonthlyClaimOfficialUkeBundle([claim], results),
+    /公式提出準備に1件の要対応があります。/
+  );
+});
+
+test('late-elderly patients can record the 区カ special note', () => {
+  const claim = highCostClaim({ highCostLimitCategory: 'カ', insuranceType: '後期高齢者医療' });
+  const report = buildMonthlyClaimUkeOfficialReadinessReport(claim);
+
+  assert.strictEqual(
+    report.issues.some((item) => item.code === 'official_uke_high_cost_special_note_unrecordable'),
+    false
+  );
+  assert.strictEqual(officialRecordFields(claim, 'RE')[7], '41', '区カ = 41');
 });

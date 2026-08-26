@@ -74,6 +74,54 @@ describe('Schema Validation', () => {
       assert.notStrictEqual(errors, null);
     });
 
+    test('should validate high-cost limit category and copayment reduction on a patient', () => {
+      // 高額療養費の適用区分と減免は、レセプト特記事項・HOレコードの記録に使う (schema v4 で追加)。
+      const patientWithHighCost = {
+        patientId: 'pt_highcost',
+        name: '山田 太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1950-01-01',
+        gender: 'male',
+        insuranceInfo: {
+          provider: '39131234',
+          number: '12345678',
+          burdenRatio: 10,
+          insuranceType: '後期高齢者医療',
+          highCostLimitCategory: 'カ',
+          highCostMultipleOccurrence: true,
+          copaymentCategoryCode: '1',
+          copaymentReduction: {
+            code: '1',
+            ratioPercent: 30,
+            reducedYen: 1200,
+            certificateNumber: '012'
+          }
+        }
+      };
+
+      assert.strictEqual(getErrors(PATIENT_SCHEMA, patientWithHighCost), null);
+      assert.strictEqual(PATIENT_SCHEMA.version, 4);
+    });
+
+    test('should reject a high-cost limit category outside 区ア〜区キ', () => {
+      const invalid = {
+        patientId: 'pt_bad_category',
+        name: '山田 太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1950-01-01',
+        gender: 'male',
+        insuranceInfo: { highCostLimitCategory: 'ク' }
+      };
+
+      const errors = getErrors(PATIENT_SCHEMA, invalid);
+      // 必須項目の欠落など別の理由で落ちていないことまで確かめる
+      assert.ok(errors);
+      assert.deepStrictEqual(
+        errors.map((error: any) => error.instancePath),
+        ['/insuranceInfo/highCostLimitCategory']
+      );
+    });
+
     test('should fail if enum value is incorrect', () => {
       const invalidPatient = {
         patientId: 'pt_123',

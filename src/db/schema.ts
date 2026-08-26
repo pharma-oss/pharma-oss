@@ -70,7 +70,7 @@ export const FACILITY_SETTINGS_SCHEMA: RxJsonSchema<FacilitySettings> = {
 
 export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
   title: 'patient schema',
-  version: 3,
+  version: 4,
   description: 'Patient master data',
   primaryKey: 'patientId',
   type: 'object',
@@ -91,7 +91,20 @@ export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
         validFrom: { type: 'string', maxLength: 50 },
         validTo: { type: 'string', maxLength: 50 },
         eligibilityCheckedAt: { type: 'string', maxLength: 50 },
-        eligibilityStatus: { type: 'string', enum: ['unchecked', 'valid', 'warning', 'invalid', 'unavailable'], maxLength: 50 }
+        eligibilityStatus: { type: 'string', enum: ['unchecked', 'valid', 'warning', 'invalid', 'unavailable'], maxLength: 50 },
+        highCostLimitCategory: { type: 'string', enum: ['ア', 'イ', 'ウ', 'エ', 'オ', 'カ', 'キ'], maxLength: 2 },
+        highCostMultipleOccurrence: { type: 'boolean' },
+        copaymentCategoryCode: { type: 'string', maxLength: 2 },
+        copaymentReduction: {
+          type: 'object',
+          properties: {
+            code: { type: 'string', maxLength: 2 },
+            ratioPercent: { type: 'number', minimum: 0, maximum: 100 },
+            reducedYen: { type: 'number', minimum: 0 },
+            certificateNumber: { type: 'string', maxLength: 3 }
+          },
+          required: ['code']
+        }
       }
     },
     publicInsurances: {
