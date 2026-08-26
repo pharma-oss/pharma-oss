@@ -91,9 +91,17 @@ import {
   getDisplayDrugName,
   isLiquidItem,
   isOintmentItem,
-  getClaimItemFlagValue,
   formatPrescriptionAuditIssues
 } from '../helpers';
+
+import {
+  CLAIM_ACTION_MESSAGES,
+  applyClaimOptionsWithAudit,
+  applyItemClaimFlagWithAudit,
+  persistClaimLifecycleWithAudit,
+  persistClaimOptions as persistVisitClaimOptions,
+  printDocumentsWithAuditLog
+} from '../claim_actions';
 
 import { DispensingRecordPrint } from '../components/DispensingRecordPrint';
 import { ReceiptStatementPrint } from '../components/ReceiptStatementPrint';
@@ -323,12 +331,17 @@ export default function PrintPage() {
     setVisitData
   });
 
-  const persistClaimOptions = async (nextOptions: FeeCalculationOptions) => {
-    if (!db) throw new Error('データベースの初期化が完了していません。');
-    const visitDoc = await db.visits.findOne(visitId).exec();
-    if (!visitDoc) throw new Error('対象の受付が見つかりません。');
-    await visitDoc.patch({ claimOptions: nextOptions });
+  const applyPersistedClaimOptions = (nextOptions: FeeCalculationOptions) => {
     setVisitData((prev: any) => prev ? { ...prev, claimOptions: nextOptions } : prev);
+  };
+
+  const persistClaimOptions = async (nextOptions: FeeCalculationOptions) => {
+    await persistVisitClaimOptions({
+      db,
+      visitId,
+      options: nextOptions,
+      onPersisted: applyPersistedClaimOptions
+    });
   };
 
   const handleDrugFeeOnlyChange = async (drugFeeOnly: boolean) => {
@@ -339,22 +352,21 @@ export default function PrintPage() {
     }
     const previousOptions = claimOptions;
     const nextOptions = { ...claimOptions, drugFeeOnly };
-    setClaimOptions(nextOptions);
     try {
-      await persistClaimOptions(nextOptions);
-      if (db) {
-        const auditOk = await logAuditAction(
-          db,
-          'billing_toggle',
-          `点数請求切替: ${drugFeeOnly ? '薬剤料のみ' : '通常調剤報酬算定'}`,
-          visitData?.patientId,
-          patientData?.name
-        );
-        if (!auditOk) {
-          await persistClaimOptions(previousOptions);
-          setClaimOptions(previousOptions);
-          alert('点数請求切替の監査ログ記録に失敗したため、変更を元に戻しました。');
-        }
+      const outcome = await applyClaimOptionsWithAudit({
+        db,
+        visitId,
+        previousOptions,
+        nextOptions,
+        auditDetail: `点数請求切替: ${drugFeeOnly ? '薬剤料のみ' : '通常調剤報酬算定'}`,
+        rollbackMessage: CLAIM_ACTION_MESSAGES.drugFeeOnlyAuditRolledBack,
+        patientId: visitData?.patientId,
+        patientName: patientData?.name,
+        applyOptions: setClaimOptions,
+        onPersisted: applyPersistedClaimOptions
+      });
+      if (outcome.status === 'rolled_back') {
+        alert(outcome.message);
       }
     } catch (e) {
       setClaimOptions(previousOptions);
@@ -438,20 +450,21 @@ export default function PrintPage() {
       disabledFeeRationales: rationales
     };
     try {
-      setClaimOptions(nextOptions);
-      await persistClaimOptions(nextOptions);
       const actionText = enabled ? '算定ON' : `算定OFF (理由: ${rationale})`;
-      const auditOk = await logAuditAction(
+      const outcome = await applyClaimOptionsWithAudit({
         db,
-        'billing_toggle',
-        `点数請求算定切替: 「${code}」を ${actionText} に変更しました。`,
-        visitData?.patientId,
-        patientData?.name
-      );
-      if (!auditOk) {
-        setClaimOptions(previousOptions);
-        await persistClaimOptions(previousOptions);
-        throw new Error('算定切替の監査ログ記録に失敗したため、変更を元に戻しました。');
+        visitId,
+        previousOptions,
+        nextOptions,
+        auditDetail: `点数請求算定切替: 「${code}」を ${actionText} に変更しました。`,
+        rollbackMessage: CLAIM_ACTION_MESSAGES.feeToggleAuditRolledBack,
+        patientId: visitData?.patientId,
+        patientName: patientData?.name,
+        applyOptions: setClaimOptions,
+        onPersisted: applyPersistedClaimOptions
+      });
+      if (outcome.status === 'rolled_back') {
+        throw new Error(outcome.message);
       }
     } catch (err: any) {
       setClaimOptions(previousOptions);
@@ -534,28 +547,14 @@ export default function PrintPage() {
     try {
       const currentItem = prescriptionItems[index];
       if (currentItem && currentItem.itemId === itemId && currentItem.doc) {
-        const patch: Record<string, boolean> = { [field]: value };
-        const previousPatch: Record<string, boolean> = { [field]: getClaimItemFlagValue(currentItem, field) };
-        if (field === 'isDiagnosticTest' && value) {
-          patch.claimPreparation = false;
-          patch.claimManagement = false;
-          previousPatch.claimPreparation = getClaimItemFlagValue(currentItem, 'claimPreparation');
-          previousPatch.claimManagement = getClaimItemFlagValue(currentItem, 'claimManagement');
-        }
-        await currentItem.doc.patch(patch);
-
-        const drugLabel = currentItem.dispensedDrug || currentItem.drugName || currentItem.drugId;
-        const auditOk = await logAuditAction(
+        const patch = await applyItemClaimFlagWithAudit({
           db,
-          'billing_toggle',
-          `処方薬別算定切替: 薬品「${drugLabel}」の「${field}」を ${value ? 'ON' : 'OFF'} に変更しました。`,
-          visitData?.patientId,
-          patientData?.name
-        );
-        if (!auditOk) {
-          await currentItem.doc.patch(previousPatch);
-          throw new Error('処方薬別算定切替の監査ログ記録に失敗したため、変更を元に戻しました。');
-        }
+          item: currentItem,
+          field,
+          value,
+          patientId: visitData?.patientId,
+          patientName: patientData?.name
+        });
         setPrescriptionItems(prev => {
           if (prev[index]?.itemId !== itemId) return prev;
           const next = [...prev];
@@ -682,42 +681,32 @@ export default function PrintPage() {
       );
       if (!shouldContinue) return;
     }
-    const auditOk = await logAuditAction(
+    const outcome = await printDocumentsWithAuditLog({
       db,
-      'print',
-      `帳票印刷実行: 受付ID ${visitId} / 患者 ${patientData?.name || '未設定'}`,
-      visitData?.patientId,
-      patientData?.name
-    );
-    if (!auditOk) {
-      alert('印刷の監査ログ記録に失敗したため、印刷を中止しました。');
-      return;
+      visitId,
+      patientId: visitData?.patientId,
+      patientName: patientData?.name,
+      print: () => window.print()
+    });
+    if (outcome.status === 'blocked') {
+      alert(outcome.message);
     }
-    window.print();
+  };
+
+  const applyClaimLifecycleToVisit = (lifecycle: ClaimLifecycleState) => {
+    setVisitData((prev: any) => prev ? { ...prev, claimLifecycle: lifecycle } : prev);
   };
 
   const persistClaimLifecycle = async (nextLifecycle: ClaimLifecycleState, detail: string) => {
-    if (!db) return;
-    const visitDoc = await db.visits.findOne(visitId).exec();
-    if (!visitDoc) {
-      throw new Error('Visit was not found.');
-    }
-    const previousLifecycle = (visitDoc.toJSON() as any).claimLifecycle as ClaimLifecycleState | undefined;
-    await visitDoc.patch({ claimLifecycle: nextLifecycle });
-    setVisitData((prev: any) => prev ? { ...prev, claimLifecycle: nextLifecycle } : prev);
-    const auditOk = await logAuditAction(
+    await persistClaimLifecycleWithAudit({
       db,
-      'claim_lifecycle',
+      visitId,
+      nextLifecycle,
       detail,
-      visitData?.patientId,
-      patientData?.name
-    );
-    if (!auditOk) {
-      const rollbackLifecycle = previousLifecycle || { status: 'draft' as const };
-      await visitDoc.patch({ claimLifecycle: rollbackLifecycle });
-      setVisitData((prev: any) => prev ? { ...prev, claimLifecycle: rollbackLifecycle } : prev);
-      throw new Error('請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。');
-    }
+      patientId: visitData?.patientId,
+      patientName: patientData?.name,
+      applyLifecycle: applyClaimLifecycleToVisit
+    });
   };
 
   const handleDownloadUke = async () => {

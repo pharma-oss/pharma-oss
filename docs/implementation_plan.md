@@ -313,7 +313,7 @@ gantt
 
 | 項目 | 状態 |
 |---|---|
-| `PrintPickingFlow.test.ts` 176 assert の昇格 | **第一段のみ完了（2026-08-26）**。`claim_edit_guard.test.ts` +4 / `print/helpers.test.ts` 新規 7 テスト。算定ロックの全 5 スコープ遮断と `getClaimItemFlagValue` の既定値を純粋関数テストへ昇格した。残りは仕様確定後に継続 |
+| `PrintPickingFlow.test.ts` 176 assert の昇格 | **第二段まで完了（2026-08-26）**。第一段: `claim_edit_guard.test.ts` +4 / `print/helpers.test.ts` 新規 7 テスト（算定ロックの全 5 スコープ遮断、`getClaimItemFlagValue` の既定値）。第二段: 監査ログ必須化・ロールバック契約を `src/app/print/claim_actions.ts` へ切り出し、`claim_actions.test.ts` 19 テスト / 64 assert をモック DB で新設。`PrintPickingFlow.test.ts` 側は委譲の確認へ置き換え（176 → 181 assert）。残るソース文字列部分は電子処方箋・UI 配線の grep（実描画テストが無いと代替不可） |
 | `src/lib/` 運用 CLI 系 22 ファイル / 約 1,700 assert の 3 分類移行 | 未着手。P2-2 でスコープ外とした分 |
 
 ---

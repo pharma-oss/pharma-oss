@@ -52,48 +52,64 @@ test('print page surfaces prescription audit before printing and UKE export', ()
   assert.match(printSource, /data-testid="receipt-statement-doc"/);
 });
 
-test('print page requires audit logging before printing documents', () => {
-  const body = section(printSource, 'const handlePrint = async', 'const persistClaimLifecycle = async');
+// 以下 3 件は「監査ログが残らなければ操作を確定させない」契約。
+// 実挙動 (何が DB に残り、何が巻き戻るか) は claim_actions.test.ts が
+// モック DB で検証している。ここでは page.tsx がその層へ委譲したままであること
+// — ガードを迂回する実装へ戻っていないこと — を見る。
+test('print page delegates document printing to the audited claim action', () => {
+  const body = section(printSource, 'const handlePrint = async', 'const applyClaimLifecycleToVisit =');
 
   assert.match(body, /if \(!db\)/);
-  assert.match(body, /const auditOk = await logAuditAction\(\s*db,\s*'print'/);
-  assert.match(body, /印刷の監査ログ記録に失敗したため、印刷を中止しました。/);
+  assert.match(body, /await printDocumentsWithAuditLog\(/);
+  assert.match(body, /print: \(\) => window\.print\(\)/);
+  assert.match(body, /outcome\.status === 'blocked'/);
+  assert.match(body, /alert\(outcome\.message\)/);
 
-  const auditIndex = body.indexOf("const auditOk = await logAuditAction(");
-  const printIndex = body.indexOf('window.print()');
-  assert.ok(auditIndex > -1);
-  assert.ok(printIndex > auditIndex);
+  // 監査ログを通さない印刷経路が増えていないこと。
+  const directPrintCalls = printSource.match(/window\.print\(\)/g) || [];
+  assert.equal(directPrintCalls.length, 1, 'window.print() は監査済みの1経路のみ');
 });
 
-test('print page rolls back billing option changes when audit logging fails', () => {
-  const persistBody = section(printSource, 'const persistClaimOptions = async', 'const ensurePermission =');
-  assert.match(persistBody, /throw new Error\('データベースの初期化が完了していません。'\)/);
-  assert.match(persistBody, /throw new Error\('対象の受付が見つかりません。'\)/);
+test('print page delegates billing option changes to the audited claim action', () => {
+  const persistBody = section(printSource, 'const persistClaimOptions = async', 'const handleDrugFeeOnlyChange = async');
+  assert.match(persistBody, /await persistVisitClaimOptions\(/);
+  assert.match(persistBody, /onPersisted: applyPersistedClaimOptions/);
 
-  const drugFeeOnlyBody = section(printSource, 'const handleDrugFeeOnlyChange = async', 'const handleFeeToggle = async');
+  const drugFeeOnlyBody = section(printSource, 'const handleDrugFeeOnlyChange = async', 'const handleRecordAiSuggestionDecision = async');
   assert.match(drugFeeOnlyBody, /const previousOptions = claimOptions/);
-  assert.match(drugFeeOnlyBody, /const auditOk = await logAuditAction\(\s*db,\s*'billing_toggle'/);
-  assert.match(drugFeeOnlyBody, /if \(!auditOk\)/);
-  assert.match(drugFeeOnlyBody, /await persistClaimOptions\(previousOptions\)/);
-  assert.match(drugFeeOnlyBody, /点数請求切替の監査ログ記録に失敗したため、変更を元に戻しました。/);
+  assert.match(drugFeeOnlyBody, /await applyClaimOptionsWithAudit\(/);
+  assert.match(drugFeeOnlyBody, /rollbackMessage: CLAIM_ACTION_MESSAGES\.drugFeeOnlyAuditRolledBack/);
+  assert.match(drugFeeOnlyBody, /outcome\.status === 'rolled_back'/);
+  assert.match(drugFeeOnlyBody, /alert\(outcome\.message\)/);
 
-  const feeToggleBody = section(printSource, 'const handleFeeToggle = async', 'const handleItemClaimToggle = async');
+  const feeToggleBody = section(printSource, 'const handleFeeToggle = async', 'const handleToggleIppoka = async');
   assert.match(feeToggleBody, /const previousOptions = claimOptions/);
-  assert.match(feeToggleBody, /const auditOk = await logAuditAction\(\s*db,\s*'billing_toggle'/);
-  assert.match(feeToggleBody, /if \(!auditOk\)/);
-  assert.match(feeToggleBody, /await persistClaimOptions\(previousOptions\)/);
-  assert.match(feeToggleBody, /算定切替の監査ログ記録に失敗したため、変更を元に戻しました。/);
+  assert.match(feeToggleBody, /await applyClaimOptionsWithAudit\(/);
+  assert.match(feeToggleBody, /rollbackMessage: CLAIM_ACTION_MESSAGES\.feeToggleAuditRolledBack/);
+  assert.match(feeToggleBody, /outcome\.status === 'rolled_back'/);
+  assert.match(feeToggleBody, /throw new Error\(outcome\.message\)/);
+
+  // 算定切替が監査ログを通さない素の保存へ戻っていないこと。
+  assert.doesNotMatch(feeToggleBody, /const auditOk = await logAuditAction\(/);
+  assert.doesNotMatch(drugFeeOnlyBody, /const auditOk = await logAuditAction\(/);
 });
 
-test('print page rolls back item-level claim flags when audit logging fails', () => {
-  const body = section(printSource, 'const handleItemClaimToggle = async', 'const handleReceiptRemarkChange =');
+test('print page delegates item-level claim flags to the audited claim action', () => {
+  const body = section(printSource, 'const handleItemClaimToggle = async', 'const handleTokkanChange = async');
 
   assert.match(printSource, /function getClaimItemFlagValue/);
-  assert.match(body, /const previousPatch: Record<string, boolean>/);
-  assert.match(body, /const auditOk = await logAuditAction\(\s*db,\s*'billing_toggle'/);
-  assert.match(body, /if \(!auditOk\)/);
-  assert.match(body, /await currentItem\.doc\.patch\(previousPatch\)/);
-  assert.match(body, /処方薬別算定切替の監査ログ記録に失敗したため、変更を元に戻しました。/);
+  assert.match(body, /currentItem && currentItem\.itemId === itemId && currentItem\.doc/);
+  assert.match(body, /await applyItemClaimFlagWithAudit\(/);
+  assert.match(body, /item: currentItem/);
+  assert.doesNotMatch(body, /const auditOk = await logAuditAction\(/);
+});
+
+test('print page delegates claim lifecycle transitions to the audited claim action', () => {
+  const body = section(printSource, 'const persistClaimLifecycle = async', 'const handleDownloadUke = async');
+
+  assert.match(body, /await persistClaimLifecycleWithAudit\(/);
+  assert.match(body, /applyLifecycle: applyClaimLifecycleToVisit/);
+  assert.doesNotMatch(body, /const auditOk = await logAuditAction\(/);
 });
 
 test('print page surfaces AI assist suggestions with decision audit logging', () => {
