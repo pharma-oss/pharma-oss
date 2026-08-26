@@ -584,7 +584,6 @@ test('electronic prescription connector contract rejects reused sample IDs', () 
 
 test('electronic prescription connector contract exposes a CLI template contract', () => {
   const template = buildElectronicPrescriptionConnectorContractTemplate();
-  const script = readFileSync(new URL('../../scripts/runElectronicPrescriptionConnectorContract.ts', import.meta.url), 'utf8');
 
   assert.strictEqual(template.schemaVersion, 3);
   assert.strictEqual(template.connectorArtifactSha256, '');
@@ -599,5 +598,4 @@ test('electronic prescription connector contract exposes a CLI template contract
     packageJson.scripts['electronic-prescription:connector-contract'],
     'tsx scripts/runElectronicPrescriptionConnectorContract.ts'
   );
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_CONNECTOR_CONTRACT/);
 });

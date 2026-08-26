@@ -10,7 +10,6 @@ import {
 
 const generatedAt = new Date('2026-06-23T09:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const supportTriageScript = readFileSync(new URL('../../scripts/runSupportCaseTriage.ts', import.meta.url), 'utf8');
 
 function baseDiagnostic(): AnonymousDiagnosticExport {
   return {
@@ -494,7 +493,4 @@ test('buildSupportCaseTriageCsv is formula-safe and support triage CLI is expose
 
   assert.match(csv, /"'=危険"/);
   assert.strictEqual(packageJson.scripts['support:triage'], 'tsx scripts/runSupportCaseTriage.ts');
-  assert.match(supportTriageScript, /YAKUREKI_SUPPORT_DIAGNOSTIC_JSON/);
-  assert.match(supportTriageScript, /support-case-triage\.json/);
-  assert.match(supportTriageScript, /support-case-reproduction-memo\.txt/);
 });

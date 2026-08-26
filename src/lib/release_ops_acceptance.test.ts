@@ -349,20 +349,7 @@ test('release ops acceptance exports privacy-safe template, CSV, checklist and a
   }
 });
 
-test('release ops acceptance CLI is exposed and writes artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runReleaseOpsAcceptance.ts', import.meta.url), 'utf8');
-
+test('release ops acceptance CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['release:ops-acceptance'], 'tsx scripts/runReleaseOpsAcceptance.ts');
-  assert.match(script, /YAKUREKI_RELEASE_OPS_ACCEPTANCE_EVIDENCE/);
-  assert.match(script, /YAKUREKI_RELEASE_READINESS_REVIEW_JSON/);
-  assert.match(script, /YAKUREKI_RELEASE_POST_REVIEW_JSON/);
-  assert.match(script, /YAKUREKI_SUPPORT_SLA_REVIEW_JSON/);
-  assert.match(script, /YAKUREKI_SUPPORT_DRILL_REVIEW_JSON/);
-  assert.match(script, /ok = review\.status !== 'blocked'/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /linkageStatusLabel/);
-  assert.match(script, /release-ops-acceptance\.json/);
-  assert.match(script, /release-ops-acceptance\.csv/);
-  assert.match(script, /release-ops-acceptance-evidence-template\.json/);
-  assert.match(script, /release-ops-acceptance-checklist\.txt/);
 });

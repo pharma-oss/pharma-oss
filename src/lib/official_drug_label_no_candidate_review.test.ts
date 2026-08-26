@@ -13,7 +13,6 @@ import type { OfficialDrugLabelQueueEntry } from './official_drug_label_queue_re
 
 const generatedAt = new Date('2026-07-07T10:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const noCandidateReviewScript = readFileSync(new URL('../../scripts/runOfficialDrugLabelNoCandidateReview.ts', import.meta.url), 'utf8');
 
 function queueEntries(overrides: OfficialDrugLabelQueueEntry[] = []): OfficialDrugLabelQueueEntry[] {
   return [
@@ -123,7 +122,7 @@ test('buildOfficialDrugLabelNoCandidateReview passes when PMDA no-candidate evid
   assert.deepStrictEqual(review.nextActions, ['対応不要']);
 });
 
-test('official drug label no-candidate review exports privacy-safe CSV, checklist, template, and CLI contract', () => {
+test('official drug label no-candidate review exports privacy-safe CSV, checklist, template, and registers its CLI', () => {
   const review = buildOfficialDrugLabelNoCandidateReview({
     generatedAt,
     noCandidateEntries: collectOfficialDrugLabelNoCandidateEntries(queueEntries([
@@ -153,6 +152,4 @@ test('official drug label no-candidate review exports privacy-safe CSV, checklis
     packageJson.scripts['drug-label:no-candidate-review'],
     'tsx scripts/runOfficialDrugLabelNoCandidateReview.ts'
   );
-  assert.match(noCandidateReviewScript, /YAKUREKI_DRUG_LABEL_NO_CANDIDATE_EVIDENCE/);
-  assert.match(noCandidateReviewScript, /official-drug-label-no-candidate-review\.json/);
 });

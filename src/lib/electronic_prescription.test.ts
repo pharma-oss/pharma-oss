@@ -2380,19 +2380,11 @@ test('electronic prescription duplicate check operation verifies prescription ID
   assert.strictEqual(checked.duplicateCheck?.status, 'passed');
 });
 
-test('electronic prescription connector preflight CLI is registered', () => {
+test('electronic prescription connector preflight CLI is registered in package.json', () => {
   const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-  const scriptSource = readFileSync(new URL('../../scripts/runElectronicPrescriptionConnectorPreflight.ts', import.meta.url), 'utf8');
 
   assert.strictEqual(
     packageJson.scripts['electronic-prescription:connector-preflight'],
     'tsx scripts/runElectronicPrescriptionConnectorPreflight.ts'
   );
-  assert.match(scriptSource, /electronic-prescription-connector-preflight/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_OUTCOME/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_ENDPOINT_SHA256/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_AUTH_SHA256/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_KIND/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CONNECTOR_ARTIFACT_SHA256/);
-  assert.match(scriptSource, /ELECTRONIC_PRESCRIPTION_LAST_ATTEMPT_CAPABILITIES/);
 });

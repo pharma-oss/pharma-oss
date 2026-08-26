@@ -11,7 +11,6 @@ import {
 
 const generatedAt = new Date('2026-07-07T09:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const queueReviewScript = readFileSync(new URL('../../scripts/runOfficialDrugLabelQueueReview.ts', import.meta.url), 'utf8');
 
 function queueEntries(overrides: OfficialDrugLabelQueueEntry[] = []): OfficialDrugLabelQueueEntry[] {
   return [
@@ -126,7 +125,7 @@ test('buildOfficialDrugLabelQueueReview blocks legacy schema and non-PMDA source
   assert.ok(review.gates.some((gate) => gate.id === 'source_urls' && gate.status === 'blocked'));
 });
 
-test('official drug label queue review exports privacy-safe CSV, checklist, and CLI contract', () => {
+test('official drug label queue review exports privacy-safe CSV, checklist, and registers its CLI', () => {
   const review = buildOfficialDrugLabelQueueReview({
     generatedAt,
     queueEntries: queueEntries([{ ingredient: '=危険成分', status: 'pending' }]),
@@ -143,6 +142,4 @@ test('official drug label queue review exports privacy-safe CSV, checklist, and 
   assert.match(checklist, /P4-01内部ゲート/);
   assert.doesNotMatch(csv + checklist, /山田太郎|patient-001|<html|\/Users|secret-token/i);
   assert.strictEqual(packageJson.scripts['drug-label:queue-review'], 'tsx scripts/runOfficialDrugLabelQueueReview.ts');
-  assert.match(queueReviewScript, /YAKUREKI_DRUG_LABEL_QUEUE_REVIEW_OUTPUT_DIR/);
-  assert.match(queueReviewScript, /official-drug-label-queue-review\.json/);
 });

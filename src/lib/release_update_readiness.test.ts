@@ -247,15 +247,7 @@ test('release update readiness exports privacy-safe template, CSV, checklist and
   }
 });
 
-test('release update readiness CLI is exposed and writes artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runReleaseUpdateReadiness.ts', import.meta.url), 'utf8');
-
+test('release update readiness CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['release:readiness'], 'tsx scripts/runReleaseUpdateReadiness.ts');
-  assert.match(script, /YAKUREKI_RELEASE_READINESS_EVIDENCE/);
-  assert.match(script, /ok = review\.status !== 'blocked'/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /release-update-readiness-review\.json/);
-  assert.match(script, /release-update-readiness-review\.csv/);
-  assert.match(script, /release-update-readiness-evidence-template\.json/);
-  assert.match(script, /release-update-checklist\.txt/);
 });

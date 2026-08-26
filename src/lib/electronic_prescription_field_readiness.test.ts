@@ -606,9 +606,8 @@ test('electronic prescription field exports explain the copy and exchange-number
   assert.doesNotMatch(csv, /bridge\.vendor|secret-token/);
 });
 
-test('electronic prescription field exposes a safe template and CLI contract', () => {
+test('electronic prescription field exposes a safe template and registers its CLI', () => {
   const template = buildElectronicPrescriptionFieldEvidenceTemplate();
-  const script = readFileSync(new URL('../../scripts/runElectronicPrescriptionFieldReadiness.ts', import.meta.url), 'utf8');
 
   assert.strictEqual(template.noPatientDataConfirmed, false);
   assert.strictEqual(template.schemaVersion, 5);
@@ -645,13 +644,6 @@ test('electronic prescription field exposes a safe template and CLI contract', (
     packageJson.scripts['electronic-prescription:field-readiness'],
     'tsx scripts/runElectronicPrescriptionFieldReadiness.ts'
   );
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_CONNECTOR_READINESS/);
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_CONNECTOR_CONTRACT_REPORT/);
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_EVIDENCE/);
-  assert.match(script, /ok: report\.status !== 'blocked'/);
-  assert.match(script, /electronic-prescription-field-check-request\.json/);
-  assert.match(script, /electronic-prescription-field-check-request\.txt/);
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_REQUEST_ONLY/);
 });
 
 test('electronic prescription field check request lists connector, scenario and dispensing evidence without free text', () => {

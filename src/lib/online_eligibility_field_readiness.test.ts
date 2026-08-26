@@ -192,7 +192,6 @@ test('field readiness blocks and redacts patient data in evidence', () => {
 
 test('field readiness exposes a safe evidence template and CLI', () => {
   const template = buildOnlineEligibilityAuthEvidenceTemplate();
-  const script = readFileSync(new URL('../../scripts/runOnlineEligibilityFieldReadiness.ts', import.meta.url), 'utf8');
 
   assert.strictEqual(template.noPatientDataConfirmed, false);
   assert.strictEqual(template.sourceArtifactSha256, '');
@@ -201,13 +200,6 @@ test('field readiness exposes a safe evidence template and CLI', () => {
     packageJson.scripts['eligibility:field-readiness'],
     'tsx scripts/runOnlineEligibilityFieldReadiness.ts'
   );
-  assert.match(script, /YAKUREKI_ELIGIBILITY_CONNECTOR_READINESS/);
-  assert.match(script, /YAKUREKI_ELIGIBILITY_RESPONSE_DIFF/);
-  assert.match(script, /YAKUREKI_ELIGIBILITY_FIELD_EVIDENCE/);
-  assert.match(script, /ok: report\.status !== 'blocked'/);
-  assert.match(script, /online-eligibility-field-check-request\.json/);
-  assert.match(script, /online-eligibility-field-check-request\.txt/);
-  assert.match(script, /YAKUREKI_ELIGIBILITY_FIELD_REQUEST_ONLY/);
 });
 
 test('online eligibility field check request lists auth, device and response sample evidence without free text', () => {

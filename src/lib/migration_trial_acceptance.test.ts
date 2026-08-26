@@ -304,23 +304,7 @@ test('migration trial acceptance exports privacy-safe template, CSV, checklist a
   }
 });
 
-test('migration trial acceptance CLI is exposed and writes artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runMigrationTrialAcceptance.ts', import.meta.url), 'utf8');
-
+test('migration trial acceptance CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['migration:trial-acceptance'], 'tsx scripts/runMigrationTrialAcceptance.ts');
-  assert.match(script, /YAKUREKI_MIGRATION_ACCEPTANCE_EVIDENCE/);
-  assert.match(script, /YAKUREKI_MIGRATION_PATIENT_CSV/);
-  assert.match(script, /YAKUREKI_MIGRATION_VISIT_CSV/);
-  assert.match(script, /YAKUREKI_MIGRATION_DRUG_STOCK_CSV/);
-  assert.match(script, /YAKUREKI_MIGRATION_SOAP_CSV/);
-  assert.match(script, /ok = review\.status !== 'blocked'/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /operationalCoverageStatus/);
-  assert.match(script, /buildMigrationTrialAcceptanceSampleRequest/);
-  assert.match(script, /migration-trial-acceptance\.json/);
-  assert.match(script, /migration-trial-acceptance\.csv/);
-  assert.match(script, /migration-trial-acceptance-evidence-template\.json/);
-  assert.match(script, /migration-trial-acceptance-checklist\.txt/);
-  assert.match(script, /migration-trial-acceptance-sample-request\.json/);
-  assert.match(script, /migration-trial-acceptance-sample-request\.txt/);
 });

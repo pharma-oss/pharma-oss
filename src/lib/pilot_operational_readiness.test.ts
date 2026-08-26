@@ -21,7 +21,6 @@ import type { ReleaseOpsAcceptanceReview } from './release_ops_acceptance.ts';
 
 const generatedAt = new Date('2026-06-29T18:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const script = readFileSync(new URL('../../scripts/runPilotOperationalReadiness.ts', import.meta.url), 'utf8');
 
 const realWorldProvenance = {
   capturedAt: '2026-06-29T17:45:00.000Z',
@@ -264,7 +263,7 @@ test('buildPilotOperationalReadinessReview blocks nested privacy or evidence-int
   assert.ok(review.artifacts.some((item) => item.id === 'release_ops_acceptance' && item.evidenceIntegrityStatus === 'blocked'));
 });
 
-test('pilot operational readiness exports privacy-safe CSV, template, checklist, audit detail, and CLI contract', () => {
+test('pilot operational readiness exports privacy-safe CSV, template, checklist, audit detail, and registers its CLI', () => {
   const review = buildPilotOperationalReadinessReview({
     generatedAt,
     evidence: {
@@ -302,13 +301,6 @@ test('pilot operational readiness exports privacy-safe CSV, template, checklist,
   assert.strictEqual(template.artifactEnvironmentVariables.electronicPrescriptionFieldReadiness, 'YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_READINESS_JSON');
   assert.strictEqual(template.privacy.containsPatientData, false);
   assert.strictEqual(packageJson.scripts['pilot:operational-readiness'], 'tsx scripts/runPilotOperationalReadiness.ts');
-  assert.match(script, /YAKUREKI_PILOT_OPERATIONAL_READINESS_EVIDENCE/);
-  assert.match(script, /YAKUREKI_RELEASE_OPS_ACCEPTANCE_JSON/);
-  assert.match(script, /YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_READINESS_JSON/);
-  assert.match(script, /pilot-operational-readiness\.json/);
-  assert.match(script, /buildPilotOperationalReadinessRequest/);
-  assert.match(script, /pilot-operational-readiness-request\.json/);
-  assert.match(script, /pilot-operational-readiness-request\.txt/);
 
   for (const sensitiveValue of ['秘密薬局', '患者 太郎', '担当 花子', '/Users/secret', 'bearer-token-secret', 'https://example.test']) {
     assert.doesNotMatch(combined, new RegExp(sensitiveValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

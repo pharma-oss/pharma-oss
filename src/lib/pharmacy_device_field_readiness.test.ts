@@ -158,7 +158,7 @@ test('pharmacy device field readiness blocks dummy evidence and patient data wit
   assert.doesNotMatch(serialized, /患者 太郎|pat-secret-001|secret-token|192\.168\.1\.20/);
 });
 
-test('pharmacy device field exports a safe template, metrics, and CLI contract', () => {
+test('pharmacy device field exports a safe template, metrics, and registers its CLI', () => {
   const report = buildPharmacyDeviceFieldReadinessReport({
     generatedAt,
     connectorReadiness: readyConnector(),
@@ -167,7 +167,6 @@ test('pharmacy device field exports a safe template, metrics, and CLI contract',
   const csv = buildPharmacyDeviceFieldReadinessCsv(report);
   const checklist = buildPharmacyDeviceFieldChecklist(report);
   const template = buildPharmacyDeviceFieldEvidenceTemplate();
-  const script = readFileSync(new URL('../../scripts/runPharmacyDeviceFieldReadiness.ts', import.meta.url), 'utf8');
 
   assert.match(csv, /20営業日/);
   assert.match(csv, /失敗率2\.0%/);
@@ -176,11 +175,6 @@ test('pharmacy device field exports a safe template, metrics, and CLI contract',
   assert.strictEqual(template.successfulTransferCount, 0);
   assert.match(template.guidance, /デモ、ダミー、サンプル/);
   assert.strictEqual(packageJson.scripts['pharmacy-device:field-readiness'], 'tsx scripts/runPharmacyDeviceFieldReadiness.ts');
-  assert.match(script, /YAKUREKI_PHARMACY_DEVICE_CONNECTOR_READINESS/);
-  assert.match(script, /YAKUREKI_PHARMACY_DEVICE_FIELD_EVIDENCE/);
-  assert.match(script, /pharmacy-device-field-check-request\.json/);
-  assert.match(script, /pharmacy-device-field-check-request\.txt/);
-  assert.match(script, /YAKUREKI_PHARMACY_DEVICE_FIELD_REQUEST_ONLY/);
 });
 
 test('pharmacy device field check request lists governance, lifecycle and stable operation evidence without free text', () => {

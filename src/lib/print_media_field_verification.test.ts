@@ -14,7 +14,6 @@ import {
 
 const generatedAt = new Date('2026-06-23T15:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const printFieldVerificationScript = readFileSync(new URL('../../scripts/runPrintMediaFieldVerification.ts', import.meta.url), 'utf8');
 
 const manifest: PrintLayoutRegressionManifestInput = {
   ok: true,
@@ -279,18 +278,7 @@ test('buildPrintMediaFieldCheckRequest describes real paper checks without raw e
   assert.doesNotMatch(combined, /Canon|EPSON|\/Users|secret-patient|operatorName|printerName/);
 });
 
-test('print media field verification CLI is exposed as a package script', () => {
+test('print media field verification CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['print:field-verification'], 'tsx scripts/runPrintMediaFieldVerification.ts');
-  assert.match(printFieldVerificationScript, /YAKUREKI_PRINT_LAYOUT_MANIFEST/);
-  assert.match(printFieldVerificationScript, /YAKUREKI_PRINT_FIELD_EVIDENCE/);
-  assert.match(printFieldVerificationScript, /YAKUREKI_PRINT_FIELD_REQUEST_ONLY/);
-  assert.match(printFieldVerificationScript, /mode: 'request_only'/);
-  assert.match(printFieldVerificationScript, /buildPrintMediaFieldCheckRequest/);
-  assert.match(printFieldVerificationScript, /print-media-field-verification-review\.csv/);
-  assert.match(printFieldVerificationScript, /print-media-field-evidence-template\.json/);
-  assert.match(printFieldVerificationScript, /print-media-field-check-request\.json/);
-  assert.match(printFieldVerificationScript, /print-media-field-check-request\.txt/);
-  assert.match(printFieldVerificationScript, /evidenceIntegrityStatus/);
-  assert.match(printFieldVerificationScript, /ok: review\.status !== 'blocked'/);
-  assert.match(printFieldVerificationScript, /if \(review\.status === 'blocked'\)/);
 });

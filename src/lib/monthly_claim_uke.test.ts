@@ -880,7 +880,6 @@ test('monthly official submission trial blocks dummy result artifacts', () => {
 
 test('monthly official submission trial exposes a safe input template and CLI', () => {
   const template = buildMonthlyClaimOfficialSubmissionTrialTemplate();
-  const script = readFileSync(new URL('../../scripts/runOfficialSubmissionTrialReview.ts', import.meta.url), 'utf8');
 
   assert.deepStrictEqual(template.trials.map((trial) => trial.payer), ['social_insurance', 'national_insurance']);
   assert.ok(template.trials.every((trial) => trial.noPatientDataConfirmed === false));
@@ -889,8 +888,6 @@ test('monthly official submission trial exposes a safe input template and CLI', 
     packageJson.scripts['claim:official-submission-review'],
     'tsx scripts/runOfficialSubmissionTrialReview.ts'
   );
-  assert.match(script, /YAKUREKI_OFFICIAL_SUBMISSION_TRIAL_JSON/);
-  assert.match(script, /ok: report\.ok/);
 });
 
 test('monthly official resubmission regression report keeps return fixes and UKE diffs patient-free', () => {

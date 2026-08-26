@@ -282,19 +282,7 @@ test('pilot KPI review exports privacy-safe template, CSV, checklist and audit d
   }
 });
 
-test('pilot KPI review CLI is exposed and writes artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runPilotKpiReview.ts', import.meta.url), 'utf8');
-
+test('pilot KPI review CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['pilot:kpi-review'], 'tsx scripts/runPilotKpiReview.ts');
-  assert.match(script, /YAKUREKI_PILOT_KPI_EVIDENCE/);
-  assert.match(script, /pilot-kpi-review\.json/);
-  assert.match(script, /pilot-kpi-review\.csv/);
-  assert.match(script, /pilot-kpi-evidence-template\.json/);
-  assert.match(script, /pilot-kpi-checklist\.txt/);
-  assert.match(script, /buildPilotKpiEvidenceRequest/);
-  assert.match(script, /pilot-kpi-evidence-request\.json/);
-  assert.match(script, /pilot-kpi-evidence-request\.txt/);
-  assert.match(script, /trendStatusLabel/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /ok: review\.status !== 'blocked'/);
 });

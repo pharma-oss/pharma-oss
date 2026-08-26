@@ -215,11 +215,6 @@ test('AI clinical review exports privacy-safe template, CSV, checklist, audit de
     assert.doesNotMatch(combined, new RegExp(forbidden));
   }
 
-  const script = readFileSync(new URL('../../scripts/runAiClinicalReview.ts', import.meta.url), 'utf8');
-  assert.match(script, /YAKUREKI_AI_CLINICAL_REVIEW_EVIDENCE/);
-  assert.match(script, /ai-clinical-review-check-request\.json/);
-  assert.match(script, /ai-clinical-review-check-request\.txt/);
-  assert.match(script, /YAKUREKI_AI_CLINICAL_REVIEW_REQUEST_ONLY/);
 });
 
 test('AI clinical review check request lists privacy, coverage, safety and governance evidence without free text', () => {

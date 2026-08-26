@@ -314,7 +314,7 @@ gantt
 | 項目 | 状態 |
 |---|---|
 | `PrintPickingFlow.test.ts` 176 assert の昇格 | **第二段まで完了（2026-08-26）**。第一段: `claim_edit_guard.test.ts` +4 / `print/helpers.test.ts` 新規 7 テスト（算定ロックの全 5 スコープ遮断、`getClaimItemFlagValue` の既定値）。第二段: 監査ログ必須化・ロールバック契約を `src/app/print/claim_actions.ts` へ切り出し、`claim_actions.test.ts` 19 テスト / 64 assert をモック DB で新設。`PrintPickingFlow.test.ts` 側は委譲の確認へ置き換え（176 → 181 assert）。残るソース文字列部分は電子処方箋・UI 配線の grep（実描画テストが無いと代替不可） |
-| `src/lib/` 運用 CLI 系 22 ファイル / 約 1,700 assert の 3 分類移行 | 未着手。P2-2 でスコープ外とした分 |
+| `src/lib/` 運用 CLI 系 21 ファイルの grep 移行 | **完了（2026-08-27）**。`scripts/run*.ts` を readFileSync して env 名・出力ファイル名を正規表現で見ていた 152 箇所を削除し、`src/lib/ops_review_cli.test.ts`（新規 39 テスト）で CLI を実際に実行して判定する形へ置き換えた。ソースファイルを readFileSync するテストは 23 → 2 ファイル（`PrintLayoutRegression` と `PrintPickingFlow` の例外のみ）|
 
 ---
 

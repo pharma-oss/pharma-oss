@@ -219,15 +219,7 @@ test('release post review exports privacy-safe template, CSV, checklist and audi
   }
 });
 
-test('release post review CLI is exposed and writes artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runReleasePostReview.ts', import.meta.url), 'utf8');
-
+test('release post review CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['release:post-review'], 'tsx scripts/runReleasePostReview.ts');
-  assert.match(script, /YAKUREKI_RELEASE_POST_REVIEW_EVIDENCE/);
-  assert.match(script, /ok = review\.status !== 'blocked'/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /release-post-review\.json/);
-  assert.match(script, /release-post-review\.csv/);
-  assert.match(script, /release-post-review-evidence-template\.json/);
-  assert.match(script, /release-post-review-checklist\.txt/);
 });

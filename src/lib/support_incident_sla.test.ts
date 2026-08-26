@@ -283,20 +283,9 @@ test('support incident SLA blocks dummy evidence even when operational gates loo
   assert.ok(review.gates.some((gate) => gate.id === 'evidence_integrity' && gate.status === 'blocked'));
 });
 
-test('support incident SLA CLI is exposed and writes review artifacts', () => {
-  const script = readFileSync(new URL('../../scripts/runSupportIncidentSlaReview.ts', import.meta.url), 'utf8');
-
+test('support incident SLA CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['support:sla'], 'tsx scripts/runSupportIncidentSlaReview.ts');
-  assert.match(script, /YAKUREKI_SUPPORT_TRIAGE_JSON/);
-  assert.match(script, /YAKUREKI_SUPPORT_SLA_EVIDENCE/);
-  assert.match(script, /support-incident-sla-review\.json/);
-  assert.match(script, /support-incident-sla-review\.csv/);
-	  assert.match(script, /support-incident-sla-evidence-template\.json/);
-  assert.match(script, /support-incident-notice-checklist\.txt/);
-  assert.match(script, /evidenceIntegrityStatus/);
-  assert.match(script, /support-incident-sla-check-request\.json/);
-  assert.match(script, /support-incident-sla-check-request\.txt/);
-  assert.match(script, /YAKUREKI_SUPPORT_SLA_REQUEST_ONLY/);
 });
 
 test('support incident SLA check request lists timeline, response and drill evidence without free text', () => {

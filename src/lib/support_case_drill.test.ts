@@ -11,7 +11,6 @@ import type { SupportCaseTriage } from './support_case_triage.ts';
 
 const generatedAt = new Date('2026-06-23T10:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const drillScript = readFileSync(new URL('../../scripts/runSupportCaseDrill.ts', import.meta.url), 'utf8');
 const realWorldProof = {
   capturedAt: '2026-06-23T10:00:00.000Z',
   operatorReviewId: 'support-drill-review-20260623',
@@ -227,12 +226,7 @@ test('support case drill blocks dummy evidence even when all confirmations are r
   assert.strictEqual(review.blockedFocusAreaCount, 0);
 });
 
-test('support case drill CLI is exposed and writes review artifacts', () => {
+test('support case drill CLI is registered in package.json', () => {
+  // 実行時の契約 (env と出力ファイル) は ops_review_cli.test.ts が CLI を実際に走らせて検証する。
   assert.strictEqual(packageJson.scripts['support:drill'], 'tsx scripts/runSupportCaseDrill.ts');
-  assert.match(drillScript, /YAKUREKI_SUPPORT_TRIAGE_JSON/);
-  assert.match(drillScript, /YAKUREKI_SUPPORT_DRILL_EVIDENCE/);
-  assert.match(drillScript, /support-case-drill-review\.json/);
-	  assert.match(drillScript, /support-case-drill-review\.csv/);
-  assert.match(drillScript, /support-case-drill-evidence-template\.json/);
-  assert.match(drillScript, /evidenceIntegrityStatus/);
 });

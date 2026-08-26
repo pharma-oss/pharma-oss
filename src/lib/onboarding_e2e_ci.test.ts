@@ -2,14 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { OFFICIAL_AUDIT_ITEMS } from './official_audit.ts';
 
+// GitHub Actions のワークフローは YAML でしか表現されていないため、
+// 「CI がこの手順で回っているか」はファイルを読む以外に確かめる手段がない。
+// (公式監査台帳の側は OFFICIAL_AUDIT_ITEMS を直接 import して検査する)
 const workflow = readFileSync(new URL('../../.github/workflows/onboarding-e2e.yml', import.meta.url), 'utf8');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 // 社内向けロードマップは公開リポジトリに含まれない(docs/internal/ はgit管理外)。
 // 存在する環境(私有リポジトリ)でだけロードマップ側の整合を検査する。
 const roadmapPath = fileURLToPath(new URL('../../docs/internal/industry_no1_roadmap.md', import.meta.url));
 const roadmap = existsSync(roadmapPath) ? readFileSync(roadmapPath, 'utf8') : null;
-const officialAudit = readFileSync(new URL('./official_audit.ts', import.meta.url), 'utf8');
 
 test('onboarding E2E GitHub Actions workflow runs the full quality gate', () => {
   assert.match(workflow, /name: Onboarding E2E/);
@@ -52,6 +55,14 @@ test('roadmap and official audit no longer leave onboarding E2E CI as open work'
     assert.match(roadmap, /導入時E2EのCI常設があり/);
     assert.doesNotMatch(roadmap, /7\. 導入時E2EのCI常設/);
   }
-  assert.match(officialAudit, /導入時E2EのCI常設/);
-  assert.doesNotMatch(officialAudit, /remainingWork:[\s\S]*ブラウザE2EのCI常設/);
+  const evidence = OFFICIAL_AUDIT_ITEMS.flatMap((item) => item.implementationEvidence);
+  const remaining = OFFICIAL_AUDIT_ITEMS.flatMap((item) => item.remainingWork);
+  assert.ok(
+    evidence.some((line) => line.includes('導入時E2EのCI常設')),
+    '公式監査台帳の実装済み証跡に導入時E2EのCI常設が載っていること'
+  );
+  assert.ok(
+    !remaining.some((line) => line.includes('ブラウザE2EのCI常設')),
+    '公式監査台帳の残作業にブラウザE2EのCI常設が残っていないこと'
+  );
 });

@@ -18,7 +18,6 @@ import type { AuditLog } from '../db/types.ts';
 
 const generatedAt = new Date('2026-07-07T11:00:00.000Z');
 const packageJson = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-const reviewScript = readFileSync(new URL('../../scripts/runStaffAccessRecoveryReview.ts', import.meta.url), 'utf8');
 
 function completeEvidence(overrides: Partial<StaffAccessRecoveryEvidenceInput> = {}): StaffAccessRecoveryEvidenceInput {
   return {
@@ -315,7 +314,7 @@ test('buildStaffAccessRecoveryMonthlyReview summarizes only the target month and
   );
 });
 
-test('staff access recovery review exports privacy-safe CSV, checklist, template, audit detail, and CLI contract', () => {
+test('staff access recovery review exports privacy-safe CSV, checklist, template, audit detail, and registers its CLI', () => {
   const review = buildStaffAccessRecoveryReview({
     generatedAt,
     evidence: completeEvidence({
@@ -343,11 +342,6 @@ test('staff access recovery review exports privacy-safe CSV, checklist, template
     packageJson.scripts['staff:access-recovery-review'],
     'tsx scripts/runStaffAccessRecoveryReview.ts'
   );
-  assert.match(reviewScript, /YAKUREKI_STAFF_ACCESS_RECOVERY_EVIDENCE/);
-  assert.match(reviewScript, /staff-access-recovery-review\.json/);
-  assert.match(reviewScript, /staff-access-recovery-check-request\.json/);
-  assert.match(reviewScript, /staff-access-recovery-check-request\.txt/);
-  assert.match(reviewScript, /YAKUREKI_STAFF_ACCESS_RECOVERY_REQUEST_ONLY/);
 });
 
 test('staff access recovery check request lists privacy, scenario, admin and reason-specific evidence without free text', () => {
