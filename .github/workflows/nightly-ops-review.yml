@@ -1,0 +1,99 @@
+name: Nightly Ops Review
+
+# 運用レビュー CLI を毎晩ドライランし、結果を要約してアーティファクトに残す。
+# 台帳: docs/ops_review_ledger.md
+#
+# 重要: これらのスクリプトは「レビュー結果が合格でないとき exit 1」を返す設計。
+# exit 1 はクラッシュではなく業務上の状態なので、ジョブは落とさない
+# (continue-on-error)。人がサマリを読んで判断する。
+
+on:
+  schedule:
+    # JST 03:00 = UTC 18:00
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TZ: 'Asia/Tokyo'
+
+jobs:
+  ops-review:
+    name: Nightly ops review (dry-run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ---- Tier 1: 入力不要 ----
+      - name: 'Tier1: release readiness'
+        id: readiness
+        continue-on-error: true
+        run: npm run release:readiness
+
+      - name: 'Tier1: release post review'
+        continue-on-error: true
+        run: npm run release:post-review
+
+      - name: 'Tier1: pilot KPI review'
+        continue-on-error: true
+        run: npm run pilot:kpi-review
+
+      - name: 'Tier1: AI clinical review'
+        continue-on-error: true
+        run: npm run ai:clinical-review
+
+      - name: 'Tier1: migration trial acceptance'
+        continue-on-error: true
+        run: npm run migration:trial-acceptance
+
+      - name: 'Tier1: staff access recovery review'
+        continue-on-error: true
+        run: npm run staff:access-recovery-review
+
+      - name: 'Tier1: electronic prescription connector preflight'
+        continue-on-error: true
+        run: npm run electronic-prescription:connector-preflight
+
+      # ---- Tier 4: Tier1 の成果物を統合 ----
+      # Tier2/3 は外部から供給される入力(診断JSON・コネクタ応答)が
+      # CI には無いためスキップする。台帳 §1 を参照。
+      - name: 'Tier4: release ops acceptance'
+        continue-on-error: true
+        run: |
+          READINESS=$(ls -d artifacts/release-update-readiness/*/ 2>/dev/null | tail -1)
+          POST=$(ls -d artifacts/release-post-review/*/ 2>/dev/null | tail -1)
+          if [ -n "$READINESS" ] && [ -n "$POST" ]; then
+            YAKUREKI_RELEASE_READINESS_REVIEW_JSON="${READINESS}release-update-readiness-review.json" \
+            YAKUREKI_RELEASE_POST_REVIEW_JSON="${POST}release-post-review.json" \
+            npm run release:ops-acceptance
+          else
+            echo "Tier1 の成果物が見つからないためスキップ"
+          fi
+
+      # ---- 結果の要約 ----
+      - name: Summarize review statuses
+        if: always()
+        run: node scripts/summarizeOpsReviews.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-ops-review-artifacts
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: warn
