@@ -23,6 +23,13 @@ const OFFICIAL_CLAIM_BODY_RECORD_TYPES = new Set([
   'ST'
 ]);
 
+import {
+  DISPENSING_UKE_COPAYMENT_CATEGORY_CODES,
+  DISPENSING_UKE_REDUCTION_CODES,
+  buildSpecialNoteField,
+  findDispensingUkeCodeTableEntry
+} from './dispensing_uke_code_tables';
+
 export interface DispensingUkeOfficialHeaderInput {
   payerOrganizationCode: '1' | '2';
   prefectureCode: string;
@@ -40,6 +47,24 @@ export interface DispensingUkeOfficialClaimCommonInput {
   patientName: string;
   genderCode: '1' | '2';
   birthDate: string;
+  /** 給付割合。国民健康保険の場合に百分率(%)で記録する (RE 第7項目) */
+  benefitRatio?: number;
+  /** 別表7 レセプト特記事項コード。最大5つ (RE 第8項目) */
+  specialNoteCodes?: string[];
+  /**
+   * 別表8 一部負担金区分コード (RE 第40項目)。
+   * 限度額適用・標準負担額減額認定証等が提示され、高額療養費が現物給付された場合のみ。
+   */
+  copaymentCategoryCode?: string;
+}
+
+/** 別表10 減免区分と、その減額内容 (HO 第11〜13項目) */
+export interface DispensingUkeOfficialCopaymentReductionInput {
+  code: string;
+  /** 「割」単位で減額される場合の減額割合。百分率(%) */
+  ratioPercent?: number;
+  /** 「円」単位で減額される場合の減額金額 */
+  reducedYen?: number;
 }
 
 export interface DispensingUkeOfficialInsuranceInput {
@@ -48,6 +73,12 @@ export interface DispensingUkeOfficialInsuranceInput {
   number?: string;
   prescriptionCount: number;
   totalPoints: number;
+  /** 国民健康保険の一部負担金減額・免除・徴収猶予証明書の証明書番号 (HO 第8項目) */
+  certificateNumber?: string;
+  /** 一部負担金が必要な場合の当該金額 (HO 第9項目) */
+  copaymentYen?: number;
+  /** 一部負担金の減免 (HO 第11〜13項目) */
+  copaymentReduction?: DispensingUkeOfficialCopaymentReductionInput;
 }
 
 export interface DispensingUkeOfficialPublicExpenseInput {
@@ -56,6 +87,10 @@ export interface DispensingUkeOfficialPublicExpenseInput {
   optionalBenefitCode?: string;
   prescriptionCount: number;
   totalPoints: number;
+  /** 公費負担医療に係る患者の一部負担金額 (KO 第7項目) */
+  copaymentYen?: number;
+  /** 公費給付対象一部負担金 (KO 第9項目) */
+  publicBenefitCopaymentYen?: number;
 }
 
 export interface DispensingUkeOfficialClaimInput {
@@ -138,6 +173,37 @@ function assertOfficialField(value: string, label: string): void {
   }
 }
 
+/**
+ * 必須項目だけの配列に、任意項目を項番指定で差し込む。
+ *
+ * UKE は CSV の位置で項目が決まるので、後ろの任意項目を記録するときは
+ * 間の項目を空文字で埋める必要がある。任意項目が何も無ければ配列は伸ばさない
+ * (末尾の空項目は省略できるため、既存の出力と1バイトも変わらない)。
+ */
+function withOptionalFields(
+  base: string[],
+  optional: Array<{ index: number; value?: string }>
+): string[] {
+  const populated = optional.filter((item) => item.value !== undefined && item.value !== '');
+  if (populated.length === 0) return base;
+  const size = Math.max(base.length, ...populated.map((item) => item.index + 1));
+  const fields = Array.from({ length: size }, (_, index) => base[index] ?? '');
+  for (const item of populated) {
+    fields[item.index] = item.value as string;
+  }
+  return fields;
+}
+
+function assertOptionalDigits(value: number | undefined, label: string, maxDigits: number): string | undefined {
+  if (value === undefined) return undefined;
+  assertNonNegativeInteger(value, label);
+  const text = String(value);
+  if (text.length > maxDigits) {
+    throw new Error(`${label}は${maxDigits}桁以内で入力してください。`);
+  }
+  return text;
+}
+
 function assertRecordFields(record: UkeRecord, label: string): void {
   assertOfficialField(record.type, `${label}のレコード種別`);
   record.fields.forEach((field, index) => assertOfficialField(field, `${label}の第${index + 1}項目`));
@@ -183,16 +249,38 @@ function buildClaimCommonRecord(input: DispensingUkeOfficialClaimCommonInput): U
     throw new Error('患者氏名を入力してください。');
   }
 
+  const benefitRatio = assertOptionalDigits(input.benefitRatio, '給付割合', 3);
+
+  const specialNote = buildSpecialNoteField(input.specialNoteCodes || []);
+  if (!specialNote.ok) {
+    throw new Error(specialNote.reason);
+  }
+
+  let copaymentCategoryCode: string | undefined;
+  if (input.copaymentCategoryCode !== undefined && input.copaymentCategoryCode !== '') {
+    if (!findDispensingUkeCodeTableEntry(DISPENSING_UKE_COPAYMENT_CATEGORY_CODES, input.copaymentCategoryCode)) {
+      throw new Error(`別表8にない一部負担金区分コードです: ${input.copaymentCategoryCode}`);
+    }
+    copaymentCategoryCode = input.copaymentCategoryCode;
+  }
+
   const record: UkeRecord = {
     type: 'RE',
-    fields: [
-      String(input.claimNumber),
-      input.claimTypeCode,
-      formatDispensingUkeGregorianMonth(input.dispensingMonth, '調剤年月'),
-      input.patientName,
-      input.genderCode,
-      formatDispensingUkeGregorianDate(input.birthDate, '生年月日')
-    ]
+    fields: withOptionalFields(
+      [
+        String(input.claimNumber),
+        input.claimTypeCode,
+        formatDispensingUkeGregorianMonth(input.dispensingMonth, '調剤年月'),
+        input.patientName,
+        input.genderCode,
+        formatDispensingUkeGregorianDate(input.birthDate, '生年月日')
+      ],
+      [
+        { index: 6, value: benefitRatio },
+        { index: 7, value: specialNote.value },
+        { index: 39, value: copaymentCategoryCode }
+      ]
+    )
   };
   assertRecordFields(record, `レセプト${input.claimNumber}のREレコード`);
   return record;
@@ -202,15 +290,45 @@ function buildInsuranceRecord(input: DispensingUkeOfficialInsuranceInput, claimN
   assertDigits(input.insurerNumber, '保険者番号', [6, 8]);
   assertNonNegativeInteger(input.prescriptionCount, '処方箋受付回数');
   assertNonNegativeInteger(input.totalPoints, '保険総点数');
+  if (input.certificateNumber !== undefined && input.certificateNumber !== '') {
+    assertDigits(input.certificateNumber, '証明書番号', [3]);
+  }
+  const copaymentYen = assertOptionalDigits(input.copaymentYen, '一部負担金', 8);
+
+  let reductionCode: string | undefined;
+  let reductionRatio: string | undefined;
+  let reductionYen: string | undefined;
+  if (input.copaymentReduction) {
+    const reduction = input.copaymentReduction;
+    if (!findDispensingUkeCodeTableEntry(DISPENSING_UKE_REDUCTION_CODES, reduction.code)) {
+      throw new Error(`別表10にない減免区分コードです: ${reduction.code}`);
+    }
+    reductionCode = reduction.code;
+    reductionRatio = assertOptionalDigits(reduction.ratioPercent, '減額割合', 3);
+    if (reductionRatio !== undefined && Number(reductionRatio) > 100) {
+      throw new Error('減額割合は百分率(%)で100以下で入力してください。');
+    }
+    reductionYen = assertOptionalDigits(reduction.reducedYen, '減額金額', 6);
+  }
+
   const record: UkeRecord = {
     type: 'HO',
-    fields: [
-      input.insurerNumber,
-      input.symbol ?? '',
-      input.number ?? '',
-      String(input.prescriptionCount),
-      String(input.totalPoints)
-    ]
+    fields: withOptionalFields(
+      [
+        input.insurerNumber,
+        input.symbol ?? '',
+        input.number ?? '',
+        String(input.prescriptionCount),
+        String(input.totalPoints)
+      ],
+      [
+        { index: 7, value: input.certificateNumber },
+        { index: 8, value: copaymentYen },
+        { index: 10, value: reductionCode },
+        { index: 11, value: reductionRatio },
+        { index: 12, value: reductionYen }
+      ]
+    )
   };
   assertRecordFields(record, `レセプト${claimNumber}のHOレコード`);
   return record;
@@ -221,15 +339,28 @@ function buildPublicExpenseRecord(input: DispensingUkeOfficialPublicExpenseInput
   assertDigits(input.recipientNumber, '公費受給者番号', [7]);
   assertNonNegativeInteger(input.prescriptionCount, '公費処方箋受付回数');
   assertNonNegativeInteger(input.totalPoints, '公費総点数');
+  const publicCopaymentYen = assertOptionalDigits(input.copaymentYen, '公費の一部負担金額', 8);
+  const publicBenefitCopaymentYen = assertOptionalDigits(
+    input.publicBenefitCopaymentYen,
+    '公費給付対象一部負担金',
+    8
+  );
+
   const record: UkeRecord = {
     type: 'KO',
-    fields: [
-      input.payerNumber,
-      input.recipientNumber,
-      input.optionalBenefitCode ?? '',
-      String(input.prescriptionCount),
-      String(input.totalPoints)
-    ]
+    fields: withOptionalFields(
+      [
+        input.payerNumber,
+        input.recipientNumber,
+        input.optionalBenefitCode ?? '',
+        String(input.prescriptionCount),
+        String(input.totalPoints)
+      ],
+      [
+        { index: 6, value: publicCopaymentYen },
+        { index: 8, value: publicBenefitCopaymentYen }
+      ]
+    )
   };
   assertRecordFields(record, `レセプト${claimNumber}のKOレコード`);
   return record;
