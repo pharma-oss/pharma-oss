@@ -357,7 +357,7 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
                 disabled={!canEditBilling}
                 onChange={(e) => handleBillingAgentOverrideLocalChange(item.itemId, 'billingAgentGroupKey', e.target.value, idx)}
                 onBlur={() => persistBillingAgentOverride(item.itemId, idx)}
-                style={{ width: '80px', fontSize: '0.75rem', padding: '2px 4px' }}
+                className="input-agent-group"
               />
               <input
                 type="text"
@@ -365,7 +365,7 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
                 value={remarks[item.itemId] ?? (item.receiptRemark || '')}
                 disabled={!canEditBilling}
                 onChange={(e) => handleReceiptRemarkChange(item.itemId, e.target.value, idx)}
-                style={{ width: '120px', fontSize: '0.75rem', padding: '2px 4px' }}
+                className="input-receipt-remark"
               />
             </div>
           </div>
@@ -821,6 +821,18 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
           color: #334155;
           font-size: 0.76rem;
           font-weight: 700;
+        }
+
+        .input-agent-group {
+          width: 80px;
+          font-size: 0.75rem;
+          padding: 2px 4px;
+        }
+
+        .input-receipt-remark {
+          width: 120px;
+          font-size: 0.75rem;
+          padding: 2px 4px;
         }
 
         @media print {

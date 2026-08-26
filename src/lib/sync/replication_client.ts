@@ -44,6 +44,13 @@ function buildPullHandler(collectionName: SyncCollectionName, fetchImpl: typeof 
     });
     const response = await fetchImpl(`/api/sync/pull?${params.toString()}`);
     if (!response.ok) {
+      if (response.status === 401) {
+        import('@/lib/sync/satellite_offline_auth').then(({ purgeSatelliteAllCaches }) => {
+          purgeSatelliteAllCaches();
+        }).catch((e) => {
+          console.error('[Replication Client] Failed to trigger purge on revocation in pull:', e);
+        });
+      }
       throw new Error(`同期pullに失敗しました(${collectionName}): HTTP ${response.status}`);
     }
     const body = await response.json() as HubPullResult;
@@ -61,7 +68,9 @@ function enqueueRowsToLocalQueue(
     for (const r of rows) {
       enqueueUnsentRecord(collectionName, r.newDocumentState, primaryPath, r.assumedMasterState);
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    console.error(`[Replication Client] Failed to enqueue unsent rows to local queue for ${collectionName}:`, err);
+  });
 }
 
 function buildPushHandler(collectionName: SyncCollectionName, primaryPath: string, fetchImpl: typeof fetch) {
@@ -86,6 +95,13 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        import('@/lib/sync/satellite_offline_auth').then(({ purgeSatelliteAllCaches }) => {
+          purgeSatelliteAllCaches();
+        }).catch((e) => {
+          console.error('[Replication Client] Failed to trigger purge on revocation in push:', e);
+        });
+      }
       enqueueRowsToLocalQueue(collectionName, primaryPath, rows);
       throw new Error(`同期pushに失敗しました(${collectionName}): HTTP ${response.status}`);
     }

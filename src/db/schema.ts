@@ -735,7 +735,7 @@ export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
 
 export const SOAP_RECORD_SCHEMA: RxJsonSchema<SoapRecord> = {
   title: 'soap record schema',
-  version: 3,
+  version: 4,
   primaryKey: 'soapId',
   type: 'object',
   properties: {
@@ -753,8 +753,14 @@ export const SOAP_RECORD_SCHEMA: RxJsonSchema<SoapRecord> = {
             items: {
               type: 'object',
               properties: {
+                id: { type: 'string' },
                 type: { type: 'string', enum: ['S', 'O', 'A', 'P'] },
-                text: { type: 'string' }
+                text: { type: 'string' },
+                origin: { type: 'string', enum: ['manual', 'ai_draft', 'legacy_unspecified'] },
+                aiStatus: { type: 'string', enum: ['unconfirmed', 'reviewed', 'approved', 'modified'] },
+                aiDraftId: { type: 'string' },
+                confirmedAt: { type: 'string', format: 'date-time' },
+                confirmedBy: { type: 'string' }
               }
             }
           }
@@ -979,7 +985,7 @@ export const DRUG_INFO_SCHEMA: RxJsonSchema<DrugInfo> = {
 
 export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
   title: 'audit log schema',
-  version: 18,
+  version: 19,
   primaryKey: 'logId',
   type: 'object',
   properties: {
@@ -988,7 +994,7 @@ export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
     userId: { type: 'string', maxLength: 100 },
     userName: { type: 'string', maxLength: 100 },
     userRole: { type: 'string', enum: ['admin', 'pharmacist', 'clerk'], maxLength: 50 },
-    actionType: { type: 'string', enum: ['login', 'prescription_ocr', 'prescription_edit', 'billing_toggle', 'claim_lifecycle', 'daily_closing_approval', 'daily_closing_kpi_action', 'session_lock', 'print', 'uke_export', 'stock_update', 'user_switch', 'facility_settings_update', 'drug_master_update', 'patient_medication_info_template', 'follow_up_record', 'ai_suggestion_review', 'electronic_prescription', 'external_device_handoff', 'staff_create', 'staff_delete', 'staff_credential_recovery', 'passkey_register', 'audit_export', 'audit_retention_approval', 'backup_export', 'backup_schedule_update', 'backup_external_storage', 'backup_external_transfer_manifest', 'backup_drill', 'backup_import', 'official_spec_review'], maxLength: 50 },
+    actionType: { type: 'string', enum: ['login', 'prescription_ocr', 'prescription_edit', 'billing_toggle', 'claim_lifecycle', 'daily_closing_approval', 'daily_closing_kpi_action', 'session_lock', 'print', 'uke_export', 'stock_update', 'user_switch', 'facility_settings_update', 'drug_master_update', 'patient_medication_info_template', 'follow_up_record', 'ai_suggestion_review', 'ai_draft_approved', 'ai_draft_modified', 'electronic_prescription', 'external_device_handoff', 'staff_create', 'staff_delete', 'staff_credential_recovery', 'passkey_register', 'audit_export', 'audit_retention_approval', 'backup_export', 'backup_schedule_update', 'backup_external_storage', 'backup_external_transfer_manifest', 'backup_drill', 'backup_import', 'official_spec_review'], maxLength: 50 },
     patientId: { type: 'string', maxLength: 100 },
     patientName: { type: 'string', maxLength: 100 },
     details: { type: 'string', maxLength: 2000 },

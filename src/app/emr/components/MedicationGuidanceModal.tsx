@@ -103,75 +103,42 @@ export const MedicationGuidanceModal = ({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ width: '600px', maxWidth: '90vw' }}>
+      <div className="modal-content modal-md">
         <div className="modal-header">
           <h2>服薬指導補助マニュアル: {drug?.name}</h2>
           <button className="btn-icon" onClick={onClose}>
-            <span style={{ fontSize: '1.2rem' }}>&times;</span>
+            <span className="close-icon">&times;</span>
           </button>
         </div>
         <div className="modal-body">
           {isLoading ? (
-            <div className="flex-center" style={{ height: '200px' }}>
+            <div className="flex-center loading-container">
               <Loader2 className="spin" size={24} />
             </div>
           ) : (
             <>
-              <p
-                style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', marginBottom: '1rem' }}
-              >
+              <p className="guidance-desc">
                 この薬剤に関する指導ポイントやヒントを登録できます。
               </p>
 
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem',
-                  marginBottom: '1rem'
-                }}
-              >
+              <div className="guidance-entry-list">
                 {entries.map((entry) => (
                   <div
                     key={entry.id}
-                    style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}
+                    className="guidance-entry-row"
                   >
-                    <div
-                      style={{
-                        fontWeight: 800,
-                        fontSize: '1.2rem',
-                        paddingTop: '0.5rem',
-                        width: '30px',
-                        textAlign: 'center',
-                        color:
-                          entry.type === 'S'
-                            ? 'var(--status-blue)'
-                            : entry.type === 'O'
-                              ? 'var(--status-green)'
-                              : entry.type === 'A'
-                                ? 'var(--status-orange)'
-                                : 'var(--status-purple)'
-                      }}
-                    >
+                    <div className={`guidance-type-badge is-${entry.type.toLowerCase()}`}>
                       {entry.type}
                     </div>
                     <textarea
                       value={entry.text}
                       onChange={(e) => updateEntry(entry.id, e.target.value)}
-                      style={{
-                        flex: 1,
-                        minHeight: '60px',
-                        padding: '0.5rem',
-                        border: '1px solid var(--border)',
-                        borderRadius: '4px',
-                        resize: 'vertical'
-                      }}
+                      className="guidance-textarea"
                       placeholder="内容を入力..."
                     />
                     <button
-                      className="btn-icon text-muted"
+                      className="btn-icon text-muted btn-trash-action"
                       onClick={() => removeEntry(entry.id)}
-                      style={{ padding: '0.5rem' }}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -179,31 +146,15 @@ export const MedicationGuidanceModal = ({
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <span
-                  style={{
-                    fontSize: 'var(--fs-md)',
-                    color: 'var(--text-ghost)',
-                    alignSelf: 'center',
-                    marginRight: '0.5rem'
-                  }}
-                >
+              <div className="guidance-add-bar">
+                <span className="guidance-add-label">
                   追加:
                 </span>
                 {['S', 'O', 'A', 'P'].map((type) => (
                   <button
                     key={type}
-                    className={`btn-add-entry ${type.toLowerCase()}`}
+                    className={`btn-add-type is-${type.toLowerCase()}`}
                     onClick={() => addEntry(type)}
-                    style={{
-                      background: 'white',
-                      border: '1px solid var(--border)',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '4px',
-                      fontSize: 'var(--fs-sm)',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
                   >
                     + {type}
                   </button>
@@ -228,6 +179,85 @@ export const MedicationGuidanceModal = ({
           </span>
         </div>
       </div>
+      <style jsx>{`
+        .modal-md {
+          width: 600px;
+          max-width: 90vw;
+        }
+        .close-icon {
+          font-size: 1.2rem;
+        }
+        .loading-container {
+          height: 200px;
+        }
+        .guidance-desc {
+          font-size: var(--fs-md);
+          color: var(--text-ghost);
+          margin-bottom: var(--space-4);
+        }
+        .guidance-entry-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+          margin-bottom: var(--space-4);
+        }
+        .guidance-entry-row {
+          display: flex;
+          gap: var(--space-2);
+          align-items: flex-start;
+        }
+        .guidance-type-badge {
+          font-weight: 800;
+          font-size: 1.2rem;
+          padding-top: var(--space-2);
+          width: 30px;
+          text-align: center;
+        }
+        .guidance-type-badge.is-s { color: var(--status-blue); }
+        .guidance-type-badge.is-o { color: var(--status-green); }
+        .guidance-type-badge.is-a { color: var(--status-orange); }
+        .guidance-type-badge.is-p { color: var(--status-purple); }
+        .guidance-textarea {
+          flex: 1;
+          min-height: 60px;
+          padding: var(--space-2);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm);
+          resize: vertical;
+          background: var(--bg-card);
+          color: var(--text-main);
+          font-size: var(--fs-base);
+          font-family: inherit;
+        }
+        .btn-trash-action {
+          padding: var(--space-2);
+        }
+        .guidance-add-bar {
+          display: flex;
+          gap: var(--space-2);
+          align-items: center;
+        }
+        .guidance-add-label {
+          font-size: var(--fs-md);
+          color: var(--text-ghost);
+          align-self: center;
+          margin-right: var(--space-2);
+        }
+        .btn-add-type {
+          background: white;
+          border: 1px solid var(--border);
+          padding: 0.2rem 0.6rem;
+          border-radius: var(--radius-sm);
+          font-size: var(--fs-sm);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+        .btn-add-type:hover {
+          border-color: var(--primary);
+          background: var(--primary-light);
+        }
+      `}</style>
     </div>
   );
 };

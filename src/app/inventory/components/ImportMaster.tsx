@@ -351,12 +351,12 @@ export function ImportMaster({
         <div className="import-master card">
             {activeTab === 'import-ocr' ? (
                 <>
-                    <h3 style={{ marginTop: 0 }}>納品書写真から取り込み (OCR)</h3>
-                    <p className="text-muted" style={{ marginBottom: '1.5rem' }}>納品書の写真をアップロードして、数量やロットなどを自動入力します。（スズケン等のフォーマットに対応）</p>
+                    <h3 className="import-section-title">納品書写真から取り込み (OCR)</h3>
+                    <p className="import-section-desc">納品書の写真をアップロードして、数量やロットなどを自動入力します。（スズケン等のフォーマットに対応）</p>
 
-                    <div className="upload-zone" style={{ textAlign: 'center' }}>
-                        <label className="file-input-label" style={{ cursor: isOcrProcessing ? 'wait' : 'pointer' }}>
-                            <span className="btn-secondary" style={{ pointerEvents: 'none' }}>
+                    <div className="upload-zone">
+                        <label className={`file-input-label ${isOcrProcessing ? 'is-busy' : ''}`}>
+                            <span className="btn-secondary">
                                 {isOcrProcessing ? '読み取り中...' : '納品書の画像を選択 (PNG, JPG)'}
                             </span>
                             <input
@@ -371,12 +371,12 @@ export function ImportMaster({
                 </>
             ) : (
                 <>
-                    <h3>卸データ（CSV）から入荷インポート</h3>
-                    <p className="text-muted" style={{marginBottom: '1rem'}}>JD-NET / NHI形式などのCSVファイルを選択してください。</p>
+                    <h3 className="import-section-title">卸データ（CSV）から入荷インポート</h3>
+                    <p className="import-section-desc compact">JD-NET / NHI形式などのCSVファイルを選択してください。</p>
 
                     <div className="upload-zone">
                         <label className="file-input-label">
-                            <span className="btn-secondary" style={{ pointerEvents: 'none' }}>ファイルを選択 (CSV)</span>
+                            <span className="btn-secondary">ファイルを選択 (CSV)</span>
                             <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden-input" aria-label="卸データCSVファイルをアップロード" />
                         </label>
                     </div>
@@ -399,7 +399,7 @@ export function ImportMaster({
                             </thead>
                             <tbody>
                                 {parsedData.slice(0, 100).map((row, idx) => (
-                                    <tr key={idx} style={{ backgroundColor: row.matchedDrug ? 'inherit' : '#fef2f2' }}>
+                                    <tr key={idx} className={row.matchedDrug ? '' : 'unmatched-import-row'}>
                                         <td>{row.rawCode}</td>
                                         <td>
                                             {row.matchedDrug ? (
@@ -427,8 +427,7 @@ export function ImportMaster({
                                                     newData[idx].quantity = Number(e.target.value);
                                                     setParsedData(newData);
                                                 }}
-                                                style={{ width: '80px', padding: '0.2rem' }}
-                                                className="edit-input"
+                                                className="edit-input import-qty-input"
                                                 aria-label={`${row.matchedDrug ? row.matchedDrug.name : row.rawCode}の入荷数量`}
                                             />
                                         </td>
@@ -439,7 +438,7 @@ export function ImportMaster({
                             </tbody>
                         </table>
                         {parsedData.length > 100 && (
-                            <div className="limit-message text-muted text-sm" style={{ textAlign: 'center', marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div className="limit-message text-muted text-sm">
                                 ※プレビューが多すぎます。上位100件のみ表示しています（全 {parsedData.length} 件）。
                             </div>
                         )}

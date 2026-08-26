@@ -13,6 +13,7 @@ declare global {
   interface Window {
     __yakurekiSeedOnboardingE2E?: () => Promise<OnboardingE2ESeedResult>;
     __yakurekiSeedReturnCorrectionE2E?: () => Promise<ReturnCorrectionE2ESeedResult>;
+    __yakurekiSeedTutorialDemo?: () => Promise<{ visitId: string; alreadySeeded: boolean }>;
   }
 }
 
@@ -79,8 +80,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       const { seedReturnCorrectionE2EData } = await import('@/lib/return_correction_e2e_seed');
       return seedReturnCorrectionE2EData(db);
     };
+    const seedTutorialDemo = async () => {
+      const { seedTutorialDemoData } = await import('@/lib/demo_data');
+      return seedTutorialDemoData(db);
+    };
     window.__yakurekiSeedOnboardingE2E = seedOnboardingE2E;
     window.__yakurekiSeedReturnCorrectionE2E = seedReturnCorrectionE2E;
+    window.__yakurekiSeedTutorialDemo = seedTutorialDemo;
 
     return () => {
       if (window.__yakurekiSeedOnboardingE2E === seedOnboardingE2E) {
@@ -89,33 +95,93 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       if (window.__yakurekiSeedReturnCorrectionE2E === seedReturnCorrectionE2E) {
         delete window.__yakurekiSeedReturnCorrectionE2E;
       }
+      if (window.__yakurekiSeedTutorialDemo === seedTutorialDemo) {
+        delete window.__yakurekiSeedTutorialDemo;
+      }
     };
   }, [db]);
 
   if (dbError) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '2rem', background: '#f8fafc', color: '#0f172a' }}>
-        <div role="alert" style={{ maxWidth: '720px', border: '1px solid #fecaca', borderRadius: '8px', background: '#fff1f2', padding: '1.25rem', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' }}>
-          <h1 style={{ margin: '0 0 0.75rem', fontSize: '1.25rem' }}>ローカルデータベースを開けません</h1>
-          <p style={{ margin: '0 0 0.75rem', lineHeight: 1.7 }}>
+      <div className="db-fullscreen-container">
+        <div role="alert" className="db-alert-card">
+          <h1 className="db-card-title">ローカルデータベースを開けません</h1>
+          <p className="db-card-desc">
             患者データ保護のため、アプリは自動削除や自動初期化を実行していません。バックアップの有無を確認し、管理者の復旧手順に従ってください。
           </p>
-          <p style={{ margin: 0, fontSize: 'var(--fs-md)', color: '#7f1d1d' }}>エラー: {dbError}</p>
+          <p className="db-error-text">エラー: {dbError}</p>
         </div>
+        <style jsx>{`
+          .db-fullscreen-container {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: var(--space-8);
+            background: #f8fafc;
+            color: #0f172a;
+          }
+          .db-alert-card {
+            max-width: 720px;
+            border: 1px solid #fecaca;
+            border-radius: var(--radius-md);
+            background: #fff1f2;
+            padding: var(--space-5);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+          }
+          .db-card-title {
+            margin: 0 0 var(--space-3);
+            font-size: 1.25rem;
+          }
+          .db-card-desc {
+            margin: 0 0 var(--space-3);
+            line-height: 1.7;
+          }
+          .db-error-text {
+            margin: 0;
+            font-size: var(--fs-md);
+            color: #7f1d1d;
+          }
+        `}</style>
       </div>
     );
   }
 
   if (satelliteSyncing) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '2rem', background: '#f8fafc', color: '#0f172a' }}>
-        <div role="status" style={{ maxWidth: '720px', border: '1px solid #bfdbfe', borderRadius: '8px', background: '#eff6ff', padding: '1.25rem', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' }}>
-          <h1 style={{ margin: '0 0 0.75rem', fontSize: '1.25rem' }}>メイン端末からデータを取得しています…</h1>
-          <p style={{ margin: '0 0 0.75rem', lineHeight: 1.7 }}>
+      <div className="db-fullscreen-container">
+        <div role="status" className="db-status-card">
+          <h1 className="db-card-title">メイン端末からデータを取得しています…</h1>
+          <p className="db-card-desc">
             この端末はサテライト端末です。患者データは端末に保存されず、起動のたびにメイン端末から取得します。
             この画面のまま進まない場合は、メイン端末が起動しているか、ネットワーク接続を確認してください。
           </p>
         </div>
+        <style jsx>{`
+          .db-fullscreen-container {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: var(--space-8);
+            background: #f8fafc;
+            color: #0f172a;
+          }
+          .db-status-card {
+            max-width: 720px;
+            border: 1px solid #bfdbfe;
+            border-radius: var(--radius-md);
+            background: #eff6ff;
+            padding: var(--space-5);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+          }
+          .db-card-title {
+            margin: 0 0 var(--space-3);
+            font-size: 1.25rem;
+          }
+          .db-card-desc {
+            margin: 0 0 var(--space-3);
+            line-height: 1.7;
+          }
+        `}</style>
       </div>
     );
   }

@@ -151,14 +151,13 @@ export const WarningInsightCard = React.memo(function WarningInsightCard({
     return (
       <div
         id="emr-warning-insights"
-        className="insight-card warning"
-        style={{ borderColor: 'var(--green-200)', backgroundColor: 'var(--green-50)' }}
+        className="insight-card warning is-clear"
       >
         <div className="insight-header">
           <CheckCircle2 size={18} color="var(--green-600)" />
-          <h3 style={{ color: 'var(--green-700)' }}>相互作用・注意なし</h3>
+          <h3 className="text-success-dark">相互作用・注意なし</h3>
         </div>
-        <p style={{ fontSize: 'var(--fs-md)', color: 'var(--green-700)', marginTop: '0.5rem' }}>
+        <p className="insight-clear-desc">
           併用禁忌や用法用量の警告は検出されませんでした。
         </p>
       </div>
@@ -176,7 +175,7 @@ export const WarningInsightCard = React.memo(function WarningInsightCard({
           <li key={idx}>
             {w.type === 'contraindication' && (
               <>
-                <strong style={{ color: w.severity === 'danger' ? '#ef4444' : '#eab308' }}>
+                <strong className={w.severity === 'danger' ? 'severity-danger' : 'severity-warning'}>
                   {w.severity === 'danger' ? '併用禁忌:' : '併用注意:'}
                 </strong>{' '}
                 {w.drug1} と {w.drug2}（{w.message}）
@@ -184,7 +183,7 @@ export const WarningInsightCard = React.memo(function WarningInsightCard({
             )}
             {w.type === 'usage' && (
               <>
-                <strong style={{ color: w.severity === 'danger' ? '#ef4444' : '#eab308' }}>
+                <strong className={w.severity === 'danger' ? 'severity-danger' : 'severity-warning'}>
                   {w.severity === 'danger' ? '病態禁忌/注意:' : '用法注意:'}
                 </strong>{' '}
                 {w.drug}（{w.message}）
@@ -192,7 +191,7 @@ export const WarningInsightCard = React.memo(function WarningInsightCard({
             )}
             {w.type === 'patient_alert' && (
               <>
-                <strong style={{ color: w.severity === 'danger' ? '#ef4444' : '#eab308' }}>
+                <strong className={w.severity === 'danger' ? 'severity-danger' : 'severity-warning'}>
                   {w.alertType === 'allergy' ? '薬剤アレルギー:' : '副作用歴:'}
                 </strong>{' '}
                 {w.drug}（{w.message}）
@@ -220,7 +219,10 @@ export const SoapAiDraftInsightCard = React.memo(function SoapAiDraftInsightCard
     <div className="insight-card soap-ai-draft">
       <div className="insight-header">
         <Sparkles size={18} className="icon-ai" />
-        <h3>AI補助 SOAP下書き</h3>
+        <div>
+          <h3>AI補助 SOAP下書き</h3>
+          <span className="soap-ai-disclaimer">【定型文】医薬品マスタ・監査ルールに基づく補助候補（臨床判断ではありません）</span>
+        </div>
       </div>
       <div className="soap-ai-list">
         {visibleSuggestions.map((suggestion) => (
@@ -254,7 +256,7 @@ export const SoapAiDraftInsightCard = React.memo(function SoapAiDraftInsightCard
               type="button"
               className="btn-secondary soap-ai-apply"
               onClick={() => onApplyDraft(suggestion)}
-              title="SOAPへ反映して監査ログに記録"
+              title="SOAPへ未確認下書きとして反映（内容を確認・承認してください）"
             >
               <Plus size={14} aria-hidden="true" />
               <span>SOAPへ反映</span>
@@ -262,6 +264,15 @@ export const SoapAiDraftInsightCard = React.memo(function SoapAiDraftInsightCard
           </div>
         ))}
       </div>
+      <style jsx>{`
+        .soap-ai-disclaimer {
+          display: block;
+          font-size: 0.7rem;
+          color: var(--text-muted);
+          font-weight: 500;
+          margin-top: 0.15rem;
+        }
+      `}</style>
     </div>
   );
 });
@@ -272,7 +283,7 @@ export const VitalInsightCard = React.memo(function VitalInsightCard() {
       <div className="insight-header">
         <h3>バイタル・臨床検査値</h3>
       </div>
-      <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
+      <p className="insight-empty-text">
         最新の検査値（eGFR / Blood Pressure等）は未登録です
       </p>
     </div>
@@ -293,7 +304,7 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
         <h3>指導文・患者説明資料</h3>
       </div>
       {!prescribedDrugs || prescribedDrugs.length === 0 ? (
-        <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)', margin: 0, fontWeight: 700 }}>
+        <p className="insight-empty-text">
           処方薬を読み込み中...
         </p>
       ) : (
@@ -322,6 +333,25 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
           box-shadow: var(--shadow-sm);
         }
         .insight-card.warning { border-left: 4px solid #f59e0b; }
+        .insight-card.warning.is-clear {
+          border-color: var(--green-200);
+          background-color: var(--green-50);
+          border-left: 4px solid var(--green-600);
+        }
+        .text-success-dark { color: var(--green-700); }
+        .insight-clear-desc {
+          font-size: var(--fs-md);
+          color: var(--green-700);
+          margin-top: 0.5rem;
+        }
+        .severity-danger { color: #ef4444; }
+        .severity-warning { color: #eab308; }
+        .insight-empty-text {
+          font-size: var(--fs-md);
+          color: var(--text-ghost);
+          margin: 0;
+          font-weight: 700;
+        }
         .insight-card.info { border-left: 4px solid #3b82f6; }
         .insight-card.default { border-left: 4px solid var(--text-ghost); }
         .insight-header {

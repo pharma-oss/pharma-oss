@@ -501,7 +501,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
                         return (
                             <tr key={row.drugCode} className={diff === null ? 'unentered-row' : diff === 0 ? 'matched-row' : 'mismatch-row'}>
                                 <td>
-                                    {row.kind === 'narcotic' ? <span className="status-tag urgent">麻薬</span> : <span className="status-tag" style={{ background: '#dbeafe', color: '#1e40af' }}>向精神薬</span>}
+                                    {row.kind === 'narcotic' ? <span className="status-tag urgent">麻薬</span> : <span className="status-tag psychotropic">向精神薬</span>}
                                 </td>
                                 <td>
                                     <div className="daily-drug-name">
@@ -599,7 +599,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
                     })}
                     {filteredDailyCheckRows.length === 0 && (
                         <tr>
-                            <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }} className="text-muted">
+                            <td colSpan={7} className="daily-check-empty text-muted">
                                 表示できる品目がありません
                             </td>
                         </tr>

@@ -1531,7 +1531,7 @@ export default function OcrPage() {
               </div>
 
               <div className="form-row">
-                <div className="form-group" style={{ width: '180px' }}>
+                <div className="form-group is-compact">
                   <label htmlFor="patientBirthDate">
                     生年月日
                     <span className="text-danger ml-1 text-sm" aria-hidden="true">*</span>
@@ -1576,7 +1576,7 @@ export default function OcrPage() {
                   />
                 </div>
 
-                <div className="form-group" style={{ width: '120px' }}>
+                <div className="form-group is-narrow">
                   <label htmlFor="burdenRatio">
                     負担割合
                   </label>
@@ -1584,8 +1584,7 @@ export default function OcrPage() {
                     id="burdenRatio"
                     value={burdenRatio}
                     onChange={(e) => setBurdenRatio(e.target.value)}
-                    className="w-full"
-                    style={{ padding: '0.6rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'white' }}
+                    className="w-full form-select-md"
                   >
                     <option value="10">1割</option>
                     <option value="20">2割</option>

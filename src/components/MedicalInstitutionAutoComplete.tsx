@@ -108,29 +108,28 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
 
   return (
     <div className="medical-inst-autocomplete" ref={containerRef}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.75rem' }}>
+      <div className="auto-grid">
         <div>
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text-muted)' }}>
+          <label className="auto-label">
             医療機関コード (10桁)
           </label>
           <input
             type="text"
-            className="input-field"
+            className="input-field auto-input"
             value={code}
             onChange={handleCodeChange}
             placeholder={placeholderCode}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.2rem' }}
           />
         </div>
 
-        <div style={{ position: 'relative' }} role="combobox" aria-expanded={isOpen} aria-haspopup="listbox" aria-controls="med-inst-suggestions-list">
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text-muted)' }}>
+        <div className="auto-combobox" role="combobox" aria-expanded={isOpen} aria-haspopup="listbox" aria-controls="med-inst-suggestions-list">
+          <label className="auto-label">
             医療機関名
           </label>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <div className="auto-input-wrapper">
             <input
               type="text"
-              className="input-field"
+              className="input-field auto-input"
               value={name}
               onChange={handleNameChange}
               onKeyDown={handleKeyDown}
@@ -142,7 +141,6 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                 }
               }}
               placeholder={placeholderName}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.2rem' }}
             />
           </div>
 
@@ -151,20 +149,6 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
               id="med-inst-suggestions-list"
               className="suggestions-dropdown"
               role="listbox"
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                zIndex: 50,
-                background: '#ffffff',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                maxHeight: '220px',
-                overflowY: 'auto',
-                marginTop: '4px'
-              }}
             >
               {suggestions.map((inst, idx) => (
                 <button
@@ -173,29 +157,17 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
                   role="option"
                   aria-selected={idx === selectedIndex}
                   onClick={() => handleSelectSuggestion(inst)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '0.6rem 0.8rem',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border-subtle)',
-                    background: idx === selectedIndex ? 'var(--bg-subtle, #f1f5f9)' : 'transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.2rem'
-                  }}
-                  className="suggestion-item"
+                  className={`suggestion-item ${idx === selectedIndex ? 'selected' : ''}`}
                 >
-                  <div style={{ fontWeight: 700, fontSize: 'var(--fs-md)', color: 'var(--text-main)' }}>
+                  <div className="suggestion-title">
                     {inst.name}
                     {isUsingSeedMedicalInstitutionData() && (
-                      <span style={{ marginLeft: '0.4rem', fontSize: 'var(--fs-2xs)', fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-soft)', padding: '1px 6px', borderRadius: '4px' }}>
+                      <span className="suggestion-badge">
                         サンプル
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
+                  <div className="suggestion-meta">
                     コード: <strong>{inst.code}</strong> (点数表: {inst.scoreCode}) {inst.address ? ` / ${inst.address}` : ''}
                   </div>
                 </button>
@@ -204,6 +176,79 @@ export const MedicalInstitutionAutoComplete: React.FC<MedicalInstitutionAutoComp
           )}
         </div>
       </div>
+      <style jsx>{`
+        .auto-grid {
+          display: grid;
+          grid-template-columns: 1fr 2fr;
+          gap: var(--space-3);
+        }
+        .auto-label {
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          color: var(--text-muted);
+        }
+        .auto-input {
+          width: 100%;
+          padding: var(--space-1-5) var(--space-2-5);
+          font-size: var(--fs-md);
+          margin-top: var(--space-1);
+        }
+        .auto-combobox {
+          position: relative;
+        }
+        .auto-input-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .suggestions-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          z-index: 50;
+          background: #ffffff;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          max-height: 220px;
+          overflow-y: auto;
+          margin-top: 4px;
+        }
+        .suggestion-item {
+          width: 100%;
+          text-align: left;
+          padding: var(--space-2-5) var(--space-3);
+          border: none;
+          border-bottom: 1px solid var(--border-subtle);
+          background: transparent;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1);
+        }
+        .suggestion-item.selected {
+          background: var(--bg-subtle, #f1f5f9);
+        }
+        .suggestion-title {
+          font-weight: 700;
+          font-size: var(--fs-md);
+          color: var(--text-main);
+        }
+        .suggestion-badge {
+          margin-left: var(--space-1-5);
+          font-size: var(--fs-2xs);
+          font-weight: 700;
+          color: var(--warning);
+          background: var(--warning-soft);
+          padding: 1px 6px;
+          border-radius: 4px;
+        }
+        .suggestion-meta {
+          font-size: var(--fs-xs);
+          color: var(--text-muted);
+        }
+      `}</style>
     </div>
   );
 };

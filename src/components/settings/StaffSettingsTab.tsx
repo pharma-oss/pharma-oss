@@ -20,27 +20,6 @@ import {
 
 const ROLE_PERMISSION_SETTING_ROLES: User['role'][] = ['admin', 'pharmacist', 'clerk'];
 
-  const staffRecoveryStatusStyle = (status: StaffRecoveryStepStatus) => {
-    const styles = {
-      complete: { color: '#15803d', background: '#f0fdf4', border: '#86efac' },
-      attention: { color: '#b45309', background: '#fffbeb', border: '#fcd34d' },
-      blocked: { color: '#b91c1c', background: '#fef2f2', border: '#fca5a5' }
-    }[status];
-
-    return {
-      display: 'inline-flex',
-      alignItems: 'center',
-      borderRadius: '999px',
-      border: `1px solid ${styles.border}`,
-      padding: '0.14rem 0.55rem',
-      fontSize: 'var(--fs-xs)',
-      fontWeight: 800,
-      color: styles.color,
-      background: styles.background,
-      whiteSpace: 'nowrap' as const
-    };
-  };
-
 interface StaffSettingsTabProps {
   currentUser: User;
   canManageStaff: boolean;
@@ -130,19 +109,18 @@ export default function StaffSettingsTab({
 }: StaffSettingsTabProps) {
   return (
         <div className="settings-section glass">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <div className="staff-header">
             <div>
               <h2>スタッフアカウント・パスキー管理</h2>
-              <p className="section-desc" style={{ marginBottom: 0 }}>
+              <p className="section-desc staff-header-desc">
                 薬局の操作スタッフを管理し、パスワードとデバイス認証（パスキー）の登録・設定を行います。<br />
-                <strong style={{ color: 'var(--primary)' }}>
+                <strong className="staff-primary-note">
                   🔑 パスワードはソルト付きPBKDF2-SHA-256でハッシュ化され、平文で保存されることはありません。
                 </strong>
               </p>
             </div>
             <button
-              className="btn-primary flex-center gap-2"
-              style={{ padding: '0.6rem 1.2rem', fontSize: 'var(--fs-md)' }}
+              className="btn-primary flex-center gap-2 btn-add-staff"
               onClick={() => setIsAddStaffOpen(true)}
               disabled={!canManageStaff}
               title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -153,26 +131,12 @@ export default function StaffSettingsTab({
           </div>
 
           {isOnboardingStaffSetup && currentStaffRecord && (
-            <div
-              style={{
-                border: '1px solid #bfdbfe',
-                background: '#eff6ff',
-                color: '#1e3a8a',
-                borderRadius: '8px',
-                padding: '1rem',
-                marginBottom: '1.25rem',
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.75rem'
-              }}
-            >
+            <div className="onboarding-banner">
               <div>
-                <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
+                <strong className="onboarding-title">
                   {shouldPromptCurrentStaffPasskey ? 'パスキーを登録しましょう' : '次にスタッフを追加しましょう'}
                 </strong>
-                <span style={{ fontSize: 'var(--fs-base)', lineHeight: 1.6 }}>
+                <span className="onboarding-text">
                   {shouldPromptCurrentStaffPasskey
                     ? 'パスワードでも使えますが、日々のログインはパスキーにすると速く安全です。'
                     : '管理者の認証設定は完了しています。受付や調剤で使うスタッフを追加できます。'}
@@ -180,20 +144,18 @@ export default function StaffSettingsTab({
               </div>
               {shouldPromptCurrentStaffPasskey ? (
                 <button
-                  className="btn-primary flex-center gap-2"
+                  className="btn-primary flex-center gap-2 btn-onboarding-action"
                   onClick={() => handleRegisterPasskey(currentStaffRecord)}
                   disabled={!canManageStaff}
-                  style={{ padding: '0.55rem 1rem' }}
                 >
                   <Fingerprint size={16} />
                   <span>パスキーを登録</span>
                 </button>
               ) : (
                 <button
-                  className="btn-primary flex-center gap-2"
+                  className="btn-primary flex-center gap-2 btn-onboarding-action"
                   onClick={() => setIsAddStaffOpen(true)}
                   disabled={!canManageStaff}
-                  style={{ padding: '0.55rem 1rem' }}
                 >
                   <Plus size={16} />
                   <span>スタッフを追加</span>
@@ -204,26 +166,16 @@ export default function StaffSettingsTab({
 
           {/* Add Staff Modal/Form */}
           {isAddStaffOpen && (
-            <div 
-              style={{
-                background: 'rgba(255, 255, 255, 0.9)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '1.5rem',
-                marginBottom: '2rem',
-                boxShadow: 'var(--shadow-md)'
-              }}
-            >
-              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 600 }}>スタッフの新規追加</h3>
-              <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div className="form-grid" style={{ gap: '1rem' }}>
+            <div className="add-staff-card">
+              <h3 className="add-staff-title">スタッフの新規追加</h3>
+              <form onSubmit={handleAddStaff} className="add-staff-form">
+                <div className="form-grid add-staff-grid">
                   <div className="form-group">
-                    <label htmlFor="new-staff-name" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>スタッフ氏名</label>
+                    <label htmlFor="new-staff-name" className="add-staff-label">スタッフ氏名</label>
                     <input
                       id="new-staff-name"
                       type="text"
-                      className="form-control"
-                      style={{ width: '100%', maxWidth: 'none' }}
+                      className="form-control input-full-width"
                       placeholder="例: 佐藤 花子"
                       value={newStaffName}
                       onChange={(e) => setNewStaffName(e.target.value)}
@@ -232,11 +184,10 @@ export default function StaffSettingsTab({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="new-staff-role" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>職種・権限</label>
+                    <label htmlFor="new-staff-role" className="add-staff-label">職種・権限</label>
                     <select
                       id="new-staff-role"
-                      className="form-control"
-                      style={{ width: '100%', maxWidth: 'none', background: 'white' }}
+                      className="form-control select-full-white"
                       value={newStaffRole}
                       onChange={(e) => setNewStaffRole(e.target.value as any)}
                     >
@@ -246,15 +197,14 @@ export default function StaffSettingsTab({
                     </select>
                   </div>
 
-                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                    <label htmlFor="new-staff-password" style={{ fontWeight: 600, fontSize: 'var(--fs-md)' }}>
+                  <div className="form-group add-staff-full-group">
+                    <label htmlFor="new-staff-password" className="add-staff-label">
                       ログインパスワード（任意）
                     </label>
                     <input
                       id="new-staff-password"
                       type="password"
-                      className="form-control"
-                      style={{ width: '100%', maxWidth: 'none' }}
+                      className="form-control input-full-width"
                       placeholder="8文字以上。未入力の場合はパスキー登録が必要です"
                       value={newStaffPassword}
                       onChange={(e) => setNewStaffPassword(e.target.value)}
@@ -266,11 +216,10 @@ export default function StaffSettingsTab({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <div className="add-staff-actions">
                   <button
                     type="button"
-                    className="btn-secondary"
-                    style={{ padding: '0.5rem 1.25rem' }}
+                    className="btn-secondary btn-staff-cancel"
                     onClick={() => {
                       setIsAddStaffOpen(false);
                       setNewStaffName('');
@@ -282,8 +231,7 @@ export default function StaffSettingsTab({
                   </button>
                   <button
                     type="submit"
-                    className="btn-primary flex-center gap-2"
-                    style={{ padding: '0.5rem 1.5rem' }}
+                    className="btn-primary flex-center gap-2 btn-staff-save"
                     disabled={isSubmittingStaff || !canManageStaff}
                   >
                     {isSubmittingStaff && <Loader2 size={16} className="animate-spin" />}
@@ -297,26 +245,19 @@ export default function StaffSettingsTab({
           <section
             data-testid="role-permission-policy-panel"
             aria-label="権限ロール設定"
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '1.5rem',
-              background: '#f8fafc'
-            }}
+            className="role-policy-panel"
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <div className="role-policy-head">
               <div>
-                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 700 }}>権限ロール設定</h3>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
+                <h3 className="role-policy-title">権限ロール設定</h3>
+                <p className="role-policy-desc">
                   管理者は全権限固定。薬剤師・事務は店舗の運用に合わせて保存されます。
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="role-policy-actions">
                 <button
                   type="button"
-                  className="btn-secondary"
-                  style={{ padding: '0.45rem 0.85rem', fontSize: 'var(--fs-md)' }}
+                  className="btn-secondary btn-role-reset"
                   onClick={handleResetRolePermissionPolicy}
                   disabled={!canManageStaff || isSavingRolePermissionPolicy}
                   title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -325,8 +266,7 @@ export default function StaffSettingsTab({
                 </button>
                 <button
                   type="button"
-                  className="btn-primary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.95rem', fontSize: 'var(--fs-md)' }}
+                  className="btn-primary flex-center gap-2 btn-role-save"
                   onClick={handleSaveRolePermissionPolicy}
                   disabled={!canManageStaff || isSavingRolePermissionPolicy}
                   title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -337,58 +277,32 @@ export default function StaffSettingsTab({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div className="role-policy-grid">
               {ROLE_PERMISSION_SETTING_ROLES.map((role) => {
                 const isAdminRole = role === 'admin';
                 return (
                   <div
                     key={role}
-                    style={{
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      background: 'white',
-                      overflow: 'hidden'
-                    }}
+                    className="role-card"
                   >
                     <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.5rem',
-                        padding: '0.65rem 0.75rem',
-                        borderBottom: '1px solid #e2e8f0',
-                        background: isAdminRole ? '#faf5ff' : role === 'pharmacist' ? '#eff6ff' : '#f0fdf4',
-                        color: isAdminRole ? '#6b21a8' : role === 'pharmacist' ? '#1d4ed8' : '#15803d',
-                        fontWeight: 800,
-                        fontSize: 'var(--fs-md)'
-                      }}
+                      className={`role-card-header ${role}`}
                     >
                       <span>{getRoleLabel(role)}</span>
                       {isAdminRole && (
-                        <span style={{ fontSize: 'var(--fs-xs)', fontWeight: 800, color: '#6b21a8' }}>
+                        <span className="role-fixed-badge">
                           固定
                         </span>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gap: '0.4rem', padding: '0.75rem' }}>
+                    <div className="role-permissions-list">
                       {ALL_PERMISSION_ACTIONS.map((action) => {
                         const checked = !!rolePermissionPolicy[role]?.includes(action);
                         const disabled = isAdminRole || !canManageStaff || isSavingRolePermissionPolicy;
                         return (
                           <label
                             key={`${role}-${action}`}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '18px 1fr',
-                              alignItems: 'center',
-                              gap: '0.45rem',
-                              minHeight: '28px',
-                              color: disabled && !checked ? 'var(--text-ghost)' : 'var(--text-main)',
-                              fontSize: 'var(--fs-md)',
-                              fontWeight: checked ? 700 : 500,
-                              cursor: disabled ? 'not-allowed' : 'pointer'
-                            }}
+                            className={`role-permission-item ${disabled ? 'disabled' : ''} ${checked ? 'checked' : ''}`}
                           >
                             <input
                               type="checkbox"
@@ -411,26 +325,19 @@ export default function StaffSettingsTab({
           <section
             data-testid="staff-recovery-panel"
             aria-label="復旧・退職対応"
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '1rem',
-              marginBottom: '1.5rem',
-              background: '#fff7ed'
-            }}
+            className="recovery-panel"
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <div className="recovery-head">
               <div>
-                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 700 }}>復旧・退職対応</h3>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
+                <h3 className="recovery-title">復旧・退職対応</h3>
+                <p className="recovery-desc">
                   端末移行、退職、パスキー紛失時に、対象スタッフと確認事項をそろえてから認証情報を復旧します。
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="recovery-head-actions">
                 <button
                   type="button"
-                  className="btn-secondary flex-center gap-2"
-                  style={{ padding: '0.45rem 0.8rem' }}
+                  className="btn-secondary flex-center gap-2 btn-recovery-csv"
                   onClick={handleExportStaffAccessRecoveryMonthlyReviewCsv}
                   disabled={!canViewAuditLogs || isExportingStaffAccessRecoveryMonthlyReview}
                   title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
@@ -439,18 +346,17 @@ export default function StaffSettingsTab({
                   {isExportingStaffAccessRecoveryMonthlyReview ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
                   <span>月次棚卸CSV</span>
                 </button>
-                <span style={staffRecoveryStatusStyle(staffRecoveryChecklist.status)}>
+                <span className={`recovery-status-badge ${staffRecoveryChecklist.status}`}>
                   {staffRecoveryChecklist.statusLabel}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '0.9rem' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
+            <div className="recovery-inputs-grid">
+              <label className="recovery-input-label">
                 対象スタッフ
                 <select
-                  className="form-control"
-                  style={{ width: '100%', maxWidth: 'none', background: 'white' }}
+                  className="form-control select-full-white"
                   value={staffRecoveryTargetUserId}
                   onChange={(e) => setStaffRecoveryTargetUserId(e.target.value)}
                   disabled={!canManageStaff || isHandlingStaffRecovery}
@@ -464,11 +370,10 @@ export default function StaffSettingsTab({
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
+              <label className="recovery-input-label">
                 理由
                 <select
-                  className="form-control"
-                  style={{ width: '100%', maxWidth: 'none', background: 'white' }}
+                  className="form-control select-full-white"
                   value={staffRecoveryReason}
                   onChange={(e) => setStaffRecoveryReason(e.target.value as StaffRecoveryReason)}
                   disabled={!canManageStaff || isHandlingStaffRecovery}
@@ -479,12 +384,11 @@ export default function StaffSettingsTab({
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)' }}>
+              <label className="recovery-input-label">
                 再設定パスワード
                 <input
                   type="password"
-                  className="form-control"
-                  style={{ width: '100%', maxWidth: 'none' }}
+                  className="form-control input-full-width"
                   value={staffRecoveryPassword}
                   onChange={(e) => setStaffRecoveryPassword(e.target.value)}
                   autoComplete="new-password"
@@ -495,11 +399,10 @@ export default function StaffSettingsTab({
               </label>
             </div>
 
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 700, fontSize: 'var(--fs-md)', marginBottom: '0.9rem' }}>
+            <label className="recovery-note-label">
               対応メモ
               <textarea
-                className="form-control"
-                style={{ width: '100%', maxWidth: 'none', minHeight: '72px', resize: 'vertical' }}
+                className="form-control recovery-textarea"
                 value={staffRecoveryNote}
                 onChange={(e) => setStaffRecoveryNote(e.target.value)}
                 placeholder="例: 本人確認済み、旧端末は回収済み"
@@ -507,36 +410,25 @@ export default function StaffSettingsTab({
               />
             </label>
 
-            <div style={{ display: 'grid', gap: '0.45rem', marginBottom: '1rem' }}>
+            <div className="recovery-steps-list">
               {staffRecoveryChecklist.steps.map((step) => (
                 <div
                   key={step.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                    gap: '0.65rem',
-                    alignItems: 'center',
-                    padding: '0.55rem 0.65rem',
-                    border: '1px solid #fed7aa',
-                    borderRadius: '8px',
-                    background: 'rgba(255, 255, 255, 0.82)',
-                    fontSize: 'var(--fs-md)'
-                  }}
+                  className="recovery-step-row"
                 >
-                  <strong style={{ color: 'var(--text-main)' }}>{step.label}</strong>
-                  <span style={staffRecoveryStatusStyle(step.status)}>
+                  <strong className="recovery-step-label">{step.label}</strong>
+                  <span className={`recovery-status-badge ${step.status}`}>
                     {step.status === 'complete' ? 'OK' : step.status === 'attention' ? '要確認' : '要対応'}
                   </span>
-                  <span style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>{step.detail}</span>
+                  <span className="recovery-step-detail">{step.detail}</span>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div className="recovery-actions-bar">
               <button
                 type="button"
-                className="btn-secondary flex-center gap-2"
-                style={{ padding: '0.5rem 0.9rem' }}
+                className="btn-secondary flex-center gap-2 btn-recovery-action"
                 onClick={handleResetStaffRecoveryPassword}
                 disabled={!canManageStaff || isHandlingStaffRecovery || !staffRecoveryTarget || staffRecoveryPassword.trim().length < 8}
                 title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : staffRecoveryPassword.trim().length < 8 ? '8文字以上の新しいパスワードを入力してください' : undefined}
@@ -546,8 +438,7 @@ export default function StaffSettingsTab({
               </button>
               <button
                 type="button"
-                className="btn-secondary flex-center gap-2"
-                style={{ padding: '0.5rem 0.9rem' }}
+                className="btn-secondary flex-center gap-2 btn-recovery-action"
                 onClick={handleClearStaffRecoveryPasskey}
                 disabled={!canManageStaff || isHandlingStaffRecovery || !staffRecoveryTarget?.passkeyCredentialId}
                 title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : !staffRecoveryTarget?.passkeyCredentialId ? '解除するパスキーがありません' : undefined}
@@ -558,8 +449,7 @@ export default function StaffSettingsTab({
               {staffRecoveryReason === 'staff_retirement' && (
                 <button
                   type="button"
-                  className="btn-primary flex-center gap-2"
-                  style={{ padding: '0.5rem 0.95rem' }}
+                  className="btn-primary flex-center gap-2 btn-recovery-primary"
                   onClick={handleRecordStaffRetirementCheck}
                   disabled={!canManageStaff || isHandlingStaffRecovery || !staffRecoveryTarget}
                   title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
@@ -572,85 +462,52 @@ export default function StaffSettingsTab({
           </section>
 
           {/* Staff List Table */}
-          <div className="table-responsive" style={{ background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-            <table className="audit-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div className="table-responsive staff-table-wrapper">
+            <table className="audit-table staff-table">
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>氏名</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>職種・権限</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>パスワード</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)' }}>パスキーデバイス</th>
-                  <th style={{ padding: '0.75rem 1rem', fontSize: 'var(--fs-md)', fontWeight: 600, color: 'var(--text-muted)', textAlign: 'right' }}>操作</th>
+                <tr className="staff-thead-tr">
+                  <th className="staff-th">氏名</th>
+                  <th className="staff-th">職種・権限</th>
+                  <th className="staff-th">パスワード</th>
+                  <th className="staff-th">パスキーデバイス</th>
+                  <th className="staff-th-action">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {staffList.map((staff) => {
                   const isLastCredentialedAdmin = staff.role === 'admin' && hasLoginCredential(staff) && credentialedAdminCount <= 1;
                   return (
-                  <tr key={staff.userId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '1rem', fontSize: 'var(--fs-base)', fontWeight: 600, color: 'var(--text-main)' }}>
+                  <tr key={staff.userId} className="staff-tr">
+                    <td className="staff-td-name">
                       {staff.name}
                       {isInitialAdminUser(staff) && (
-                        <span
-                          style={{
-                            marginLeft: '0.5rem',
-                            padding: '0.12rem 0.4rem',
-                            borderRadius: '4px',
-                            background: '#fef3c7',
-                            color: '#92400e',
-                            fontSize: 'var(--fs-xs)',
-                            fontWeight: 700
-                          }}
-                        >
+                        <span className="badge-initial-admin">
                           初期管理者
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: 'var(--fs-md)' }}>
-                      <span 
-                        style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: 'var(--fs-sm)',
-                          fontWeight: 600,
-                          background: staff.role === 'pharmacist' ? '#eff6ff' : staff.role === 'clerk' ? '#f0fdf4' : '#faf5ff',
-                          color: staff.role === 'pharmacist' ? '#1d4ed8' : staff.role === 'clerk' ? '#15803d' : '#6b21a8'
-                        }}
-                      >
+                    <td className="staff-td-role">
+                      <span className={`badge-role ${staff.role}`}>
                         {staff.role === 'pharmacist' ? '薬剤師' : staff.role === 'clerk' ? '事務' : '管理者'}
                       </span>
                     </td>
-                    <td
-                      style={{
-                        padding: '1rem',
-                        fontSize: 'var(--fs-md)',
-                        color: staff.passwordHash && staff.salt ? '#16a34a' : 'var(--text-ghost)',
-                        fontWeight: 500
-                      }}
-                    >
+                    <td className={`staff-td-password ${staff.passwordHash && staff.salt ? 'set' : 'unset'}`}>
                       {staff.passwordHash && staff.salt ? '● 設定済み (PBKDF2-SHA-256)' : '未設定'}
                     </td>
-                    <td style={{ padding: '1rem', fontSize: 'var(--fs-md)' }}>
+                    <td className="staff-td-passkey">
                       {staff.passkeyCredentialId ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#2563eb', fontWeight: 500 }}>
+                        <span className="passkey-registered">
                           <Fingerprint size={14} />
                           <span>登録済み (WebAuthn)</span>
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-md)' }}>未登録</span>
+                        <span className="passkey-unregistered">未登録</span>
                       )}
                     </td>
-                    <td style={{ padding: '1rem', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <td className="staff-td-action">
+                      <div className="staff-actions-cell">
                         <button
-                          className="btn-secondary flex-center gap-1"
-                          style={{
-                            padding: '0.35rem 0.75rem',
-                            fontSize: 'var(--fs-sm)',
-                            borderColor: staff.passkeyCredentialId ? '#d1d5db' : '#3b82f6',
-                            color: staff.passkeyCredentialId ? 'var(--text-main)' : '#2563eb',
-                            background: staff.passkeyCredentialId ? 'transparent' : 'rgba(37, 99, 235, 0.03)'
-                          }}
+                          className={`btn-secondary flex-center gap-1 btn-passkey-register ${staff.passkeyCredentialId ? 'registered' : 'unregistered'}`}
                           onClick={() => handleRegisterPasskey(staff)}
                           title="生体認証（指紋・顔認証）デバイスをログインキーとして登録します"
                           disabled={!canManageStaff}
@@ -659,13 +516,12 @@ export default function StaffSettingsTab({
                           <span>{staff.passkeyCredentialId ? '再登録' : 'パスキーを登録'}</span>
                         </button>
                         {!hasLoginCredential(staff) && (
-                          <span style={{ color: '#b45309', fontSize: 'var(--fs-sm)', fontWeight: 700 }}>
+                          <span className="badge-unregistered">
                             要登録
                           </span>
                         )}
                         <button
-                          className="btn-trash flex-center"
-                          style={{ padding: '0.4rem', color: '#ef4444' }}
+                          className="btn-trash flex-center btn-trash-staff"
                           onClick={() => handleDeleteStaff(staff)}
                           title={isLastCredentialedAdmin ? '最後の認証済み管理者は削除できません' : 'スタッフアカウントを削除'}
                           aria-label={`${staff.name}を削除`}
@@ -681,6 +537,448 @@ export default function StaffSettingsTab({
               </tbody>
             </table>
           </div>
+
+          <style jsx>{`
+            .staff-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 1.5rem;
+            }
+            .staff-header-desc {
+              margin-bottom: 0;
+            }
+            .staff-primary-note {
+              color: var(--primary);
+            }
+            .btn-add-staff {
+              padding: 0.6rem 1.2rem;
+              font-size: var(--fs-md);
+            }
+            .onboarding-banner {
+              border: 1px solid #bfdbfe;
+              background: #eff6ff;
+              color: #1e3a8a;
+              border-radius: 8px;
+              padding: 1rem;
+              margin-bottom: 1.25rem;
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              justify-content: space-between;
+              gap: 0.75rem;
+            }
+            .onboarding-title {
+              display: block;
+              margin-bottom: 0.25rem;
+            }
+            .onboarding-text {
+              font-size: var(--fs-base);
+              line-height: 1.6;
+            }
+            .btn-onboarding-action {
+              padding: 0.55rem 1rem;
+            }
+            .add-staff-card {
+              background: rgba(255, 255, 255, 0.9);
+              border: 1px solid var(--border);
+              border-radius: var(--radius-lg);
+              padding: 1.5rem;
+              margin-bottom: 2rem;
+              box-shadow: var(--shadow-md);
+            }
+            .add-staff-title {
+              margin: 0 0 1rem 0;
+              font-size: 1.1rem;
+              font-weight: 600;
+            }
+            .add-staff-form {
+              display: flex;
+              flex-direction: column;
+              gap: 1.25rem;
+            }
+            .add-staff-grid {
+              gap: 1rem;
+            }
+            .add-staff-label {
+              font-weight: 600;
+              font-size: var(--fs-md);
+            }
+            .input-full-width {
+              width: 100%;
+              max-width: none;
+            }
+            .select-full-white {
+              width: 100%;
+              max-width: none;
+              background: white;
+            }
+            .add-staff-full-group {
+              grid-column: 1 / -1;
+            }
+            .add-staff-actions {
+              display: flex;
+              gap: 0.75rem;
+              justify-content: flex-end;
+              margin-top: 0.5rem;
+            }
+            .btn-staff-cancel {
+              padding: 0.5rem 1.25rem;
+            }
+            .btn-staff-save {
+              padding: 0.5rem 1.5rem;
+            }
+            .role-policy-panel {
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 1rem;
+              margin-bottom: 1.5rem;
+              background: #f8fafc;
+            }
+            .role-policy-head {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 1rem;
+              flex-wrap: wrap;
+              margin-bottom: 1rem;
+            }
+            .role-policy-title {
+              margin: 0 0 0.35rem;
+              font-size: 1rem;
+              font-weight: 700;
+            }
+            .role-policy-desc {
+              margin: 0;
+              color: var(--text-muted);
+              font-size: var(--fs-md);
+              line-height: 1.55;
+            }
+            .role-policy-actions {
+              display: flex;
+              gap: 0.5rem;
+              flex-wrap: wrap;
+              justify-content: flex-end;
+            }
+            .btn-role-reset {
+              padding: 0.45rem 0.85rem;
+              font-size: var(--fs-md);
+            }
+            .btn-role-save {
+              padding: 0.45rem 0.95rem;
+              font-size: var(--fs-md);
+            }
+            .role-policy-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 0.75rem;
+            }
+            .role-card {
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              background: white;
+              overflow: hidden;
+            }
+            .role-card-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 0.5rem;
+              padding: 0.65rem 0.75rem;
+              border-bottom: 1px solid #e2e8f0;
+              font-weight: 800;
+              font-size: var(--fs-md);
+            }
+            .role-card-header.admin {
+              background: #faf5ff;
+              color: #6b21a8;
+            }
+            .role-card-header.pharmacist {
+              background: #eff6ff;
+              color: #1d4ed8;
+            }
+            .role-card-header.clerk {
+              background: #f0fdf4;
+              color: #15803d;
+            }
+            .role-fixed-badge {
+              font-size: var(--fs-xs);
+              font-weight: 800;
+              color: #6b21a8;
+            }
+            .role-permissions-list {
+              display: grid;
+              gap: 0.4rem;
+              padding: 0.75rem;
+            }
+            .role-permission-item {
+              display: grid;
+              grid-template-columns: 18px 1fr;
+              align-items: center;
+              gap: 0.45rem;
+              min-height: 28px;
+              color: var(--text-main);
+              font-size: var(--fs-md);
+              font-weight: 500;
+              cursor: pointer;
+            }
+            .role-permission-item.disabled {
+              color: var(--text-ghost);
+              cursor: not-allowed;
+            }
+            .role-permission-item.checked {
+              font-weight: 700;
+              color: var(--text-main);
+            }
+            .recovery-panel {
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 1rem;
+              margin-bottom: 1.5rem;
+              background: #fff7ed;
+            }
+            .recovery-head {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 1rem;
+              flex-wrap: wrap;
+              margin-bottom: 1rem;
+            }
+            .recovery-title {
+              margin: 0 0 0.35rem;
+              font-size: 1rem;
+              font-weight: 700;
+            }
+            .recovery-desc {
+              margin: 0;
+              color: var(--text-muted);
+              font-size: var(--fs-md);
+              line-height: 1.55;
+            }
+            .recovery-head-actions {
+              display: flex;
+              align-items: center;
+              gap: 0.55rem;
+              flex-wrap: wrap;
+              justify-content: flex-end;
+            }
+            .btn-recovery-csv {
+              padding: 0.45rem 0.8rem;
+            }
+            .recovery-status-badge {
+              display: inline-flex;
+              align-items: center;
+              border-radius: 999px;
+              padding: 0.14rem 0.55rem;
+              font-size: var(--fs-xs);
+              font-weight: 800;
+              white-space: nowrap;
+            }
+            .recovery-status-badge.complete {
+              color: #15803d;
+              background: #f0fdf4;
+              border: 1px solid #86efac;
+            }
+            .recovery-status-badge.attention {
+              color: #b45309;
+              background: #fffbeb;
+              border: 1px solid #fcd34d;
+            }
+            .recovery-status-badge.blocked {
+              color: #b91c1c;
+              background: #fef2f2;
+              border: 1px solid #fca5a5;
+            }
+            .recovery-inputs-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 0.75rem;
+              margin-bottom: 0.9rem;
+            }
+            .recovery-input-label {
+              display: flex;
+              flex-direction: column;
+              gap: 0.35rem;
+              fontWeight: 700;
+              font-size: var(--fs-md);
+            }
+            .recovery-note-label {
+              display: flex;
+              flex-direction: column;
+              gap: 0.35rem;
+              font-weight: 700;
+              font-size: var(--fs-md);
+              margin-bottom: 0.9rem;
+            }
+            .recovery-textarea {
+              width: 100%;
+              max-width: none;
+              min-height: 72px;
+              resize: vertical;
+            }
+            .recovery-steps-list {
+              display: grid;
+              gap: 0.45rem;
+              margin-bottom: 1rem;
+            }
+            .recovery-step-row {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+              gap: 0.65rem;
+              align-items: center;
+              padding: 0.55rem 0.65rem;
+              border: 1px solid #fed7aa;
+              border-radius: 8px;
+              background: rgba(255, 255, 255, 0.82);
+              font-size: var(--fs-md);
+            }
+            .recovery-step-label {
+              color: var(--text-main);
+            }
+            .recovery-step-detail {
+              color: var(--text-muted);
+              line-height: 1.5;
+            }
+            .recovery-actions-bar {
+              display: flex;
+              gap: 0.65rem;
+              flex-wrap: wrap;
+              justify-content: flex-end;
+            }
+            .btn-recovery-action {
+              padding: 0.5rem 0.9rem;
+            }
+            .btn-recovery-primary {
+              padding: 0.5rem 0.95rem;
+            }
+            .staff-table-wrapper {
+              background: white;
+              border-radius: var(--radius-md);
+              border: 1px solid var(--border);
+              overflow: hidden;
+            }
+            .staff-table {
+              width: 100%;
+              border-collapse: collapse;
+              text-align: left;
+            }
+            .staff-thead-tr {
+              background: #f8fafc;
+              border-bottom: 1px solid var(--border);
+            }
+            .staff-th {
+              padding: 0.75rem 1rem;
+              font-size: var(--fs-md);
+              font-weight: 600;
+              color: var(--text-muted);
+            }
+            .staff-th-action {
+              padding: 0.75rem 1rem;
+              font-size: var(--fs-md);
+              font-weight: 600;
+              color: var(--text-muted);
+              text-align: right;
+            }
+            .staff-tr {
+              border-bottom: 1px solid #f1f5f9;
+            }
+            .staff-td-name {
+              padding: 1rem;
+              font-size: var(--fs-base);
+              font-weight: 600;
+              color: var(--text-main);
+            }
+            .badge-initial-admin {
+              margin-left: 0.5rem;
+              padding: 0.12rem 0.4rem;
+              border-radius: 4px;
+              background: #fef3c7;
+              color: #92400e;
+              font-size: var(--fs-xs);
+              font-weight: 700;
+            }
+            .staff-td-role {
+              padding: 1rem;
+              font-size: var(--fs-md);
+            }
+            .badge-role {
+              padding: 0.2rem 0.5rem;
+              border-radius: 4px;
+              font-size: var(--fs-sm);
+              font-weight: 600;
+            }
+            .badge-role.pharmacist {
+              background: #eff6ff;
+              color: #1d4ed8;
+            }
+            .badge-role.clerk {
+              background: #f0fdf4;
+              color: #15803d;
+            }
+            .badge-role.admin {
+              background: #faf5ff;
+              color: #6b21a8;
+            }
+            .staff-td-password {
+              padding: 1rem;
+              font-size: var(--fs-md);
+              font-weight: 500;
+            }
+            .staff-td-password.set {
+              color: #16a34a;
+            }
+            .staff-td-password.unset {
+              color: var(--text-ghost);
+            }
+            .staff-td-passkey {
+              padding: 1rem;
+              font-size: var(--fs-md);
+            }
+            .passkey-registered {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.25rem;
+              color: #2563eb;
+              font-weight: 500;
+            }
+            .passkey-unregistered {
+              color: var(--text-ghost);
+              font-size: var(--fs-md);
+            }
+            .staff-td-action {
+              padding: 1rem;
+              text-align: right;
+            }
+            .staff-actions-cell {
+              display: inline-flex;
+              gap: 0.5rem;
+              align-items: center;
+            }
+            .btn-passkey-register {
+              padding: 0.35rem 0.75rem;
+              font-size: var(--fs-sm);
+            }
+            .btn-passkey-register.registered {
+              border-color: #d1d5db;
+              color: var(--text-main);
+              background: transparent;
+            }
+            .btn-passkey-register.unregistered {
+              border-color: #3b82f6;
+              color: #2563eb;
+              background: rgba(37, 99, 235, 0.03);
+            }
+            .badge-unregistered {
+              color: #b45309;
+              font-size: var(--fs-sm);
+              font-weight: 700;
+            }
+            .btn-trash-staff {
+              padding: 0.4rem;
+              color: #ef4444;
+            }
+          `}</style>
         </div>
   );
 }

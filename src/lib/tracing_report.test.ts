@@ -62,6 +62,51 @@ describe('Tracing Report Helpers & Engine', () => {
     assert.ok(draft.proposal?.includes('血圧手帳の持参指導'));
   });
 
+  test('buildAutoTracingReportDraft EXCLUDES unconfirmed AI draft entries (aiStatus === unconfirmed) from report', () => {
+    const draft = buildAutoTracingReportDraft({
+      patientName: '佐藤 二郎',
+      soapProblems: [
+        {
+          title: '糖尿病・服薬指導',
+          entries: [
+            {
+              type: 'S',
+              text: '【AI下書き未確認S】患者は朝食後のみ服用と申告',
+              origin: 'ai_draft',
+              aiStatus: 'unconfirmed'
+            },
+            {
+              type: 'S',
+              text: '【承認済S】食後血糖値の安定を自覚',
+              origin: 'ai_draft',
+              aiStatus: 'approved'
+            },
+            {
+              type: 'P',
+              text: '【AI下書き未確認P】AIが勝手に生成した未確認の減薬提案',
+              origin: 'ai_draft',
+              aiStatus: 'unconfirmed'
+            },
+            {
+              type: 'P',
+              text: '【手書きP】低血糖症状の有無を確認し手帳指導',
+              origin: 'manual',
+              aiStatus: 'approved'
+            }
+          ]
+        }
+      ]
+    });
+
+    // 未確認エントリが含まれていないことの検証
+    assert.strictEqual(draft.patientCondition?.includes('AI下書き未確認S'), false);
+    assert.strictEqual(draft.proposal?.includes('AI下書き未確認P'), false);
+
+    // 承認済みおよび手書きエントリは正常に含まれることの検証
+    assert.ok(draft.patientCondition?.includes('【承認済S】食後血糖値の安定を自覚'));
+    assert.ok(draft.proposal?.includes('【手書きP】低血糖症状の有無を確認し手帳指導'));
+  });
+
   test('generateTracingReportPrintHtml produces clean A4 printable HTML', () => {
     const html = generateTracingReportPrintHtml(
       {

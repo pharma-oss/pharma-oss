@@ -54,3 +54,4 @@ fetch_shiori.log
 
 # メイン端末(hub)のサテライト同期用ローカルストア(患者データを含む暗号化SQLite)
 /data/
+/screenshots

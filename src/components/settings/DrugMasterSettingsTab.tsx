@@ -116,8 +116,8 @@ export default function DrugMasterSettingsTab({
 }: DrugMasterSettingsTabProps) {
   return (
         <>
-          <div className="settings-section glass" style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="settings-section glass med-inst-header">
+            <div className="med-inst-content">
               <div>
                 <h2>公式医療機関マスタ同期</h2>
                 <p className="section-desc">厚生労働省・支払基金の公式医療機関コードマスタ（CSV/JSON）をインポートして補完用データベースを更新します。</p>
@@ -177,15 +177,11 @@ export default function DrugMasterSettingsTab({
 
           <section
             aria-label="支払基金マスター更新候補"
-            style={{
-              marginTop: '1rem',
-              paddingTop: '1rem',
-              borderTop: '1px solid var(--border)'
-            }}
+            className="drug-master-section"
           >
             <div className="form-group">
               <label htmlFor="drug-master-official-page-html">支払基金ページHTML</label>
-              <div className="actions" style={{ margin: '0 0 0.5rem' }}>
+              <div className="actions actions-compact">
                 <button
                   className="btn-secondary flex-center gap-2"
                   onClick={handleFetchDrugMasterOfficialPage}
@@ -207,10 +203,10 @@ export default function DrugMasterSettingsTab({
                 rows={4}
                 placeholder="<a href=&quot;...&quot;>全件ファイル...</a>"
                 disabled={isUploading || isImportingDrugMasterFromUrl || isFetchingDrugMasterOfficialPage}
-                style={{ resize: 'vertical', minHeight: '96px' }}
+                className="textarea-code"
               />
             </div>
-            <div className="actions" style={{ marginTop: '0.5rem' }}>
+            <div className="actions actions-spaced">
               <button
                 className="btn-secondary flex-center gap-2"
                 onClick={handleExtractDrugMasterCandidates}
@@ -227,38 +223,23 @@ export default function DrugMasterSettingsTab({
             {drugMasterCandidates.length > 0 && (
               <div
                 aria-label="支払基金マスター更新候補一覧"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                  gap: '0.65rem',
-                  marginTop: '0.85rem'
-                }}
+                className="candidates-grid"
               >
                 {drugMasterCandidates.map((candidate) => (
                   <button
                     key={`${candidate.kind}-${candidate.url}`}
                     type="button"
-                    className="btn-secondary"
+                    className="btn-secondary candidate-card"
                     onClick={() => handleSelectDrugMasterCandidate(candidate)}
                     disabled={isUploading || isImportingDrugMasterFromUrl}
-                    style={{
-                      justifyContent: 'flex-start',
-                      alignItems: 'flex-start',
-                      textAlign: 'left',
-                      padding: '0.7rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.25rem',
-                      minHeight: '96px'
-                    }}
                   >
-                    <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                    <span className="candidate-title">
                       {drugMasterCandidateKindLabel[candidate.kind]} {candidate.fileType || ''}
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.4 }}>
+                    <span className="candidate-subtitle">
                       {candidate.title}
                     </span>
-                    <span style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', lineHeight: 1.35 }}>
+                    <span className="candidate-meta">
                       {[candidate.updateDate, candidate.sizeLabel].filter(Boolean).join(' / ') || '日付・サイズ未記載'}
                     </span>
                   </button>
@@ -269,11 +250,7 @@ export default function DrugMasterSettingsTab({
 
           <section
             aria-label="医薬品マスター仕様PDF本文照合"
-            style={{
-              marginTop: '1rem',
-              paddingTop: '1rem',
-              borderTop: '1px solid var(--border)'
-            }}
+            className="drug-master-section"
           >
             <div className="form-group">
               <label htmlFor="drug-master-spec-pdf-text">仕様PDF本文</label>
@@ -288,10 +265,10 @@ export default function DrugMasterSettingsTab({
                 rows={4}
                 placeholder="〈医薬品マスター〉 項番 項目名 モード 桁数 バイト数..."
                 disabled={isUploading || isImportingDrugMasterFromUrl || isFetchingDrugMasterSpecPdf}
-                style={{ resize: 'vertical', minHeight: '96px' }}
+                className="textarea-code"
               />
             </div>
-            <div className="actions" style={{ marginTop: '0.5rem', alignItems: 'center' }}>
+            <div className="actions actions-aligned">
               <button
                 className="btn-secondary flex-center gap-2"
                 onClick={handleFetchDrugMasterSpecPdf}
@@ -316,24 +293,14 @@ export default function DrugMasterSettingsTab({
               </button>
               {drugMasterSpecPdfReviewLabel && (
                 <span
-                  className="help-text"
-                  style={{
-                    color: drugMasterSpecPdfReview?.ok ? 'var(--success)' : 'var(--warning)',
-                    fontWeight: 700
-                  }}
+                  className={`help-text pdf-review-label ${drugMasterSpecPdfReview?.ok ? 'ok' : 'ng'}`}
                 >
                   {drugMasterSpecPdfReviewLabel}
                 </span>
               )}
             </div>
             {drugMasterSpecPdfReview && !drugMasterSpecPdfReview.ok && (
-              <div style={{
-                display: 'grid',
-                gap: '0.35rem',
-                marginTop: '0.75rem',
-                color: 'var(--text-muted)',
-                fontSize: 'var(--fs-sm)'
-              }}>
+              <div className="pdf-review-diffs">
                 {drugMasterSpecPdfReview.parseIssues.slice(0, 3).map((issue) => (
                   <span key={issue}>読取確認: {issue}</span>
                 ))}
@@ -400,14 +367,10 @@ export default function DrugMasterSettingsTab({
 
           <section
             aria-label="医薬品マスターロールバック"
-            style={{
-              marginTop: '1.5rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid var(--border)'
-            }}
+            className="rollback-section"
           >
-            <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem' }}>医薬品マスターロールバック</h3>
-            <p className="section-desc" style={{ marginBottom: '1rem' }}>
+            <h3 className="rollback-title">医薬品マスターロールバック</h3>
+            <p className="section-desc rollback-desc">
               更新時に出力されたロールバックJSONを選択すると、更新前の薬価・YJ・廃止状態へ戻せます。
             </p>
 
@@ -451,9 +414,9 @@ export default function DrugMasterSettingsTab({
           <section
             aria-label="薬品重複点検（マスタ統合）"
             data-testid="drug-duplicate-review-section"
-            style={{ padding: '1.2rem 0 0', marginTop: '1.2rem', borderTop: '1px solid var(--border)' }}
+            className="duplicate-section"
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+            <div className="duplicate-header">
               <div>
                 <h3>薬品重複点検（マスタ統合）</h3>
                 <p className="help-text">
@@ -477,24 +440,24 @@ export default function DrugMasterSettingsTab({
               <p className="help-text">候補が多いため、使用量の多い先頭50グループのみ表示しています。統合後に再度点検してください。</p>
             )}
             {drugDuplicateReport && drugDuplicateReport.groups.length > 0 && (
-              <div style={{ display: 'grid', gap: '0.85rem' }}>
+              <div className="duplicate-groups-grid">
                 {drugDuplicateReport.groups.slice(0, 50).map((group) => {
                   const targetCode = drugMergeTargets[group.groupId] || group.suggestedTargetCode;
                   return (
-                    <div key={group.groupId} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '0.85rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                    <div key={group.groupId} className="duplicate-group-card">
+                      <div className="duplicate-group-header">
                         <strong>{group.displayName}</strong>
                         <span className="help-text">{group.matchLabel} / {group.members.length}件</span>
                         {group.hasYjConflict && (
-                          <span className="help-text" style={{ color: 'var(--danger)' }}>
+                          <span className="help-text conflict-warning">
                             YJコードが異なるため統合不可（別薬品の可能性）
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gap: '0.45rem' }}>
+                      <div className="duplicate-members-list">
                         {group.members.map((member) => (
-                          <div key={member.code} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <div key={member.code} className="duplicate-member-row">
+                            <label className="member-radio-label">
                               <input
                                 type="radio"
                                 name={`drug-merge-target-${group.groupId}`}
@@ -506,14 +469,13 @@ export default function DrugMasterSettingsTab({
                               />
                               <span>残す</span>
                             </label>
-                            <span style={{ minWidth: '13rem' }}>{member.name}{member.isAbolished ? '（廃止）' : ''}</span>
+                            <span className="member-name">{member.name}{member.isAbolished ? '（廃止）' : ''}</span>
                             <span className="help-text">コード {member.code}{member.yjCode ? ` / YJ ${member.yjCode}` : ''}</span>
                             <span className="help-text">在庫 {member.stockQuantity}（ロット{member.stockLotCount}件） / 処方参照 {member.prescriptionItemCount}件{member.location ? ` / 棚 ${member.location}` : ''}</span>
                             {member.code !== targetCode && (
                               <button
                                 type="button"
-                                className="btn-secondary"
-                                style={{ padding: '0.25rem 0.6rem', fontSize: 'var(--fs-sm)' }}
+                                className="btn-secondary btn-merge-review"
                                 onClick={() => openDrugMergeReview(group, member.code)}
                                 disabled={!canUpdateDrugMaster || isApplyingDrugMerge || group.hasYjConflict}
                                 title={group.hasYjConflict ? 'YJコードが異なるため統合できません' : undefined}
@@ -525,24 +487,24 @@ export default function DrugMasterSettingsTab({
                         ))}
                       </div>
                       {drugMergeReview?.groupId === group.groupId && (
-                        <div style={{ marginTop: '0.7rem', padding: '0.7rem', borderRadius: '8px', background: 'var(--bg-subtle)' }} data-testid="drug-duplicate-merge-review">
-                          <strong style={{ display: 'block', marginBottom: '0.35rem' }}>統合内容の確認</strong>
+                        <div className="merge-review-card" data-testid="drug-duplicate-merge-review">
+                          <strong className="merge-review-title">統合内容の確認</strong>
                           <p className="help-text">{drugMergeReview.plan.summary}</p>
                           {drugMergeReview.plan.issues.length > 0 && (
-                            <ul className="help-text" style={{ margin: '0.35rem 0 0 1rem' }}>
+                            <ul className="help-text merge-issues-list">
                               {drugMergeReview.plan.issues.map((issue) => (
                                 <li key={issue.code}>{issue.severity === 'error' ? '統合不可: ' : '確認: '}{issue.message}</li>
                               ))}
                             </ul>
                           )}
                           {drugMergeReview.plan.conflicts.length > 0 && (
-                            <ul className="help-text" style={{ margin: '0.35rem 0 0 1rem' }}>
+                            <ul className="help-text merge-issues-list">
                               {drugMergeReview.plan.conflicts.map((conflict) => (
                                 <li key={conflict.field}>{conflict.label}: 統合元「{conflict.sourceValue}」→ 残す値「{conflict.targetValue}」</li>
                               ))}
                             </ul>
                           )}
-                          <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.6rem' }}>
+                          <div className="merge-review-actions">
                             <button
                               type="button"
                               className="btn-primary"

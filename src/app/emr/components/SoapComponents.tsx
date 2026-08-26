@@ -1,4 +1,4 @@
-import { ClipboardList, History, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardList, History, Sparkles, X } from 'lucide-react';
 import React from 'react';
 import type { SoapStructuredAssessment } from '@/db/types';
 import type { SoapHistoryTimelineEntry } from '@/lib/emr_patient_history';
@@ -22,6 +22,11 @@ export interface SoapEntry {
   id: string;
   type: SoapEntryType;
   text: string;
+  origin?: 'manual' | 'ai_draft' | 'legacy_unspecified';
+  aiStatus?: 'unconfirmed' | 'reviewed' | 'approved' | 'modified';
+  aiDraftId?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
 }
 
 export interface SoapProblem {
@@ -33,24 +38,57 @@ export interface SoapProblem {
 export const SoapEntryBox = React.memo(function SoapEntryBox({
   entry,
   onChange,
-  onRemove
+  onRemove,
+  onApprove
 }: {
   entry: SoapEntry;
   onChange: (text: string) => void;
   onRemove: () => void;
+  onApprove?: () => void;
 }) {
   const meta = soapEntryTypeMeta[entry.type];
+  const isUnconfirmedAi = entry.origin === 'ai_draft' && entry.aiStatus === 'unconfirmed';
+  const isApprovedAi = entry.origin === 'ai_draft' && (entry.aiStatus === 'approved' || entry.aiStatus === 'modified');
+  const isLegacy = entry.origin === 'legacy_unspecified';
+
   return (
-    <div className={`soap-entry-box ${meta.className}`}>
-      <div className="entry-header" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-        <span className="entry-badge" style={{ fontWeight: 850, fontSize: 'var(--fs-md)' }}>{entry.type}</span>
-        <span className="entry-sublabel" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{meta.subLabel}</span>
+    <div className={`soap-entry-box ${meta.className} ${isUnconfirmedAi ? 'entry-ai-unconfirmed' : ''} ${isApprovedAi ? 'entry-ai-approved' : ''}`}>
+      <div className="entry-header">
+        <span className="entry-badge">{entry.type}</span>
+        <span className="entry-sublabel">{meta.subLabel}</span>
+        {isUnconfirmedAi && (
+          <span className="ai-unconfirmed-badge" title="AIが自動提案した下書きです。薬剤師が内容を確認・承認してください">
+            <Sparkles size={12} aria-hidden="true" />
+            AI下書き（未確認）
+          </span>
+        )}
+        {isApprovedAi && (
+          <span className="ai-approved-badge" title="薬剤師が内容を確認・承認しました">
+            <CheckCircle2 size={12} aria-hidden="true" />
+            {entry.aiStatus === 'modified' ? 'AI下書き（修正済）' : 'AI下書き（承認済）'}
+          </span>
+        )}
+        {isLegacy && (
+          <span className="legacy-badge" title="マイグレーション前の既存記録です（由来記録なし）">
+            由来記録なし
+          </span>
+        )}
+        {isUnconfirmedAi && onApprove && (
+          <button
+            type="button"
+            onClick={onApprove}
+            className="btn-approve-ai"
+            title="このAI下書きをそのまま承認して確定記録にします"
+          >
+            <CheckCircle2 size={13} aria-hidden="true" />
+            <span>この内容で承認</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={onRemove}
           className="btn-remove-entry"
           aria-label={`${entry.type} エントリを削除`}
-          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7 }}
         >
           <X size={14} />
         </button>
@@ -60,17 +98,143 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
         onChange={(e) => onChange(e.target.value)}
         placeholder={`${meta.label} を入力...`}
         rows={3}
-        className="entry-textarea"
-        style={{
-          width: '100%',
-          padding: '0.5rem',
-          borderRadius: '6px',
-          border: '1px solid var(--border)',
-          fontSize: 'var(--fs-base)',
-          fontFamily: 'inherit',
-          resize: 'vertical'
-        }}
+        className={`entry-textarea ${isUnconfirmedAi ? 'textarea-ai-unconfirmed' : ''}`}
       />
+      {isUnconfirmedAi && (
+        <div className="ai-unconfirmed-hint">
+          <AlertCircle size={12} aria-hidden="true" />
+          <span>編集すると自動的に「修正済」となり、「この内容で承認」を押すと「承認済」として確定保存されます。</span>
+        </div>
+      )}
+      <style jsx>{`
+        .soap-entry-box.entry-ai-unconfirmed {
+          border: 1.5px solid #f59e0b;
+          background: #fffdfa;
+          border-radius: 8px;
+          padding: 0.5rem;
+        }
+        .soap-entry-box.entry-ai-approved {
+          border: 1px solid #bbf7d0;
+          background: #f0fdf4;
+          border-radius: 8px;
+          padding: 0.5rem;
+        }
+        .entry-header {
+          display: flex;
+          align-items: center;
+          gap: var(--space-1-5);
+          margin-bottom: var(--space-1);
+          flex-wrap: wrap;
+        }
+        .entry-badge {
+          font-weight: 850;
+          font-size: var(--fs-md);
+        }
+        .entry-sublabel {
+          font-size: var(--fs-xs);
+          color: var(--text-muted);
+        }
+        .ai-unconfirmed-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #b45309;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          padding: 0.15rem 0.45rem;
+          border-radius: 9999px;
+        }
+        .ai-approved-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: 0.72rem;
+          font-weight: 800;
+          color: #15803d;
+          background: #dcfce7;
+          border: 1px solid #bbf7d0;
+          padding: 0.15rem 0.45rem;
+          border-radius: 9999px;
+        }
+        .legacy-badge {
+          display: inline-flex;
+          align-items: center;
+          font-size: 0.68rem;
+          font-weight: 600;
+          color: var(--text-ghost);
+          background: var(--bg-subtle);
+          border: 1px solid var(--border);
+          padding: 0.1rem 0.35rem;
+          border-radius: 4px;
+        }
+        .btn-approve-ai {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: 0.75rem;
+          font-weight: 800;
+          color: #fff;
+          background: #10b981;
+          border: none;
+          padding: 0.2rem 0.55rem;
+          border-radius: 6px;
+          cursor: pointer;
+          margin-left: auto;
+          transition: background var(--transition-fast);
+        }
+        .btn-approve-ai:hover {
+          background: #059669;
+        }
+        .btn-remove-entry {
+          margin-left: 0.25rem;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          opacity: 0.7;
+          display: flex;
+          align-items: center;
+          padding: var(--space-0-5);
+          border-radius: var(--radius-sm);
+        }
+        .soap-entry-box:not(.entry-ai-unconfirmed) .btn-remove-entry {
+          margin-left: auto;
+        }
+        .btn-remove-entry:hover {
+          opacity: 1;
+          background: rgba(0, 0, 0, 0.05);
+        }
+        .entry-textarea {
+          width: 100%;
+          padding: var(--space-2);
+          border-radius: 6px;
+          border: 1px solid var(--border);
+          font-size: var(--fs-base);
+          font-family: inherit;
+          resize: vertical;
+          background: var(--bg-card);
+          color: var(--text-main);
+        }
+        .entry-textarea:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 2px var(--primary-soft);
+        }
+        .textarea-ai-unconfirmed {
+          border-color: #fde68a;
+          background: #ffffff;
+        }
+        .ai-unconfirmed-hint {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          font-size: 0.72rem;
+          color: #d97706;
+          margin-top: 0.35rem;
+          font-weight: 600;
+        }
+      `}</style>
     </div>
   );
 });

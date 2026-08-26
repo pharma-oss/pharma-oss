@@ -45,7 +45,7 @@ export default function FacilitySettingsTab({
     <div className="settings-section glass">
       <h2>薬局・施設基準設定 (令和8年6月改定対応)</h2>
       <p className="section-desc">調剤基本料や加算の算定に用いる薬局の施設基準を設定します。<br />
-      <strong style={{ color: 'var(--primary)' }}>令和8年6月1日施行の調剤報酬点数表に合わせた区分を選択できます。</strong></p>
+      <strong className="notice-highlight">令和8年6月1日施行の調剤報酬点数表に合わせた区分を選択できます。</strong></p>
 
       <h3 className="subsection-title">薬局基本情報</h3>
       <div className="form-grid">
@@ -206,7 +206,7 @@ export default function FacilitySettingsTab({
       </div>
 
       <h3 className="subsection-title">公式算定コード</h3>
-      <div className="actions" style={{ marginTop: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+      <div className="actions fee-code-actions">
         <span
           className="btn-tooltip-wrapper"
           data-disabled={!canManageFacility}
@@ -229,12 +229,8 @@ export default function FacilitySettingsTab({
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : isImportingOfficialFeeCodeCsv ? '読み込み中...' : ''}
         >
           <label
-            className="btn-secondary flex-center gap-2"
+            className={`btn-secondary flex-center gap-2 btn-upload-label ${isImportingOfficialFeeCodeCsv || !canManageFacility ? 'disabled' : ''}`}
             aria-disabled={isImportingOfficialFeeCodeCsv || !canManageFacility}
-            style={{
-              cursor: isImportingOfficialFeeCodeCsv || !canManageFacility ? 'not-allowed' : 'pointer',
-              opacity: isImportingOfficialFeeCodeCsv || !canManageFacility ? 0.6 : 1
-            }}
           >
             {isImportingOfficialFeeCodeCsv ? (
               <Loader2 size={16} className="spin" aria-hidden="true" />
@@ -259,12 +255,8 @@ export default function FacilitySettingsTab({
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : isReviewingOfficialFeeCodeMasterCsv ? '照合中...' : ''}
         >
           <label
-            className="btn-secondary flex-center gap-2"
+            className={`btn-secondary flex-center gap-2 btn-upload-label ${isReviewingOfficialFeeCodeMasterCsv || !canManageFacility ? 'disabled' : ''}`}
             aria-disabled={isReviewingOfficialFeeCodeMasterCsv || !canManageFacility}
-            style={{
-              cursor: isReviewingOfficialFeeCodeMasterCsv || !canManageFacility ? 'not-allowed' : 'pointer',
-              opacity: isReviewingOfficialFeeCodeMasterCsv || !canManageFacility ? 0.6 : 1
-            }}
           >
             {isReviewingOfficialFeeCodeMasterCsv ? (
               <Loader2 size={16} className="spin" aria-hidden="true" />
@@ -308,14 +300,7 @@ export default function FacilitySettingsTab({
         <>
           <div
             data-testid="official-fee-code-master-summary"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: '0.5rem',
-              marginBottom: '0.75rem',
-              color: 'var(--text-muted)',
-              fontSize: 'var(--fs-md)'
-            }}
+            className="fee-code-summary"
           >
             <span>候補 {officialFeeCodeMasterProposal.matchedCount}件</span>
             <span>未一致 {officialFeeCodeMasterProposal.unresolvedCount}件</span>
@@ -324,26 +309,14 @@ export default function FacilitySettingsTab({
           </div>
           <div
             data-testid="official-fee-code-master-preview"
-            style={{
-              display: 'grid',
-              gap: '0.5rem',
-              marginBottom: '0.85rem'
-            }}
+            className="fee-code-preview"
           >
             {officialFeeCodeMasterProposal.candidates.slice(0, 8).map((candidate) => (
               <div
                 key={`${candidate.key}-${candidate.officialFeeCode}`}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1.3fr) minmax(86px, 0.6fr) minmax(0, 1.2fr) minmax(56px, 0.5fr)',
-                  gap: '0.5rem',
-                  alignItems: 'center',
-                  fontSize: 'var(--fs-sm)',
-                  color: 'var(--text-muted)',
-                  wordBreak: 'break-word'
-                }}
+                className="fee-code-row"
               >
-                <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>{candidate.label}</span>
+                <span className="fee-code-label">{candidate.label}</span>
                 <code>{candidate.officialFeeCode}</code>
                 <span>{candidate.masterName}</span>
                 <span>{candidate.rowNumber}行目</span>
@@ -352,17 +325,9 @@ export default function FacilitySettingsTab({
             {officialFeeCodeMasterProposal.unresolvedItems.slice(0, 5).map((item) => (
               <div
                 key={`${item.key}-${item.reason}`}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1.3fr) minmax(86px, 0.6fr) minmax(0, 1.2fr) minmax(56px, 0.5fr)',
-                  gap: '0.5rem',
-                  alignItems: 'center',
-                  fontSize: 'var(--fs-sm)',
-                  color: 'var(--text-muted)',
-                  wordBreak: 'break-word'
-                }}
+                className="fee-code-row"
               >
-                <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>{item.label}</span>
+                <span className="fee-code-label">{item.label}</span>
                 <span>{item.reason === 'duplicate' ? '重複' : '未一致'}</span>
                 <span>{item.reason === 'duplicate' ? '複数候補あり' : '候補なし'}</span>
                 <span>-</span>
@@ -404,6 +369,51 @@ export default function FacilitySettingsTab({
           </button>
         </span>
       </div>
+
+      <style jsx>{`
+        .notice-highlight {
+          color: var(--primary);
+        }
+        .fee-code-actions {
+          margin-top: 0.5rem;
+          margin-bottom: 0.75rem;
+          align-items: center;
+        }
+        .btn-upload-label {
+          cursor: pointer;
+          opacity: 1;
+        }
+        .btn-upload-label.disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+        .fee-code-summary {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 0.5rem;
+          margin-bottom: 0.75rem;
+          color: var(--text-muted);
+          font-size: var(--fs-md);
+        }
+        .fee-code-preview {
+          display: grid;
+          gap: 0.5rem;
+          margin-bottom: 0.85rem;
+        }
+        .fee-code-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1.3fr) minmax(86px, 0.6fr) minmax(0, 1.2fr) minmax(56px, 0.5fr);
+          gap: 0.5rem;
+          align-items: center;
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+          word-break: break-word;
+        }
+        .fee-code-label {
+          font-weight: 700;
+          color: var(--text-main);
+        }
+      `}</style>
     </div>
   );
 }

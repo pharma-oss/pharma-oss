@@ -462,9 +462,18 @@ export interface PrescriptionItem {
   shortageRecordedAt?: string;
 }
 
+export type SoapEntryOrigin = 'manual' | 'ai_draft' | 'legacy_unspecified';
+export type SoapEntryAiStatus = 'unconfirmed' | 'reviewed' | 'approved' | 'modified';
+
 export interface SoapEntry {
+  id?: string;
   type: 'S' | 'O' | 'A' | 'P';
   text: string;
+  origin?: SoapEntryOrigin;
+  aiStatus?: SoapEntryAiStatus;
+  aiDraftId?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
 }
 
 export interface SoapProblem {
@@ -599,6 +608,8 @@ export type AuditActionType =
   | 'patient_medication_info_template'
   | 'follow_up_record'
   | 'ai_suggestion_review'
+  | 'ai_draft_approved'
+  | 'ai_draft_modified'
   | 'electronic_prescription'
   | 'external_device_handoff'
   | 'staff_create'

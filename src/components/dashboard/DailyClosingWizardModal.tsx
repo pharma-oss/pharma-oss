@@ -179,138 +179,84 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--card-bg, #ffffff)',
-          color: 'var(--foreground, #1e293b)',
-          borderRadius: '12px',
-          width: '90%',
-          maxWidth: '560px',
-          padding: '1.5rem',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          border: '1px solid var(--border-color, #e2e8f0)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ShieldCheck size={20} style={{ color: 'var(--primary, #2563eb)' }} />
-            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>日次締め・閉局ウィザード</h3>
+    <div className="closing-modal-overlay">
+      <div className="closing-modal-card">
+        <div className="closing-modal-header">
+          <div className="closing-title-box">
+            <ShieldCheck size={20} className="closing-title-icon" />
+            <h3 className="closing-title">日次締め・閉局ウィザード</h3>
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' }}
+            className="btn-closing-close"
           >
             <X size={18} />
           </button>
         </div>
 
         {permissionError ? (
-          <div style={{ padding: '1.5rem 0', textAlign: 'center' }}>
-            <AlertTriangle size={36} style={{ color: '#dc2626', marginBottom: '0.5rem' }} />
-            <p style={{ fontWeight: 600, color: '#b91c1c' }}>権限エラー</p>
-            <p style={{ fontSize: 'var(--fs-md)', color: '#475569' }}>{permissionError}</p>
+          <div className="closing-perm-error">
+            <AlertTriangle size={36} className="closing-perm-icon" />
+            <p className="closing-perm-title">権限エラー</p>
+            <p className="closing-perm-desc">{permissionError}</p>
             <button
               onClick={onClose}
-              style={{
-                marginTop: '1rem',
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                cursor: 'pointer',
-              }}
+              className="btn-perm-close"
             >
               閉じる
             </button>
           </div>
         ) : step === 1 ? (
           <div>
-            <p style={{ fontSize: 'var(--fs-md)', color: '#475569', lineHeight: 1.5 }}>
+            <p className="closing-desc">
               本日の受付・薬歴データの整合性をリアルタイム計測し、パスワード暗号化を適用した上で外部保存（NAS / USB）と監査ログ記録を完遂します。
             </p>
 
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '1rem',
-                margin: '1rem 0',
-                fontSize: 'var(--fs-sm)',
-              }}
-            >
-              <p style={{ margin: '0 0 0.5rem 0', fontWeight: 600, color: '#334155' }}>【本日のデータ実測状況】</p>
+            <div className="closing-stats-box">
+              <p className="closing-stats-title">【本日のデータ実測状況】</p>
               {isChecking ? (
-                <p style={{ color: '#64748b' }}>データベースを計測中…</p>
+                <p className="closing-stats-loading">データベースを計測中…</p>
               ) : (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                    <CheckCircle2 size={15} style={{ color: '#16a34a' }} />
+                  <div className="closing-stat-row">
+                    <CheckCircle2 size={15} className="icon-success" />
                     <span>本日受付件数: <strong>{checkSummary?.todayVisitsCount || 0}</strong> 件</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                  <div className="closing-stat-row">
                     {checkSummary?.uncompletedEmrCount === 0 ? (
-                      <CheckCircle2 size={15} style={{ color: '#16a34a' }} />
+                      <CheckCircle2 size={15} className="icon-success" />
                     ) : (
-                      <AlertTriangle size={15} style={{ color: '#d97706' }} />
+                      <AlertTriangle size={15} className="icon-warning" />
                     )}
                     <span>薬歴未完了件数: <strong>{checkSummary?.uncompletedEmrCount || 0}</strong> 件</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <HardDrive size={15} style={{ color: '#0284c7' }} />
+                  <div className="closing-stat-row">
+                    <HardDrive size={15} className="icon-info" />
                     <span>外部保存方式: {isFileSystemAccessSupported() ? '1クリックフォルダ保存 (File System Access)' : '暗号化JSON保存'}</span>
                   </div>
                 </>
               )}
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: 'var(--fs-sm)', fontWeight: 600, marginBottom: '0.35rem', color: '#334155' }}>
-                暗号化パスワード (AES-256) <span style={{ color: '#dc2626' }}>*必須</span>
+            <div className="closing-field-group">
+              <label className="closing-label">
+                暗号化パスワード (AES-256) <span className="closing-required-star">*必須</span>
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="8文字以上のバックアップ専用暗号化パスワードを入力"
-                style={{
-                  width: '100%',
-                  padding: '0.5rem',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: 'var(--fs-md)',
-                  boxSizing: 'border-box',
-                }}
+                className="closing-password-input"
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.25rem' }}>
+            <div className="closing-actions">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isProcessing}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  cursor: 'pointer',
-                  fontSize: 'var(--fs-md)',
-                }}
+                className="btn-closing-cancel"
               >
                 キャンセル
               </button>
@@ -321,54 +267,35 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                   setStep(2);
                   handleRunBackupAndClosing();
                 }}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: 'var(--primary, #2563eb)',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: 'var(--fs-md)',
-                  opacity: isChecking || isProcessing ? 0.6 : 1,
-                }}
+                className="btn-closing-submit"
               >
                 暗号化バックアップ & 閉局実行
               </button>
             </div>
           </div>
         ) : step === 2 ? (
-          <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-            <FileCheck size={36} style={{ color: 'var(--primary, #2563eb)', marginBottom: '1rem' }} />
-            <p style={{ fontWeight: 600, fontSize: 'var(--fs-base)' }}>{saveStatus}</p>
-            <p style={{ fontSize: 'var(--fs-sm)', color: '#64748b' }}>暗号化処理および検証記録を実行中です…</p>
+          <div className="closing-step2-box">
+            <FileCheck size={36} className="closing-step2-icon" />
+            <p className="closing-step2-status">{saveStatus}</p>
+            <p className="closing-step2-desc">暗号化処理および検証記録を実行中です…</p>
           </div>
         ) : (
           <div>
-            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <CheckCircle2 size={44} style={{ color: '#16a34a', marginBottom: '0.5rem' }} />
-              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.05rem', fontWeight: 600 }}>日次締め・暗号化外部保存が完了しました</h4>
-              <p style={{ fontSize: 'var(--fs-md)', color: '#475569' }}>
+            <div className="closing-step3-box">
+              <CheckCircle2 size={44} className="closing-step3-icon" />
+              <h4 className="closing-step3-title">日次締め・暗号化外部保存が完了しました</h4>
+              <p className="closing-step3-desc">
                 AES-256 暗号化バックアップおよび店舗設定は外部保存先へ正しく書き出され、監査ログへ記録されました。
               </p>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+            <div className="closing-step3-actions">
               <button
                 type="button"
                 onClick={() => {
                   onComplete();
                   onClose();
                 }}
-                style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: '#16a34a',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: 'var(--fs-md)',
-                }}
+                className="btn-closing-confirm"
               >
                 確認して閉じる
               </button>
@@ -376,6 +303,214 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
           </div>
         )}
       </div>
+
+      <style jsx>{`
+        .closing-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+        .closing-modal-card {
+          background: var(--card-bg, #ffffff);
+          color: var(--foreground, #1e293b);
+          border-radius: 12px;
+          width: 90%;
+          max-width: 560px;
+          padding: var(--space-6);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          border: 1px solid var(--border-color, #e2e8f0);
+        }
+        .closing-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--space-4);
+        }
+        .closing-title-box {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+        }
+        .closing-title-icon {
+          color: var(--primary, #2563eb);
+        }
+        .closing-title {
+          margin: 0;
+          font-size: 1.1rem;
+          font-weight: 600;
+        }
+        .btn-closing-close {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: #64748b;
+          padding: var(--space-1);
+        }
+        .closing-perm-error {
+          padding: var(--space-6) 0;
+          text-align: center;
+        }
+        .closing-perm-icon {
+          color: #dc2626;
+          margin-bottom: var(--space-2);
+        }
+        .closing-perm-title {
+          font-weight: 600;
+          color: #b91c1c;
+        }
+        .closing-perm-desc {
+          font-size: var(--fs-md);
+          color: #475569;
+        }
+        .btn-perm-close {
+          margin-top: var(--space-4);
+          padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-md);
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          cursor: pointer;
+        }
+        .closing-desc {
+          font-size: var(--fs-md);
+          color: #475569;
+          line-height: 1.5;
+        }
+        .closing-stats-box {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: var(--radius-md);
+          padding: var(--space-4);
+          margin: var(--space-4) 0;
+          font-size: var(--fs-sm);
+        }
+        .closing-stats-title {
+          margin: 0 0 var(--space-2) 0;
+          font-weight: 600;
+          color: #334155;
+        }
+        .closing-stats-loading {
+          color: #64748b;
+        }
+        .closing-stat-row {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          margin-bottom: var(--space-1-5);
+        }
+        .icon-success {
+          color: #16a34a;
+        }
+        .icon-warning {
+          color: #d97706;
+        }
+        .icon-info {
+          color: #0284c7;
+        }
+        .closing-field-group {
+          margin-bottom: var(--space-4);
+        }
+        .closing-label {
+          display: block;
+          font-size: var(--fs-sm);
+          font-weight: 600;
+          margin-bottom: var(--space-1-5);
+          color: #334155;
+        }
+        .closing-required-star {
+          color: #dc2626;
+        }
+        .closing-password-input {
+          width: 100%;
+          padding: var(--space-2);
+          border-radius: var(--radius-md);
+          border: 1px solid #cbd5e1;
+          font-size: var(--fs-md);
+          box-sizing: border-box;
+        }
+        .closing-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-2);
+          margin-top: var(--space-5);
+        }
+        .btn-closing-cancel {
+          padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-md);
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          cursor: pointer;
+          font-size: var(--fs-md);
+        }
+        .btn-closing-submit {
+          padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-md);
+          border: none;
+          background: var(--primary, #2563eb);
+          color: #ffffff;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: var(--fs-md);
+        }
+        .btn-closing-submit:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .closing-step2-box {
+          text-align: center;
+          padding: var(--space-8) var(--space-4);
+        }
+        .closing-step2-icon {
+          color: var(--primary, #2563eb);
+          margin-bottom: var(--space-4);
+        }
+        .closing-step2-status {
+          font-weight: 600;
+          font-size: var(--fs-base);
+        }
+        .closing-step2-desc {
+          font-size: var(--fs-sm);
+          color: #64748b;
+        }
+        .closing-step3-box {
+          text-align: center;
+          padding: var(--space-4) 0;
+        }
+        .closing-step3-icon {
+          color: #16a34a;
+          margin-bottom: var(--space-2);
+        }
+        .closing-step3-title {
+          margin: 0 0 var(--space-2) 0;
+          font-size: 1.05rem;
+          font-weight: 600;
+        }
+        .closing-step3-desc {
+          font-size: var(--fs-md);
+          color: #475569;
+        }
+        .closing-step3-actions {
+          display: flex;
+          justify-content: center;
+          margin-top: var(--space-4);
+        }
+        .btn-closing-confirm {
+          padding: var(--space-2) var(--space-5);
+          border-radius: var(--radius-md);
+          border: none;
+          background: #16a34a;
+          color: #ffffff;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: var(--fs-md);
+        }
+      `}</style>
     </div>
   );
 }

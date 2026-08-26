@@ -7,7 +7,12 @@ export interface TracingReportDraftInput {
   prescriptionItems?: Array<{ drugName: string; quantity?: number; usage?: string }>;
   soapProblems?: Array<{
     title: string;
-    entries: Array<{ type: 'S' | 'O' | 'A' | 'P'; text: string }>;
+    entries: Array<{
+      type: 'S' | 'O' | 'A' | 'P';
+      text: string;
+      origin?: 'manual' | 'ai_draft' | 'legacy_unspecified';
+      aiStatus?: 'unconfirmed' | 'reviewed' | 'approved' | 'modified';
+    }>;
   }>;
   assessment?: SoapStructuredAssessment;
   existingReport?: Partial<VisitTracingReport>;
@@ -50,7 +55,9 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
   }
 
   soapProblems.forEach((problem) => {
-    const sEntries = problem.entries.filter((e) => e.type === 'S');
+    // 未確認の AI 下書き（aiStatus: 'unconfirmed'）は院外文書（トレーシングレポート）への誤流出を防ぐため除外
+    const confirmedEntries = (problem.entries || []).filter((e) => e.aiStatus !== 'unconfirmed');
+    const sEntries = confirmedEntries.filter((e) => e.type === 'S');
     if (sEntries.length > 0) {
       conditionLines.push(`【${problem.title}】 ${sEntries.map((e) => e.text).join(' / ')}`);
     }
@@ -60,7 +67,8 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
 
   const assessmentLines: string[] = [];
   soapProblems.forEach((problem) => {
-    const aEntries = problem.entries.filter((e) => e.type === 'A');
+    const confirmedEntries = (problem.entries || []).filter((e) => e.aiStatus !== 'unconfirmed');
+    const aEntries = confirmedEntries.filter((e) => e.type === 'A');
     if (aEntries.length > 0) {
       assessmentLines.push(`【${problem.title}】 ${aEntries.map((e) => e.text).join(' / ')}`);
     }
@@ -76,7 +84,8 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
 
   const proposalLines: string[] = [];
   soapProblems.forEach((problem) => {
-    const pEntries = problem.entries.filter((e) => e.type === 'P');
+    const confirmedEntries = (problem.entries || []).filter((e) => e.aiStatus !== 'unconfirmed');
+    const pEntries = confirmedEntries.filter((e) => e.type === 'P');
     if (pEntries.length > 0) {
       proposalLines.push(`【${problem.title}】 ${pEntries.map((e) => e.text).join(' / ')}`);
     }

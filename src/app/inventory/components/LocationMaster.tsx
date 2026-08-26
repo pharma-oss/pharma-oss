@@ -156,7 +156,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
         <div className="location-master">
             <div className="add-location card">
                 <h3>棚番の一括作成</h3>
-                <p className="text-muted" style={{ fontSize: 'var(--fs-md)', marginBottom: '0.6rem' }}>
+                <p className="location-help-text">
                     「A-01 〜 A-10」のような連番の棚番をまとめて作成します。登録済みの棚番はスキップします。
                 </p>
                 <div className="location-inputs">
@@ -167,7 +167,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                         onChange={e => setBulkPrefix(toHalfWidth(e.target.value))}
                         maxLength={10}
                         aria-label="一括作成する棚のプレフィックス"
-                        style={{ width: '90px' }}
+                        className="location-code-input"
                     />
                     <span aria-hidden="true">-</span>
                     <input
@@ -176,7 +176,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                         value={bulkStart}
                         onChange={e => setBulkStart(e.target.value)}
                         aria-label="一括作成の開始番号"
-                        style={{ width: '90px' }}
+                        className="location-code-input"
                     />
                     <span aria-hidden="true">〜</span>
                     <input
@@ -185,7 +185,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                         value={bulkEnd}
                         onChange={e => setBulkEnd(e.target.value)}
                         aria-label="一括作成の終了番号"
-                        style={{ width: '90px' }}
+                        className="location-code-input"
                     />
                     <button className="btn-primary" onClick={handleBulkCreate} disabled={isBulkCreating}>
                         {isBulkCreating ? '作成中...' : '一括作成'}
@@ -239,10 +239,10 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
             </div>
 
             <div className="location-list">
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.5rem' }}>
-                    <h3 style={{ margin: 0 }}>登録済みの棚番地</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <span className="text-muted" style={{ fontSize: 'var(--fs-md)' }}>
+                <div className="location-list-header">
+                    <h3>登録済みの棚番地</h3>
+                    <div className="location-list-actions">
+                        <span className="location-count-badge">
                             登録 {locations.length}件 / 未使用 {unusedLocations.length}件
                             {unassignedStockedCount > 0 && ` / 棚番未設定の在庫あり薬品 ${unassignedStockedCount}件`}
                         </span>
@@ -266,7 +266,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                                 <li key={loc.id} className="location-item card">
                                     <div>
                                         <span className="location-text">{loc.displayText}</span>
-                                        <small className="text-muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
+                                        <small className="location-desc-small">
                                             {count > 0 ? `${count}品目で使用中` : '未使用'}
                                         </small>
                                     </div>

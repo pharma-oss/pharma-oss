@@ -10,6 +10,7 @@ import {
   SoapSaveStatusIndicator,
   SoapStructuredAssessmentPanel,
   type SoapProblem,
+  type SoapEntry,
   type SoapEntryType,
   type SoapSaveStatus,
   soapEntryTypeMeta
@@ -23,7 +24,7 @@ import { buildPastProblemSuggestions } from '@/lib/emr_patient_history';
 
 export interface SoapEditorProps {
   targetVisitId: string | null;
-  registerFlush?: (fn: (() => Promise<{ hasContent: boolean; missingStructuredFields: string[] }>) | null) => void;
+  registerFlush?: (fn: (() => Promise<{ hasContent: boolean; missingStructuredFields: string[]; unconfirmedAiDraftCount: number }>) | null) => void;
   onResolvedVisitChange?: (visitId: string | null) => void;
 }
 
@@ -98,7 +99,16 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
           setProblems(record.problems.map((p: any) => ({
             id: p.id || uuidv4(),
             title: p.title || '',
-            entries: (p.entries || []).map((e: any) => ({ id: uuidv4(), type: e.type as SoapEntryType, text: e.text || '' }))
+            entries: (p.entries || []).map((e: any) => ({
+              id: e.id || uuidv4(),
+              type: e.type as SoapEntryType,
+              text: e.text || '',
+              origin: e.origin || 'legacy_unspecified',
+              aiStatus: e.aiStatus,
+              aiDraftId: e.aiDraftId,
+              confirmedAt: e.confirmedAt,
+              confirmedBy: e.confirmedBy
+            }))
           })));
           setActiveProblemId(null);
         }
@@ -166,13 +176,14 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
     return () => { cancelled = true; };
   }, [db, targetVisitId]);
 
-  const persistSoap = useCallback(async (): Promise<{ hasContent: boolean; missingStructuredFields: string[] }> => {
+  const persistSoap = useCallback(async (): Promise<{ hasContent: boolean; missingStructuredFields: string[]; unconfirmedAiDraftCount: number }> => {
     const current = problemsRef.current;
     const assessment = normalizeSoapStructuredAssessment(structuredAssessmentRef.current);
     const hasContent = current.some((p: SoapProblem) => p.entries.some((e: { text: string }) => e.text.trim().length > 0));
     const missingStructuredFields = getMissingSoapStructuredAssessmentFields(assessment);
+    const unconfirmedAiDraftCount = current.reduce((sum, p) => sum + p.entries.filter(e => e.origin === 'ai_draft' && e.aiStatus === 'unconfirmed').length, 0);
     const visitId = resolvedVisitIdRef.current;
-    if (!db || !visitId) return { hasContent, missingStructuredFields };
+    if (!db || !visitId) return { hasContent, missingStructuredFields, unconfirmedAiDraftCount };
     const soapId = soapIdRef.current || `soap_${visitId}`;
     soapIdRef.current = soapId;
     setSaveStatus('saving');
@@ -185,7 +196,16 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
         problems: current.map((p: SoapProblem) => ({
           id: p.id,
           title: p.title,
-          entries: p.entries.map((e: { type: string; text: string }) => ({ type: e.type as SoapEntryType, text: e.text }))
+          entries: p.entries.map((e: SoapEntry) => ({
+            id: e.id,
+            type: e.type as SoapEntryType,
+            text: e.text,
+            origin: e.origin,
+            aiStatus: e.aiStatus,
+            aiDraftId: e.aiDraftId,
+            confirmedAt: e.confirmedAt,
+            confirmedBy: e.confirmedBy
+          }))
         })),
         structuredAssessment: assessment,
         updatedAt
@@ -198,7 +218,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
       setSaveStatus('error');
       throw err;
     }
-    return { hasContent, missingStructuredFields };
+    return { hasContent, missingStructuredFields, unconfirmedAiDraftCount };
   }, [db]);
 
   // Debounced autosave once the existing record has loaded and the user edited.
@@ -244,7 +264,8 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
 
   useEffect(() => {
     const handleInsert = (e: Event) => {
-      const { type, text } = (e as CustomEvent).detail;
+      const detail = (e as CustomEvent).detail || {};
+      const { type, text, origin, aiStatus, aiDraftId } = detail;
       markSoapDirty();
       setProblems((prev: SoapProblem[]) => {
         const targetId = activeProblemId || prev[0]?.id;
@@ -256,10 +277,29 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
           const emptyIndex = p.entries.findIndex((entry: { type: string; text: string }) => entry.type === type && entry.text.trim() === '');
           if (emptyIndex >= 0) {
             const entries = [...p.entries];
-            entries[emptyIndex] = { ...entries[emptyIndex], text };
+            entries[emptyIndex] = {
+              ...entries[emptyIndex],
+              text,
+              origin: origin || (origin === undefined ? 'manual' : origin),
+              aiStatus: aiStatus || (origin === 'ai_draft' ? 'unconfirmed' : undefined),
+              aiDraftId: aiDraftId || entries[emptyIndex].aiDraftId
+            };
             return { ...p, entries };
           }
-          return { ...p, entries: [...p.entries, { id: uuidv4(), type: type as SoapEntryType, text }] };
+          return {
+            ...p,
+            entries: [
+              ...p.entries,
+              {
+                id: uuidv4(),
+                type: type as SoapEntryType,
+                text,
+                origin: origin || (origin === undefined ? 'manual' : origin),
+                aiStatus: aiStatus || (origin === 'ai_draft' ? 'unconfirmed' : undefined),
+                aiDraftId
+              }
+            ]
+          };
         });
       });
       toast.success(`${type}に指導項目を追記しました`);
@@ -270,7 +310,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
 
   const addProblem = (title: string = '') => {
     markSoapDirty();
-    setProblems([...problems, { id: uuidv4(), title: `#${problems.length + 1} ${title}`, entries: [{ id: uuidv4(), type: 'S', text: '' }] }]);
+    setProblems([...problems, { id: uuidv4(), title: `#${problems.length + 1} ${title}`, entries: [{ id: uuidv4(), type: 'S', text: '', origin: 'manual' }] }]);
   };
 
   const removeProblem = useCallback((probId: string) => {
@@ -287,7 +327,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
     markSoapDirty();
     setProblems((prev: SoapProblem[]) => prev.map((p: SoapProblem) => {
       if (p.id === probId) {
-        return { ...p, entries: [...p.entries, { id: uuidv4(), type, text: '' }] };
+        return { ...p, entries: [...p.entries, { id: uuidv4(), type, text: '', origin: 'manual' }] };
       }
       return p;
     }));
@@ -295,13 +335,66 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
 
   const updateEntry = useCallback((probId: string, entryId: string, text: string) => {
     markSoapDirty();
+    const currentUser = getCurrentUser();
     setProblems((prev: SoapProblem[]) => prev.map((p: SoapProblem) => {
       if (p.id === probId) {
-        return { ...p, entries: p.entries.map((e: { id: string; type: SoapEntryType; text: string }) => e.id === entryId ? { ...e, text } : e) };
+        return {
+          ...p,
+          entries: p.entries.map((e: SoapEntry) => {
+            if (e.id === entryId) {
+              const wasAi = e.origin === 'ai_draft';
+              return {
+                ...e,
+                text,
+                origin: e.origin || 'manual',
+                aiStatus: wasAi ? 'modified' : e.aiStatus,
+                confirmedAt: wasAi ? new Date().toISOString() : e.confirmedAt,
+                confirmedBy: wasAi ? currentUser.userId : e.confirmedBy
+              };
+            }
+            return e;
+          })
+        };
       }
       return p;
     }));
   }, [markSoapDirty]);
+
+  const approveEntry = useCallback((probId: string, entryId: string) => {
+    markSoapDirty();
+    const currentUser = getCurrentUser();
+    const confirmedAt = new Date().toISOString();
+
+    // 承認後のエントリは setProblems の外で組み立てる。
+    // updater は React が遅延実行するため、updater 内で代入した変数は
+    // この直後の dispatch 時点ではまだ null で、監査ログが記録されない。
+    const targetEntry = problems
+      .find((p: SoapProblem) => p.id === probId)
+      ?.entries.find((e: SoapEntry) => e.id === entryId);
+    const approvedTarget: SoapEntry | null = targetEntry
+      ? { ...targetEntry, aiStatus: 'approved', confirmedAt, confirmedBy: currentUser.userId }
+      : null;
+
+    setProblems((prev: SoapProblem[]) => prev.map((p: SoapProblem) => {
+      if (p.id === probId) {
+        return {
+          ...p,
+          entries: p.entries.map((e: SoapEntry) => (
+            e.id === entryId
+              ? { ...e, aiStatus: 'approved' as const, confirmedAt, confirmedBy: currentUser.userId }
+              : e
+          ))
+        };
+      }
+      return p;
+    }));
+    toast.success('AI下書きを承認しました');
+    if (approvedTarget) {
+      document.dispatchEvent(new CustomEvent('soap-ai-draft-approved', {
+        detail: { entry: approvedTarget, reviewer: currentUser }
+      }));
+    }
+  }, [markSoapDirty, problems]);
 
   const removeEntry = useCallback((probId: string, entryId: string) => {
     markSoapDirty();
@@ -452,6 +545,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
                 entry={entry}
                 onChange={(text) => updateEntry(problem.id, entry.id, text)}
                 onRemove={() => removeEntry(problem.id, entry.id)}
+                onApprove={() => approveEntry(problem.id, entry.id)}
               />
             ))}
           </div>

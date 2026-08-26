@@ -15,7 +15,7 @@ export default function ExternalConnectorSettingsTab({
 }: ExternalConnectorSettingsTabProps) {
   return (
     <div className="settings-section glass" data-testid="external-connector-settings">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+      <div className="connector-header">
         <div>
           <h2>外部連携</h2>
           <p className="section-desc">オンライン資格確認、電子処方箋、施設内の調剤機器・POSへの接続準備を確認します。</p>
@@ -33,39 +33,39 @@ export default function ExternalConnectorSettingsTab({
       </div>
 
       {!externalConnectorReadiness && (
-        <div className="empty-state" style={{ marginTop: '1rem' }}>
+        <div className="empty-state connector-empty">
           <Network size={32} aria-hidden="true" />
           <p>{isLoadingExternalConnectorReadiness ? '接続準備を確認しています。' : '外部連携の接続準備は未確認です。'}</p>
         </div>
       )}
 
       {externalConnectorReadiness && (
-        <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+        <div className="connector-content">
+          <div className="connector-summary-grid">
             {[
               ['総合判定', externalConnectorReadiness.overallStatus],
               ['診断版', `v${externalConnectorReadiness.schemaVersion}`],
               ['診断日時', new Date(externalConnectorReadiness.generatedAt).toLocaleString('ja-JP')],
               ['秘密情報', externalConnectorReadiness.privacy.containsEndpointUrl || externalConnectorReadiness.privacy.containsBearerToken ? '要確認' : '非表示']
             ].map(([label, value]) => (
-              <div key={label} style={{ border: '1px solid var(--border)', borderRadius: '8px', background: '#fff', padding: '0.8rem' }}>
-                <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>{label}</div>
-                <strong style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-main)' }}>{value}</strong>
+              <div key={label} className="connector-stat-card">
+                <div className="connector-stat-label">{label}</div>
+                <strong className="connector-stat-value">{value}</strong>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <div className="connector-checks-list">
             {externalConnectorReadiness.checks.map((check) => (
               <section
                 key={check.id}
                 data-testid={`external-connector-check-${check.id}`}
-                style={{ border: '1px solid var(--border)', borderRadius: '8px', background: '#fff', padding: '0.9rem', display: 'grid', gap: '0.75rem' }}
+                className="connector-check-card"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="connector-check-head">
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>{check.label}</h3>
-                    <p className="help-text" style={{ margin: '0.2rem 0 0' }}>
+                    <h3 className="connector-check-title">{check.label}</h3>
+                    <p className="help-text connector-check-sub">
                       モード {check.config.mode} / 接続先 {check.config.endpointConfigured ? '設定済み' : '未設定'} / 直近試行 {check.lastAttempt.outcomeLabel}
                     </p>
                   </div>
@@ -75,9 +75,9 @@ export default function ExternalConnectorSettingsTab({
                 </div>
 
                 {check.id === 'electronic_prescription' && check.electronicPrescription && (
-                  <div data-testid="electronic-prescription-connector-capabilities" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.55rem' }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>公式接続方式</div>
+                  <div data-testid="electronic-prescription-connector-capabilities" className="connector-capabilities-grid">
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">公式接続方式</div>
                       <strong>
                         {check.electronicPrescription.connectorKind === 'qualification_terminal'
                           ? '資格確認端末経由'
@@ -86,24 +86,24 @@ export default function ExternalConnectorSettingsTab({
                             : '未設定'}
                       </strong>
                     </div>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>必須機能</div>
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">必須機能</div>
                       <strong>
                         {check.electronicPrescription.configuredCapabilities.length}
                         /{check.electronicPrescription.configuredCapabilities.length + check.electronicPrescription.missingCapabilities.length}
                       </strong>
                     </div>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>未確認</div>
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">未確認</div>
                       <strong>{check.electronicPrescription.missingCapabilities.length}件</strong>
                     </div>
                   </div>
                 )}
 
                 {check.id === 'pharmacy_device' && check.pharmacyDevice && (
-                  <div data-testid="pharmacy-device-connector-capabilities" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.55rem' }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>接続方式</div>
+                  <div data-testid="pharmacy-device-connector-capabilities" className="connector-capabilities-grid">
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">接続方式</div>
                       <strong>
                         {check.pharmacyDevice.connectorKind === 'nsips_gateway'
                           ? '許諾済みNSIPSゲートウェイ'
@@ -112,12 +112,12 @@ export default function ExternalConnectorSettingsTab({
                             : '未設定'}
                       </strong>
                     </div>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>連携仕様版</div>
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">連携仕様版</div>
                       <strong>{check.pharmacyDevice.interfaceVersion || '未設定'}</strong>
                     </div>
-                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.6rem' }}>
-                      <div style={{ color: 'var(--text-ghost)', fontSize: 'var(--fs-xs)', fontWeight: 800 }}>必須機能</div>
+                    <div className="connector-cap-box">
+                      <div className="connector-cap-label">必須機能</div>
                       <strong>
                         {check.pharmacyDevice.configuredCapabilities.length}
                         /{check.pharmacyDevice.configuredCapabilities.length + check.pharmacyDevice.missingCapabilities.length}
@@ -127,16 +127,16 @@ export default function ExternalConnectorSettingsTab({
                 )}
 
                 {check.evidence.length > 0 && (
-                  <ul style={{ margin: 0, paddingLeft: '1.2rem', color: 'var(--text-muted)', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
+                  <ul className="connector-evidence-list">
                     {check.evidence.slice(0, 4).map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
                 )}
                 {check.requiredActions.length > 0 && (
-                  <div style={{ display: 'grid', gap: '0.35rem' }}>
-                    <strong style={{ color: '#92400e', fontSize: 'var(--fs-md)' }}>残対応</strong>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#92400e', fontSize: 'var(--fs-md)', lineHeight: 1.55 }}>
+                  <div className="connector-actions-box">
+                    <strong className="connector-actions-title">残対応</strong>
+                    <ul className="connector-actions-list">
                       {check.requiredActions.slice(0, 5).map((action) => (
                         <li key={action}>{action}</li>
                       ))}
@@ -148,6 +148,110 @@ export default function ExternalConnectorSettingsTab({
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .connector-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+        .connector-empty {
+          margin-top: 1rem;
+        }
+        .connector-content {
+          display: grid;
+          gap: 1rem;
+          margin-top: 1rem;
+        }
+        .connector-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 0.75rem;
+        }
+        .connector-stat-card {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.8rem;
+        }
+        .connector-stat-label {
+          color: var(--text-ghost);
+          fontSize: var(--fs-xs);
+          font-weight: 800;
+        }
+        .connector-stat-value {
+          display: block;
+          margin-top: 0.25rem;
+          color: var(--text-main);
+        }
+        .connector-checks-list {
+          display: grid;
+          gap: 0.75rem;
+        }
+        .connector-check-card {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #fff;
+          padding: 0.9rem;
+          display: grid;
+          gap: 0.75rem;
+        }
+        .connector-check-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.75rem;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .connector-check-title {
+          margin: 0;
+          font-size: 1rem;
+          color: var(--text-main);
+        }
+        .connector-check-sub {
+          margin: 0.2rem 0 0;
+        }
+        .connector-capabilities-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 0.55rem;
+        }
+        .connector-cap-box {
+          background: #f8fafc;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 0.6rem;
+        }
+        .connector-cap-label {
+          color: var(--text-ghost);
+          font-size: var(--fs-xs);
+          font-weight: 800;
+        }
+        .connector-evidence-list {
+          margin: 0;
+          padding-left: 1.2rem;
+          color: var(--text-muted);
+          font-size: var(--fs-md);
+          line-height: 1.55;
+        }
+        .connector-actions-box {
+          display: grid;
+          gap: 0.35rem;
+        }
+        .connector-actions-title {
+          color: #92400e;
+          font-size: var(--fs-md);
+        }
+        .connector-actions-list {
+          margin: 0;
+          padding-left: 1.2rem;
+          color: #92400e;
+          font-size: var(--fs-md);
+          line-height: 1.55;
+        }
+      `}</style>
     </div>
   );
 }

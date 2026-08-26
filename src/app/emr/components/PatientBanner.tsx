@@ -456,30 +456,17 @@ export const PatientBanner = React.memo(function PatientBanner({
     <div id="emr-patient-alerts" className="patient-banner glass">
       <div className="avatar large">{patientInitials}</div>
       <div className="patient-summary">
-        <div className="row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="row patient-header-row">
           <h2>{patientTitle}</h2>
           <span className="id-tag">ID: {patientData?.patientId || '-'}</span>
           <span className="badge-outline">処理中</span>
         </div>
         <p className="text-muted">{calcBirthDate}</p>
-        <div
-          className="patient-actions"
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}
-        >
+        <div className="patient-actions">
           <button
             className="btn-edit-insurance flex align-center gap-1"
             onClick={openModal}
             title="患者・保険・公費情報を編集"
-            style={{
-              background: 'rgba(37, 99, 235, 0.08)',
-              color: 'var(--primary)',
-              border: '1px solid rgba(37, 99, 235, 0.15)',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: 'var(--fs-xs)',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
           >
             <CreditCard size={12} />
             <span>患者・保険・公費編集</span>
@@ -488,16 +475,6 @@ export const PatientBanner = React.memo(function PatientBanner({
             className="btn-picking flex align-center gap-1"
             onClick={onOpenPicking}
             title="ピッキング支援モードを開始"
-            style={{
-              background: 'rgba(16, 185, 129, 0.08)',
-              color: 'var(--success, #10b981)',
-              border: '1px solid rgba(16, 185, 129, 0.15)',
-              padding: '2px 8px',
-              borderRadius: '6px',
-              fontSize: 'var(--fs-xs)',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
           >
             <Activity size={12} />
             <span>ピッキング支援</span>
@@ -520,7 +497,7 @@ export const PatientBanner = React.memo(function PatientBanner({
             <span className="badge blue">患者アラートなし</span>
           )}
         </div>
-        <div className="flex align-center gap-2" style={{ justifyContent: 'flex-end', marginTop: '4px' }}>
+        <div className="flex align-center gap-2 patient-alerts-footer">
           <span className={`badge ${insuranceBadgeClass}`}>
             {mynaReadDisplay?.status === 'verified' && <CheckCircle2 size={12} className="inline-icon" aria-hidden="true" />}
             保険: {displayedInsuranceInfo}
@@ -1071,6 +1048,48 @@ export const PatientBanner = React.memo(function PatientBanner({
           font-size: var(--fs-sm);
           font-weight: 700;
         }
+        .patient-header-row {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          flex-wrap: wrap;
+        }
+
+        .patient-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+          margin-top: var(--space-2);
+        }
+
+        .btn-edit-insurance {
+          background: rgba(37, 99, 235, 0.08);
+          color: var(--primary);
+          border: 1px solid rgba(37, 99, 235, 0.15);
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .btn-picking {
+          background: rgba(16, 185, 129, 0.08);
+          color: var(--success, #10b981);
+          border: 1px solid rgba(16, 185, 129, 0.15);
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .patient-alerts-footer {
+          justify-content: flex-end;
+          margin-top: var(--space-1);
+        }
+
         .spin {
           animation: spin 1s linear infinite;
         }

@@ -23,9 +23,95 @@ export interface UnsentLocalRecord {
   checksum: string;
 }
 
+export const SATELLITE_QUEUE_LIMITS = {
+  WARN_RECORDS: 800,
+  MAX_RECOMMENDED_RECORDS: 1000,
+  EXPIRY_WARNING_HOURS: 24,
+} as const;
+
+export interface SatelliteQueueHealth {
+  total: number;
+  byCollection: Record<string, number>;
+  expiredCount: number;
+  hasExpired: boolean;
+  isNearLimit: boolean;
+  isLimitExceeded: boolean;
+  oldestEnqueuedAt: string | null;
+  newestEnqueuedAt: string | null;
+}
+
 const LOCAL_QUEUE_STORAGE_KEY = 'yakureki_satellite_unsent_queue_v1';
 const PERSISTENT_QUEUE_KEY_STORAGE_KEY = 'yakureki_satellite_persistent_queue_enc_key';
 let memoryQueue: UnsentLocalRecord[] = [];
+
+/**
+ * レコードが保持期限警告閾値(既定24時間)を超過しているか判定します。
+ * (※重要: 期限超過であっても自動削除は絶対にせず、早期同期を促す警告表示にのみ用います)
+ */
+export function isRecordExpired(
+  record: UnsentLocalRecord,
+  now: Date = new Date(),
+  expiryHours: number = SATELLITE_QUEUE_LIMITS.EXPIRY_WARNING_HOURS
+): boolean {
+  if (!record.enqueuedAt) return false;
+  const enqueuedTime = new Date(record.enqueuedAt).getTime();
+  if (Number.isNaN(enqueuedTime)) return false;
+  const elapsedMs = now.getTime() - enqueuedTime;
+  return elapsedMs >= expiryHours * 60 * 60 * 1000;
+}
+
+/**
+ * 未送信ローカルキューの健康状態（件数、期限超過、上限接近/超過、コレクション別内訳）を返します。
+ */
+export function getSatelliteQueueHealth(now: Date = new Date()): SatelliteQueueHealth {
+  const queue = getUnsentLocalQueue();
+  const byCollection: Record<string, number> = {};
+  let expiredCount = 0;
+  let oldestTime: number | null = null;
+  let newestTime: number | null = null;
+  let oldestEnqueuedAt: string | null = null;
+  let newestEnqueuedAt: string | null = null;
+
+  for (const item of queue) {
+    byCollection[item.collectionName] = (byCollection[item.collectionName] || 0) + 1;
+    if (isRecordExpired(item, now)) {
+      expiredCount++;
+    }
+    if (item.enqueuedAt) {
+      const t = new Date(item.enqueuedAt).getTime();
+      if (!Number.isNaN(t)) {
+        if (oldestTime === null || t < oldestTime) {
+          oldestTime = t;
+          oldestEnqueuedAt = item.enqueuedAt;
+        }
+        if (newestTime === null || t > newestTime) {
+          newestTime = t;
+          newestEnqueuedAt = item.enqueuedAt;
+        }
+      }
+    }
+  }
+
+  const total = queue.length;
+  return {
+    total,
+    byCollection,
+    expiredCount,
+    hasExpired: expiredCount > 0,
+    isNearLimit: total >= SATELLITE_QUEUE_LIMITS.WARN_RECORDS && total < SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS,
+    isLimitExceeded: total >= SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS,
+    oldestEnqueuedAt,
+    newestEnqueuedAt,
+  };
+}
+
+export function getUnsentQueueSummary(): { total: number; byCollection: Record<string, number> } {
+  const health = getSatelliteQueueHealth();
+  return {
+    total: health.total,
+    byCollection: health.byCollection,
+  };
+}
 
 /**
  * 端末再起動・ブラウザクラッシュ後も生存する端末永続暗号鍵を取得します。
@@ -160,18 +246,6 @@ export function clearAllUnsentQueue(): void {
       console.error('[Satellite Local Queue] Failed to clear unsent queue:', e);
     }
   }
-}
-
-export function getUnsentQueueSummary(): { total: number; byCollection: Record<string, number> } {
-  const queue = getUnsentLocalQueue();
-  const byCollection: Record<string, number> = {};
-  for (const item of queue) {
-    byCollection[item.collectionName] = (byCollection[item.collectionName] || 0) + 1;
-  }
-  return {
-    total: queue.length,
-    byCollection,
-  };
 }
 
 /**

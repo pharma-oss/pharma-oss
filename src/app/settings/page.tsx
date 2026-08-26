@@ -116,46 +116,6 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const tabButtonStyle = (isActive: boolean) => ({
-    flex: '0 0 auto',
-    minHeight: '44px',
-    display: 'inline-flex' as const,
-    alignItems: 'center' as const,
-    gap: '0.4rem',
-    padding: '0.55rem 0.9rem',
-    background: isActive ? 'var(--primary)' : 'white',
-    color: isActive ? 'white' : 'var(--text-main)',
-    border: isActive ? '1px solid var(--primary)' : '1px solid var(--border)',
-    borderRadius: '8px',
-    fontWeight: 600,
-    fontSize: 'var(--fs-md)',
-    whiteSpace: 'nowrap' as const,
-    cursor: 'pointer',
-    transition: 'all var(--transition-fast)',
-    outline: 'none'
-  });
-
-  const initialSetupStatusStyle = (status: InitialSetupStep['status']) => {
-    const styles = {
-      complete: { color: '#15803d', background: '#f0fdf4', border: '#86efac' },
-      attention: { color: '#b45309', background: '#fffbeb', border: '#fcd34d' },
-      blocked: { color: '#b91c1c', background: '#fef2f2', border: '#fca5a5' }
-    }[status];
-
-    return {
-      display: 'inline-flex',
-      alignItems: 'center',
-      borderRadius: '999px',
-      border: `1px solid ${styles.border}`,
-      padding: '0.16rem 0.6rem',
-      fontSize: 'var(--fs-xs)',
-      fontWeight: 800,
-      color: styles.color,
-      background: styles.background,
-      whiteSpace: 'nowrap' as const
-    };
-  };
-
   const ensurePermission = (action: PermissionAction) => {
     if (canUserPerform(getCurrentUser(), action)) return true;
     toast.error(getPermissionDeniedMessage(getCurrentUser(), action));
@@ -368,11 +328,7 @@ export default function SettingsPage() {
           </div>
           <div className="initial-setup-actions">
             <span
-              className="initial-setup-status"
-              style={{
-                color: initialSetupStatusColor,
-                background: initialSetupStatusBackground
-              }}
+              className={`initial-setup-status status-${initialSetupChecklist.status}`}
             >
               {initialSetupChecklist.statusLabel}
             </span>
@@ -433,7 +389,7 @@ export default function SettingsPage() {
             return (
               <div key={step.id} className="initial-setup-step" data-testid={`initial-setup-step-${step.id}`}>
                 <div className="initial-setup-step-main">
-                  <span style={initialSetupStatusStyle(step.status)}>{step.statusLabel}</span>
+                  <span className={`initial-setup-step-status status-${step.status}`}>{step.statusLabel}</span>
                   <div>
                     <strong>{step.title}</strong>
                     <span>{step.evidence}</span>
@@ -463,11 +419,10 @@ export default function SettingsPage() {
       </section>
 
       {/* タブ選択ナビゲーション */}
-      <div className="section-tabs" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.65rem' }} role="tablist">
+      <div className="section-tabs" role="tablist">
         <button
           className={`tab-pill ${activeTab === 'facility' ? 'active' : ''}`}
           onClick={() => openTab('facility', 'manage_facility_settings')}
-          style={tabButtonStyle(activeTab === 'facility')}
           disabled={!canManageFacility}
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : undefined}
         >
@@ -477,7 +432,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'external' ? 'active' : ''}`}
           onClick={() => openTab('external', 'manage_facility_settings')}
-          style={tabButtonStyle(activeTab === 'external')}
           disabled={!canManageFacility}
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : undefined}
           data-testid="settings-tab-external-connectors"
@@ -488,7 +442,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'master' ? 'active' : ''}`}
           onClick={() => openTab('master', 'update_drug_master')}
-          style={tabButtonStyle(activeTab === 'master')}
           disabled={!canUpdateDrugMaster}
           title={!canUpdateDrugMaster ? getPermissionDeniedMessage(currentUser, 'update_drug_master') : undefined}
         >
@@ -498,7 +451,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'medicationInfo' ? 'active' : ''}`}
           onClick={() => openTab('medicationInfo', 'manage_facility_settings')}
-          style={tabButtonStyle(activeTab === 'medicationInfo')}
           disabled={!canManageFacility}
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : undefined}
           data-testid="settings-tab-medication-info"
@@ -509,7 +461,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'backup' ? 'active' : ''}`}
           onClick={() => openTab('backup', 'manage_backups')}
-          style={tabButtonStyle(activeTab === 'backup')}
           disabled={!canManageBackups}
           title={!canManageBackups ? getPermissionDeniedMessage(currentUser, 'manage_backups') : undefined}
           data-testid="settings-tab-backup"
@@ -520,7 +471,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'officialAudit' ? 'active' : ''}`}
           onClick={() => openTab('officialAudit', 'view_official_audit')}
-          style={tabButtonStyle(activeTab === 'officialAudit')}
           disabled={!canViewOfficialAudit}
           title={!canViewOfficialAudit ? getPermissionDeniedMessage(currentUser, 'view_official_audit') : undefined}
         >
@@ -530,7 +480,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'audit' ? 'active' : ''}`}
           onClick={() => openTab('audit', 'view_audit_logs')}
-          style={tabButtonStyle(activeTab === 'audit')}
           disabled={!canViewAuditLogs}
           title={!canViewAuditLogs ? getPermissionDeniedMessage(currentUser, 'view_audit_logs') : undefined}
         >
@@ -540,7 +489,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'staff' ? 'active' : ''}`}
           onClick={() => openTab('staff', 'manage_staff')}
-          style={tabButtonStyle(activeTab === 'staff')}
           disabled={!canManageStaff}
           title={!canManageStaff ? getPermissionDeniedMessage(currentUser, 'manage_staff') : undefined}
         >
@@ -550,7 +498,6 @@ export default function SettingsPage() {
         <button
           className={`tab-pill ${activeTab === 'terminalSync' ? 'active' : ''}`}
           onClick={() => openTab('terminalSync', 'manage_facility_settings')}
-          style={tabButtonStyle(activeTab === 'terminalSync')}
           disabled={!canManageFacility}
           title={!canManageFacility ? getPermissionDeniedMessage(currentUser, 'manage_facility_settings') : undefined}
         >
@@ -751,6 +698,66 @@ export default function SettingsPage() {
           color: var(--text-muted);
           font-size: var(--fs-xs);
           font-weight: 750;
+        }
+        .initial-setup-status.status-complete,
+        .initial-setup-step-status.status-complete {
+          color: #15803d;
+          background: #f0fdf4;
+          border-color: #86efac;
+        }
+        .initial-setup-status.status-attention,
+        .initial-setup-step-status.status-attention {
+          color: #b45309;
+          background: #fffbeb;
+          border-color: #fcd34d;
+        }
+        .initial-setup-status.status-blocked,
+        .initial-setup-step-status.status-blocked {
+          color: #b91c1c;
+          background: #fef2f2;
+          border-color: #fca5a5;
+        }
+        .initial-setup-step-status {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          padding: 0.16rem 0.6rem;
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          white-space: nowrap;
+        }
+        .section-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          align-items: center;
+          margin-bottom: 1.5rem;
+          border-bottom: 1px solid var(--border);
+          padding-bottom: 0.65rem;
+        }
+        .tab-pill {
+          flex: 0 0 auto;
+          min-height: 44px;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.4rem;
+          padding: 0.55rem 0.9rem;
+          background: white;
+          color: var(--text-main);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          font-weight: 600;
+          font-size: var(--fs-md);
+          white-space: nowrap;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+          outline: none;
+        }
+        .tab-pill.active {
+          background: var(--primary);
+          color: white;
+          border-color: var(--primary);
         }
         .tab-pill:disabled {
           opacity: 0.55;

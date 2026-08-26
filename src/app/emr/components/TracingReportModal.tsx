@@ -136,59 +136,39 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
   return (
     <dialog
       ref={dialogRef}
-      className="tracing-modal glass"
+      className="modal-overlay tracing-dialog"
       aria-labelledby="tracing-title"
       onClose={onClose}
-      style={{
-        width: '760px',
-        maxWidth: '95%',
-        padding: '1.5rem',
-        borderRadius: '16px',
-        border: '1px solid var(--border)',
-        background: 'var(--bg-card)',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.15)'
-      }}
     >
-      <div
-        className="modal-header"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid var(--border)',
-          paddingBottom: '0.85rem'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+      <div className="modal-header tracing-header">
+        <div className="tracing-title-box">
           <FileText size={22} />
-          <h3 id="tracing-title" style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+          <h3 id="tracing-title" className="tracing-title">
             服薬情報提供書 (トレーシングレポート) 作成
           </h3>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="tracing-header-actions">
           <button
             type="button"
-            className="btn-secondary"
+            className="btn-secondary btn-auto-draft"
             onClick={handleGenerateDraft}
-            style={{ fontSize: 'var(--fs-sm)', display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.6rem' }}
             title="SOAPおよび薬歴チェック結果から文章を自動補完します"
           >
-            <Sparkles size={14} style={{ color: 'var(--warning)' }} />
+            <Sparkles size={14} className="icon-sparkles" />
             <span>SOAPから自動下書き</span>
           </button>
           <button
             type="button"
-            className="btn-close"
+            className="btn-close btn-modal-close"
             onClick={onClose}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.2rem' }}
           >
             <X size={20} />
           </button>
         </div>
       </div>
 
-      <div className="modal-body" style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '65vh', overflowY: 'auto' }}>
-        <div style={{ border: '1px solid var(--border)', padding: '0.85rem', borderRadius: '8px', background: 'var(--bg-subtle)' }}>
+      <div className="modal-body tracing-body">
+        <div className="tracing-institution-card">
           <MedicalInstitutionAutoComplete
             valueCode={(report as any).destinationInstitutionCode || ''}
             valueName={report.destinationInstitution || ''}
@@ -202,54 +182,50 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div className="tracing-grid-2col">
           <div>
-            <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <label className="tracing-field-label">
               <Building2 size={14} /> 診療科 (任意)
             </label>
             <input
               type="text"
-              className="input-field"
+              className="input-field tracing-input"
               placeholder="例: 循環器内科"
               value={report.destinationDepartment || ''}
               onChange={(e) => setReport({ ...report, destinationDepartment: e.target.value })}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <label className="tracing-field-label">
               <UserCheck size={14} /> 担当医師名
             </label>
             <input
               type="text"
-              className="input-field"
+              className="input-field tracing-input"
               placeholder="例: 山田 太郎 先生"
               value={report.destinationDoctor || ''}
               onChange={(e) => setReport({ ...report, destinationDoctor: e.target.value })}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
             />
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
+        <div className="tracing-grid-2-1">
           <div>
-            <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>報告件名</label>
+            <label className="tracing-field-label">報告件名</label>
             <input
               type="text"
-              className="input-field"
+              className="input-field tracing-input"
               placeholder="例: 【服薬情報提供】残薬調整および服薬状況報告"
               value={report.subject || ''}
               onChange={(e) => setReport({ ...report, subject: e.target.value })}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>ステータス</label>
+            <label className="tracing-field-label">ステータス</label>
             <select
-              className="input-field"
+              className="input-field tracing-input"
               value={report.status || 'draft'}
               onChange={(e) => setReport({ ...report, status: e.target.value as TracingReportStatus })}
-              style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
             >
               {(Object.keys(tracingStatusLabel) as TracingReportStatus[]).map((statusKey) => (
                 <option key={statusKey} value={statusKey}>
@@ -261,72 +237,57 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         </div>
 
         <div>
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>1. 処方薬剤概要</label>
+          <label className="tracing-field-label">1. 処方薬剤概要</label>
           <textarea
-            className="input-field"
+            className="input-field tracing-input"
             rows={2}
             value={report.medicationSummary || ''}
             onChange={(e) => setReport({ ...report, medicationSummary: e.target.value })}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>2. 患者の服薬状況・主訴・経過</label>
+          <label className="tracing-field-label">2. 患者の服薬状況・主訴・経過</label>
           <textarea
-            className="input-field"
+            className="input-field tracing-input"
             rows={3}
             value={report.patientCondition || ''}
             onChange={(e) => setReport({ ...report, patientCondition: e.target.value })}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>3. 薬剤師アセスメント</label>
+          <label className="tracing-field-label">3. 薬剤師アセスメント</label>
           <textarea
-            className="input-field"
+            className="input-field tracing-input"
             rows={2}
             value={report.assessment || ''}
             onChange={(e) => setReport({ ...report, assessment: e.target.value })}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>4. 処方提案・ご検討事項</label>
+          <label className="tracing-field-label">4. 処方提案・ご検討事項</label>
           <textarea
-            className="input-field"
+            className="input-field tracing-input"
             rows={2}
             value={report.proposal || ''}
             onChange={(e) => setReport({ ...report, proposal: e.target.value })}
-            style={{ width: '100%', padding: '0.4rem 0.6rem', fontSize: 'var(--fs-md)', marginTop: '0.25rem' }}
           />
         </div>
       </div>
 
-      <div
-        className="modal-footer"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderTop: '1px solid var(--border)',
-          paddingTop: '0.85rem',
-          marginTop: '0.5rem'
-        }}
-      >
+      <div className="modal-footer tracing-footer">
         <button
           type="button"
-          className="btn-secondary flex-center gap-1"
+          className="btn-secondary flex-center gap-1 btn-tracing-print"
           onClick={handlePrint}
-          style={{ padding: '0.4rem 0.8rem' }}
         >
           <Printer size={16} />
           <span>A4印刷 / PDF出力</span>
         </button>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="tracing-footer-actions">
           <button type="button" className="btn-secondary" onClick={onClose}>
             キャンセル
           </button>
@@ -341,6 +302,114 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
           </button>
         </div>
       </div>
+      <style jsx>{`
+        .tracing-dialog {
+          width: 760px;
+          max-width: 95%;
+          padding: var(--space-6);
+          border-radius: 16px;
+          border: 1px solid var(--border);
+          background: var(--bg-card);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        .tracing-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--border);
+          padding-bottom: var(--space-3);
+        }
+        .tracing-title-box {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          color: var(--primary);
+        }
+        .tracing-title {
+          font-size: 1.2rem;
+          font-weight: 800;
+          margin: 0;
+        }
+        .tracing-header-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+        }
+        .btn-auto-draft {
+          font-size: var(--fs-sm);
+          display: flex;
+          align-items: center;
+          gap: var(--space-1);
+          padding: var(--space-1) var(--space-2);
+        }
+        .icon-sparkles {
+          color: var(--warning);
+        }
+        .btn-modal-close {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: var(--space-0-5);
+          display: flex;
+          align-items: center;
+        }
+        .tracing-body {
+          padding: var(--space-4) 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+          max-height: 65vh;
+          overflow-y: auto;
+        }
+        .tracing-institution-card {
+          border: 1px solid var(--border);
+          padding: var(--space-3);
+          border-radius: 8px;
+          background: var(--bg-subtle);
+        }
+        .tracing-grid-2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--space-3);
+        }
+        .tracing-grid-2-1 {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: var(--space-3);
+        }
+        .tracing-field-label {
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          gap: var(--space-1);
+        }
+        .tracing-input {
+          width: 100%;
+          padding: var(--space-1-5) var(--space-2);
+          font-size: var(--fs-md);
+          margin-top: var(--space-1);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border);
+          background: var(--bg-card);
+          color: var(--text-main);
+        }
+        .tracing-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-top: 1px solid var(--border);
+          padding-top: var(--space-3);
+          margin-top: var(--space-2);
+        }
+        .btn-tracing-print {
+          padding: var(--space-1-5) var(--space-3);
+        }
+        .tracing-footer-actions {
+          display: flex;
+          gap: var(--space-2);
+        }
+      `}</style>
     </dialog>
   );
 };

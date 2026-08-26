@@ -348,15 +348,15 @@ export function buildOnboardingE2ESeedRecords(seededAt: Date = new Date()): Onbo
         userId: ONBOARDING_E2E_SEED_IDS.adminUserId,
         name: 'E2E導入管理者',
         role: 'admin',
-        passwordHash: 'e2e-admin-password-hash',
-        salt: 'e2e-admin-salt'
+        passwordHash: 'b0ad415d327f88e88eda96a60593a850dc29bc08828efae60e23dc42ff2f80bd',
+        salt: 'e2e-admin-salt-fixed-16b'
       },
       {
         userId: ONBOARDING_E2E_SEED_IDS.pharmacistUserId,
         name: '導入 薬剤師',
         role: 'pharmacist',
-        passwordHash: 'e2e-pharmacist-password-hash',
-        salt: 'e2e-pharmacist-salt'
+        passwordHash: 'b0ad415d327f88e88eda96a60593a850dc29bc08828efae60e23dc42ff2f80bd',
+        salt: 'e2e-admin-salt-fixed-16b'
       }
     ],
     patients: [patient],

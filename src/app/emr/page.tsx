@@ -90,12 +90,12 @@ import { PickingSupportModal } from './components/PickingSupportModal';
 import { TracingReportModal } from './components/TracingReportModal';
 
 const TimelineItem = ({ date, drug, detail, change, active }: { date: string; drug: string; detail: string; change?: string; active?: boolean }) => (
-  <div className={`timeline-item ${active ? 'active' : ''}`} style={{ display: 'flex', gap: '0.6rem', padding: '0.4rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
-    <div className="item-date" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', minWidth: '70px' }}>{date}</div>
-    <div className="item-content" style={{ flex: 1 }}>
-      <div className="item-drug" style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{drug}</div>
-      <div className="item-detail" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>{detail}</div>
-      {change && <div className="item-change" style={{ fontSize: 'var(--fs-xs)', color: 'var(--primary)' }}>{change}</div>}
+  <div className={`timeline-item ${active ? 'active' : ''}`}>
+    <div className="item-date">{date}</div>
+    <div className="item-content">
+      <div className="item-drug">{drug}</div>
+      <div className="item-detail">{detail}</div>
+      {change && <div className="item-change">{change}</div>}
     </div>
   </div>
 );
@@ -109,6 +109,7 @@ export default function EmrPage() {
   const [completionConfirmation, setCompletionConfirmation] = useState<{
     soapEmpty: boolean;
     missingStructuredFields: string[];
+    unconfirmedAiDraftCount: number;
     stockShortageText: string;
   } | null>(null);
 
@@ -150,20 +151,29 @@ export default function EmrPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const searchParams = new URLSearchParams(window.location.search);
-    const visitId = searchParams.get('visitId');
-    if (visitId) {
-      setTargetVisitId(visitId);
-    }
-    if (searchParams.get('openPicking') === '1') {
-      setIsPickingModalOpen(true);
-    }
-    if (searchParams.get('openIntervention') === '1') {
-      setIsInterventionModalOpen(true);
-      const reason = searchParams.get('reason');
-      if (reason) setIntReason(reason);
-    }
-  }, []);
+    const syncFromLocation = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const visitId = searchParams.get('visitId');
+      if (visitId && visitId !== targetVisitId) {
+        setTargetVisitId(visitId);
+      }
+      if (searchParams.get('openPicking') === '1') {
+        setIsPickingModalOpen(true);
+      }
+      if (searchParams.get('openIntervention') === '1') {
+        setIsInterventionModalOpen(true);
+        const reason = searchParams.get('reason');
+        if (reason) setIntReason(reason);
+      }
+    };
+    syncFromLocation();
+    const interval = window.setInterval(syncFromLocation, 300);
+    window.addEventListener('popstate', syncFromLocation);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('popstate', syncFromLocation);
+    };
+  }, [targetVisitId]);
 
   useEffect(() => {
     if (!db) return;
@@ -209,7 +219,7 @@ export default function EmrPage() {
     filterAiAssistItemsByMode(allSoapAiDraftSuggestions, aiAssistMode)
   ), [aiAssistMode, allSoapAiDraftSuggestions]);
 
-  const soapFlushRef = React.useRef<(() => Promise<{ hasContent: boolean; missingStructuredFields: string[] }>) | null>(null);
+  const soapFlushRef = React.useRef<(() => Promise<{ hasContent: boolean; missingStructuredFields: string[]; unconfirmedAiDraftCount: number }>) | null>(null);
 
   const findActiveVisit = useCallback(async () => {
     if (!db) return null;
@@ -241,7 +251,7 @@ export default function EmrPage() {
   // Because SoapEditor manages its own state internally right now, we either need to lift SoapEditor state up
   // or use an event dispatcher. Let's use a simple custom event for decoupled communication.
   const handleSelectGuidance = useCallback((type: string, text: string) => {
-    document.dispatchEvent(new CustomEvent('insert-soap-guidance', { detail: { type, text } }));
+    document.dispatchEvent(new CustomEvent('insert-soap-guidance', { detail: { type, text, origin: 'manual' } }));
   }, []);
 
   const handleFocusSoapEvidence = useCallback((targetId?: string) => {
@@ -272,11 +282,17 @@ export default function EmrPage() {
     }
 
     document.dispatchEvent(new CustomEvent('insert-soap-guidance', {
-      detail: { type: draft.type, text: draft.text }
+      detail: {
+        type: draft.type,
+        text: draft.text,
+        origin: 'ai_draft',
+        aiStatus: 'unconfirmed',
+        aiDraftId: draft.draftId
+      }
     }));
 
     if (!db || !editable.visit) {
-      toast.success(`SOAP ${draft.type} にAI補助下書きを反映しました。`);
+      toast.success(`SOAP ${draft.type} にAI補助下書き（未確認）を反映しました。`);
       return;
     }
 
@@ -290,17 +306,45 @@ export default function EmrPage() {
           suggestion: soapDraftSuggestionToAiAssistSuggestion(draft),
           decision: 'accepted',
           reviewerName: currentUser.name,
-          feedback: 'SOAP下書きへ反映'
+          feedback: 'SOAP下書きへ反映（未確認として挿入）'
         }),
         editable.visit.patientId,
         patientName
       );
-      toast.success(`SOAP ${draft.type} にAI補助下書きを反映し、監査ログへ記録しました。`);
+      toast.success(`SOAP ${draft.type} にAI補助下書きを反映し、監査ログへ記録しました。内容を確認・承認してください。`);
     } catch (error) {
       console.error('Failed to log SOAP AI draft application:', error);
       toast.warning(`SOAP ${draft.type} に反映しましたが、監査ログ記録に失敗しました。`);
     }
   }, [db, ensureActiveVisitEditable]);
+
+  // AI下書き承認イベントの監査ログ記録リスナー
+  useEffect(() => {
+    const handleAiApproved = async (e: Event) => {
+      const { entry, reviewer } = (e as CustomEvent).detail || {};
+      if (!db || !entry) return;
+      try {
+        const visit = await findActiveVisit();
+        const patientId = visit?.patientId;
+        let patientName = '不明';
+        if (patientId) {
+          const patients = await db.patients.find({ selector: { patientId } }).exec();
+          patientName = patients[0]?.name || '不明';
+        }
+        await logAuditAction(
+          db,
+          'ai_draft_approved',
+          `AI下書き承認: SOAP ${entry.type} / 提案ID: ${entry.aiDraftId || '-'} / 承認者: ${reviewer?.name || '薬剤師'} / 確定テキスト: ${String(entry.text || '').slice(0, 120)}`,
+          patientId,
+          patientName
+        );
+      } catch (err) {
+        console.error('Failed to log ai_draft_approved audit log:', err);
+      }
+    };
+    document.addEventListener('soap-ai-draft-approved', handleAiApproved);
+    return () => document.removeEventListener('soap-ai-draft-approved', handleAiApproved);
+  }, [db, findActiveVisit]);
 
   const {
     interventions,
@@ -1086,6 +1130,22 @@ useEffect(() => {
                 yjCode: drug.yjCode,
                 genericName: drug.genericName
               });
+           } else if (item.dispensedDrug) {
+              currentDrugs.push({
+                code: item.drugId,
+                name: item.dispensedDrug,
+                genericName: item.dispensedDrug,
+                isGeneric: false,
+                isHighRisk: false
+              });
+              currentAlertItems.push({
+                itemId: item.itemId,
+                drugId: item.drugId,
+                drugName: item.dispensedDrug,
+                dispensedDrug: item.dispensedDrug,
+                yjCode: '',
+                genericName: item.dispensedDrug
+              });
            }
         }
         setPrescribedDrugs(currentDrugs);
@@ -1293,13 +1353,14 @@ useEffect(() => {
       // (服薬状況・指導内容の記録は服薬管理指導料の算定要件)。
       const soapResult = soapFlushRef.current
         ? await soapFlushRef.current()
-        : { hasContent: false, missingStructuredFields: [] };
+        : { hasContent: false, missingStructuredFields: [], unconfirmedAiDraftCount: 0 };
 
       // 未確認事項はネイティブconfirmの連発ではなく、1つの確認モーダルへまとめて提示する。
       if (!options?.skipConfirmation) {
         setCompletionConfirmation({
           soapEmpty: !soapResult.hasContent,
           missingStructuredFields: soapResult.missingStructuredFields,
+          unconfirmedAiDraftCount: soapResult.unconfirmedAiDraftCount || 0,
           stockShortageText
         });
         return;
@@ -1476,12 +1537,11 @@ useEffect(() => {
           </div>
 
           <div
-            className="soap-grid"
+            className={`soap-grid soap-panel-container ${activeEmrSection === 'soap' ? 'active' : ''}`}
             role="tabpanel"
             id="soap-panel"
             aria-labelledby="tab-soap"
             hidden={activeEmrSection !== 'soap'}
-            style={{ display: activeEmrSection === 'soap' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}
           >
             <SoapEditor
               targetVisitId={targetVisitId}
@@ -1503,10 +1563,9 @@ useEffect(() => {
               title={isCompleting ? '完了処理中...' : soapVisitId === null ? '受付が選択されていません' : ''}
             >
               <button
-                className="btn-complete btn-stacked"
+                className="btn-complete btn-stacked nowrap"
                 onClick={() => handleCompleteVisit()}
                 disabled={isCompleting || soapVisitId === null}
-                style={{ whiteSpace: 'nowrap' }}
               >
                 <span className="btn-label-main flex-center gap-2">
                   {isCompleting ? <Loader2 size={18} className="spin" aria-hidden="true" /> : <CheckCircle2 size={18} aria-hidden="true" />}
@@ -1556,20 +1615,15 @@ useEffect(() => {
           />
           {allSoapAiDraftSuggestions.length > soapAiDraftSuggestions.length && (
             <div
-              className="insight-card"
+              className="insight-card ai-assist-notice"
               role="status"
               data-testid="soap-ai-mode-notice"
-              style={{
-                borderLeft: '4px solid #f59e0b',
-                background: '#fffbeb',
-                color: '#92400e'
-              }}
             >
               <div className="insight-header">
                 <AlertTriangle size={18} aria-hidden="true" />
                 <h3>AI補助は「{AI_ASSIST_MODE_LABELS[aiAssistMode]}」です</h3>
               </div>
-              <p style={{ margin: 0, fontSize: 'var(--fs-md)', fontWeight: 700, lineHeight: 1.5 }}>
+              <p className="ai-assist-desc">
                 {aiAssistMode === 'disabled'
                   ? 'SOAP下書き候補を停止しています。通常の薬歴入力は継続できます。'
                   : `要修正以外の下書き候補 ${allSoapAiDraftSuggestions.length - soapAiDraftSuggestions.length}件を非表示にしています。`}
@@ -1589,16 +1643,16 @@ useEffect(() => {
 
         {/* Prescription Timeline / History */}
 
-        <aside className="history-aside" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>初回質問表</h3>
+        <aside className="history-aside">
+          <div className="card glass-premium aside-card">
+            <div className="aside-card-header">
+              <h3 className="aside-card-title">初回質問表</h3>
               {initialQuestionnaire && (
                 <span className="status-chip compact confirmed">OCR取込済</span>
               )}
             </div>
             {!initialQuestionnaire ? (
-              <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>
+              <span className="text-muted aside-empty-text">
                 この受付には初回質問表が保存されていません。
               </span>
             ) : (
@@ -1636,15 +1690,15 @@ useEffect(() => {
             )}
           </div>
 
-          <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>マイナ取込</h3>
+          <div className="card glass-premium aside-card">
+            <div className="aside-card-header">
+              <h3 className="aside-card-title">マイナ取込</h3>
               {mynaClinicalImports.length > 0 && (
                 <span className="status-chip compact confirmed">{mynaClinicalImports.length}件</span>
               )}
             </div>
             {mynaClinicalImports.length === 0 ? (
-              <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>
+              <span className="text-muted aside-empty-text">
                 特定健診情報・薬剤履歴はまだ取り込まれていません。
               </span>
             ) : (
@@ -1676,36 +1730,35 @@ useEffect(() => {
             )}
           </div>
 
-          <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>疑義照会</h3>
+          <div className="card glass-premium aside-card">
+            <div className="aside-card-header">
+              <h3 className="aside-card-title">疑義照会</h3>
               <button
-                className="btn-primary"
-                style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--fs-sm)', borderRadius: '6px' }}
+                className="btn-primary btn-aside-action"
                 onClick={() => setIsInterventionModalOpen(true)}
               >
                 新規記録
               </button>
             </div>
-            <div className="intervention-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '180px', overflowY: 'auto' }}>
+            <div className="intervention-list">
               {interventions.length === 0 ? (
-                <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>記録されている履歴はありません。</span>
+                <span className="text-muted aside-empty-text">記録されている履歴はありません。</span>
               ) : (
                 interventions.map((inv) => (
-                  <div key={inv.interventionId} className="glass" style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: 'var(--fs-sm)', background: 'rgba(255,255,255,0.45)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                      <span style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                  <div key={inv.interventionId} className="glass intervention-item-card">
+                    <div className="intervention-item-header">
+                      <span className="intervention-doctor">
                         {inv.inquiryDoctor || '未指定'}医師
                       </span>
                       <span className={`status-chip compact ${inv.inquiryStatus === 'pending' ? 'warning' : 'confirmed'}`}>
                         {inquiryStatusLabel[inv.inquiryStatus as keyof typeof inquiryStatusLabel] || '記録'}
                       </span>
                     </div>
-                    <div style={{ marginBottom: '0.2rem', color: 'var(--text-main)' }}><strong>理由:</strong> {inv.reason}</div>
+                    <div className="intervention-reason-row"><strong>理由:</strong> {inv.reason}</div>
                     {inv.inquiryResult && (
-                      <div style={{ marginBottom: '0.2rem', color: 'var(--text-main)' }}><strong>回答:</strong> {inv.inquiryResult}</div>
+                      <div className="intervention-reason-row"><strong>回答:</strong> {inv.inquiryResult}</div>
                     )}
-                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-ghost)' }}>
+                    <div className="intervention-meta">
                       {inv.beforeSnapshot || '変更前未入力'} &rarr; {inv.afterSnapshot || '変更後未入力'}
                       {inv.responseDueDate ? ` / 期限 ${inv.responseDueDate}` : ''}
                     </div>
@@ -1715,12 +1768,11 @@ useEffect(() => {
             </div>
           </div>
 
-          <div className="card glass-premium" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <h3 style={{ margin: 0, fontSize: 'var(--fs-base)', fontWeight: 700, color: 'var(--text-main)' }}>トレーシングレポート</h3>
+          <div className="card glass-premium aside-card">
+            <div className="aside-card-header">
+              <h3 className="aside-card-title">トレーシングレポート</h3>
               <button
-                className="btn-primary"
-                style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--fs-sm)', borderRadius: '6px' }}
+                className="btn-primary btn-aside-action"
                 onClick={() => setIsTracingModalOpen(true)}
               >
                 新規作成
@@ -1728,7 +1780,7 @@ useEffect(() => {
             </div>
             <div className="tracing-report-list">
               {tracingReports.length === 0 ? (
-                <span className="text-muted" style={{ fontSize: 'var(--fs-md)', color: 'var(--text-ghost)' }}>記録されているレポートはありません。</span>
+                <span className="text-muted aside-empty-text">記録されているレポートはありません。</span>
               ) : (
                 tracingReports.map((report) => (
                   <div key={report.reportId} className="tracing-report-item">
@@ -1783,7 +1835,7 @@ useEffect(() => {
       {/* 薬歴完了の確認モーダル: 未確認事項をまとめて1回で提示する */}
       {completionConfirmation && (
         <div className="insurance-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="completion-confirm-title">
-          <div className="insurance-modal animate-scale" style={{ width: '520px' }}>
+          <div className="insurance-modal animate-scale modal-completion">
             <div className="modal-header">
               <div className="modal-title-row">
                 <CheckCircle2 size={20} />
@@ -1791,8 +1843,14 @@ useEffect(() => {
               </div>
               <span className="modal-subtitle">薬歴を完了し、在庫を引き落とします。</span>
             </div>
-            {(completionConfirmation.soapEmpty || completionConfirmation.missingStructuredFields.length > 0 || completionConfirmation.stockShortageText) ? (
+            {(completionConfirmation.soapEmpty || completionConfirmation.missingStructuredFields.length > 0 || completionConfirmation.unconfirmedAiDraftCount > 0 || completionConfirmation.stockShortageText) ? (
               <ul className="completion-warning-list">
+                {completionConfirmation.unconfirmedAiDraftCount > 0 && (
+                  <li className="warning-ai-draft">
+                    <strong>【要確認】AI下書き（未確認）が {completionConfirmation.unconfirmedAiDraftCount} 件残っています。</strong>
+                    薬剤師が内容を確認・承認してから完了してください。
+                  </li>
+                )}
                 {completionConfirmation.soapEmpty && (
                   <li>SOAP（薬歴）が空のまま完了しようとしています。記録なしで完了すると後から追記が必要になります。</li>
                 )}
@@ -1804,7 +1862,7 @@ useEffect(() => {
                 )}
               </ul>
             ) : (
-              <p className="completion-ok-note">SOAP記録・構造化チェックともに確認済みです。</p>
+              <p className="completion-ok-note">SOAP記録・AI下書き承認・構造化チェックともに確認済みです。</p>
             )}
             <div className="completion-modal-actions">
               <button className="btn-secondary" onClick={() => setCompletionConfirmation(null)}>
@@ -2093,7 +2151,128 @@ useEffect(() => {
         }
 
         .ml-auto { margin-left: auto; }
-        .gap-2 { gap: 0.5rem; }
+        .gap-2 { gap: var(--space-2); }
+
+        .timeline-item {
+          display: flex;
+          gap: var(--space-2-5);
+          padding: var(--space-1-5) 0;
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .timeline-item .item-date {
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+          min-width: 70px;
+        }
+        .timeline-item .item-content {
+          flex: 1;
+        }
+        .timeline-item .item-drug {
+          font-size: var(--fs-md);
+          font-weight: 700;
+        }
+        .timeline-item .item-detail {
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+        }
+        .timeline-item .item-change {
+          font-size: var(--fs-xs);
+          color: var(--primary);
+        }
+
+        .soap-panel-container {
+          display: none;
+          flex-direction: column;
+          gap: var(--space-4);
+        }
+        .soap-panel-container.active {
+          display: flex;
+        }
+
+        .btn-complete.nowrap {
+          white-space: nowrap;
+        }
+
+        .ai-assist-notice {
+          border-left: 4px solid #f59e0b;
+          background: #fffbeb;
+          color: #92400e;
+        }
+        .ai-assist-desc {
+          margin: 0;
+          font-size: var(--fs-md);
+          font-weight: 700;
+          line-height: 1.5;
+        }
+
+        .aside-card {
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+        }
+        .aside-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+        }
+        .aside-card-title {
+          margin: 0;
+          font-size: var(--fs-base);
+          font-weight: 700;
+          color: var(--text-main);
+        }
+        .aside-empty-text {
+          font-size: var(--fs-md);
+          color: var(--text-ghost);
+        }
+        .btn-aside-action {
+          padding: var(--space-1) var(--space-2);
+          font-size: var(--fs-sm);
+          border-radius: 6px;
+        }
+
+        .intervention-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+          max-height: 180px;
+          overflow-y: auto;
+        }
+        .intervention-item-card {
+          padding: var(--space-2-5);
+          border-radius: 8px;
+          border: 1px solid var(--border);
+          font-size: var(--fs-sm);
+          background: rgba(255, 255, 255, 0.45);
+        }
+        .intervention-item-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2);
+          margin-bottom: var(--space-1);
+        }
+        .intervention-doctor {
+          font-weight: 700;
+          color: var(--primary);
+        }
+        .intervention-reason-row {
+          margin-bottom: var(--space-0-5);
+          color: var(--text-main);
+        }
+        .intervention-meta {
+          font-size: var(--fs-xs);
+          color: var(--text-ghost);
+        }
+
+        .modal-completion {
+          width: 520px;
+          max-width: 95vw;
+        }
 
         :global(.soap-evidence-focus) {
           outline: 3px solid rgba(124, 58, 237, 0.45);

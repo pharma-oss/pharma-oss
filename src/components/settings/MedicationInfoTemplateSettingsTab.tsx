@@ -99,20 +99,8 @@ export default function MedicationInfoTemplateSettingsTab({
           {invalidApprovedMedicationInfoTemplates.length > 0 && (
             <div
               role="alert"
+              className="template-alert-danger"
               data-testid="medication-info-invalid-approved-alert"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.85rem',
-                padding: '0.65rem 0.75rem',
-                border: '1px solid #dc2626',
-                borderRadius: '8px',
-                color: '#991b1b',
-                background: '#fef2f2',
-                fontWeight: 700,
-                fontSize: 'var(--fs-md)'
-              }}
             >
               <AlertTriangle size={17} aria-hidden="true" />
               承認条件を満たさず印刷に使われないテンプレが{invalidApprovedMedicationInfoTemplates.length}件あります。
@@ -122,12 +110,7 @@ export default function MedicationInfoTemplateSettingsTab({
           <div
             role="group"
             aria-label="薬情テンプレ状態絞り込み"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-              gap: '0.65rem',
-              marginBottom: '1rem'
-            }}
+            className="template-status-filters"
           >
             {([
               ['all', 'すべて'],
@@ -143,18 +126,11 @@ export default function MedicationInfoTemplateSettingsTab({
                   type="button"
                   onClick={() => setMedicationInfoTemplateStatusFilter(status)}
                   aria-pressed={isActive}
+                  className={`btn-template-filter ${isActive ? 'active' : ''}`}
                   data-testid={`medication-info-template-status-filter-${status}`}
-                  style={{
-                    border: isActive ? '2px solid var(--primary)' : '1px solid var(--border)',
-                    borderRadius: '8px',
-                    padding: '0.65rem 0.75rem',
-                    background: isActive ? '#eff6ff' : 'white',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
                 >
-                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontWeight: 700 }}>{label}</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  <div className="filter-label">{label}</div>
+                  <div className="filter-count">
                     {count}
                   </div>
                 </button>
@@ -165,12 +141,7 @@ export default function MedicationInfoTemplateSettingsTab({
           <div
             role="group"
             aria-label="薬情テンプレ承認準備絞り込み"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '0.45rem',
-              marginBottom: '1rem'
-            }}
+            className="template-readiness-filters"
           >
             {(['all', 'ready', 'missing'] as MedicationInfoTemplateReadinessFilter[]).map((readiness) => {
               const isActive = medicationInfoTemplateReadinessFilter === readiness;
@@ -180,17 +151,8 @@ export default function MedicationInfoTemplateSettingsTab({
                   type="button"
                   onClick={() => setMedicationInfoTemplateReadinessFilter(readiness)}
                   aria-pressed={isActive}
+                  className={`btn-readiness-filter ${isActive ? 'active' : ''}`}
                   data-testid={`medication-info-template-readiness-filter-${readiness}`}
-                  style={{
-                    border: isActive ? '2px solid var(--primary)' : '1px solid var(--border)',
-                    borderRadius: '8px',
-                    padding: '0.45rem 0.7rem',
-                    background: isActive ? '#eff6ff' : 'white',
-                    color: 'var(--text-main)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--fs-sm)',
-                    fontWeight: 800
-                  }}
                 >
                   {MEDICATION_INFO_TEMPLATE_READINESS_LABELS[readiness]} {medicationInfoTemplateReadinessCounts[readiness]}
                 </button>
@@ -199,15 +161,8 @@ export default function MedicationInfoTemplateSettingsTab({
           </div>
 
           <div className="medication-info-template-layout">
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '0.85rem',
-                background: 'white'
-              }}
-            >
-              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+            <div className="template-search-sidebar">
+              <div className="form-group template-search-group">
                 <label htmlFor="medication-info-template-search">テンプレ検索</label>
                 <input
                   id="medication-info-template-search"
@@ -222,7 +177,7 @@ export default function MedicationInfoTemplateSettingsTab({
               <div
                 role="status"
                 data-testid="medication-info-template-result-count"
-                style={{ marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', fontWeight: 700 }}
+                className="template-result-count"
               >
                 {filteredMedicationInfoTemplates.length.toLocaleString()}件
                 {filteredMedicationInfoTemplates.length > 80
@@ -230,13 +185,13 @@ export default function MedicationInfoTemplateSettingsTab({
                   : 'を表示'}
               </div>
 
-              <div style={{ display: 'grid', gap: '0.5rem', maxHeight: '560px', overflowY: 'auto' }}>
+              <div className="template-list">
                 {isLoadingMedicationInfoTemplates ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)', padding: '0.75rem' }}>
+                  <div className="template-list-empty">
                     読み込み中...
                   </div>
                 ) : filteredMedicationInfoTemplates.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--fs-md)', padding: '0.75rem' }}>
+                  <div className="template-list-empty">
                     {medicationInfoTemplates.length === 0
                       ? 'テンプレはまだありません。'
                       : '条件に一致するテンプレはありません。'}
@@ -248,67 +203,38 @@ export default function MedicationInfoTemplateSettingsTab({
                       && !isApprovedPatientMedicationInfoTemplate(template);
                     const readinessIssues = getMedicationInfoTemplateReadinessIssues(template);
                     const isReadyForApproval = readinessIssues.length === 0;
-                    const statusColor = hasInvalidApproval
-                      ? '#dc2626'
+                    const statusClass = hasInvalidApproval
+                      ? 'status-badge-error'
                       : template.status === 'approved'
-                      ? '#15803d'
+                      ? 'status-badge-approved'
                       : template.status === 'needs_review'
-                        ? '#b45309'
+                        ? 'status-badge-review'
                         : template.status === 'retired'
-                          ? '#64748b'
-                          : '#2563eb';
+                          ? 'status-badge-retired'
+                          : 'status-badge-draft';
                     return (
                       <button
                         key={template.templateId}
                         type="button"
                         onClick={() => handleSelectMedicationInfoTemplate(template)}
-                        style={{
-                          textAlign: 'left',
-                          border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
-                          borderRadius: '8px',
-                          padding: '0.7rem',
-                          background: isSelected ? '#eff6ff' : '#fff',
-                          cursor: 'pointer',
-                          display: 'grid',
-                          gap: '0.3rem'
-                        }}
+                        className={`btn-template-item ${isSelected ? 'active' : ''}`}
                       >
-                        <span style={{ fontWeight: 800, color: 'var(--text-main)', wordBreak: 'break-word' }}>
+                        <span className="template-item-name">
                           {template.drugName}
                         </span>
-                        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>
+                        <span className="template-item-code">
                           {template.drugCode}
                           {template.genericName ? ` / ${template.genericName}` : ''}
                         </span>
-                        <span style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                          <span
-                            style={{
-                              width: 'fit-content',
-                              borderRadius: '999px',
-                              padding: '0.12rem 0.5rem',
-                              fontSize: 'var(--fs-xs)',
-                              fontWeight: 800,
-                              color: statusColor,
-                              background: '#f8fafc',
-                              border: `1px solid ${statusColor}`
-                            }}
-                          >
+                        <span className="template-item-badges">
+                          <span className={`template-badge ${statusClass}`}>
                             {hasInvalidApproval ? '承認不備' : MEDICATION_INFO_TEMPLATE_STATUS_LABELS[template.status]}
                           </span>
                           <span
                             title={isReadyForApproval
                               ? '承認に必要な本文と参照元が揃っています'
                               : readinessIssues.map((issue) => issue.message).join('、')}
-                            style={{
-                              width: 'fit-content',
-                              borderRadius: '999px',
-                              padding: '0.12rem 0.5rem',
-                              fontSize: 'var(--fs-xs)',
-                              fontWeight: 800,
-                              color: isReadyForApproval ? '#047857' : '#b45309',
-                              background: isReadyForApproval ? '#ecfdf5' : '#fffbeb',
-                              border: `1px solid ${isReadyForApproval ? '#10b981' : '#f59e0b'}`
-                            }}
+                            className={`template-badge ${isReadyForApproval ? 'readiness-badge-ok' : 'readiness-badge-missing'}`}
                           >
                             {isReadyForApproval ? '承認準備OK' : `不足 ${readinessIssues.length}`}
                           </span>
@@ -342,12 +268,8 @@ export default function MedicationInfoTemplateSettingsTab({
                   <span>CSV書出</span>
                 </button>
                 <label
-                  className="btn-secondary flex-center gap-2"
+                  className={`btn-secondary flex-center gap-2 btn-upload-label ${isSavingMedicationInfoTemplate || isImportingMedicationInfoCsv || !canManageFacility ? 'disabled' : ''}`}
                   aria-disabled={isSavingMedicationInfoTemplate || isImportingMedicationInfoCsv || !canManageFacility}
-                  style={{
-                    cursor: isSavingMedicationInfoTemplate || isImportingMedicationInfoCsv || !canManageFacility ? 'not-allowed' : 'pointer',
-                    opacity: isSavingMedicationInfoTemplate || isImportingMedicationInfoCsv || !canManageFacility ? 0.6 : 1
-                  }}
                 >
                   {isImportingMedicationInfoCsv
                     ? <Loader2 size={16} className="spin" aria-hidden="true" />
@@ -405,19 +327,7 @@ export default function MedicationInfoTemplateSettingsTab({
                 <div
                   role="status"
                   data-testid="medication-info-template-csv-import-summary"
-                  style={{
-                    display: 'grid',
-                    gap: '0.25rem',
-                    marginBottom: '0.85rem',
-                    padding: '0.65rem 0.75rem',
-                    border: '1px solid #93c5fd',
-                    borderRadius: '8px',
-                    background: '#eff6ff',
-                    color: '#1e40af',
-                    fontSize: 'var(--fs-md)',
-                    fontWeight: 700,
-                    lineHeight: 1.45
-                  }}
+                  className="template-csv-summary"
                 >
                   <span>
                     CSV下書き取込: {medicationInfoCsvImportSummary.fileName}
@@ -427,7 +337,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     承認準備OK {medicationInfoCsvImportSummary.readyForApprovalCount.toLocaleString()}件 /
                     不足・警告 {medicationInfoCsvImportSummary.warningCount.toLocaleString()}件
                   </span>
-                  <span style={{ color: '#1d4ed8', fontSize: 'var(--fs-xs)' }}>
+                  <span className="template-csv-timestamp">
                     取込日時 {new Date(medicationInfoCsvImportSummary.importedAt).toLocaleString('ja-JP')}
                   </span>
                 </div>
@@ -437,17 +347,7 @@ export default function MedicationInfoTemplateSettingsTab({
                 <div
                   role={isEditingImmutableMedicationInfoRevision ? 'alert' : 'status'}
                   data-testid="medication-info-template-revision-notice"
-                  style={{
-                    marginBottom: '0.85rem',
-                    padding: '0.7rem 0.8rem',
-                    border: `1px solid ${isEditingImmutableMedicationInfoRevision ? '#f59e0b' : '#93c5fd'}`,
-                    borderRadius: '8px',
-                    background: isEditingImmutableMedicationInfoRevision ? '#fffbeb' : '#eff6ff',
-                    color: isEditingImmutableMedicationInfoRevision ? '#92400e' : '#1e40af',
-                    fontSize: 'var(--fs-md)',
-                    fontWeight: 700,
-                    lineHeight: 1.5
-                  }}
+                  className={`template-revision-notice ${isEditingImmutableMedicationInfoRevision ? 'editing' : 'viewing'}`}
                 >
                   {isEditingImmutableMedicationInfoRevision
                     ? '保存前の版から本文または参照元が変更されています。下書き保存または承認保存では新しいテンプレIDへ分岐し、元の版の内容を保持します。'
@@ -600,18 +500,7 @@ export default function MedicationInfoTemplateSettingsTab({
                 id="medication-info-template-approval-readiness"
                 role="status"
                 data-testid="medication-info-template-approval-readiness"
-                style={{
-                  display: 'grid',
-                  gap: '0.4rem',
-                  marginTop: '0.75rem',
-                  padding: '0.7rem 0.8rem',
-                  border: `1px solid ${currentMedicationInfoApprovalIssues.length > 0 ? '#f59e0b' : '#16a34a'}`,
-                  borderRadius: '8px',
-                  background: currentMedicationInfoApprovalIssues.length > 0 ? '#fffbeb' : '#f0fdf4',
-                  color: currentMedicationInfoApprovalIssues.length > 0 ? '#92400e' : '#166534',
-                  fontSize: 'var(--fs-md)',
-                  fontWeight: 700
-                }}
+                className={`template-approval-status ${currentMedicationInfoApprovalIssues.length > 0 ? 'attention' : 'ready'}`}
               >
                 <span>
                   {currentMedicationInfoApprovalIssues.length > 0
@@ -619,7 +508,7 @@ export default function MedicationInfoTemplateSettingsTab({
                     : '承認条件を満たしています。'}
                 </span>
                 {currentMedicationInfoApprovalIssues.length > 0 && (
-                  <ul style={{ margin: 0, paddingLeft: '1.1rem', fontWeight: 600, lineHeight: 1.45 }}>
+                  <ul className="template-issue-list">
                     {currentMedicationInfoApprovalIssues.map((issue) => (
                       <li key={issue.code}>{issue.message}</li>
                     ))}
@@ -627,7 +516,7 @@ export default function MedicationInfoTemplateSettingsTab({
                 )}
               </div>
 
-              <div className="actions" style={{ marginTop: '1rem', alignItems: 'center' }}>
+              <div className="actions template-bottom-actions">
                 <button
                   type="button"
                   className="btn-secondary flex-center gap-2"
@@ -691,11 +580,239 @@ export default function MedicationInfoTemplateSettingsTab({
           </div>
 
       <style jsx>{`
+        .template-alert-danger {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 0.85rem;
+          padding: 0.65rem 0.75rem;
+          border: 1px solid #dc2626;
+          border-radius: 8px;
+          color: #991b1b;
+          background: #fef2f2;
+          font-weight: 700;
+          font-size: var(--fs-md);
+        }
+        .template-status-filters {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 0.65rem;
+          margin-bottom: 1rem;
+        }
+        .btn-template-filter {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0.65rem 0.75rem;
+          background: white;
+          cursor: pointer;
+          text-align: left;
+          transition: all var(--transition-fast);
+        }
+        .btn-template-filter.active {
+          border: 2px solid var(--primary);
+          background: #eff6ff;
+        }
+        .filter-label {
+          font-size: var(--fs-xs);
+          color: var(--text-muted);
+          font-weight: 700;
+        }
+        .filter-count {
+          font-size: 1.35rem;
+          font-weight: 800;
+          color: var(--text-main);
+        }
+        .template-readiness-filters {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.45rem;
+          margin-bottom: 1rem;
+        }
+        .btn-readiness-filter {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0.45rem 0.7rem;
+          background: white;
+          color: var(--text-main);
+          cursor: pointer;
+          font-size: var(--fs-sm);
+          font-weight: 800;
+          transition: all var(--transition-fast);
+        }
+        .btn-readiness-filter.active {
+          border: 2px solid var(--primary);
+          background: #eff6ff;
+        }
         .medication-info-template-layout {
           display: grid;
           grid-template-columns: minmax(260px, 0.9fr) minmax(0, 2fr);
           gap: 1rem;
           align-items: start;
+        }
+        .template-search-sidebar {
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0.85rem;
+          background: white;
+        }
+        .template-search-group {
+          margin-bottom: 0.75rem;
+        }
+        .template-result-count {
+          margin-bottom: 0.5rem;
+          color: var(--text-muted);
+          font-size: var(--fs-sm);
+          font-weight: 700;
+        }
+        .template-list {
+          display: grid;
+          gap: 0.5rem;
+          max-height: 560px;
+          overflow-y: auto;
+        }
+        .template-list-empty {
+          color: var(--text-muted);
+          font-size: var(--fs-md);
+          padding: 0.75rem;
+        }
+        .btn-template-item {
+          text-align: left;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0.7rem;
+          background: #fff;
+          cursor: pointer;
+          display: grid;
+          gap: 0.3rem;
+          transition: all var(--transition-fast);
+        }
+        .btn-template-item.active {
+          border: 2px solid var(--primary);
+          background: #eff6ff;
+        }
+        .template-item-name {
+          font-weight: 800;
+          color: var(--text-main);
+          word-break: break-word;
+        }
+        .template-item-code {
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+        }
+        .template-item-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+        }
+        .template-badge {
+          width: fit-content;
+          border-radius: 999px;
+          padding: 0.12rem 0.5rem;
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          background: #f8fafc;
+        }
+        .status-badge-error {
+          color: #dc2626;
+          border: 1px solid #dc2626;
+        }
+        .status-badge-approved {
+          color: #15803d;
+          border: 1px solid #15803d;
+        }
+        .status-badge-review {
+          color: #b45309;
+          border: 1px solid #b45309;
+        }
+        .status-badge-retired {
+          color: #64748b;
+          border: 1px solid #64748b;
+        }
+        .status-badge-draft {
+          color: #2563eb;
+          border: 1px solid #2563eb;
+        }
+        .readiness-badge-ok {
+          color: #047857;
+          background: #ecfdf5;
+          border: 1px solid #10b981;
+        }
+        .readiness-badge-missing {
+          color: #b45309;
+          background: #fffbeb;
+          border: 1px solid #f59e0b;
+        }
+        .btn-upload-label {
+          cursor: pointer;
+          opacity: 1;
+        }
+        .btn-upload-label.disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+        .template-csv-summary {
+          display: grid;
+          gap: 0.25rem;
+          margin-bottom: 0.85rem;
+          padding: 0.65rem 0.75rem;
+          border: 1px solid #93c5fd;
+          border-radius: 8px;
+          background: #eff6ff;
+          color: #1e40af;
+          font-size: var(--fs-md);
+          font-weight: 700;
+          line-height: 1.45;
+        }
+        .template-csv-timestamp {
+          color: #1d4ed8;
+          font-size: var(--fs-xs);
+        }
+        .template-revision-notice {
+          margin-bottom: 0.85rem;
+          padding: 0.7rem 0.8rem;
+          border-radius: 8px;
+          font-size: var(--fs-md);
+          font-weight: 700;
+          line-height: 1.5;
+        }
+        .template-revision-notice.editing {
+          border: 1px solid #f59e0b;
+          background: #fffbeb;
+          color: #92400e;
+        }
+        .template-revision-notice.viewing {
+          border: 1px solid #93c5fd;
+          background: #eff6ff;
+          color: #1e40af;
+        }
+        .template-approval-status {
+          display: grid;
+          gap: 0.4rem;
+          margin-top: 0.75rem;
+          padding: 0.7rem 0.8rem;
+          border-radius: 8px;
+          font-size: var(--fs-md);
+          font-weight: 700;
+        }
+        .template-approval-status.ready {
+          border: 1px solid #16a34a;
+          background: #f0fdf4;
+          color: #166534;
+        }
+        .template-approval-status.attention {
+          border: 1px solid #f59e0b;
+          background: #fffbeb;
+          color: #92400e;
+        }
+        .template-issue-list {
+          margin: 0;
+          padding-left: 1.1rem;
+          font-weight: 600;
+          line-height: 1.45;
+        }
+        .template-bottom-actions {
+          margin-top: 1rem;
+          align-items: center;
         }
         .medication-info-template-actions {
           display: flex;

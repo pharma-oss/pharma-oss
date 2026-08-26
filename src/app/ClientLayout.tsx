@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, FileText, LayoutDashboard, Package, Scan, Search, Settings, X, KeyRound, Fingerprint, Loader2, RefreshCw, UserRound, Sparkles } from 'lucide-react';
+import { Download, FileText, LayoutDashboard, Package, Scan, Search, Settings, X, KeyRound, Fingerprint, Loader2, RefreshCw, UserRound, Sparkles, AlertOctagon, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,6 +14,7 @@ import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { CapsuleGlyph } from '@/components/brand/CapsuleMark';
 import { DbSecurityBanner } from '@/components/DbSecurityBanner';
+import { SatelliteQueueWarningBanner } from '@/components/sync/SatelliteQueueWarningBanner';
 import { LoginModal } from '@/components/layout/LoginModal';
 import { usePWA } from '@/hooks/usePWA';
 import { useSessionLock } from '@/hooks/useSessionLock';
@@ -38,7 +39,7 @@ const toUser = (doc: any): User => {
     passwordHash: data.passwordHash,
     salt: data.salt,
     passkeyCredentialId: data.passkeyCredentialId,
-    passkeyPublicKey: data.passkeyPublicKey
+    passkeyPublicKey: data.passkeyPublicKey,
   };
 };
 
@@ -52,10 +53,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [staffLoadTimedOut, setStaffLoadTimedOut] = useState(false);
   const [staffLoadError, setStaffLoadError] = useState('');
   const [staffLoadAttempt, setStaffLoadAttempt] = useState(0);
+  const [isOfflineAuthMode, setIsOfflineAuthMode] = useState(false);
+  const [isTerminalRevoked, setIsTerminalRevoked] = useState(false);
+  const [offlineExpiresAt, setOfflineExpiresAt] = useState('');
+
   const isAuthenticated = isAuthenticatedUser(currentUser);
   const initialAdmin = users.find(isInitialAdminUser);
-  const initialAdminNeedsCredential = !!initialAdmin && !hasLoginCredential(initialAdmin);
-  const [preLoginTourDismissed, setPreLoginTourDismissed] = useState(false);
+  const initialAdminNeedsCredential = !isOfflineAuthMode && !isTerminalRevoked && !!initialAdmin && !hasLoginCredential(initialAdmin);
+  const [preLoginTourDismissed, setPreLoginTourDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return Boolean(window.localStorage.getItem(PRE_LOGIN_TOUR_STORAGE_KEY));
+    } catch {
+      return false;
+    }
+  });
   const showPreLoginTour = !isAuthenticated && initialAdminNeedsCredential && !preLoginTourDismissed;
   // ゲスト体験中(パスワード未設定の初期管理者としてログインしている)かどうか。
   // 実際にパスワード/パスキーが設定されるとhasLoginCredentialがtrueになり自動的に外れる。
@@ -78,16 +90,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     onSessionLocked: handleSessionLocked
   });
 
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(PRE_LOGIN_TOUR_STORAGE_KEY)) {
-        setPreLoginTourDismissed(true);
-      }
-    } catch {
-      // ストレージにアクセスできない場合は毎回表示されるが、スキップは常に可能
-    }
-  }, []);
-
   const handleFinishPreLoginTour = useCallback(() => {
     try {
       window.localStorage.setItem(PRE_LOGIN_TOUR_STORAGE_KEY, new Date().toISOString());
@@ -101,6 +103,60 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     const user = getCurrentUser();
     setLocalCurrentUser(user);
+  }, []);
+
+  // Periodic and storage event check for satellite offline auth and revocation tombstone
+  useEffect(() => {
+    let active = true;
+    const checkState = async () => {
+      try {
+        const { isSatelliteRevokedTombstone, getOfflineAuthCache } = await import('@/lib/sync/satellite_offline_auth');
+        if (!active) return;
+        if (isSatelliteRevokedTombstone()) {
+          setIsTerminalRevoked(true);
+          return;
+        }
+        setIsTerminalRevoked(false);
+
+        // Check if role is satellite and probe hub status
+        const { resolveClientSyncIdentity } = await import('@/lib/sync/client_role');
+        const identity = await resolveClientSyncIdentity();
+        if (!active) return;
+        if (identity.role === 'satellite') {
+          const res = await fetch('/api/sync/status').catch(() => null);
+          const isReachable = res?.ok ? ((await res.json().catch(() => ({}))).hubReachable !== false) : false;
+          if (!active) return;
+          if (!isReachable) {
+            setIsOfflineAuthMode(true);
+            const offlineCache = getOfflineAuthCache();
+            if (offlineCache.ok) {
+              setOfflineExpiresAt(offlineCache.expiresAt);
+            }
+          } else {
+            setIsOfflineAuthMode(false);
+          }
+        }
+      } catch {}
+    };
+
+    checkState();
+    const interval = window.setInterval(checkState, 2000);
+
+    const handleStorage = (e: StorageEvent) => {
+      checkState();
+      if (
+        e.key === 'yakureki_satellite_offline_auth_cache_v1' ||
+        e.key === 'yakureki_satellite_revocation_tombstone'
+      ) {
+        setStaffLoadAttempt((a) => a + 1);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   // Login Modal State
@@ -134,14 +190,56 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       window.clearTimeout(staffLoadTimeout);
       const nextUsers = (list || []).map(toUser);
 
-      setUsers(nextUsers);
-      setStaffLoadTimedOut(false);
-      setLocalCurrentUser((current) => {
-        if (!isAuthenticatedUser(current)) return nextUsers.length > 0 ? current : UNAUTHENTICATED_USER;
-        const refreshedCurrent = nextUsers.find((user) => user.userId === current.userId);
-        return refreshedCurrent || UNAUTHENTICATED_USER;
-      });
-      setHasLoadedUsers(true);
+      if (nextUsers.length > 0) {
+        setUsers(nextUsers);
+        setIsOfflineAuthMode(false);
+        setIsTerminalRevoked(false);
+        setStaffLoadTimedOut(false);
+        setLocalCurrentUser((current) => {
+          if (!isAuthenticatedUser(current)) return nextUsers.length > 0 ? current : UNAUTHENTICATED_USER;
+          const refreshedCurrent = nextUsers.find((user) => user.userId === current.userId);
+          return refreshedCurrent || UNAUTHENTICATED_USER;
+        });
+        setHasLoadedUsers(true);
+        import('@/lib/sync/satellite_offline_auth').then(({ saveOfflineAuthCache }) => {
+          saveOfflineAuthCache(nextUsers);
+        }).catch(() => {});
+      } else {
+        import('@/lib/sync/satellite_offline_auth').then(({ isSatelliteRevokedTombstone, getOfflineAuthCache }) => {
+          if (!isMounted) return;
+          if (isSatelliteRevokedTombstone()) {
+            setIsTerminalRevoked(true);
+            setUsers([]);
+            setLocalCurrentUser(UNAUTHENTICATED_USER);
+            setHasLoadedUsers(true);
+            return;
+          }
+
+          const offlineCache = getOfflineAuthCache();
+          if (offlineCache.ok && offlineCache.users.length > 0) {
+            setUsers(offlineCache.users);
+            setIsOfflineAuthMode(true);
+            setOfflineExpiresAt(offlineCache.expiresAt);
+            setStaffLoadTimedOut(false);
+            setLocalCurrentUser((current) => {
+              if (!isAuthenticatedUser(current)) return offlineCache.users[0] || UNAUTHENTICATED_USER;
+              const matched = offlineCache.users.find((u) => u.userId === current.userId);
+              return matched || UNAUTHENTICATED_USER;
+            });
+            setHasLoadedUsers(true);
+          } else {
+            setUsers([]);
+            setLocalCurrentUser(UNAUTHENTICATED_USER);
+            setHasLoadedUsers(true);
+          }
+        }).catch(() => {
+          if (isMounted) {
+            setUsers([]);
+            setLocalCurrentUser(UNAUTHENTICATED_USER);
+            setHasLoadedUsers(true);
+          }
+        });
+      }
     };
 
     const initUsers = async () => {
@@ -217,6 +315,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     try {
       if (!selectedUser.passwordHash || !selectedUser.salt) {
         setLoginError('このスタッフにはパスワードが設定されていません。パスキーで認証するか、管理者がパスワードを登録してください。');
+        return;
+      }
+
+      if (isOfflineAuthMode) {
+        const { verifyOfflinePassword } = await import('@/lib/sync/satellite_offline_auth');
+        if (await verifyOfflinePassword(passwordInput, selectedUser)) {
+          await completeLogin(selectedUser);
+          toast.success(`${selectedUser.name}（オフライン認証）としてログインしました。`);
+        } else {
+          setLoginError('パスワードが正しくありません。');
+        }
         return;
       }
 
@@ -644,6 +753,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
             <main className="main-viewport">
               <DbSecurityBanner />
+              <SatelliteQueueWarningBanner />
               {isGuestDemoSession && (
                 <div className="pwa-install-banner guest-demo-banner animate-fade-in" data-testid="guest-demo-banner">
                   <div className="pwa-install-copy">
@@ -761,7 +871,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   )}
                 </div>
 
-                <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div className="user-profile">
                   <SyncStatusIndicator />
                   {isAuthenticated && (
                     <FirstRunTutorial
@@ -777,24 +887,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     value={currentUser.userId}
                     onChange={handleUserChange}
                     className="user-select glass"
-                    style={{
-                      padding: '0.4rem 0.75rem',
-                      border: '1px solid rgba(0, 0, 0, 0.1)',
-                      borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.65)',
-                      color: 'var(--foreground)',
-                      fontSize: 'var(--fs-md)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      outline: 'none'
-                    }}
                   >
-                    <option value={UNAUTHENTICATED_USER.userId} disabled style={{ color: '#333' }}>
+                    <option value={UNAUTHENTICATED_USER.userId} disabled className="user-option">
                       スタッフを選択
                     </option>
                     {users.length > 0 ? (
                       users.map(u => (
-                        <option key={u.userId} value={u.userId} style={{ color: '#333' }}>
+                        <option key={u.userId} value={u.userId} className="user-option">
                           {u.name} ({u.role === 'pharmacist' ? '薬剤師' : u.role === 'clerk' ? '事務' : '管理者'})
                         </option>
                       ))
@@ -809,10 +908,23 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               </header>
 
               <section className="content-scroll">
-                {staffLoadError ? (
-                  <div className="card glass" role="alert" style={{ margin: '2rem auto', maxWidth: '720px', padding: '1.5rem' }}>
-                    <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem' }}>スタッフ情報を確認できません</h2>
-                    <p className="text-muted" style={{ margin: '0 0 0.9rem', lineHeight: 1.7 }}>
+                {isTerminalRevoked ? (
+                  <div className="card glass auth-card" role="alert" style={{ border: '2px solid var(--danger, #ef4444)', background: 'rgba(239, 68, 68, 0.04)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--danger, #ef4444)', marginBottom: '0.75rem' }}>
+                      <AlertOctagon size={28} aria-hidden="true" />
+                      <h2 className="auth-title" style={{ margin: 0, color: 'var(--danger, #ef4444)' }}>この端末は失効されています</h2>
+                    </div>
+                    <p className="text-muted auth-desc-compact" style={{ lineHeight: 1.7 }}>
+                      このサテライト端末は管理者によってアクセス権が失効（Revoke）されました。
+                      患者データの保護のため、端末内の認証キャッシュおよび未送信データは安全に消去（Zeroize）されています。
+                      オフライン状態であっても本端末からログインすることはできません。
+                      業務を再開するには、メイン端末の「設定 &gt; 端末同期」から本端末を再登録してください。
+                    </p>
+                  </div>
+                ) : staffLoadError ? (
+                  <div className="card glass auth-card" role="alert">
+                    <h2 className="auth-title">スタッフ情報を確認できません</h2>
+                    <p className="text-muted auth-desc">
                       {staffLoadError} 患者情報や受付は、確認が完了するまで表示しません。
                     </p>
                     <button
@@ -825,45 +937,55 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     </button>
                   </div>
                 ) : !hasLoadedUsers ? (
-                  <div className="card glass" role="status" style={{ margin: '2rem auto', maxWidth: '720px', padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <div className="card glass auth-card" role="status">
+                    <div className="auth-status-row">
                       <Loader2 size={17} className="animate-spin" aria-hidden="true" />
                       <span>スタッフ情報を確認しています...</span>
                     </div>
                     {staffLoadTimedOut && (
-                      <p className="text-muted" style={{ margin: '0.75rem 0 0', lineHeight: 1.7 }}>
+                      <p className="text-muted auth-timeout-note">
                         初回起動やデータ更新後は時間がかかることがあります。確認が終わるまで、このままお待ちください。
                       </p>
                     )}
                   </div>
                 ) : isAuthenticated ? (
-                  children
+                  <>
+                    {isOfflineAuthMode && (
+                      <div style={{ background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.4)', borderRadius: 'var(--radius-md)', padding: '0.6rem 1rem', margin: '0.75rem var(--space-4)', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem' }}>
+                        <AlertTriangle size={17} style={{ color: '#ca8a04', flexShrink: 0 }} aria-hidden="true" />
+                        <span>
+                          <strong>【オフライン認証中】</strong> メイン端末と通信できないため、端末内認証キャッシュ（有効期限: {offlineExpiresAt ? new Date(offlineExpiresAt).toLocaleTimeString() : '24時間'}）でログインしています。
+                        </span>
+                      </div>
+                    )}
+                    {children}
+                  </>
                 ) : showPreLoginTour ? (
                   <PreLoginTour onFinish={handleFinishPreLoginTour} onStartGuestDemo={handleStartGuestDemo} />
                 ) : initialAdminNeedsCredential ? (
-                  <form className="card glass" onSubmit={handleInitialAdminPasswordSetup} style={{ margin: '2rem auto', maxWidth: '720px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <form className="card glass auth-setup-form" onSubmit={handleInitialAdminPasswordSetup}>
                     <div>
-                      <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem' }}>初期管理者の認証を設定してください</h2>
-                      <p className="text-muted" style={{ margin: 0, lineHeight: 1.7 }}>
+                      <h2 className="auth-title">初期管理者の認証を設定してください</h2>
+                      <p className="text-muted auth-desc-compact">
                         初期管理者は登録済みです。パスワードまたはパスキーを設定するとログインできます。
                       </p>
                     </div>
                     {setupError && (
-                      <div role="alert" style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', fontSize: 'var(--fs-base)' }}>
+                      <div role="alert" className="auth-error-box">
                         {setupError}
                       </div>
                     )}
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 600 }}>
+                    <label className="auth-label">
                       管理者名
                       <input
                         type="text"
                         value={setupAdminName}
                         onChange={(e) => setSetupAdminName(e.target.value)}
                         autoComplete="name"
-                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 'var(--fs-base)' }}
+                        className="auth-input"
                       />
                     </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontWeight: 600 }}>
+                    <label className="auth-label">
                       初期パスワード（8文字以上）
                       <input
                         type="password"
@@ -871,10 +993,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                         onChange={(e) => setSetupAdminPassword(e.target.value)}
                         autoComplete="new-password"
                         minLength={8}
-                        style={{ padding: '0.7rem', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 'var(--fs-base)' }}
+                        className="auth-input"
                       />
                     </label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div className="auth-actions">
                       <button type="submit" className="btn-primary flex-center gap-2" disabled={isCreatingInitialAdmin}>
                         {isCreatingInitialAdmin && <Loader2 size={16} className="animate-spin" />}
                         <KeyRound size={16} />
@@ -882,30 +1004,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       </button>
                       <button
                         type="button"
-                        className="btn-secondary flex-center gap-2"
+                        className="btn-secondary flex-center gap-2 btn-passkey-setup"
                         onClick={handleInitialAdminPasskeySetup}
                         disabled={isCreatingInitialAdmin}
-                        style={{
-                          border: '1px solid #3b82f6',
-                          color: '#2563eb',
-                          background: 'rgba(37, 99, 235, 0.04)'
-                        }}
                       >
                         {isCreatingInitialAdmin && <Loader2 size={16} className="animate-spin" />}
                         <Fingerprint size={16} />
                         <span>パスキーを登録して開始</span>
                       </button>
                     </div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <p className="text-muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>
+                    <div className="auth-demo-footer">
+                      <p className="text-muted auth-demo-desc">
                         まだパスワードを決めていない場合は、デモ患者・受付データで自由に試せる体験モードに戻れます。
                       </p>
                       <button
                         type="button"
-                        className="btn-secondary flex-center gap-2"
+                        className="btn-secondary flex-center gap-2 btn-resume-demo"
                         onClick={handleResumeGuestDemoFromAuthGate}
                         disabled={isResumingGuestDemo || isCreatingInitialAdmin}
-                        style={{ alignSelf: 'flex-start' }}
                       >
                         {isResumingGuestDemo && <Loader2 size={16} className="animate-spin" />}
                         <Sparkles size={16} />
@@ -914,9 +1030,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     </div>
                   </form>
                 ) : (
-                  <div className="card glass" role="status" style={{ margin: '2rem auto', maxWidth: '720px', padding: '1.5rem' }}>
-                    <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.25rem' }}>スタッフログインが必要です</h2>
-                    <p className="text-muted" style={{ margin: 0, lineHeight: 1.7 }}>
+                  <div className="card glass auth-card" role="status">
+                    <h2 className="auth-title">スタッフログインが必要です</h2>
+                    <p className="text-muted auth-desc-compact">
                       右上の操作者メニューからスタッフを選択し、パスワードまたはパスキーで認証してください。未ログイン状態では患者情報、受付、印刷、設定を操作できません。
                     </p>
                   </div>
@@ -925,6 +1041,106 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </main>
           </div>
       </DatabaseProvider>
+
+      <style jsx>{`
+        .user-profile {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+        }
+        .user-select {
+          padding: var(--space-1-5) var(--space-3);
+          border: 1px solid rgba(0, 0, 0, 0.1);
+          border-radius: var(--radius-md);
+          background: rgba(255, 255, 255, 0.65);
+          color: var(--foreground);
+          font-size: var(--fs-md);
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+        }
+        .user-option {
+          color: #333;
+        }
+        .auth-card {
+          margin: var(--space-8) auto;
+          max-width: 720px;
+          padding: var(--space-6);
+        }
+        .auth-title {
+          margin: 0 0 var(--space-2);
+          font-size: 1.25rem;
+        }
+        .auth-desc {
+          margin: 0 0 var(--space-3-5);
+          line-height: 1.7;
+        }
+        .auth-status-row {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2-5);
+        }
+        .auth-timeout-note {
+          margin: var(--space-3) 0 0;
+          line-height: 1.7;
+        }
+        .auth-setup-form {
+          margin: var(--space-8) auto;
+          max-width: 720px;
+          padding: var(--space-6);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+        }
+        .auth-error-box {
+          color: #b91c1c;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-radius: var(--radius-md);
+          padding: var(--space-3);
+          font-size: var(--fs-base);
+        }
+        .auth-label {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1);
+          font-weight: 600;
+        }
+        .auth-input {
+          padding: var(--space-2-5) var(--space-3);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          font-size: var(--fs-base);
+        }
+        .auth-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--space-3);
+        }
+        .btn-passkey-setup {
+          border: 1px solid #3b82f6;
+          color: #2563eb;
+          background: rgba(37, 99, 235, 0.04);
+        }
+        .auth-demo-footer {
+          border-top: 1px solid var(--border);
+          padding-top: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2);
+        }
+        .auth-demo-desc {
+          margin: 0;
+          font-size: var(--fs-md);
+        }
+        .btn-resume-demo {
+          align-self: flex-start;
+        }
+        .auth-desc-compact {
+          margin: 0;
+          line-height: 1.7;
+        }
+      `}</style>
 
       {/* Staff Login Modal */}
       {showLoginModal && selectedUser && (

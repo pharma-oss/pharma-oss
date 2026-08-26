@@ -583,8 +583,23 @@ describe('Schema Validation', () => {
             id: 'prob_1',
             title: '#1 高血圧',
             entries: [
-              { type: 'S', text: '最近、血圧が高い' },
-              { type: 'O', text: '145/92 mmHg' }
+              {
+                id: 'e_1',
+                type: 'S',
+                text: '最近、血圧が高い',
+                origin: 'manual',
+                aiStatus: 'approved',
+                confirmedAt: '2026-08-24T10:00:00Z',
+                confirmedBy: 'user_1'
+              },
+              {
+                id: 'e_2',
+                type: 'O',
+                text: '145/92 mmHg',
+                origin: 'ai_draft',
+                aiStatus: 'unconfirmed',
+                aiDraftId: 'soap-o-1'
+              }
             ]
           }
         ],
@@ -602,8 +617,8 @@ describe('Schema Validation', () => {
       assert.strictEqual(errors, null);
     });
 
-    test('should validate structured medication guidance fields', () => {
-      assert.strictEqual(SOAP_RECORD_SCHEMA.version, 3);
+    test('should validate structured medication guidance fields and version 4', () => {
+      assert.strictEqual(SOAP_RECORD_SCHEMA.version, 4);
       const invalidSoap = {
         soapId: 'soap_1',
         visitId: 'v_123',
@@ -933,7 +948,7 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(AUDIT_LOG_SCHEMA, validLog);
       assert.strictEqual(errors, null);
-      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 18);
+      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 19);
     });
 
     test('should validate per-terminal chained audit logs with terminalId', () => {

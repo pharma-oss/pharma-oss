@@ -69,7 +69,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
 
   return (
     <div className="insurance-modal-overlay">
-      <div className="insurance-modal animate-scale" style={{ width: '500px' }}>
+      <div className="insurance-modal animate-scale modal-intervention">
         <div className="modal-header">
           <div className="modal-title-row">
             <MessageSquare size={20} />
@@ -77,14 +77,14 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
           </div>
           <span className="modal-subtitle">変更理由と医師の回答結果をレセプト(UKE)に自動連携します。</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+        <div className="intervention-form-body">
+          <div className="form-row intervention-row">
             <div className="form-group flex-1">
               <label>照会状態</label>
               <select
                 value={intStatus}
                 onChange={(e) => setIntStatus(e.target.value as 'pending' | 'completed')}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
+                className="intervention-select"
               >
                 <option value="completed">回答済</option>
                 <option value="pending">照会中</option>
@@ -95,7 +95,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               <select
                 value={intMethod}
                 onChange={(e) => setIntMethod(e.target.value as 'phone' | 'fax' | 'in_person' | 'other')}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'white' }}
+                className="intervention-select"
               >
                 <option value="phone">電話</option>
                 <option value="fax">FAX</option>
@@ -111,7 +111,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               placeholder="例: 山田"
               value={intDoctor}
               onChange={(e) => setIntDoctor(e.target.value)}
-              style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+              className="intervention-input"
             />
           </div>
           <div className="form-group">
@@ -120,10 +120,10 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               placeholder="例: 重複投薬防止のため / 後発品への変更"
               value={intReason}
               onChange={(e) => setIntReason(e.target.value)}
-              style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)', minHeight: '60px' }}
+              className="intervention-textarea"
             />
           </div>
-          <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+          <div className="form-row intervention-row">
             <div className="form-group flex-1">
               <label>変更前の薬品名</label>
               <input
@@ -131,7 +131,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 placeholder="例: ロキソニン錠60mg"
                 value={intBefore}
                 onChange={(e) => setIntBefore(e.target.value)}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                className="intervention-input"
               />
             </div>
             <div className="form-group flex-1">
@@ -141,7 +141,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 placeholder="例: ロキソプロフェンNa塩錠60mg"
                 value={intAfter}
                 onChange={(e) => setIntAfter(e.target.value)}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                className="intervention-input"
               />
             </div>
           </div>
@@ -152,17 +152,17 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               placeholder={intStatus === 'pending' ? '例: 医師不在。折り返し待ち' : '例: 了承、削除、一般名処方へ変更'}
               value={intResult}
               onChange={(e) => setIntResult(e.target.value)}
-              style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+              className="intervention-input"
             />
           </div>
-          <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+          <div className="form-row intervention-row">
             <div className="form-group flex-1">
               <label>回答期限</label>
               <input
                 type="date"
                 value={intResponseDueDate}
                 onChange={(e) => setIntResponseDueDate(e.target.value)}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                className="intervention-input"
               />
             </div>
             <div className="form-group flex-1">
@@ -172,11 +172,11 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 placeholder="例: 次回受診時に再確認"
                 value={intNote}
                 onChange={(e) => setIntNote(e.target.value)}
-                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}
+                className="intervention-input"
               />
             </div>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: 'var(--fs-base)', color: 'var(--text-main)' }}>
+          <label className="intervention-checkbox-label">
             <input
               type="checkbox"
               checked={intConsented}
@@ -185,7 +185,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
             患者の同意を得ている
           </label>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+        <div className="intervention-footer">
           <button className="btn-secondary" onClick={onClose}>キャンセル</button>
           <button
             className="btn-primary"
@@ -214,6 +214,62 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
           </button>
         </div>
       </div>
+      <style jsx>{`
+        .modal-intervention {
+          width: 500px;
+          max-width: 95vw;
+        }
+        .intervention-form-body {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-4);
+        }
+        .intervention-row {
+          display: flex;
+          gap: var(--space-4);
+        }
+        .intervention-select {
+          padding: var(--space-2);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border);
+          background: white;
+          color: var(--text-main);
+          font-size: var(--fs-base);
+        }
+        .intervention-input {
+          padding: var(--space-2);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border);
+          background: var(--bg-card);
+          color: var(--text-main);
+          font-size: var(--fs-base);
+        }
+        .intervention-textarea {
+          padding: var(--space-2);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border);
+          min-height: 60px;
+          resize: vertical;
+          background: var(--bg-card);
+          color: var(--text-main);
+          font-size: var(--fs-base);
+          font-family: inherit;
+        }
+        .intervention-checkbox-label {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          cursor: pointer;
+          font-size: var(--fs-base);
+          color: var(--text-main);
+        }
+        .intervention-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-2);
+          margin-top: var(--space-4);
+        }
+      `}</style>
     </div>
   );
 };

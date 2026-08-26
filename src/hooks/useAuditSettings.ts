@@ -101,7 +101,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
   const [isExportingDailyClosingStoreBenchmark, setIsExportingDailyClosingStoreBenchmark] = useState(false);
   const [recordingDailyClosingKpiActionId, setRecordingDailyClosingKpiActionId] = useState<string | null>(null);
   const [postponingDailyClosingKpiActionId, setPostponingDailyClosingKpiActionId] = useState<string | null>(null);
-  const [filterUser, setFilterUser] = useState('all');
+  // 操作ユーザーは自由入力のテキストボックス。'all' を初期値にすると
+  // log.userName.includes('all') が評価され、監査ログが1件も表示されなくなる。
+  const [filterUser, setFilterUser] = useState('');
   const [filterAction, setFilterAction] = useState('all');
 
   const fetchAuditLogs = useCallback(async () => {

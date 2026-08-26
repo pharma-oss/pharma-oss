@@ -21,6 +21,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditLog['actionType'], string> = {
   patient_medication_info_template: '薬情テンプレ承認',
   follow_up_record: '服薬フォロー記録',
   ai_suggestion_review: 'AI補助提案確認',
+  ai_draft_approved: 'AI下書き承認',
+  ai_draft_modified: 'AI下書き修正',
   electronic_prescription: '電子処方箋受付',
   external_device_handoff: '調剤機器連携',
   staff_create: 'スタッフ追加',

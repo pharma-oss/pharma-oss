@@ -8,6 +8,9 @@ import {
   clearAllUnsentQueue,
   getUnsentQueueSummary,
   flushUnsentLocalQueue,
+  isRecordExpired,
+  getSatelliteQueueHealth,
+  SATELLITE_QUEUE_LIMITS,
 } from './satellite_local_queue.ts';
 
 test('satellite local queue enqueues encrypted items with true SHA-256 checksum and docId', () => {
@@ -116,3 +119,131 @@ test('enqueueUnsentRecord correctly extracts primaryKeys for non-id schema colle
 
   clearAllUnsentQueue();
 });
+
+test('isRecordExpired accurately identifies records older than expiration threshold', () => {
+  const now = new Date('2026-08-24T12:00:00.000Z');
+
+  // 1時間前: 期限内 (expired = false)
+  const freshRecord = {
+    id: 'patients:p1',
+    docId: 'p1',
+    collectionName: 'patients',
+    payload: { id: 'p1' },
+    enqueuedAt: '2026-08-24T11:00:00.000Z',
+    checksum: 'abc',
+  };
+  assert.strictEqual(isRecordExpired(freshRecord, now), false);
+
+  // 23時間前: 期限内 (expired = false)
+  const nearExpiryRecord = {
+    id: 'patients:p2',
+    docId: 'p2',
+    collectionName: 'patients',
+    payload: { id: 'p2' },
+    enqueuedAt: '2026-08-23T13:00:00.000Z',
+    checksum: 'abc',
+  };
+  assert.strictEqual(isRecordExpired(nearExpiryRecord, now), false);
+
+  // 25時間前 (前日以前): 期限超過 (expired = true)
+  const expiredRecord = {
+    id: 'patients:p3',
+    docId: 'p3',
+    collectionName: 'patients',
+    payload: { id: 'p3' },
+    enqueuedAt: '2026-08-23T10:00:00.000Z',
+    checksum: 'abc',
+  };
+  assert.strictEqual(isRecordExpired(expiredRecord, now), true);
+});
+
+test('getSatelliteQueueHealth computes total, byCollection, expiredCount, isNearLimit, and isLimitExceeded', () => {
+  clearAllUnsentQueue();
+  const now = new Date('2026-08-24T12:00:00.000Z');
+
+  // 空の状態
+  const initialHealth = getSatelliteQueueHealth(now);
+  assert.strictEqual(initialHealth.total, 0);
+  assert.strictEqual(initialHealth.hasExpired, false);
+  assert.strictEqual(initialHealth.expiredCount, 0);
+  assert.strictEqual(initialHealth.isNearLimit, false);
+  assert.strictEqual(initialHealth.isLimitExceeded, false);
+  assert.strictEqual(initialHealth.oldestEnqueuedAt, null);
+
+  // 新鮮なレコードを2件登録
+  enqueueUnsentRecord('patients', { id: 'p_01', name: '患者1' });
+  enqueueUnsentRecord('visits', { id: 'v_01', status: 'reception' });
+
+  const freshHealth = getSatelliteQueueHealth(now);
+  assert.strictEqual(freshHealth.total, 2);
+  assert.strictEqual(freshHealth.byCollection.patients, 1);
+  assert.strictEqual(freshHealth.byCollection.visits, 1);
+  assert.strictEqual(freshHealth.hasExpired, false);
+  assert.strictEqual(freshHealth.expiredCount, 0);
+  assert.strictEqual(freshHealth.isNearLimit, false);
+  assert.strictEqual(freshHealth.isLimitExceeded, false);
+  assert.ok(freshHealth.oldestEnqueuedAt);
+
+  clearAllUnsentQueue();
+});
+
+test('getSatelliteQueueHealth flags expiredCount > 0 without deleting expired records', () => {
+  clearAllUnsentQueue();
+  const now = new Date('2026-08-24T12:00:00.000Z');
+
+  // レコードを登録
+  const record = enqueueUnsentRecord('patients', { id: 'p_expired', name: '前日未送信患者' });
+  // enqueuedAt を 30時間前に設定して保存
+  const queue = getUnsentLocalQueue();
+  queue[0].enqueuedAt = '2026-08-23T06:00:00.000Z';
+  // 手動でストレージに反映
+  (global as any).window?.localStorage?.setItem(
+    'yakureki_satellite_unsent_queue_v1',
+    CryptoJS.AES.encrypt(JSON.stringify(queue), 'mock_test_key_placeholder').toString()
+  );
+
+  // 健全性チェック
+  const health = getSatelliteQueueHealth(now);
+  assert.strictEqual(health.total, 1);
+  assert.strictEqual(health.hasExpired, true);
+  assert.strictEqual(health.expiredCount, 1);
+
+  // 重要: 期限超過であってもデータは絶対に削除されずキューに残っていること
+  const remaining = getUnsentLocalQueue();
+  assert.strictEqual(remaining.length, 1);
+  assert.strictEqual(remaining[0].docId, 'p_expired');
+
+  clearAllUnsentQueue();
+});
+
+test('enqueueUnsentRecord ALWAYS persists records even when exceeding 1000 items (no throw, no drop)', () => {
+  clearAllUnsentQueue();
+
+  // 1,000 件の大量未送信レコードをシミュレート
+  for (let i = 1; i <= 1000; i++) {
+    enqueueUnsentRecord('visits', { id: `visit_${i}`, count: i });
+  }
+
+  assert.strictEqual(getUnsentLocalQueue().length, 1000);
+
+  const health1000 = getSatelliteQueueHealth();
+  assert.strictEqual(health1000.total, 1000);
+  assert.strictEqual(health1000.isLimitExceeded, true);
+  assert.strictEqual(health1000.isNearLimit, false);
+
+  // 1,001 件目を enqueue: 例外を投げず、絶対に破棄せず、確実に永続化されることを検証
+  assert.doesNotThrow(() => {
+    const record1001 = enqueueUnsentRecord('patients', { id: 'patient_1001', name: '1001人目の患者' });
+    assert.strictEqual(record1001.docId, 'patient_1001');
+  });
+
+  const updatedQueue = getUnsentLocalQueue();
+  assert.strictEqual(updatedQueue.length, 1001);
+
+  const found1001 = updatedQueue.find((item) => item.docId === 'patient_1001');
+  assert.ok(found1001, '1001件目のレコードがキュー内に確実に保存されていること');
+  assert.strictEqual((found1001.payload as any).name, '1001人目の患者');
+
+  clearAllUnsentQueue();
+});
+

@@ -78,7 +78,7 @@
 
 .search-bar input {
     width: 100%;
-    padding: 0.75rem 2.5rem 0.75rem 2.5rem !important;
+    padding: 0.75rem 2.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     font-size: 1rem;
@@ -282,6 +282,12 @@
     text-align: left;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
+}
+
+.data-table th.text-right,
+.data-table td.text-right,
+.data-table .text-right {
+    text-align: right;
 }
 
 .data-table th {
@@ -1253,5 +1259,99 @@
     font-size: var(--fs-xs);
     color: var(--text-muted);
     text-align: center;
-    padding: 0.75rem 0;
+    padding: var(--space-3) 0;
+    margin-top: var(--space-4);
+}
+
+.stock-negative {
+    font-weight: 700;
+    color: var(--destructive);
+}
+
+.data-table tbody tr td.daily-check-empty {
+    text-align: center;
+    padding: var(--space-8);
+}
+
+/* 納品取込 (ImportMaster) */
+.import-section-title {
+    margin-top: 0;
+    color: var(--text-main);
+}
+
+.import-section-desc {
+    margin-bottom: var(--space-6);
+    color: var(--text-muted);
+}
+
+.import-section-desc.compact {
+    margin-bottom: var(--space-4);
+}
+
+.upload-zone {
+    text-align: center;
+}
+
+.file-input-label {
+    cursor: pointer;
+}
+
+.file-input-label.is-busy {
+    cursor: wait;
+}
+
+.file-input-label .btn-secondary {
+    pointer-events: none;
+}
+
+.data-table tbody tr.unmatched-import-row td {
+    background-color: var(--danger-soft);
+}
+
+.import-qty-input {
+    width: 80px;
+    padding: var(--space-1) var(--space-2);
+}
+
+/* 棚番地管理 (LocationMaster) */
+.location-help-text {
+    font-size: var(--fs-md);
+    margin-bottom: var(--space-2-5);
+    color: var(--text-muted);
+}
+
+.location-code-input {
+    width: 90px;
+}
+
+.location-list-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2-5);
+    margin-bottom: var(--space-2);
+}
+
+.location-list-header h3 {
+    margin: 0;
+    color: var(--text-main);
+}
+
+.location-list-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.location-count-badge {
+    font-size: var(--fs-md);
+    color: var(--text-muted);
+}
+
+.location-desc-small {
+    display: block;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
 }

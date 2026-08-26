@@ -1,91 +1,61 @@
-# Walkthrough: P2-2 残余ソース文字列テストの 3 分類移行（修正・再提出版）
+# Walkthrough: P2-3 デザイントークン策定 & インライン style={{}} 置換（Step 2 完了・EMR実画面検証）
 
 ## 1. 実施概要
 
-スコープ A（29 ファイル / 1,030 assert）に属していた「ソースコードを `readFileSync` して正規表現・文字列走査していたテスト」について、差し戻し指摘に基づき以下の通り修正・再構築を完了しました：
-1. **`PrintPickingFlow.test.ts` の完全復元と強化**:
-   - HEAD の 11 テスト（171 assert：算定ロック中の変更ブロック、電子処方箋の調剤結果登録、処方薬別算定切替のロールバック、UKEライフサイクル制御、ピッキング遷移等）を全件復元。
-   - 新設のユーティリティ単体テスト（5 assert）を追加し、**12 テスト / 176 assert** として再構成（暫定例外として維持）。
-2. **`onboarding_e2e.test.ts` (29 assert) の移行完了**:
-   - ソースコード文字列走査を排除し、E2E シナリオ定義・監査証跡レポート契約テスト（5 テスト / 14 assert）へ昇格。
-3. **正確な KPI と「追加 / 削除 / 純増（純減）」の 3 つ組報告**。
+**Step 2: EMR 薬歴・処方・モーダル（155 箇所）** のすべてのインライン `style={{}}` をデザイントークン（`--space-*`）および Vanilla CSS / `<style jsx>` クラスへ置換し、本物の実画面描画検証（ログイン突破＋シードデータ展開＋各モーダル展開待機）を完了しました。
 
 ---
 
-## 2. KPI 測定結果
+## 2. Step 2 置換内訳（計 155 箇所すべて削減完了）
 
-### 主要 KPI: スコープ A 内の `readFileSync` テストファイル数
-```bash
-find src -name "*.test.ts" | while read f; do
-  grep -q "readFileSync" "$f" || continue
-  grep -qE "\.(ts|tsx|mjs)['\"]" "$f" || continue
-  echo "$(grep -c 'assert\.' "$f")  $f"
-done | sort -rn
-```
-
-- **着手前**: 29 ファイル / 1,030 assert
-- **移行完了後**: **2 ファイル（27 ファイル移行完了、2 ファイル例外維持）**
-  - `src/app/print/PrintPickingFlow.test.ts`: **176 assert**（HEAD の全 11 テスト 171 assert ＋ 純粋関数 5 assert、暫定例外）
-  - `src/app/print/PrintLayoutRegression.test.ts`: **43 assert**（合意済みの正当例外）
-
-### 指標④: テスト数の「追加 / 削除 / 純増（純減）」の 3 つ組
-- **着手前総テスト数**: 1,348 テスト
-- **削除したテスト（旧ソース文字列走査）**: **124 テスト**
-- **追加したテスト（純粋関数単体・API実動・契約テスト）**: **100 テスト**
-- **純増（純減）**: **−24 テスト**（現在: **1,324 テスト**）
+| ファイル | 置換前 | 置換後 | 主な改修内容 |
+|---|---|---|---|
+| `src/app/emr/components/PickingSupportModal.tsx` | 40 箇所 | **0 箇所** | `.picking-modal`, `.scan-form-box`, `.picking-item-card`, `.shortage-editor`, `.picking-footer` 等へクラス化 |
+| `src/app/emr/page.tsx` | 37 箇所 | **0 箇所** | `TimelineItem`, `.soap-panel-container`, `.ai-assist-notice`, `.aside-card`, `.intervention-list`, `.modal-completion` 等へクラス化 |
+| `src/app/emr/components/TracingReportModal.tsx` | 31 箇所 | **0 箇所** | `.tracing-dialog`, `.tracing-header`, `.tracing-grid-2col`, `.tracing-input`, `.tracing-footer` 等へクラス化 |
+| `src/app/emr/components/EmrInterventionModal.tsx` | 16 箇所 | **0 箇所** | `.modal-intervention`, `.intervention-row`, `.intervention-input`, `.intervention-textarea` 等へクラス化 |
+| `src/app/emr/components/MedicationGuidanceModal.tsx` | 12 箇所 | **0 箇所** | `.modal-md`, `.guidance-entry-list`, `.guidance-type-badge`, `.guidance-textarea`, `.btn-add-type` 等へクラス化 |
+| `src/app/emr/components/EmrInsightCards.tsx` | 8 箇所 | **0 箇所** | `.insight-card.warning.is-clear`, `.text-success-dark`, `.severity-danger/warning`, `.insight-empty-text` 等へクラス化 |
+| `src/app/emr/components/SoapComponents.tsx` | 5 箇所 | **0 箇所** | `SoapEntryBox` の `.entry-header`, `.entry-badge`, `.entry-sublabel`, `.btn-remove-entry`, `.entry-textarea` 等へクラス化 |
+| `src/app/emr/components/PatientBanner.tsx` | 5 箇所 | **0 箇所** | `.patient-header-row`, `.patient-actions`, `.btn-edit-insurance`, `.btn-picking`, `.patient-alerts-footer` 等へクラス化 |
+| `src/app/emr/components/DrugHistoryModal.tsx` | 1 箇所 | **0 箇所** | `.dh-soap-letter.is-s/o/a/p` クラス化 |
+| **Step 2 小計** | **155 箇所** | **0 箇所** | **EMR 配下の残存 style={{}} は完全 0 件** |
 
 ---
 
-## 3. 全 29 ファイルの対応一覧
+## 3. 本物実画面描画検証結果（MD5 チェックサム照合済み）
 
-| # | ファイル名 | 旧 assert | 区分 | 移行・対応内容 | 移行後テスト結果 |
-|---|---|---|---|---|---|
-| 1 | `src/app/print/PrintPickingFlow.test.ts` | 171 | **暫定例外** | HEAD の 11 テスト（171 assert）全件復元 ＋ 純粋関数 5 assert 追加 | 12 テスト / 176 assert PASS |
-| 2 | `src/app/print/PrintLayoutRegression.test.ts` | 43 | **正当例外** | HTML 文字列のレイアウト回帰テスト（例外として維持） | 3 テスト / 11 assert PASS |
-| 3 | `src/hooks/useDashboardTasks.test.ts` | 116 | ①/② 昇格 | 初期値・ラベル定義・ロールバック契約テストへ昇格（`dashboard_tasks.test.ts` 新設） | 5 テスト / 20 assert PASS |
-| 4 | `src/app/DashboardRouting.test.ts` | 173 | ② 昇格 | 行・カード・セクションコンポーネントのエクスポート契約テストへ昇格 | 11 テスト / 32 assert PASS |
-| 5 | `src/app/UkeExportAudit.test.ts` | 53 | ② 昇格 | UKE 出力前検証・ロールバック不変条件テストへ昇格 | 4 テスト / 18 assert PASS |
-| 6 | `src/app/EmrSoapAiDraft.test.ts` | 10 | ② 昇格 | SOAP 下書き生成・疑義照会ロールバック不変条件テストへ昇格 | 5 テスト / 8 assert PASS |
-| 7 | `src/components/PreLoginTour.test.ts` | 57 | ② 昇格 | ステップ定義・フィクスチャ・ゲストデモ契約テストへ昇格 | 5 テスト / 10 assert PASS |
-| 8 | `src/components/FirstRunTutorial.test.ts` | 42 | ② 昇格 | ストレージキー生成・デモフィクスチャ・コールバック契約テストへ昇格 | 4 テスト / 8 assert PASS |
-| 9 | `src/lib/onboarding_e2e.test.ts` | 29 | ①/② 昇格 | シナリオセレクタ・E2E 監査証跡レポート契約テストへ昇格 | 5 テスト / 14 assert PASS |
-| 10 | `src/components/WorkflowMiniTutorial.test.ts` | 34 | ② 昇格 | ワークフロー種別ストレージキー・固定フィクスチャ契約テストへ昇格 | 3 テスト / 12 assert PASS |
-| 11 | `src/app/ClientLayout.test.ts` | 48 | ② 昇格 | タイムアウト定数・セッションロックアクティビティ契約テストへ昇格 | 2 テスト / 6 assert PASS |
-| 12 | `src/app/SettingsAudit.test.ts` | 36 | ② 昇格 | 全 8 設定タブコンポーネントのエクスポート契約テストへ昇格 | 1 テスト / 8 assert PASS |
-| 13 | `src/app/settings/SettingsMedicationInfoTemplate.test.ts` | 29 | ①/② 昇格 | テンプレID生成・フォーム変換・ソート純粋関数テストへ昇格 | 5 テスト / 10 assert PASS |
-| 14 | `src/app/SettingsTerminalSync.test.ts` | 26 | ② 昇格 | `TerminalSyncPanel`, `SyncStatusIndicator` 契約テストへ昇格 | 1 テスト / 2 assert PASS |
-| 15 | `src/app/SettingsExternalConnector.test.ts` | 19 | ② 昇格 | コネクタレディネス GET API ハンドラー実動テストへ昇格 | 2 テスト / 6 assert PASS |
-| 16 | `src/app/SettingsStaffAudit.test.ts` | 5 | ② 昇格 | `StaffSettingsTab` コンポーネント契約テストへ昇格 | 1 テスト / 1 assert PASS |
-| 17 | `src/app/SettingsDrugDuplicateReview.test.ts` | 5 | ② 昇格 | `DrugMasterSettingsTab` コンポーネント契約テストへ昇格 | 1 テスト / 1 assert PASS |
-| 18 | `src/app/SettingsAuditExportOrder.test.ts` | 5 | ② 昇格 | 監査ログ失敗時ダウンロード中止の不変条件テストへ昇格 | 2 テスト / 2 assert PASS |
-| 19 | `src/app/SettingsBackup.test.ts` | 9 | ② 昇格 | `BackupSettingsTab` コンポーネント契約テストへ昇格 | 1 テスト / 1 assert PASS |
-| 20 | `src/app/InventoryDailyCheck.test.ts` | 26 | ①/② 昇格 | `DailyCheckPanel` コンポーネント＋点検集計純粋関数テストへ昇格 | 3 テスト / 8 assert PASS |
-| 21 | `src/app/InventoryWorkbench.test.ts` | 21 | ①/② 昇格 | `OrderWorkbench` コンポーネント＋発注優先度・CSV生成純粋関数テストへ昇格 | 5 テスト / 12 assert PASS |
-| 22 | `src/db/DatabaseProvider.test.ts` | 14 | ② 昇格 | `DatabaseProvider`, `useDatabase` コンポーネント・フック契約テストへ昇格 | 1 テスト / 2 assert PASS |
-| 23 | `src/db/index.test.ts` | 9 | ② 昇格 | `getDatabase` ファクトリ契約テストへ昇格 | 1 テスト / 1 assert PASS |
-| 24 | `src/db/collection_limit.test.ts` | 4 | ② 昇格 | スキーマオブジェクト直接検証契約テストへ昇格 | 1 テスト / 28 assert PASS |
-| 25 | `src/lib/auth.test.ts` | 9 | ① 昇格 | ソルト生成・パスワードハッシュ・照合純粋関数単体テストへ昇格 | 3 テスト / 8 assert PASS |
-| 26 | `src/app/api/eligibility/EligibilityRoute.test.ts` | 13 | ② 昇格 | オンライン資格確認 POST API ハンドラー実動テストへ昇格 | 2 テスト / 6 assert PASS |
-| 27 | `src/app/api/myna/MynaReadRoute.test.ts` | 8 | ② 昇格 | マイナ読取 GET API ハンドラー実動テストへ昇格 | 1 テスト / 3 assert PASS |
-| 28 | `src/app/api/drug-master/OfficialSpecPdfRoute.test.ts` | 10 | ② 昇格 | 医薬品マスター仕様 POST API ハンドラー実動テストへ昇格 | 1 テスト / 3 assert PASS |
-| 29 | `src/app/api/receipt/OfficialSpecPdfRoute.test.ts` | 6 | ② 昇格 | レセプト仕様 GET API ハンドラー実動テストへ昇格 | 1 テスト / 2 assert PASS |
-| + | `src/lib/dashboard_tasks.test.ts` | - | **新規** | `classifyDashboardVisits` 等 14 本の純粋関数包括テスト | 16 テスト / 45 assert PASS |
-| + | `src/lib/master-data/sqlite_seed.test.ts` | 6 | スコープB | JSON import 化によるリファクタリング | 2 テスト / 5 assert PASS |
-| + | `src/lib/drug_info_data.test.ts` | 4 | スコープB | JSON import 化によるリファクタリング | 2 テスト / 2 assert PASS |
+シードデータ展開後の実環境において、各モーダルを展開し個別に撮影・検証しました：
+
+| キャプチャ対象 | ファイル名 | MD5 チェックサム | 実画面検証内容 |
+|---|---|---|---|
+| **EMR メイン画面** | `emr_main_screen.png` | `c91a62f0...` | 患者バナー（`.patient-actions` gap: 8px、保険バッジ）、SOAPエディタ、インサイトカード、右側サイドバー（初回質問表、マイナ取込、疑義照会、トレーシング、処方遍歴タイムライン） |
+| **ピッキング支援モーダル** | `emr_picking_modal.png` | `32be0f94...` | バーコードスキャンフォーム、進捗サマリー、調剤アイテムカード、不足記録エディタ、指示CSV/結果取込フッター |
+| **疑義照会モーダル** | `emr_intervention_modal.png` | `f7b5fc9ead24...` | 照会状態・方法セレクト、医師名、変更理由、変更前後の薬品名、回答期限・同意チェックボックス |
+| **トレーシングレポートモーダル** | `emr_tracing_modal.png` | `e403b10d...` | 医療機関オートコンプリート、診療科・担当医グリッド、4区分テキストエリア、A4印刷・保存フッター |
+
+### 実画面プレビュー
+
+#### ① EMR メイン画面 (`/emr`)
+![EMRメイン画面](/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9/emr_main_screen.png)
+
+#### ② ピッキング支援モーダル (`PickingSupportModal`)
+![ピッキング支援モーダル](/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9/emr_picking_modal.png)
+
+#### ③ 疑義照会モーダル (`EmrInterventionModal`)
+![疑義照会モーダル](/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9/emr_intervention_modal.png)
+
+#### ④ トレーシングレポートモーダル (`TracingReportModal`)
+![トレーシングレポートモーダル](/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9/emr_tracing_modal.png)
 
 ---
 
-## 4. 厳格な実地検証の最終結果
+## 4. 厳格な検証生結果
 
-1. **型チェック (`npx tsc --noEmit`)**:
-   ```
-   Exit Code: 0 (TypeScript 型エラー 0 件)
-   ```
-2. **全体テスト (`npm test`)**:
-   ```
-   ℹ tests 1324
-   ℹ suites 64
-   ℹ pass 1324
-   ℹ fail 0
-   EXIT=0
-   ```
+- **`npx tsc --noEmit`**: Exit code 0 (型エラー 0 件)
+- **`npm run build`**: Exit code 0 (本番ビルド完全成功)
+- **`npm test`**: tests 1324 / suites 64 / pass 1324 / fail 0 / exit 0
+- **残存 `style={{` 件数推移**:
+  - Step 1 (在庫 24 / OCR 4): **28 箇所削減完了 (残 0)**
+  - Step 2 (EMR 155): **155 箇所削減完了 (残 0)**
+  - 全体残存: **756 箇所**（残るは Step 3: Settings/Dashboard/Print 198 箇所およびその他共通コンポーネント）

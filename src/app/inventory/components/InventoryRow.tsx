@@ -68,17 +68,11 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
         <tr>
             {/* 一般名マスタ(【般】)はYJコードを持たないため一般名コードで代替表示する */}
             <td>{drug.yjCode || drug.code}</td>
-            <td
-                className="text-right"
-                style={{ fontWeight: isTotalStockNegative ? 'bold' : 'normal', color: isTotalStockNegative ? 'var(--destructive)' : 'inherit' }}
-            >
+            <td className={`text-right ${isTotalStockNegative ? 'stock-negative' : ''}`}>
                 {totalStock}
             </td>
             <td className="text-right">{pendingStock > 0 ? pendingStock : '-'}</td>
-            <td
-                className="text-right"
-                style={{ fontWeight: isAvailableStockNegative ? 'bold' : 'normal', color: isAvailableStockNegative ? 'var(--destructive)' : 'inherit' }}
-            >
+            <td className={`text-right ${isAvailableStockNegative ? 'stock-negative' : ''}`}>
                 {availableStock}
             </td>
             <td>

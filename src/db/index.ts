@@ -401,6 +401,27 @@ const create = async () => {
                 2: (oldDoc) => {
                     oldDoc.structuredAssessment = oldDoc.structuredAssessment || createDefaultSoapStructuredAssessment();
                     return oldDoc;
+                },
+                3: (oldDoc) => {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                        try {
+                            if (!window.localStorage.getItem('yakureki_soap_schema_v4_migrated_at')) {
+                                window.localStorage.setItem('yakureki_soap_schema_v4_migrated_at', new Date().toISOString());
+                            }
+                        } catch {}
+                    }
+                    const problems = (oldDoc.problems || []).map((p: any) => ({
+                        ...p,
+                        entries: (p.entries || []).map((e: any) => ({
+                            ...e,
+                            origin: e.origin || 'legacy_unspecified',
+                            aiStatus: e.aiStatus || (e.origin === 'ai_draft' ? 'unconfirmed' : undefined)
+                        }))
+                    }));
+                    return {
+                        ...oldDoc,
+                        problems
+                    };
                 }
             })
         },
@@ -649,6 +670,7 @@ const create = async () => {
         });
     };
     if (typeof window !== 'undefined') {
+        (window as any).__yakurekiDb = db;
         window.setTimeout(warmReferenceData, 2500);
     } else {
         warmReferenceData();

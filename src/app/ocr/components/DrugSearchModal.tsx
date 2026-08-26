@@ -545,7 +545,7 @@ export default function DrugSearchModal({ isOpen, onClose, onSelect, initialQuer
                   />
                 ))}
                 {filteredDrugs.length > 100 && (
-                  <div className="limit-message text-muted text-sm" style={{ textAlign: 'center', marginTop: '1rem', paddingBottom: '1rem' }}>
+                  <div className="limit-message text-muted text-sm">
                     ※検索結果が多すぎます。上位100件のみ表示しています。条件を絞り込んでください。
                   </div>
                 )}

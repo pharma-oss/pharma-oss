@@ -50,7 +50,7 @@ export interface AiSuggestionSummary {
 }
 
 export const AI_SUGGESTION_GUARDRAIL =
-  'AI補助は候補提示のみです。請求、調剤、服薬指導の確定は薬剤師が確認してください。';
+  '【定型文】医薬品マスタ・監査ルールに基づく補助候補（臨床判断ではありません）。請求、調剤、服薬指導の確定は薬剤師が確認・承認してください。';
 
 const DECISION_LABELS: Record<AiSuggestionDecision, string> = {
   accepted: '採用',

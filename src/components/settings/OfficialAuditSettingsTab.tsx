@@ -28,48 +28,12 @@ import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/
     }
   };
 
-  const auditStatusStyle = (status: OfficialAuditStatus) => {
-    const styles = {
-      verified: { background: '#dcfce7', color: '#166534', border: '#86efac' },
-      implemented: { background: '#dbeafe', color: '#1d4ed8', border: '#93c5fd' },
-      partial: { background: '#fef3c7', color: '#92400e', border: '#fcd34d' },
-      open: { background: '#fee2e2', color: '#991b1b', border: '#fca5a5' }
-    }[status];
-
+  const auditPriorityLabel = (priority: 'critical' | 'high' | 'medium') => {
     return {
-      display: 'inline-flex',
-      alignItems: 'center',
-      borderRadius: '999px',
-      border: `1px solid ${styles.border}`,
-      padding: '0.15rem 0.55rem',
-      fontSize: 'var(--fs-xs)',
-      fontWeight: 700,
-      background: styles.background,
-      color: styles.color,
-      whiteSpace: 'nowrap' as const
-    };
-  };
-
-  const auditPriorityStyle = (priority: 'critical' | 'high' | 'medium') => {
-    const styles = {
-      critical: { label: '最重要', color: '#b91c1c', background: '#fef2f2' },
-      high: { label: '高', color: '#b45309', background: '#fffbeb' },
-      medium: { label: '中', color: '#475569', background: '#f8fafc' }
+      critical: '最重要',
+      high: '高',
+      medium: '中'
     }[priority];
-
-    return {
-      ...styles,
-      style: {
-        display: 'inline-flex',
-        borderRadius: '6px',
-        padding: '0.12rem 0.45rem',
-        fontSize: 'var(--fs-xs)',
-        fontWeight: 700,
-        color: styles.color,
-        background: styles.background,
-        border: '1px solid rgba(148, 163, 184, 0.35)'
-      }
-    };
   };
 
 
@@ -266,7 +230,7 @@ export default function OfficialAuditSettingsTab({
                 rows={5}
                 placeholder="YK 薬局情報レコード&#10;1 保険薬局コード 数字 7 7 必須"
                 disabled={isFetchingDispensingUkeSpecPdf}
-                style={{ resize: 'vertical', minHeight: '120px' }}
+                className="form-control textarea-spec-text"
               />
             </div>
 
@@ -279,7 +243,7 @@ export default function OfficialAuditSettingsTab({
                 rows={3}
                 placeholder="YK-pdf-field-definition-implementation, 定義追加準備, 仕様PDF YK 第3項目, 請求担当, 2026-06-20"
                 disabled={isFetchingDispensingUkeSpecPdf}
-                style={{ resize: 'vertical', minHeight: '84px' }}
+                className="form-control textarea-memo"
               />
             </div>
 
@@ -369,18 +333,16 @@ export default function OfficialAuditSettingsTab({
           </section>
 
           <div className="official-audit-list">
-            {OFFICIAL_AUDIT_ITEMS.map((item) => {
-              const priority = auditPriorityStyle(item.priority);
-              return (
-                <section key={item.id} className="official-audit-row">
-                  <div className="official-audit-row-main">
-                    <div className="official-audit-titleline">
-                      <h3>{item.title}</h3>
-                      <span style={auditStatusStyle(item.status)}>{auditStatusLabel(item.status)}</span>
-                      <span style={priority.style}>{priority.label}</span>
-                    </div>
-                    <p className="official-audit-basis">{item.officialBasis}</p>
+            {OFFICIAL_AUDIT_ITEMS.map((item) => (
+              <section key={item.id} className="official-audit-row">
+                <div className="official-audit-row-main">
+                  <div className="official-audit-titleline">
+                    <h3>{item.title}</h3>
+                    <span className={`audit-status-badge status-${item.status}`}>{auditStatusLabel(item.status)}</span>
+                    <span className={`audit-priority-badge priority-${item.priority}`}>{auditPriorityLabel(item.priority)}</span>
                   </div>
+                  <p className="official-audit-basis">{item.officialBasis}</p>
+                </div>
 
                   <div className="official-audit-detail-grid">
                     <div>
@@ -411,8 +373,7 @@ export default function OfficialAuditSettingsTab({
                     </div>
                   )}
                 </section>
-              );
-            })}
+              ))}
           </div>
 
       <style jsx>{`
@@ -626,6 +587,63 @@ export default function OfficialAuditSettingsTab({
           color: var(--text-main);
           font-size: var(--fs-md);
           line-height: 1.55;
+        }
+        .textarea-spec-text {
+          resize: vertical;
+          min-height: 120px;
+        }
+        .textarea-memo {
+          resize: vertical;
+          min-height: 84px;
+        }
+        .audit-status-badge {
+          display: inline-flex;
+          align-items: center;
+          border-radius: 999px;
+          padding: 0.15rem 0.55rem;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .audit-status-badge.status-verified {
+          background: #dcfce7;
+          color: #166534;
+          border: 1px solid #86efac;
+        }
+        .audit-status-badge.status-implemented {
+          background: #dbeafe;
+          color: #1d4ed8;
+          border: 1px solid #93c5fd;
+        }
+        .audit-status-badge.status-partial {
+          background: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fcd34d;
+        }
+        .audit-status-badge.status-open {
+          background: #fee2e2;
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+        }
+        .audit-priority-badge {
+          display: inline-flex;
+          border-radius: 6px;
+          padding: 0.12rem 0.45rem;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+          border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+        .audit-priority-badge.priority-critical {
+          color: #b91c1c;
+          background: #fef2f2;
+        }
+        .audit-priority-badge.priority-high {
+          color: #b45309;
+          background: #fffbeb;
+        }
+        .audit-priority-badge.priority-medium {
+          color: #475569;
+          background: #f8fafc;
         }
         .official-audit-sources {
           display: flex;
