@@ -54,8 +54,8 @@ test('buildDrugMasterSourceEvidence captures provenance fields', async () => {
     rowCount: 12,
     skippedRowCount: 1,
     sourceUrlReviewLabel: '支払基金 医薬品マスター候補ファイル',
-    specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260601.pdf',
-    specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf'
+    specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260731.pdf',
+    specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf'
   });
 
   assert.strictEqual(evidence.sourceFileName, 'iyakuhin.csv');
@@ -71,8 +71,8 @@ test('buildDrugMasterSourceEvidence captures provenance fields', async () => {
   assert.strictEqual(evidence.rowCount, 12);
   assert.strictEqual(evidence.skippedRowCount, 1);
   assert.strictEqual(evidence.sourceUrlReviewLabel, '支払基金 医薬品マスター候補ファイル');
-  assert.match(evidence.specificationRevisionLabel || '', /master_3_20260601\.pdf/);
-  assert.strictEqual(evidence.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf');
+  assert.match(evidence.specificationRevisionLabel || '', /master_3_20260731\.pdf/);
+  assert.strictEqual(evidence.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf');
 });
 
 test('reviewDrugMasterSourceUrl identifies SSK drug master URLs', () => {

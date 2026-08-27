@@ -10,6 +10,7 @@ export interface DrugMasterCsvColumnLayout {
   price: number;
   yjCode?: number;
   abolishDate?: number;
+  changeDate?: number;
   headerRowNumber?: number;
 }
 
@@ -21,6 +22,11 @@ export interface DrugMasterCsvRow {
   price: number;
   yjCode: string;
   abolishDate: string;
+  /**
+   * 項番30 変更年月日 (YYYY-MM-DD)。薬価が変わった行では、その薬価の適用開始日として使う。
+   * 列が無い / 空 / 9999... の行では空文字。
+   */
+  changeDate: string;
   isAbolished: boolean;
 }
 
@@ -90,17 +96,18 @@ const SSK_STANDARD_LAYOUT: DrugMasterCsvColumnLayout = {
   name: 4,
   price: 11,
   yjCode: 31,
-  abolishDate: 33
+  abolishDate: 33,
+  changeDate: 29
 };
 
 export const DRUG_MASTER_SPECIFICATION_SOURCE: DrugMasterSpecificationSource = {
   label: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター',
-  url: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf',
+  url: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf',
   sourcePageUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.html',
-  fileName: 'master_3_20260601.pdf',
-  publishedAt: '2026-06-01',
+  fileName: 'master_3_20260731.pdf',
+  publishedAt: '2026-07-31',
   expectedItemCount: 42,
-  revisionKey: 'master_3_20260601:drug-master:42'
+  revisionKey: 'master_3_20260731:drug-master:42'
 };
 
 export const DRUG_MASTER_SPECIFICATION_COLUMNS: DrugMasterSpecificationColumn[] = [
@@ -154,7 +161,8 @@ const HEADER_ALIASES = {
   name: ['医薬品名', '医薬品名漢字', '品名', '名称'],
   price: ['薬価', '単位薬価', '薬価基準'],
   yjCode: ['YJコード', 'ＹＪコード'],
-  abolishDate: ['廃止年月日', '廃止日', '経過措置年月日', '経過措置期限']
+  abolishDate: ['廃止年月日', '廃止日', '経過措置年月日', '経過措置期限'],
+  changeDate: ['変更年月日', '変更日']
 } as const;
 
 type HeaderField = keyof typeof HEADER_ALIASES;
@@ -166,9 +174,10 @@ const REQUIRED_COLUMN_LABELS: Record<'changeType' | 'code' | 'name' | 'price', s
   price: '薬価'
 };
 
-const OPTIONAL_COLUMN_LABELS: Record<'yjCode' | 'abolishDate', string> = {
+const OPTIONAL_COLUMN_LABELS: Record<'yjCode' | 'abolishDate' | 'changeDate', string> = {
   yjCode: '薬価基準収載医薬品コード',
-  abolishDate: '経過措置年月日又は商品名医薬品コード使用期限'
+  abolishDate: '経過措置年月日又は商品名医薬品コード使用期限',
+  changeDate: '変更年月日'
 };
 
 const SSK_STANDARD_SPEC_COLUMNS = {
@@ -178,7 +187,8 @@ const SSK_STANDARD_SPEC_COLUMNS = {
   name: { label: '漢字名称', index: 4 },
   price: { label: '新又は現金額', index: 11 },
   yjCode: { label: '薬価基準収載医薬品コード', index: 31 },
-  abolishDate: { label: '経過措置年月日又は商品名医薬品コード使用期限', index: 33 }
+  abolishDate: { label: '経過措置年月日又は商品名医薬品コード使用期限', index: 33 },
+  changeDate: { label: '変更年月日', index: 29 }
 } as const;
 
 export function parseDrugMasterCsvLine(line: string): string[] {
@@ -234,6 +244,7 @@ function buildHeaderLayout(cols: string[]): DrugMasterCsvColumnLayout | null {
     price: findHeaderIndex(cols, 'price'),
     yjCode: findHeaderIndex(cols, 'yjCode'),
     abolishDate: findHeaderIndex(cols, 'abolishDate'),
+    changeDate: findHeaderIndex(cols, 'changeDate'),
     headerRowNumber: 1
   };
 
@@ -255,6 +266,7 @@ function buildHeaderLayout(cols: string[]): DrugMasterCsvColumnLayout | null {
     price: layout.price ?? -1,
     yjCode: layout.yjCode,
     abolishDate: layout.abolishDate,
+    changeDate: layout.changeDate,
     headerRowNumber: 1
   };
 }
@@ -278,6 +290,22 @@ function requiredHeaderErrors(layout: DrugMasterCsvColumnLayout): DrugMasterCsvI
 
 function normalizeDateDigits(value: string): string {
   return value.normalize('NFKC').replace(/[^\d]/g, '');
+}
+
+/**
+ * 8桁の年月日を YYYY-MM-DD へ直す。
+ * 桁数の合わない値と、未設定を表す 9999 年 (99999999・99991231 等) は空文字にする。
+ */
+function toIsoDateOrEmpty(value: string): string {
+  const digits = normalizeDateDigits(value);
+  if (digits.length !== 8) return '';
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  const day = Number(digits.slice(6, 8));
+  // 9999 年は「未設定」の意味で使われる (99999999 のほか 99991231 の形もある)
+  if (year >= 9999) return '';
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return '';
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
 function dateToDigits(date: Date): string {
@@ -527,6 +555,7 @@ export function parseDrugMasterUpdateCsv(csvText: string, options: { today?: Dat
     const priceText = String(cols[layout.price] ?? '').trim();
     const yjCode = getOptionalColumn(cols, layout.yjCode);
     const abolishDate = getOptionalColumn(cols, layout.abolishDate);
+    const changeDate = toIsoDateOrEmpty(getOptionalColumn(cols, layout.changeDate));
     const masterType = getStandardMasterType(cols, layout);
 
     if (layout.source === 'ssk-standard' && masterType !== 'Y') {
@@ -559,6 +588,7 @@ export function parseDrugMasterUpdateCsv(csvText: string, options: { today?: Dat
       price: parsePrice(priceText),
       yjCode,
       abolishDate,
+      changeDate,
       isAbolished: isAbolishedRow(changeType, abolishDate, todayDigits)
     });
   }

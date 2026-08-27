@@ -83,8 +83,8 @@ test('buildDrugMasterUpdateArtifacts summarizes changes and creates rollback pay
       rowCount: 4,
       skippedRowCount: 0,
       sourceUrlReviewLabel: '支払基金 医薬品マスター候補ファイル',
-      specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260601.pdf',
-      specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf'
+      specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260731.pdf',
+      specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf'
     }
   });
 
@@ -110,8 +110,8 @@ test('buildDrugMasterUpdateArtifacts summarizes changes and creates rollback pay
   assert.strictEqual(artifacts.rollback.sourceEvidence?.extractedCsvFileName, 'y_all.csv');
   assert.strictEqual(artifacts.sourceEvidence?.layoutLabel, 'ヘッダー列名');
   assert.strictEqual(artifacts.sourceEvidence?.sourceUrlReviewLabel, '支払基金 医薬品マスター候補ファイル');
-  assert.match(artifacts.sourceEvidence?.specificationRevisionLabel || '', /master_3_20260601\.pdf/);
-  assert.strictEqual(artifacts.sourceEvidence?.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf');
+  assert.match(artifacts.sourceEvidence?.specificationRevisionLabel || '', /master_3_20260731\.pdf/);
+  assert.strictEqual(artifacts.sourceEvidence?.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf');
   assert.strictEqual(makeDrugMasterDiffCsvFileName(artifacts.versionId), 'yakureki_drug_master_diff_20260615_010203.csv');
   assert.strictEqual(makeDrugMasterRollbackFileName(artifacts.versionId), 'yakureki_drug_master_rollback_20260615_010203.json');
 });
@@ -214,8 +214,8 @@ test('validateDrugMasterRollbackPayload preserves source evidence', () => {
       rowCount: 1,
       skippedRowCount: 0,
       sourceUrlReviewLabel: '支払基金 医薬品マスター掲載ページ',
-      specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260601.pdf',
-      specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf'
+      specificationRevisionLabel: '支払基金 令和8年基本マスターファイルレイアウト 医薬品マスター: OK / 仕様PDF master_3_20260731.pdf',
+      specificationSourceUrl: 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf'
     }
   });
 
@@ -231,8 +231,8 @@ test('validateDrugMasterRollbackPayload preserves source evidence', () => {
   assert.strictEqual(validation.payload.sourceEvidence?.csvEntryCount, 1);
   assert.strictEqual(validation.payload.sourceEvidence?.layoutLabel, '支払基金標準列');
   assert.strictEqual(validation.payload.sourceEvidence?.sourceUrlReviewLabel, '支払基金 医薬品マスター掲載ページ');
-  assert.match(validation.payload.sourceEvidence?.specificationRevisionLabel || '', /master_3_20260601\.pdf/);
-  assert.strictEqual(validation.payload.sourceEvidence?.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260601.pdf');
+  assert.match(validation.payload.sourceEvidence?.specificationRevisionLabel || '', /master_3_20260731\.pdf/);
+  assert.strictEqual(validation.payload.sourceEvidence?.specificationSourceUrl, 'https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/index.files/master_3_20260731.pdf');
 });
 
 test('validateDrugMasterRollbackPayload rejects unrelated JSON', () => {

@@ -98,7 +98,7 @@ test('normalizeOfficialDrugMasterSpecPdfFetchUrl only allows SSK basic master PD
   assert.strictEqual(normalizeOfficialDrugMasterSpecPdfFetchUrl(officialSpecPdfUrl), officialSpecPdfUrl);
 
   assert.throws(
-    () => normalizeOfficialDrugMasterSpecPdfFetchUrl('https://example.test/master_3_20260601.pdf'),
+    () => normalizeOfficialDrugMasterSpecPdfFetchUrl('https://example.test/master_3_20260731.pdf'),
     (error) => error instanceof DrugMasterOfficialSpecPdfFetchError
       && error.code === 'official_drug_master_spec_pdf_url_not_allowed'
   );
@@ -136,7 +136,7 @@ test('fetchDrugMasterOfficialSpecPdf fetches official PDF and reviews extracted 
   });
 
   assert.strictEqual(result.sourceUrl, officialSpecPdfUrl);
-  assert.strictEqual(result.fileName, 'master_3_20260601.pdf');
+  assert.strictEqual(result.fileName, 'master_3_20260731.pdf');
   assert.strictEqual(result.fetchedAt, '2026-06-19T09:00:00.000Z');
   assert.strictEqual(result.contentType, 'application/pdf');
   assert.strictEqual(result.extractionMethod, 'searchable-pdf');
@@ -195,7 +195,7 @@ test('getOfficialDrugMasterSpecPdfFileName prefers content disposition and sanit
     getOfficialDrugMasterSpecPdfFileName(officialSpecPdfUrl, 'attachment; filename="../../evil.pdf"'),
     'evil.pdf'
   );
-  assert.strictEqual(getOfficialDrugMasterSpecPdfFileName(officialSpecPdfUrl), 'master_3_20260601.pdf');
+  assert.strictEqual(getOfficialDrugMasterSpecPdfFileName(officialSpecPdfUrl), 'master_3_20260731.pdf');
 });
 
 test('fetchDrugMasterOfficialSpecPdf blocks files above the configured size limit', async () => {

@@ -295,10 +295,11 @@ export function useDrugMasterSettings({
         return false;
       }
 
-      // 薬価の版に付ける適用開始日。
-      // 医薬品マスターCSVは改定日を持たないため、取込日を適用開始日として扱う。
-      // 改定日当日に取り込む運用が前提で、遡って取り込む場合はこの版を手で直す必要がある。
-      const priceEffectiveFrom = new Date().toISOString().slice(0, 10);
+      // 薬価の版に付ける適用開始日。行の「変更年月日」(項番30) を使う。
+      // 列が無い / 空の行は取込日で代用する。
+      const importedOn = new Date().toISOString().slice(0, 10);
+      let priceRevisionFromChangeDate = 0;
+      let priceRevisionFromImportDate = 0;
 
       let updatedCount = 0;
       let newCount = 0;
@@ -363,7 +364,8 @@ export function useDrugMasterSettings({
       const genericMakers = ['東和', '日医工', '沢井', 'サワイ', 'トーワ', 'タイヨー', '武田テバ', 'サンド', 'マイラン', 'あすか', '杏林', '高田', 'タカタ', 'ファイファイ', '明治', 'アメル', '大興', 'ケミファ', 'JG'];
 
       for (let i = 0; i < parsedMasterCsv.rows.length; i++) {
-        const { code, name, price, yjCode, isAbolished } = parsedMasterCsv.rows[i];
+        const { code, name, price, yjCode, isAbolished, changeDate } = parsedMasterCsv.rows[i];
+        const priceEffectiveFrom = changeDate || importedOn;
 
         let targetDoc: Drug | null;
         if (bulkUpsertMap.has(code)) {
@@ -392,7 +394,15 @@ export function useDrugMasterSettings({
         if (targetDoc) {
           // 薬価が変わったら現在薬価を上書きするだけでなく、適用開始日つきの版を積む。
           // 版が無いと、改定後の取込で過去の調剤分まで新薬価で再計算されてしまう。
-          const priceHistory = isDrugPriceRevisionNeeded(targetDoc, price, priceEffectiveFrom)
+          const priceRevisionNeeded = isDrugPriceRevisionNeeded(targetDoc, price, priceEffectiveFrom);
+          if (priceRevisionNeeded) {
+            if (changeDate) {
+              priceRevisionFromChangeDate++;
+            } else {
+              priceRevisionFromImportDate++;
+            }
+          }
+          const priceHistory = priceRevisionNeeded
             ? appendDrugPriceRevision(targetDoc.priceHistory, {
                 price: price as number,
                 effectiveFrom: priceEffectiveFrom
@@ -449,7 +459,7 @@ export function useDrugMasterSettings({
       await logAuditAction(
         db,
         'drug_master_update',
-        `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
+        `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
       );
 
       if (refreshAuditEvidence) {

@@ -215,12 +215,12 @@ test('buildDrugMasterSpecificationRevisionReview tracks the official PDF revisio
 
   assert.strictEqual(review.ok, true);
   assert.strictEqual(review.source, DRUG_MASTER_SPECIFICATION_SOURCE);
-  assert.strictEqual(review.source.fileName, 'master_3_20260601.pdf');
+  assert.strictEqual(review.source.fileName, 'master_3_20260731.pdf');
   assert.strictEqual(review.source.expectedItemCount, 42);
   assert.strictEqual(review.actualItemCount, 42);
   assert.strictEqual(review.firstItemLabel, '変更区分');
   assert.strictEqual(review.lastItemLabel, '選定療養区分');
-  assert.match(label, /仕様PDF master_3_20260601\.pdf/);
+  assert.match(label, /仕様PDF master_3_20260731\.pdf/);
   assert.match(label, /項目 42\/42/);
 });
 
@@ -268,4 +268,42 @@ test('buildDrugMasterColumnDefinitionReview reports optional header columns sepa
   assert.ok(review.missingOptionalColumns.includes('薬価基準収載医薬品コード'));
   assert.ok(review.missingOptionalColumns.includes('経過措置年月日又は商品名医薬品コード使用期限'));
   assert.match(formatDrugMasterColumnDefinitionReview(review), /任意未確認/);
+});
+
+
+// 薬価の版に付ける適用開始日は、行の「変更年月日」(項番30) から取る。
+
+test('parseDrugMasterUpdateCsv reads the change date as the price effective date', () => {
+  const csv = [
+    makeStandardDrugMasterRow({ 2: '620000001', 11: '0000000010.90', 29: '20260401' }).join(','),
+    makeStandardDrugMasterRow({ 2: '620000002', 11: '0000000012.30', 29: '20240401' }).join(',')
+  ].join('\n');
+
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+
+  assert.strictEqual(parsed.rows[0].changeDate, '2026-04-01');
+  assert.strictEqual(parsed.rows[1].changeDate, '2024-04-01');
+});
+
+test('parseDrugMasterUpdateCsv leaves the change date empty when it is unset', () => {
+  // 99999999 と空欄は「未設定」。取込日で代用させるため空文字にする。
+  const csv = [
+    makeStandardDrugMasterRow({ 2: '620000001', 29: '99999999' }).join(','),
+    // 9999年は「未設定」。99991231 の形は月日として成立してしまうので明示的に落とす。
+    makeStandardDrugMasterRow({ 2: '620000002', 29: '99991231' }).join(','),
+    makeStandardDrugMasterRow({ 2: '620000003', 29: '' }).join(','),
+    makeStandardDrugMasterRow({ 2: '620000004', 29: '00000000' }).join(','),
+    makeStandardDrugMasterRow({ 2: '620000005', 29: '2026' }).join(',')
+  ].join('\n');
+
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+
+  assert.deepStrictEqual(parsed.rows.map((row) => row.changeDate), ['', '', '', '', '']);
+});
+
+test('parseDrugMasterUpdateCsv rejects an impossible change date instead of passing it through', () => {
+  const csv = makeStandardDrugMasterRow({ 2: '620000001', 29: '20261301' }).join(',');
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+
+  assert.strictEqual(parsed.rows[0].changeDate, '', '13月は日付として使わない');
 });
