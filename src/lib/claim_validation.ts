@@ -6,7 +6,11 @@ import {
   type FeeCode,
   type MonthlyFeeHistoryEntry
 } from '@/lib/calculator';
-import { resolveDrugPrice, type DrugPriceRevision } from './drug_price_history.ts';
+import {
+  formatDrugPriceRevisionLabel,
+  resolveDrugPrice,
+  type DrugPriceRevision
+} from './drug_price_history.ts';
 import { evaluateInsuranceEligibility } from './insurance_eligibility.ts';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
 
@@ -126,16 +130,20 @@ export function validateDispensingClaim(input: ValidateDispensingClaimInput): Cl
       { price: item.drugPrice, priceHistory: item.drugPriceHistory },
       serviceDate || ''
     );
-    if (auto.effectiveFrom === override.effectiveFrom && auto.price === override.price) continue;
+    if (
+      auto.source !== 'unknown'
+      && auto.effectiveFrom === (override.effectiveFrom ?? undefined)
+      && auto.price === override.price
+    ) continue;
     const drugLabel = item.dispensedDrug || item.drugName || item.drugId;
     addIssue(issues, {
       severity: 'warning',
       code: 'drug_price_override_applied',
       title: '調剤日時点と異なる薬価を適用しています',
-      message: `${drugLabel}: ${override.price}円（適用 ${override.effectiveFrom}）を適用しています。${
+      message: `${drugLabel}: ${override.price}円（${formatDrugPriceRevisionLabel(override.effectiveFrom)}）を適用しています。${
         auto.price === undefined
           ? '調剤日時点の薬価は特定できません。'
-          : `調剤日時点は ${auto.price}円（適用 ${auto.effectiveFrom || '不明'}）です。`
+          : `調剤日時点は ${auto.price}円（${formatDrugPriceRevisionLabel(auto.effectiveFrom)}）です。`
       }理由を摘要欄に記載してから提出してください。`,
       itemId: item.itemId
     });

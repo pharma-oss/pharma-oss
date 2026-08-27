@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DRUG_PRICE_BEFORE_HISTORY_VALUE,
   appendDrugPriceRevision,
+  drugPriceOverrideValue,
+  formatDrugPriceRevisionLabel,
+  seedDrugPriceBeforeHistory,
+  toDrugPriceOverride,
   formatDrugPriceOverrideWarning,
   isDrugPriceOverridden,
   isDrugPriceRevisionNeeded,
@@ -180,6 +185,150 @@ test('back-filling the same master twice does not grow the history', () => {
 });
 
 
+// --- 開始日不明の版 -------------------------------------------------------
+// マスターの現在薬価には適用開始日が付いてこない。履歴が空のまま最初の改定を
+// 積むと旧薬価がどこにも残らず、改定前の調剤が新薬価で算定されてしまう。
+
+const withUnknownStart: DrugPriceRevision[] = [
+  { price: 12.3 },
+  { price: 10.9, effectiveFrom: '2026-04-01' }
+];
+
+test('a revision with no effective date stands for the price before the first revision', () => {
+  // 改定日以降は記録どおり
+  assert.deepEqual(
+    resolveDrugPrice({ priceHistory: withUnknownStart }, '2026-04-01'),
+    { price: 10.9, source: 'history', effectiveFrom: '2026-04-01' }
+  );
+  // 改定日より前は旧薬価。ただし「いつから」は分からないので推定のまま返す
+  assert.deepEqual(
+    resolveDrugPrice({ priceHistory: withUnknownStart }, '2026-03-31'),
+    { price: 12.3, source: 'earliest_known' }
+  );
+});
+
+test('the first recorded revision no longer drops the price that came before it', () => {
+  // これが無いと、改定を取り込んだ時点で改定前の調剤まで新薬価になる。
+  const seeded = seedDrugPriceBeforeHistory(undefined, 12.3);
+  const afterImport = appendDrugPriceRevision(seeded, { price: 10.9, effectiveFrom: '2026-04-01' });
+
+  assert.deepEqual(afterImport, [{ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' }]);
+  assert.equal(resolveDrugPriceOn({ price: 10.9, priceHistory: afterImport }, '2026-03-31'), 12.3);
+  assert.equal(resolveDrugPriceOn({ price: 10.9, priceHistory: afterImport }, '2026-04-01'), 10.9);
+});
+
+test('seedDrugPriceBeforeHistory only fills an empty history', () => {
+  assert.deepEqual(seedDrugPriceBeforeHistory(undefined, 12.3), [{ price: 12.3 }]);
+  assert.deepEqual(seedDrugPriceBeforeHistory([], 12.3), [{ price: 12.3 }]);
+  // 既に版があるなら現在薬価は最新の版として記録済み。触らない。
+  assert.deepEqual(seedDrugPriceBeforeHistory(history, 10.9), history);
+  // 薬価が分からないマスター行では何も置かない
+  assert.deepEqual(seedDrugPriceBeforeHistory(undefined, undefined), []);
+  assert.deepEqual(seedDrugPriceBeforeHistory(undefined, Number.NaN), []);
+});
+
+test('learning when the unknown start began replaces it instead of duplicating it', () => {
+  // 開始日不明の 12.3 に「12.3 は 2024-04-01 から」が来たら、開始日が判明したということ
+  assert.deepEqual(
+    appendDrugPriceRevision([{ price: 12.3 }], { price: 12.3, effectiveFrom: '2024-04-01' }),
+    [{ price: 12.3, effectiveFrom: '2024-04-01' }]
+  );
+  // 薬価が違うなら、開始日不明の版はより古い薬価として残る
+  assert.deepEqual(
+    appendDrugPriceRevision([{ price: 12.3 }], { price: 10.9, effectiveFrom: '2026-04-01' }),
+    [{ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' }]
+  );
+});
+
+test('the unknown start stays the oldest revision however imports arrive', () => {
+  let built = seedDrugPriceBeforeHistory(undefined, 13.8);
+  built = appendDrugPriceRevision(built, { price: 10.9, effectiveFrom: '2026-04-01' });
+  built = appendDrugPriceRevision(built, { price: 12.3, effectiveFrom: '2024-04-01' });
+
+  assert.deepEqual(built, [
+    { price: 13.8 },
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { price: 10.9, effectiveFrom: '2026-04-01' }
+  ]);
+  assert.equal(resolveDrugPriceOn({ priceHistory: built }, '2023-06-14'), 13.8);
+  assert.equal(resolveDrugPriceOn({ priceHistory: built }, '2025-06-14'), 12.3);
+});
+
+test('a revision with a broken date is dropped, not read as an unknown start', () => {
+  // 項目が無い（開始日不明）のと、値が壊れているのは別物
+  const messy = [
+    { price: 9.9, effectiveFrom: 'not-a-date' },
+    { price: 10.9, effectiveFrom: '2026-04-01' }
+  ] as DrugPriceRevision[];
+  assert.deepEqual(
+    resolveDrugPrice({ priceHistory: messy }, '2020-01-01'),
+    { price: 10.9, source: 'earliest_known', effectiveFrom: '2026-04-01' }
+  );
+});
+
+test('only the first unknown start is kept when the data holds several', () => {
+  // 二つ以上あっても先後を決められないので、最初の一つしか採らない
+  const broken = [{ price: 13.8 }, { price: 12.3 }] as DrugPriceRevision[];
+  assert.deepEqual(
+    listDrugPriceRevisionChoices({ priceHistory: broken }, '2026-06-01'),
+    [{ value: DRUG_PRICE_BEFORE_HISTORY_VALUE, price: 13.8, isAutoSelected: true }]
+  );
+});
+
+test('the picker carries the unknown start on a reserved value, not an empty one', () => {
+  // 空文字は「調剤日時点（自動）」に使われているので、開始日不明の版には使えない
+  assert.deepEqual(listDrugPriceRevisionChoices({ priceHistory: withUnknownStart }, '2026-03-31'), [
+    { value: '2026-04-01', effectiveFrom: '2026-04-01', price: 10.9, isAutoSelected: false },
+    { value: DRUG_PRICE_BEFORE_HISTORY_VALUE, price: 12.3, isAutoSelected: true }
+  ]);
+  assert.notEqual(DRUG_PRICE_BEFORE_HISTORY_VALUE, '');
+});
+
+test('an unreadable dispensing date marks no revision as the automatic one', () => {
+  // 調剤日が読めないと解決自体ができない。開始日不明の版を自動扱いしないこと。
+  const choices = listDrugPriceRevisionChoices({ priceHistory: withUnknownStart }, '');
+  assert.deepEqual(choices.map((choice) => choice.isAutoSelected), [false, false]);
+});
+
+test('the unknown start can be applied as an override and read back', () => {
+  const drug = { price: 10.9, priceHistory: withUnknownStart };
+  const chosen = listDrugPriceRevisionChoices(drug, '2026-06-01')
+    .find((choice) => choice.value === DRUG_PRICE_BEFORE_HISTORY_VALUE);
+  const override = toDrugPriceOverride(chosen);
+
+  assert.deepEqual(override, { price: 12.3 });
+  assert.deepEqual(resolveDrugPriceWithOverride(drug, '2026-06-01', override), {
+    price: 12.3,
+    source: 'override',
+    autoResolved: { price: 10.9, source: 'history', effectiveFrom: '2026-04-01' }
+  });
+  // 画面が選択状態を復元できること
+  assert.equal(drugPriceOverrideValue(override), DRUG_PRICE_BEFORE_HISTORY_VALUE);
+  assert.equal(drugPriceOverrideValue(null), '');
+  assert.equal(drugPriceOverrideValue({ price: 10.9, effectiveFrom: '2026-04-01' }), '2026-04-01');
+});
+
+test('choosing the unknown start when it is already what the date resolves to is not an override', () => {
+  const drug = { price: 12.3, priceHistory: withUnknownStart };
+  assert.deepEqual(resolveDrugPriceWithOverride(drug, '2026-03-31', { price: 12.3 }), {
+    price: 12.3,
+    source: 'earliest_known'
+  });
+});
+
+test('formatDrugPriceRevisionLabel names a revision with no start date', () => {
+  // 画面・請求前チェック・監査ログで同じ言い方をする
+  assert.equal(formatDrugPriceRevisionLabel('2026-04-01'), '適用 2026-04-01');
+  assert.equal(formatDrugPriceRevisionLabel(undefined), '開始日不明・最初の改定より前');
+  assert.match(
+    formatDrugPriceOverrideWarning(
+      resolveDrugPriceWithOverride({ price: 10.9, priceHistory: withUnknownStart }, '2026-06-01', { price: 12.3 }),
+      '2026-06-01'
+    ),
+    /12\.3円（開始日不明・最初の改定より前）/
+  );
+});
+
 test('history survives an out-of-order import of an older revision', () => {
   // 過去の改定を後から取り込んでも、調剤日での判定が壊れないこと
   let built: DrugPriceRevision[] = [];
@@ -202,8 +351,8 @@ test('listDrugPriceRevisionChoices marks the revision that the dispensing date r
 
   // 新しい版が先頭 (選ぶときに探しやすい)
   assert.deepEqual(choices, [
-    { effectiveFrom: '2026-04-01', price: 10.9, isAutoSelected: true },
-    { effectiveFrom: '2024-04-01', price: 12.3, isAutoSelected: false }
+    { value: '2026-04-01', effectiveFrom: '2026-04-01', price: 10.9, isAutoSelected: true },
+    { value: '2024-04-01', effectiveFrom: '2024-04-01', price: 12.3, isAutoSelected: false }
   ]);
 
   // 調剤日が変われば自動選択も変わる

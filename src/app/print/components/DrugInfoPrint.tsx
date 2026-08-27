@@ -4,6 +4,11 @@ import { COMMON_RECEIPT_REMARKS } from '@/lib/data/receipt_remarks';
 import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
 import type { PharmacyInfo } from '../types';
 import {
+  drugPriceOverrideValue,
+  formatDrugPriceRevisionLabel,
+  type DrugPriceRevisionChoice
+} from '@/lib/drug_price_history';
+import {
   getDisplayDrugName,
   getPrescribedDrugName,
   getAmountText,
@@ -33,7 +38,7 @@ export interface DrugInfoPrintProps {
   handleToggleCrushed: (itemId: string, checked: boolean, idx: number) => Promise<void>;
   handleItemClaimToggle: (itemId: string, field: string, checked: boolean, idx: number) => Promise<void>;
   dispensingDateForPrice: string;
-  drugPriceChoicesByItemId: Record<string, { effectiveFrom: string; price: number; isAutoSelected: boolean }[]>;
+  drugPriceChoicesByItemId: Record<string, DrugPriceRevisionChoice[]>;
   drugPriceWarningByItemId: Record<string, string>;
   handleDrugPriceOverrideChange: (itemId: string, effectiveFrom: string, idx: number) => Promise<void>;
   handleTokkanChange: (itemId: string, value: string, idx: number) => Promise<void>;
@@ -251,15 +256,15 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
                       <select
                         className="drug-price-revision-select"
                         data-testid={`drug-price-revision-${item.itemId}`}
-                        value={item.drugPriceOverride?.effectiveFrom || ''}
+                        value={drugPriceOverrideValue(item.drugPriceOverride)}
                         onChange={(e) => handleDrugPriceOverrideChange(item.itemId, e.target.value, idx)}
                         disabled={!canEditBilling}
                         title={`調剤日 ${dispensingDateForPrice || '不明'} 時点の薬価で算定します`}
                       >
                         <option value="">薬価: 調剤日時点（自動）</option>
                         {(drugPriceChoicesByItemId[item.itemId] || []).map((choice) => (
-                          <option key={choice.effectiveFrom} value={choice.effectiveFrom}>
-                            薬価: {choice.price}円（適用 {choice.effectiveFrom}）
+                          <option key={choice.value} value={choice.value}>
+                            薬価: {choice.price}円（{formatDrugPriceRevisionLabel(choice.effectiveFrom)}）
                             {choice.isAutoSelected ? ' ※調剤日時点' : ''}
                           </option>
                         ))}

@@ -602,7 +602,7 @@ describe('Schema Validation', () => {
       };
       const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, validItem);
       assert.strictEqual(errors, null);
-      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 16);
+      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 17);
     });
 
     test('should fail if dosage category is not a known value', () => {
@@ -658,6 +658,20 @@ describe('Schema Validation', () => {
         amount: 1,
         days: 7,
         drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 }
+      };
+
+      assert.strictEqual(getErrors(PRESCRIPTION_ITEM_SCHEMA, item), null);
+    });
+
+    test('should accept a drug price override with no effective date', () => {
+      // 開始日不明の版（マスターの現在薬価から作った最古の版）を選んだ場合 (schema v17)。
+      const item = {
+        itemId: 'item_1',
+        visitId: 'visit_1',
+        drugId: 'drug_1',
+        amount: 1,
+        days: 7,
+        drugPriceOverride: { price: 12.3 }
       };
 
       assert.strictEqual(getErrors(PRESCRIPTION_ITEM_SCHEMA, item), null);
@@ -871,22 +885,39 @@ describe('Schema Validation', () => {
       };
 
       assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithHistory), null);
-      assert.strictEqual(DRUG_SCHEMA.version, 7);
+      assert.strictEqual(DRUG_SCHEMA.version, 8);
     });
 
-    test('should reject a price revision without an effective date', () => {
+    test('should accept a price revision with no effective date as the unknown start', () => {
+      // マスターの現在薬価には適用開始日が付いてこない。初めて改定を記録するときの
+      // 旧薬価は「開始日が分からない版」として残す (drug schema v8)。
+      const withUnknownStart = {
+        code: '620000001',
+        name: 'テスト錠10mg',
+        isGeneric: false,
+        price: 10.9,
+        priceHistory: [
+          { price: 12.3 },
+          { price: 10.9, effectiveFrom: '2026-04-01' }
+        ]
+      };
+
+      assert.strictEqual(getErrors(DRUG_SCHEMA, withUnknownStart), null);
+    });
+
+    test('should reject a price revision without a price', () => {
       const invalid = {
         code: '620000001',
         name: 'テスト錠10mg',
         isGeneric: false,
-        priceHistory: [{ price: 12.3 }]
+        priceHistory: [{ effectiveFrom: '2024-04-01' }]
       };
 
       const errors = getErrors(DRUG_SCHEMA, invalid);
       assert.ok(errors);
       assert.deepStrictEqual(
         errors.map((error: any) => error.params?.missingProperty),
-        ['effectiveFrom']
+        ['price']
       );
     });
   });

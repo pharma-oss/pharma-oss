@@ -371,7 +371,9 @@ export function buildOnboardingE2ESeedRecords(seededAt: Date = new Date()): Onbo
         isAbolished: false,
         price: 10.1,
         // 薬価改定をまたぐ調剤の確認用。調剤日で引く版と、選び直せる過去の版を持たせる。
+        // 先頭は開始日不明の版 (マスターの現在薬価から作られる最古の版)。
         priceHistory: [
+          { price: 13.2 },
           { price: 11.7, effectiveFrom: '2024-04-01' },
           { price: 10.1, effectiveFrom: '2026-04-01' }
         ],

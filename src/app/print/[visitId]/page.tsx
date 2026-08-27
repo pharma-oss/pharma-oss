@@ -54,7 +54,8 @@ import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit
 import {
   formatDrugPriceOverrideWarning,
   listDrugPriceRevisionChoices,
-  resolveDrugPriceWithOverride
+  resolveDrugPriceWithOverride,
+  toDrugPriceOverride
 } from '@/lib/drug_price_history';
 import {
   DEFAULT_CLAIM_RETURN_REASON_CODE,
@@ -612,7 +613,7 @@ export default function PrintPage() {
     return map;
   }, [prescriptionItems, dispensingDateForPrice]);
 
-  const handleDrugPriceOverrideChange = async (itemId: string, effectiveFrom: string, idx: number) => {
+  const handleDrugPriceOverrideChange = async (itemId: string, choiceValue: string, idx: number) => {
     if (!ensurePermission('change_billing')) return;
     if (!ensureClaimEditable()) return;
     if (!db) return;
@@ -625,7 +626,8 @@ export default function PrintPage() {
         { price: currentItem.price, priceHistory: currentItem.drugPriceHistory },
         dispensingDateForPrice
       );
-      const chosen = choices.find((choice) => choice.effectiveFrom === effectiveFrom);
+      const chosen = choices.find((choice) => choice.value === choiceValue);
+      const nextOverride = toDrugPriceOverride(chosen);
 
       const outcome = await applyDrugPriceOverrideWithAudit({
         db,
@@ -633,7 +635,7 @@ export default function PrintPage() {
         itemDoc,
         drug: { price: currentItem.price, priceHistory: currentItem.drugPriceHistory },
         dispensingDate: dispensingDateForPrice,
-        override: chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : null,
+        override: nextOverride,
         patientId: visitData?.patientId,
         patientName: patientData?.name
       });
@@ -644,11 +646,11 @@ export default function PrintPage() {
         next[idx] = {
           ...next[idx],
           price: outcome.price ?? next[idx].price,
-          drugPriceOverride: chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : undefined,
+          drugPriceOverride: nextOverride ?? undefined,
           drugPriceResolution: resolveDrugPriceWithOverride(
             { price: next[idx].price, priceHistory: next[idx].drugPriceHistory },
             dispensingDateForPrice,
-            chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : null
+            nextOverride
           )
         };
         return next;

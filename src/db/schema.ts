@@ -666,7 +666,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
 
 export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
   title: 'prescription item schema',
-  version: 16,
+  version: 17,
   primaryKey: 'itemId',
   type: 'object',
   properties: {
@@ -732,10 +732,11 @@ export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
     drugPriceOverride: {
       type: 'object',
       properties: {
+        // 省略は「開始日が分からない版を選んだ」
         effectiveFrom: { type: 'string', maxLength: 10 },
         price: { type: 'number', minimum: 0 }
       },
-      required: ['effectiveFrom', 'price']
+      required: ['price']
     },
     claimManagement: { type: 'boolean' },
     claimDrugFee: { type: 'boolean' },
@@ -928,7 +929,7 @@ export const INTERVENTION_SCHEMA: RxJsonSchema<Intervention> = {
 
 export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
   title: 'drug schema',
-  version: 7,
+  version: 8,
   description: 'Drug master data',
   primaryKey: 'code',
   type: 'object',
@@ -946,9 +947,11 @@ export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
         type: 'object',
         properties: {
           price: { type: 'number' },
+          // 省略は「開始日が分からない版」。マスターの現在薬価には適用開始日が
+          // 付いてこないので、初めて改定を記録するときの旧薬価がこれになる。
           effectiveFrom: { type: 'string', maxLength: 10 }
         },
-        required: ['price', 'effectiveFrom']
+        required: ['price']
       }
     },
     stockQuantity: { type: 'number' },

@@ -5,7 +5,11 @@ import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
-import { appendDrugPriceRevision, isDrugPriceRevisionNeeded } from '@/lib/drug_price_history';
+import {
+  appendDrugPriceRevision,
+  isDrugPriceRevisionNeeded,
+  seedDrugPriceBeforeHistory
+} from '@/lib/drug_price_history';
 import {
   buildDrugMasterDiffCsv,
   buildDrugMasterUpdateArtifacts,
@@ -402,11 +406,13 @@ export function useDrugMasterSettings({
               priceRevisionFromImportDate++;
             }
           }
+          // 履歴が空のまま改定を積むと、それまでの薬価がどこにも残らない。
+          // 現在薬価には適用開始日が付いてこないので、開始日不明の版として先に置く。
           const priceHistory = priceRevisionNeeded
-            ? appendDrugPriceRevision(targetDoc.priceHistory, {
-                price: price as number,
-                effectiveFrom: priceEffectiveFrom
-              })
+            ? appendDrugPriceRevision(
+                seedDrugPriceBeforeHistory(targetDoc.priceHistory, targetDoc.price),
+                { price: price as number, effectiveFrom: priceEffectiveFrom }
+              )
             : targetDoc.priceHistory;
 
           bulkUpsertMap.set(code, {

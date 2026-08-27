@@ -345,8 +345,13 @@ export async function applyDrugPriceOverrideWithAudit(
   };
 
   // 上書きを外すときは項目ごと消す (undefined を書くと RxDB の任意項目に残る)
+  // 開始日不明の版を選んだときは effectiveFrom を持たせない（undefined を書くと RxDB が拒む）
   const patch = override
-    ? { drugPriceOverride: { effectiveFrom: override.effectiveFrom, price: override.price } }
+    ? {
+        drugPriceOverride: override.effectiveFrom === undefined
+          ? { price: override.price }
+          : { effectiveFrom: override.effectiveFrom, price: override.price }
+      }
     : { drugPriceOverride: null };
   await itemDoc.patch(patch);
 

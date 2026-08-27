@@ -9,8 +9,14 @@
 
 export interface DrugPriceRevision {
   price: number;
-  /** この薬価が適用される最初の日 (YYYY-MM-DD)。改定日当日から新薬価になる */
-  effectiveFrom: string;
+  /**
+   * この薬価が適用される最初の日 (YYYY-MM-DD)。改定日当日から新薬価になる。
+   *
+   * 省略は「開始日が分からない版」。マスターの現在薬価には適用開始日が付いて
+   * こないので、初めて改定を記録するときの旧薬価がこれになる。
+   * 履歴の先頭に一つだけ置く。
+   */
+  effectiveFrom?: string;
 }
 
 export interface DrugPriceSource {
@@ -40,8 +46,8 @@ export interface DrugPriceResolution {
 
 /** 処方薬ごとに薬剤師が選び直した薬価の版 */
 export interface DrugPriceOverride {
-  /** 選んだ版の適用開始日 */
-  effectiveFrom: string;
+  /** 選んだ版の適用開始日。開始日不明の版を選んだときは省略 */
+  effectiveFrom?: string;
   /** 選んだ版の薬価。履歴が後から訂正されても、適用した額が分かるように持つ */
   price: number;
 }
@@ -59,10 +65,28 @@ function toDateOnly(value: string): string {
 }
 
 function sortedHistory(history?: DrugPriceRevision[]): DrugPriceRevision[] {
-  return [...(history || [])]
-    .filter((revision) => Number.isFinite(revision?.price) && toDateOnly(revision?.effectiveFrom) !== '')
-    .map((revision) => ({ price: revision.price, effectiveFrom: toDateOnly(revision.effectiveFrom) }))
+  const usable = (history || []).filter((revision) => Number.isFinite(revision?.price));
+
+  // 開始日不明の版は最も古い版として先頭に一つだけ。
+  // 二つ以上あっても順序を決められないので、最初の一つしか採らない。
+  const unknownStart = usable
+    .filter((revision) => revision.effectiveFrom == null)
+    .slice(0, 1)
+    .map((revision) => ({ price: revision.price }));
+
+  // 日付が読めない版は捨てる。開始日不明の版とは区別する（項目が無いのか、壊れているのか）。
+  const dated = usable
+    .filter((revision) => revision.effectiveFrom != null)
+    .map((revision) => ({ price: revision.price, effectiveFrom: toDateOnly(revision.effectiveFrom as string) }))
+    .filter((revision) => revision.effectiveFrom !== '')
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+  return [...unknownStart, ...dated];
+}
+
+/** 画面と監査ログで、版の適用期間を同じ文言で書く */
+export function formatDrugPriceRevisionLabel(effectiveFrom?: string): string {
+  return effectiveFrom ? `適用 ${effectiveFrom}` : '開始日不明・最初の改定より前';
 }
 
 /**
@@ -84,9 +108,11 @@ export function resolveDrugPrice(drug: DrugPriceSource, dispensingDate: string):
     return { source: 'unknown' };
   }
 
-  // 改定日当日から新薬価なので、effectiveFrom <= 調剤日 の最後の版を採る
+  // 改定日当日から新薬価なので、effectiveFrom <= 調剤日 の最後の版を採る。
+  // 開始日不明の版は「この日から」と言えないので、その日の版にはならない。
   let applicable: DrugPriceRevision | undefined;
   for (const revision of history) {
+    if (revision.effectiveFrom === undefined) continue;
     if (revision.effectiveFrom <= date) {
       applicable = revision;
     } else {
@@ -100,7 +126,9 @@ export function resolveDrugPrice(drug: DrugPriceSource, dispensingDate: string):
 
   // 調剤日が最初の版より前。最も古い既知の薬価で代用するが、根拠は残す。
   const earliest = history[0];
-  return { price: earliest.price, source: 'earliest_known', effectiveFrom: earliest.effectiveFrom };
+  return earliest.effectiveFrom === undefined
+    ? { price: earliest.price, source: 'earliest_known' }
+    : { price: earliest.price, source: 'earliest_known', effectiveFrom: earliest.effectiveFrom };
 }
 
 /** 数値だけ欲しい呼び出し向け。分からない場合は undefined */
@@ -115,31 +143,57 @@ export function resolveDrugPriceOn(drug: DrugPriceSource, dispensingDate: string
  * - 直前の版と同じ薬価なら追加しない（マスターの再取込で履歴が膨らむのを防ぐ）
  * - 直後の版が同じ薬価なら、その版を畳んで追加する版に含める
  *   （遡り取込で「実はもっと前から同じ薬価だった」と分かる場合）
- * - 並びは適用開始日の昇順で保つ
+ * - 開始日不明の版と同じ薬価なら、開始日が判明したとして置き換える
+ * - 並びは適用開始日の昇順で保つ（開始日不明の版が先頭）
  */
 export function appendDrugPriceRevision(
   history: DrugPriceRevision[] | undefined,
   revision: DrugPriceRevision
 ): DrugPriceRevision[] {
-  const effectiveFrom = toDateOnly(revision?.effectiveFrom);
+  // 開始日不明の版はここでは足せない (seedDrugPriceBeforeHistory の仕事)
+  const effectiveFrom = toDateOnly(revision?.effectiveFrom ?? '');
   if (!effectiveFrom || !Number.isFinite(revision?.price)) {
     return sortedHistory(history);
   }
 
   const current = sortedHistory(history).filter((item) => item.effectiveFrom !== effectiveFrom);
-  const before = current.filter((item) => item.effectiveFrom < effectiveFrom);
-  const after = current.filter((item) => item.effectiveFrom > effectiveFrom);
+  // 開始日不明の版は最も古い版なので、常に「前」側に入る。
+  const before = current.filter((item) => item.effectiveFrom === undefined || item.effectiveFrom < effectiveFrom);
+  const after = current.filter((item) => item.effectiveFrom !== undefined && item.effectiveFrom > effectiveFrom);
 
   const priceBefore = before[before.length - 1];
-  if (priceBefore && priceBefore.price === revision.price) {
+  if (priceBefore?.effectiveFrom !== undefined && priceBefore.price === revision.price) {
     return current;
   }
+
+  // 直前が開始日不明の版で同額なら、その薬価がいつからかが分かったということ。
+  // 開始日不明のまま残すと、日付の付いた版と同額の版が二つ並ぶ。
+  const head = priceBefore?.effectiveFrom === undefined && priceBefore?.price === revision.price
+    ? before.slice(0, -1)
+    : before;
 
   // 直後の版が同じ薬価なら、薬価が変わっていない版になるので畳む。
   // 残すと選択 UI に同額の版が並び、どちらを選んでも同じという状態になる。
   const kept = after[0] && after[0].price === revision.price ? after.slice(1) : after;
 
-  return [...before, { price: revision.price, effectiveFrom }, ...kept];
+  return [...head, { price: revision.price, effectiveFrom }, ...kept];
+}
+
+/**
+ * マスターの現在薬価を「開始日が分からない版」として履歴に残す。
+ *
+ * 履歴が空のまま最初の改定を記録すると、それまでの薬価がどこにも残らない。
+ * 現在薬価には適用開始日が付いてこないので、日付は付けずに置く。
+ * 既に版がある薬品では何もしない。
+ */
+export function seedDrugPriceBeforeHistory(
+  history: DrugPriceRevision[] | undefined,
+  currentPrice: number | undefined
+): DrugPriceRevision[] {
+  const existing = sortedHistory(history);
+  if (existing.length > 0) return existing;
+  if (!Number.isFinite(currentPrice as number)) return existing;
+  return [{ price: currentPrice as number }];
 }
 
 /**
@@ -167,9 +221,31 @@ export function isDrugPriceRevisionNeeded(
  * 画面の選択 UI と、選び直したときの警告表示に使う。
  */
 export interface DrugPriceRevisionChoice {
-  effectiveFrom: string;
+  /**
+   * 選択 UI が持ち回す値。空文字は「自動」の意味で使われているので、
+   * 開始日不明の版には日付の代わりに予約語を渡す。
+   */
+  value: string;
+  effectiveFrom?: string;
   price: number;
   isAutoSelected: boolean;
+}
+
+/** 開始日不明の版を選択 UI で指すための予約語 */
+export const DRUG_PRICE_BEFORE_HISTORY_VALUE = 'before-history';
+
+/** 保存された上書きを、選択 UI が持つ値に直す。空文字は「自動」 */
+export function drugPriceOverrideValue(override?: DrugPriceOverride | null): string {
+  if (!override || !Number.isFinite(override.price)) return '';
+  return override.effectiveFrom ?? DRUG_PRICE_BEFORE_HISTORY_VALUE;
+}
+
+/** 選ばれた版を、保存する上書きの形に直す。開始日不明の版では日付を持たせない */
+export function toDrugPriceOverride(choice?: DrugPriceRevisionChoice | null): DrugPriceOverride | null {
+  if (!choice) return null;
+  return choice.effectiveFrom === undefined
+    ? { price: choice.price }
+    : { price: choice.price, effectiveFrom: choice.effectiveFrom };
 }
 
 export function listDrugPriceRevisionChoices(
@@ -181,9 +257,10 @@ export function listDrugPriceRevisionChoices(
   const auto = resolveDrugPrice(drug, dispensingDate);
   return history
     .map((revision) => ({
-      effectiveFrom: revision.effectiveFrom,
+      value: revision.effectiveFrom ?? DRUG_PRICE_BEFORE_HISTORY_VALUE,
+      ...(revision.effectiveFrom === undefined ? {} : { effectiveFrom: revision.effectiveFrom }),
       price: revision.price,
-      isAutoSelected: auto.effectiveFrom === revision.effectiveFrom
+      isAutoSelected: auto.source !== 'unknown' && auto.effectiveFrom === revision.effectiveFrom
     }))
     .reverse();
 }
@@ -200,17 +277,24 @@ export function resolveDrugPriceWithOverride(
   override?: DrugPriceOverride | null
 ): DrugPriceResolution {
   const auto = resolveDrugPrice(drug, dispensingDate);
-  const effectiveFrom = toDateOnly(override?.effectiveFrom || '');
-  if (!override || !effectiveFrom || !Number.isFinite(override.price)) {
+  if (!override || !Number.isFinite(override.price)) {
     return auto;
   }
-  if (auto.effectiveFrom === effectiveFrom && auto.price === override.price) {
+
+  // 適用開始日が無いのは「開始日不明の版を選んだ」。日付があるのに読めないのは壊れた上書き。
+  const chosenBeforeHistory = override.effectiveFrom == null;
+  const effectiveFrom = chosenBeforeHistory ? undefined : toDateOnly(override.effectiveFrom as string);
+  if (effectiveFrom === '') {
+    return auto;
+  }
+
+  if (auto.source !== 'unknown' && auto.effectiveFrom === effectiveFrom && auto.price === override.price) {
     return auto;
   }
   return {
     price: override.price,
     source: 'override',
-    effectiveFrom,
+    ...(effectiveFrom === undefined ? {} : { effectiveFrom }),
     autoResolved: auto
   };
 }
@@ -229,6 +313,6 @@ export function formatDrugPriceOverrideWarning(
   const auto = resolution.autoResolved;
   const autoPart = auto?.price === undefined
     ? '調剤日時点の薬価が特定できません'
-    : `調剤日時点は ${auto.price}円（適用 ${auto.effectiveFrom || '不明'}）`;
-  return `調剤日 ${toDateOnly(dispensingDate) || '不明'} と異なる薬価の版を適用しています: ${resolution.price}円（適用 ${resolution.effectiveFrom}） / ${autoPart}`;
+    : `調剤日時点は ${auto.price}円（${formatDrugPriceRevisionLabel(auto.effectiveFrom)}）`;
+  return `調剤日 ${toDateOnly(dispensingDate) || '不明'} と異なる薬価の版を適用しています: ${resolution.price}円（${formatDrugPriceRevisionLabel(resolution.effectiveFrom)}） / ${autoPart}`;
 }

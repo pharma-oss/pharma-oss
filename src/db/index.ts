@@ -495,7 +495,10 @@ const create = async () => {
                 5: keepDocument,
                 // v6 -> v7: priceHistory (薬価の版) を追加。任意項目なのでそのまま持ち上げる。
                 // 既存ドキュメントは履歴なし = 現在薬価で解決される (drug_price_history.ts)。
-                6: keepDocument
+                6: keepDocument,
+                // v7 -> v8: priceHistory の effectiveFrom を任意にした (開始日不明の版)。
+                // 既存の版はすべて日付を持っているのでそのまま持ち上げる。
+                7: keepDocument
             })
         },
         drug_stocks: {
