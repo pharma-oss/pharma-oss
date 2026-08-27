@@ -140,7 +140,8 @@ export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_prescription_date_missing'
   | 'official_uke_dispensing_date_missing'
   | 'official_uke_multiple_prescription_group_unconfirmed'
-  | 'official_uke_high_cost_special_note_unrecordable';
+  | 'official_uke_high_cost_special_note_unrecordable'
+  | 'official_uke_public_expense_copayment_count_mismatch';
 
 export interface MonthlyClaimUkeOfficialReadinessIssue {
   severity: MonthlyClaimUkeBatchCheckSeverity;
@@ -1548,6 +1549,9 @@ function buildMonthlyClaimOfficialClaimInput(
   const dispensingMonth = calendarMonth(dispensingDate, '調剤年月');
   const specialNote = resolveOfficialHighCostSpecialNote(claim, dispensingDate, dispensingMonth);
   const reduction = insuranceInfo?.copaymentReduction;
+  // 窓口で徴収した額は算出しない。MF(窓口負担額情報)と同じく、記録された値だけを出す。
+  const insuranceCopaymentYen = claim.visit.claimOptions?.officialInsuranceCopaymentYen;
+  const publicExpenseCopayments = claim.visit.claimOptions?.officialPublicExpenseCopayments ?? [];
 
   return {
     common: {
@@ -1568,6 +1572,7 @@ function buildMonthlyClaimOfficialClaimInput(
           number: insuranceInfo.number || '',
           prescriptionCount,
           totalPoints: result.totalPoints,
+          ...(insuranceCopaymentYen === undefined ? {} : { copaymentYen: insuranceCopaymentYen }),
           ...(reduction?.certificateNumber ? { certificateNumber: reduction.certificateNumber } : {}),
           ...(reduction
             ? {
@@ -1580,12 +1585,20 @@ function buildMonthlyClaimOfficialClaimInput(
             : {})
         }]
       : [],
-    publicExpenses: (claim.patient.publicInsurances || []).map((insurance) => ({
-      payerNumber: requireDigits(insurance.provider, '公費負担者番号', [8]),
-      recipientNumber: requireDigits(insurance.recipient, '公費受給者番号', [7]),
-      prescriptionCount,
-      totalPoints: result.totalPoints
-    })),
+    publicExpenses: (claim.patient.publicInsurances || []).map((insurance, index) => {
+      // 公費の一部負担金は patient.publicInsurances と同じ並びで対応させる
+      const copayment = publicExpenseCopayments[index];
+      return {
+        payerNumber: requireDigits(insurance.provider, '公費負担者番号', [8]),
+        recipientNumber: requireDigits(insurance.recipient, '公費受給者番号', [7]),
+        prescriptionCount,
+        totalPoints: result.totalPoints,
+        ...(copayment?.copaymentYen === undefined ? {} : { copaymentYen: copayment.copaymentYen }),
+        ...(copayment?.publicBenefitCopaymentYen === undefined
+          ? {}
+          : { publicBenefitCopaymentYen: copayment.publicBenefitCopaymentYen })
+      };
+    }),
     bodyRecords: buildMonthlyClaimOfficialBodyRecords(claim),
     totalPoints: result.totalPoints
   };
@@ -1625,6 +1638,20 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
         patientName
       });
     }
+  }
+
+  const publicExpenseCopaymentCount = claim.visit.claimOptions?.officialPublicExpenseCopayments?.length ?? 0;
+  const publicInsuranceCount = (claim.patient.publicInsurances || []).length;
+  if (publicExpenseCopaymentCount > publicInsuranceCount) {
+    // 並びで対応させているので、多い分は黙って捨てられてしまう。
+    addOfficialReadinessIssue(issues, {
+      severity: 'error',
+      code: 'official_uke_public_expense_copayment_count_mismatch',
+      title: '公費の一部負担金額の件数が公費の件数と合いません',
+      message: `${patientName} の公費は${publicInsuranceCount}件ですが、一部負担金額が${publicExpenseCopaymentCount}件記録されています。並び順で対応させるため、件数を合わせてください。`,
+      visitId,
+      patientName
+    });
   }
 
   if (claim.patient.gender !== 'male' && claim.patient.gender !== 'female') {

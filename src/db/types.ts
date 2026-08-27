@@ -331,6 +331,19 @@ export interface Visit {
       category: string;
       dailyAmounts?: Record<string, string | number>;
     }[];
+    /**
+     * HO 第9項目 一部負担金。窓口で実際に徴収した額を記録する。
+     * 高額療養費の現物給付・世帯合算・処方元医療機関との関係で決まるため、
+     * 点数×負担割合からは算出しない（誤ると患者への請求額を誤る）。
+     */
+    officialInsuranceCopaymentYen?: number;
+    /**
+     * KO 第7・第9項目。patient.publicInsurances と同じ並びで対応させる。
+     */
+    officialPublicExpenseCopayments?: {
+      copaymentYen?: number;
+      publicBenefitCopaymentYen?: number;
+    }[];
     officialSplitDispensingRecords?: {
       doctorNumber?: string;
       prescriptionDate?: string;

@@ -1479,3 +1479,77 @@ test('late-elderly patients can record the 区カ special note', () => {
   );
   assert.strictEqual(officialRecordFields(claim, 'RE')[7], '41', '区カ = 41');
 });
+
+
+// 窓口で徴収した一部負担金額は算出せず、記録された値だけを出す (MF と同じ扱い)。
+
+test('recorded insurance copayment reaches the HO record', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14',
+      claimOptions: { officialInsuranceCopaymentYen: 5760 }
+    }
+  });
+
+  assert.strictEqual(officialRecordFields(claim, 'HO')[8], '5760');
+});
+
+test('no recorded copayment leaves the HO record untouched', () => {
+  // 点数×負担割合から算出しない。記録が無ければ項目を増やさない。
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    }
+  });
+
+  assert.strictEqual(officialRecordFields(claim, 'HO').length, 5);
+});
+
+test('recorded public expense copayments follow the order of publicInsurances', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14',
+      claimOptions: {
+        officialPublicExpenseCopayments: [{ copaymentYen: 500, publicBenefitCopaymentYen: 380 }]
+      }
+    },
+    patient: {
+      publicInsurances: [{ provider: '51136018', recipient: '1234567' }]
+    } as Partial<Patient>
+  });
+
+  const ko = officialRecordFields(claim, 'KO');
+  assert.strictEqual(ko[6], '500');
+  assert.strictEqual(ko[8], '380');
+});
+
+test('more copayment rows than public insurances is reported as an error', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14',
+      claimOptions: {
+        officialPublicExpenseCopayments: [{ copaymentYen: 500 }, { copaymentYen: 300 }]
+      }
+    },
+    patient: {
+      publicInsurances: [{ provider: '51136018', recipient: '1234567' }]
+    } as Partial<Patient>
+  });
+
+  const report = buildMonthlyClaimUkeOfficialReadinessReport(claim);
+  const issue = report.issues.find(
+    (item) => item.code === 'official_uke_public_expense_copayment_count_mismatch'
+  );
+
+  assert.ok(issue, '並び順で対応させるため、件数が合わないと捨てられる分が出る');
+  assert.strictEqual(issue.severity, 'error');
+  assert.match(issue.message, /公費は1件ですが、一部負担金額が2件/);
+});
