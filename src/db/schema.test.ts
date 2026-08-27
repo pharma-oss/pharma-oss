@@ -602,7 +602,7 @@ describe('Schema Validation', () => {
       };
       const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, validItem);
       assert.strictEqual(errors, null);
-      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 15);
+      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 16);
     });
 
     test('should fail if dosage category is not a known value', () => {
@@ -648,6 +648,39 @@ describe('Schema Validation', () => {
       const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, invalidItem);
       assert.notStrictEqual(errors, null);
     });
+
+    test('should validate a prescription item carrying a drug price override', () => {
+      // 薬剤師が選び直した薬価の版。点数が変わるので、適用した額まで残す (schema v16)。
+      const item = {
+        itemId: 'item_1',
+        visitId: 'visit_1',
+        drugId: 'drug_1',
+        amount: 1,
+        days: 7,
+        drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 }
+      };
+
+      assert.strictEqual(getErrors(PRESCRIPTION_ITEM_SCHEMA, item), null);
+    });
+
+    test('should reject a drug price override without the applied price', () => {
+      const item = {
+        itemId: 'item_1',
+        visitId: 'visit_1',
+        drugId: 'drug_1',
+        amount: 1,
+        days: 7,
+        drugPriceOverride: { effectiveFrom: '2024-04-01' }
+      };
+
+      const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, item);
+      assert.ok(errors);
+      assert.deepStrictEqual(
+        errors.map((error: any) => error.params?.missingProperty),
+        ['price']
+      );
+    });
+
   });
 
   describe('SOAP_RECORD_SCHEMA', () => {

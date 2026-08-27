@@ -393,3 +393,73 @@ test('validateDispensingClaim catches duplicate therapeutic category therapy', (
 
   assert.ok(issues.some((issue) => issue.code === 'duplicate_therapy_detected' && issue.severity === 'warning'));
 });
+
+
+// 調剤日時点と違う薬価の版を当てている明細は、請求前チェックにも並べる。
+
+test('validateDispensingClaim warns when a drug price override deviates from the dispensing date', () => {
+  const issues = validateDispensingClaim({
+    items: [{
+      itemId: 'item_1',
+      visitId: 'visit_1',
+      drugId: 'drug_1',
+      drugName: 'テスト錠10mg',
+      amount: 1,
+      days: 7,
+      drugPrice: 12.3,
+      drugPriceHistory: [
+        { price: 12.3, effectiveFrom: '2024-04-01' },
+        { price: 10.9, effectiveFrom: '2026-04-01' }
+      ],
+      drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 }
+    }] as any,
+    calculatedFees: [],
+    serviceDate: '2026-06-14'
+  });
+
+  const issue = issues.find((item) => item.code === 'drug_price_override_applied');
+  assert.ok(issue, '請求前チェックに出ること');
+  assert.strictEqual(issue.severity, 'warning');
+  assert.strictEqual(issue.itemId, 'item_1');
+  assert.match(issue.message, /12\.3円（適用 2024-04-01）を適用/);
+  assert.match(issue.message, /調剤日時点は 10\.9円/);
+});
+
+test('validateDispensingClaim stays quiet when the override matches the dispensing date', () => {
+  const issues = validateDispensingClaim({
+    items: [{
+      itemId: 'item_1',
+      visitId: 'visit_1',
+      drugId: 'drug_1',
+      amount: 1,
+      days: 7,
+      drugPrice: 10.9,
+      drugPriceHistory: [
+        { price: 12.3, effectiveFrom: '2024-04-01' },
+        { price: 10.9, effectiveFrom: '2026-04-01' }
+      ],
+      drugPriceOverride: { effectiveFrom: '2026-04-01', price: 10.9 }
+    }] as any,
+    calculatedFees: [],
+    serviceDate: '2026-06-14'
+  });
+
+  assert.strictEqual(issues.some((item) => item.code === 'drug_price_override_applied'), false);
+});
+
+test('validateDispensingClaim stays quiet when there is no override', () => {
+  const issues = validateDispensingClaim({
+    items: [{
+      itemId: 'item_1',
+      visitId: 'visit_1',
+      drugId: 'drug_1',
+      amount: 1,
+      days: 7,
+      drugPrice: 10.9
+    }] as any,
+    calculatedFees: [],
+    serviceDate: '2026-06-14'
+  });
+
+  assert.strictEqual(issues.some((item) => item.code === 'drug_price_override_applied'), false);
+});

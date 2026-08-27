@@ -1,5 +1,11 @@
 import { logAuditAction } from '@/lib/audit';
 import { getClaimItemFlagValue } from './helpers';
+import {
+  formatDrugPriceOverrideWarning,
+  resolveDrugPriceWithOverride,
+  type DrugPriceOverride,
+  type DrugPriceSource
+} from '@/lib/drug_price_history';
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import type { ClaimLifecycleState } from '@/lib/claim_lifecycle';
 import type { AuditActionType, PharmacyDatabase } from '@/db/types';
@@ -26,6 +32,8 @@ export const CLAIM_ACTION_MESSAGES = {
   drugFeeOnlyAuditRolledBack: '点数請求切替の監査ログ記録に失敗したため、変更を元に戻しました。',
   feeToggleAuditRolledBack: '算定切替の監査ログ記録に失敗したため、変更を元に戻しました。',
   itemClaimToggleAuditRolledBack: '処方薬別算定切替の監査ログ記録に失敗したため、変更を元に戻しました。',
+  prescriptionItemNotFound: '対象の処方明細が見つかりません。',
+  drugPriceOverrideAuditRolledBack: '薬価の版変更の監査ログ記録に失敗したため、変更を元に戻しました。',
   claimLifecycleVisitNotFound: 'Visit was not found.',
   claimLifecycleAuditRolledBack: '請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。'
 } as const;
@@ -177,7 +185,14 @@ export function buildItemClaimFlagAuditDetail(item: any, field: string, value: b
 
 export interface ApplyItemClaimFlagWithAuditParams {
   db: PharmacyDatabase;
+  /** 画面が持っている処方明細 (現在値の読み取りに使う) */
   item: any;
+  /**
+   * 保存先のRxDocument。画面の item は toJSON() 由来で doc を持たないため、
+   * 呼び出し側が DB から引いて渡す。ここを item.doc に頼ると、
+   * 画面では常に undefined になり保存が黙って行われなくなる。
+   */
+  itemDoc: any;
   field: string;
   value: boolean;
   patientId?: string;
@@ -192,9 +207,12 @@ export interface ApplyItemClaimFlagWithAuditParams {
 export async function applyItemClaimFlagWithAudit(
   params: ApplyItemClaimFlagWithAuditParams
 ): Promise<Record<string, boolean>> {
-  const { db, item, field, value, patientId, patientName, logAudit = logAuditAction } = params;
+  const { db, item, itemDoc, field, value, patientId, patientName, logAudit = logAuditAction } = params;
+  if (!itemDoc) {
+    throw new Error(CLAIM_ACTION_MESSAGES.prescriptionItemNotFound);
+  }
   const { patch, previousPatch } = buildItemClaimFlagPatches(item, field, value);
-  await item.doc.patch(patch);
+  await itemDoc.patch(patch);
 
   const auditOk = await logAudit(
     db,
@@ -204,7 +222,7 @@ export async function applyItemClaimFlagWithAudit(
     patientName
   );
   if (!auditOk) {
-    await item.doc.patch(previousPatch);
+    await itemDoc.patch(previousPatch);
     throw new Error(CLAIM_ACTION_MESSAGES.itemClaimToggleAuditRolledBack);
   }
   return patch;
@@ -255,4 +273,94 @@ export async function persistClaimLifecycleWithAudit(
     applyLifecycle(rollbackLifecycle);
     throw new Error(CLAIM_ACTION_MESSAGES.claimLifecycleAuditRolledBack);
   }
+}
+
+export interface ApplyDrugPriceOverrideParams {
+  db: PharmacyDatabase;
+  /** 画面が持っている処方明細 */
+  item: any;
+  /** 保存先のRxDocument。呼び出し側が DB から引いて渡す */
+  itemDoc: any;
+  /** 算定に使う薬品マスター (調剤薬があればそちら) */
+  drug: DrugPriceSource;
+  dispensingDate: string;
+  /** null を渡すと上書きを外して調剤日時点の版へ戻す */
+  override: DrugPriceOverride | null;
+  patientId?: string;
+  patientName?: string;
+  logAudit?: LogAuditActionFn;
+}
+
+export interface DrugPriceOverrideOutcome {
+  /** 適用後に算定へ使われる薬価 */
+  price?: number;
+  /** 調剤日時点の版と違う版を適用したか */
+  overridden: boolean;
+  /** overridden のときの警告文。画面と監査ログで同じ文言を使う */
+  warning: string;
+}
+
+export function buildDrugPriceOverrideAuditDetail(
+  item: any,
+  outcome: DrugPriceOverrideOutcome,
+  dispensingDate: string
+): string {
+  const drugLabel = item?.dispensedDrug || item?.drugName || item?.drugId;
+  if (!outcome.overridden) {
+    return `薬価の版変更: 薬品「${drugLabel}」を調剤日 ${dispensingDate} 時点の薬価（${outcome.price ?? '不明'}円）へ戻しました。`;
+  }
+  return `薬価の版変更: 薬品「${drugLabel}」に調剤日時点と異なる薬価を適用しました。${outcome.warning}`;
+}
+
+/**
+ * 処方薬の薬価の版を切り替える。監査ログが残らなければ元へ戻して投げる。
+ *
+ * 点数が変わる操作なので、調剤日時点と違う版を選んだことが監査ログに必ず残るようにする。
+ */
+export async function applyDrugPriceOverrideWithAudit(
+  params: ApplyDrugPriceOverrideParams
+): Promise<DrugPriceOverrideOutcome> {
+  const {
+    db,
+    item,
+    itemDoc,
+    drug,
+    dispensingDate,
+    override,
+    patientId,
+    patientName,
+    logAudit = logAuditAction
+  } = params;
+
+  if (!itemDoc) {
+    throw new Error(CLAIM_ACTION_MESSAGES.prescriptionItemNotFound);
+  }
+
+  const previousOverride: DrugPriceOverride | undefined = item?.drugPriceOverride;
+  const resolution = resolveDrugPriceWithOverride(drug, dispensingDate, override);
+  const outcome: DrugPriceOverrideOutcome = {
+    price: resolution.price,
+    overridden: resolution.source === 'override',
+    warning: formatDrugPriceOverrideWarning(resolution, dispensingDate)
+  };
+
+  // 上書きを外すときは項目ごと消す (undefined を書くと RxDB の任意項目に残る)
+  const patch = override
+    ? { drugPriceOverride: { effectiveFrom: override.effectiveFrom, price: override.price } }
+    : { drugPriceOverride: null };
+  await itemDoc.patch(patch);
+
+  const auditOk = await logAudit(
+    db,
+    'billing_toggle',
+    buildDrugPriceOverrideAuditDetail(item, outcome, dispensingDate),
+    patientId,
+    patientName
+  );
+  if (!auditOk) {
+    await itemDoc.patch({ drugPriceOverride: previousOverride ?? null });
+    throw new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack);
+  }
+
+  return outcome;
 }

@@ -52,6 +52,11 @@ import {
 } from '@/lib/claim_lifecycle';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
+  formatDrugPriceOverrideWarning,
+  listDrugPriceRevisionChoices,
+  resolveDrugPriceWithOverride
+} from '@/lib/drug_price_history';
+import {
   DEFAULT_CLAIM_RETURN_REASON_CODE,
   OFFICIAL_CLAIM_RETURN_REASONS,
   buildReturnCorrectionSummary,
@@ -104,6 +109,7 @@ import {
 import {
   CLAIM_ACTION_MESSAGES,
   applyClaimOptionsWithAudit,
+  applyDrugPriceOverrideWithAudit,
   applyItemClaimFlagWithAudit,
   persistClaimLifecycleWithAudit,
   persistClaimOptions as persistVisitClaimOptions,
@@ -555,10 +561,13 @@ export default function PrintPage() {
     if (!db) return;
     try {
       const currentItem = prescriptionItems[index];
-      if (currentItem && currentItem.itemId === itemId && currentItem.doc) {
+      if (currentItem && currentItem.itemId === itemId) {
+        // 画面の明細は toJSON() 由来で RxDocument を持たない。保存先は DB から引く。
+        const itemDoc = await db.prescription_items.findOne(itemId).exec();
         const patch = await applyItemClaimFlagWithAudit({
           db,
           item: currentItem,
+          itemDoc,
           field,
           value,
           patientId: visitData?.patientId,
@@ -574,6 +583,79 @@ export default function PrintPage() {
     } catch (err) {
       console.error('Failed to update item claim flags:', err);
       alert(`処方薬別算定切替に失敗しました: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
+  // 薬価の版は調剤日で決まる。画面の選択肢と警告も同じ日付で組む。
+  const dispensingDateForPrice = visitData?.dispensingDate || visitData?.issueDate || '';
+
+  const drugPriceChoicesByItemId = useMemo(() => {
+    const map: Record<string, ReturnType<typeof listDrugPriceRevisionChoices>> = {};
+    for (const item of prescriptionItems) {
+      const choices = listDrugPriceRevisionChoices(
+        { price: item.price, priceHistory: item.drugPriceHistory },
+        dispensingDateForPrice
+      );
+      if (choices.length > 0) map[item.itemId] = choices;
+    }
+    return map;
+  }, [prescriptionItems, dispensingDateForPrice]);
+
+  const drugPriceWarningByItemId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of prescriptionItems) {
+      const warning = item.drugPriceResolution
+        ? formatDrugPriceOverrideWarning(item.drugPriceResolution, dispensingDateForPrice)
+        : '';
+      if (warning) map[item.itemId] = warning;
+    }
+    return map;
+  }, [prescriptionItems, dispensingDateForPrice]);
+
+  const handleDrugPriceOverrideChange = async (itemId: string, effectiveFrom: string, idx: number) => {
+    if (!ensurePermission('change_billing')) return;
+    if (!ensureClaimEditable()) return;
+    if (!db) return;
+    try {
+      const currentItem = prescriptionItems[idx];
+      if (!currentItem || currentItem.itemId !== itemId) return;
+      const itemDoc = await db.prescription_items.findOne(itemId).exec();
+
+      const choices = listDrugPriceRevisionChoices(
+        { price: currentItem.price, priceHistory: currentItem.drugPriceHistory },
+        dispensingDateForPrice
+      );
+      const chosen = choices.find((choice) => choice.effectiveFrom === effectiveFrom);
+
+      const outcome = await applyDrugPriceOverrideWithAudit({
+        db,
+        item: currentItem,
+        itemDoc,
+        drug: { price: currentItem.price, priceHistory: currentItem.drugPriceHistory },
+        dispensingDate: dispensingDateForPrice,
+        override: chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : null,
+        patientId: visitData?.patientId,
+        patientName: patientData?.name
+      });
+
+      setPrescriptionItems((prev) => {
+        if (prev[idx]?.itemId !== itemId) return prev;
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          price: outcome.price ?? next[idx].price,
+          drugPriceOverride: chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : undefined,
+          drugPriceResolution: resolveDrugPriceWithOverride(
+            { price: next[idx].price, priceHistory: next[idx].drugPriceHistory },
+            dispensingDateForPrice,
+            chosen ? { effectiveFrom: chosen.effectiveFrom, price: chosen.price } : null
+          )
+        };
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to change drug price revision:', err);
+      alert(`薬価の版変更に失敗しました: ${err instanceof Error ? err.message : err}`);
     }
   };
 
@@ -1782,6 +1864,10 @@ export default function PrintPage() {
           handleToggleCrushed={handleToggleCrushed}
           handleItemClaimToggle={handleItemClaimToggle}
           handleTokkanChange={handleTokkanChange}
+          dispensingDateForPrice={dispensingDateForPrice}
+          drugPriceChoicesByItemId={drugPriceChoicesByItemId}
+          drugPriceWarningByItemId={drugPriceWarningByItemId}
+          handleDrugPriceOverrideChange={handleDrugPriceOverrideChange}
           handleReceiptRemarkChange={handleReceiptRemarkChange}
           handleBillingAgentOverrideLocalChange={handleBillingAgentOverrideLocalChange}
           persistBillingAgentOverride={persistBillingAgentOverride}

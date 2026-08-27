@@ -2,9 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendDrugPriceRevision,
+  formatDrugPriceOverrideWarning,
+  isDrugPriceOverridden,
   isDrugPriceRevisionNeeded,
+  listDrugPriceRevisionChoices,
   resolveDrugPrice,
   resolveDrugPriceOn,
+  resolveDrugPriceWithOverride,
   type DrugPriceRevision
 } from './drug_price_history.ts';
 
@@ -133,4 +137,86 @@ test('history survives an out-of-order import of an older revision', () => {
   assert.equal(resolveDrugPriceOn({ priceHistory: built }, '2023-06-14'), 13.8);
   assert.equal(resolveDrugPriceOn({ priceHistory: built }, '2025-06-14'), 12.3);
   assert.equal(resolveDrugPriceOn({ priceHistory: built }, '2026-06-14'), 10.9);
+});
+
+
+// 薬剤師が薬価の版を選び直せるようにした分。
+// 選び直しは点数を動かすので、「上書きしたこと」が消えないようにする。
+
+test('listDrugPriceRevisionChoices marks the revision that the dispensing date resolves to', () => {
+  const choices = listDrugPriceRevisionChoices({ priceHistory: history }, '2026-06-14');
+
+  // 新しい版が先頭 (選ぶときに探しやすい)
+  assert.deepEqual(choices, [
+    { effectiveFrom: '2026-04-01', price: 10.9, isAutoSelected: true },
+    { effectiveFrom: '2024-04-01', price: 12.3, isAutoSelected: false }
+  ]);
+
+  // 調剤日が変われば自動選択も変わる
+  const past = listDrugPriceRevisionChoices({ priceHistory: history }, '2025-06-14');
+  assert.deepEqual(past.map((choice) => choice.isAutoSelected), [false, true]);
+});
+
+test('listDrugPriceRevisionChoices returns nothing when there is no history', () => {
+  assert.deepEqual(listDrugPriceRevisionChoices({ price: 10.9 }, '2026-06-14'), []);
+});
+
+test('resolveDrugPriceWithOverride applies the chosen revision and keeps the automatic one', () => {
+  const resolution = resolveDrugPriceWithOverride(
+    { priceHistory: history },
+    '2026-06-14',
+    { effectiveFrom: '2024-04-01', price: 12.3 }
+  );
+
+  assert.equal(resolution.price, 12.3);
+  assert.equal(resolution.source, 'override');
+  assert.equal(resolution.effectiveFrom, '2024-04-01');
+  // 上書きしなければどうなっていたかを残す。警告と監査ログで使う。
+  assert.deepEqual(resolution.autoResolved, {
+    price: 10.9,
+    source: 'history',
+    effectiveFrom: '2026-04-01'
+  });
+  assert.equal(isDrugPriceOverridden(resolution), true);
+});
+
+test('choosing the same revision as the dispensing date is not treated as an override', () => {
+  // 同じ結論に警告を出しても意味がない
+  const resolution = resolveDrugPriceWithOverride(
+    { priceHistory: history },
+    '2026-06-14',
+    { effectiveFrom: '2026-04-01', price: 10.9 }
+  );
+
+  assert.equal(resolution.source, 'history');
+  assert.equal(isDrugPriceOverridden(resolution), false);
+});
+
+test('an unusable override falls back to the automatic resolution', () => {
+  const base = { priceHistory: history };
+  assert.equal(resolveDrugPriceWithOverride(base, '2026-06-14', null).source, 'history');
+  assert.equal(
+    resolveDrugPriceWithOverride(base, '2026-06-14', { effectiveFrom: '', price: 12.3 }).source,
+    'history'
+  );
+  assert.equal(
+    resolveDrugPriceWithOverride(base, '2026-06-14', { effectiveFrom: '2024-04-01', price: Number.NaN }).source,
+    'history'
+  );
+});
+
+test('formatDrugPriceOverrideWarning names both the applied and the automatic price', () => {
+  const resolution = resolveDrugPriceWithOverride(
+    { priceHistory: history },
+    '2026-06-14',
+    { effectiveFrom: '2024-04-01', price: 12.3 }
+  );
+  const warning = formatDrugPriceOverrideWarning(resolution, '2026-06-14');
+
+  assert.match(warning, /調剤日 2026-06-14/);
+  assert.match(warning, /12\.3円（適用 2024-04-01）/);
+  assert.match(warning, /調剤日時点は 10\.9円（適用 2026-04-01）/);
+
+  // 上書きしていないときは文言を出さない
+  assert.equal(formatDrugPriceOverrideWarning(resolveDrugPrice({ priceHistory: history }, '2026-06-14'), '2026-06-14'), '');
 });

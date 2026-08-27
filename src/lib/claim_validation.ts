@@ -6,6 +6,7 @@ import {
   type FeeCode,
   type MonthlyFeeHistoryEntry
 } from '@/lib/calculator';
+import { resolveDrugPrice, type DrugPriceRevision } from './drug_price_history.ts';
 import { evaluateInsuranceEligibility } from './insurance_eligibility.ts';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
 
@@ -22,6 +23,8 @@ export interface ClaimValidationIssue {
 
 export interface ClaimValidationItem extends PrescriptionItem {
   drugName?: string;
+  /** 算定に使う薬品マスターの薬価履歴。調剤日時点との差を見るために使う */
+  drugPriceHistory?: DrugPriceRevision[];
   drugPrice?: number;
   yjCode?: string;
   isHighRisk?: boolean;
@@ -113,6 +116,30 @@ export function validateDispensingClaim(input: ValidateDispensingClaimInput): Cl
       }
     : undefined;
   const totalPoints = input.totalPoints ?? calculatedFees.reduce((sum, fee) => sum + fee.points, 0);
+
+  // 調剤日時点と違う薬価の版を当てている明細は、提出前に必ず目に入るようにする。
+  // 点数が変わる上書きなので、画面の警告だけでなく請求前チェックにも並べる。
+  for (const item of items) {
+    const override = item.drugPriceOverride;
+    if (!override) continue;
+    const auto = resolveDrugPrice(
+      { price: item.drugPrice, priceHistory: item.drugPriceHistory },
+      serviceDate || ''
+    );
+    if (auto.effectiveFrom === override.effectiveFrom && auto.price === override.price) continue;
+    const drugLabel = item.dispensedDrug || item.drugName || item.drugId;
+    addIssue(issues, {
+      severity: 'warning',
+      code: 'drug_price_override_applied',
+      title: '調剤日時点と異なる薬価を適用しています',
+      message: `${drugLabel}: ${override.price}円（適用 ${override.effectiveFrom}）を適用しています。${
+        auto.price === undefined
+          ? '調剤日時点の薬価は特定できません。'
+          : `調剤日時点は ${auto.price}円（適用 ${auto.effectiveFrom || '不明'}）です。`
+      }理由を摘要欄に記載してから提出してください。`,
+      itemId: item.itemId
+    });
+  }
 
   if (!settings) {
     addIssue(issues, {

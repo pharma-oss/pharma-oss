@@ -1277,6 +1277,33 @@
           align-content: center;
         }
 
+        .drug-price-revision-select {
+          font-size: var(--fs-xs);
+          padding: 0.25rem 0.4rem;
+          border: 1px solid #cbd5f5;
+          border-radius: 6px;
+          background: #fff;
+          max-width: 260px;
+        }
+
+        .drug-price-override-warning {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          margin: 0.5rem 0 0;
+          padding: 0.5rem 0.65rem;
+          border: 1px solid #f59e0b;
+          border-radius: 8px;
+          background: #fffbeb;
+          color: #92400e;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+        }
+
+        .drug-price-override-warning svg {
+          flex-shrink: 0;
+        }
+
         .claim-lifecycle-return-reason {
           grid-column: 1 / -1;
           display: grid;

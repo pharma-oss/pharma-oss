@@ -666,7 +666,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
 
 export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
   title: 'prescription item schema',
-  version: 15,
+  version: 16,
   primaryKey: 'itemId',
   type: 'object',
   properties: {
@@ -729,6 +729,14 @@ export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
     billingAgentGroupKey: { type: 'string', maxLength: 50 },
     billingAgentGroupReason: { type: 'string', maxLength: 500 },
     claimPreparation: { type: 'boolean' },
+    drugPriceOverride: {
+      type: 'object',
+      properties: {
+        effectiveFrom: { type: 'string', maxLength: 10 },
+        price: { type: 'number', minimum: 0 }
+      },
+      required: ['effectiveFrom', 'price']
+    },
     claimManagement: { type: 'boolean' },
     claimDrugFee: { type: 'boolean' },
     isDiagnosticTest: { type: 'boolean' },

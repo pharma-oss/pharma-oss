@@ -10,6 +10,8 @@ import {
   persistClaimLifecycleWithAudit,
   persistClaimOptions,
   printDocumentsWithAuditLog,
+  applyDrugPriceOverrideWithAudit,
+  buildDrugPriceOverrideAuditDetail,
   type LogAuditActionFn
 } from './claim_actions.ts';
 import type { ClaimLifecycleState } from '../../lib/claim_lifecycle.ts';
@@ -291,6 +293,7 @@ test('applyItemClaimFlagWithAudit keeps the item change once the audit log is re
   const patch = await applyItemClaimFlagWithAudit({
     db: harness.db,
     item,
+    itemDoc: item.doc,
     field: 'claimPreparation',
     value: false,
     patientId: 'pt_0001',
@@ -312,6 +315,7 @@ test('applyItemClaimFlagWithAudit rolls the item back when the audit log fails',
     () => applyItemClaimFlagWithAudit({
       db: harness.db,
       item,
+      itemDoc: item.doc,
       field: 'claimPreparation',
       value: false,
       logAudit: harness.logAudit
@@ -334,6 +338,7 @@ test('applyItemClaimFlagWithAudit restores all three flags when a diagnostic tes
     () => applyItemClaimFlagWithAudit({
       db: harness.db,
       item,
+      itemDoc: item.doc,
       field: 'isDiagnosticTest',
       value: true,
       logAudit: harness.logAudit
@@ -455,4 +460,150 @@ test('persistClaimLifecycleWithAudit does nothing while the database is unavaila
 
   assert.deepEqual(appliedStates, []);
   assert.deepEqual(harness.auditEntries, []);
+});
+
+
+// ---------------------------------------------------------------------------
+// 薬価の版の切り替え
+// ---------------------------------------------------------------------------
+
+const priceHistory = [
+  { price: 12.3, effectiveFrom: '2024-04-01' },
+  { price: 10.9, effectiveFrom: '2026-04-01' }
+];
+
+test('applyDrugPriceOverrideWithAudit records the deviation from the dispensing-date price', async () => {
+  const harness = createHarness();
+  const { item, patches } = createItem();
+
+  const outcome = await applyDrugPriceOverrideWithAudit({
+    db: harness.db,
+    item,
+    itemDoc: item.doc,
+    drug: { priceHistory },
+    dispensingDate: '2026-06-14',
+    override: { effectiveFrom: '2024-04-01', price: 12.3 },
+    patientId: 'pt_0001',
+    patientName: 'デモ患者 みどり',
+    logAudit: harness.logAudit
+  });
+
+  assert.equal(outcome.price, 12.3);
+  assert.equal(outcome.overridden, true);
+  assert.match(outcome.warning, /調剤日時点は 10\.9円/);
+  assert.deepEqual(patches, [{ drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 } }]);
+
+  // 点数が変わる操作なので、違う版を当てたことが監査ログに必ず残る
+  assert.equal(harness.auditEntries.length, 1);
+  assert.equal(harness.auditEntries[0].actionType, 'billing_toggle');
+  assert.match(harness.auditEntries[0].details, /調剤日時点と異なる薬価を適用しました/);
+  assert.match(harness.auditEntries[0].details, /12\.3円（適用 2024-04-01）/);
+});
+
+test('applyDrugPriceOverrideWithAudit clears the override and says it returned to the automatic price', async () => {
+  const harness = createHarness();
+  const { item, patches } = createItem({
+    drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 }
+  });
+
+  const outcome = await applyDrugPriceOverrideWithAudit({
+    db: harness.db,
+    item,
+    itemDoc: item.doc,
+    drug: { priceHistory },
+    dispensingDate: '2026-06-14',
+    override: null,
+    logAudit: harness.logAudit
+  });
+
+  assert.equal(outcome.overridden, false);
+  assert.equal(outcome.price, 10.9);
+  assert.equal(outcome.warning, '');
+  assert.deepEqual(patches, [{ drugPriceOverride: null }]);
+  assert.match(harness.auditEntries[0].details, /調剤日 2026-06-14 時点の薬価（10\.9円）へ戻しました/);
+});
+
+test('choosing the dispensing-date revision is recorded without a deviation warning', async () => {
+  const harness = createHarness();
+  const { item } = createItem();
+
+  const outcome = await applyDrugPriceOverrideWithAudit({
+    db: harness.db,
+    item,
+    itemDoc: item.doc,
+    drug: { priceHistory },
+    dispensingDate: '2026-06-14',
+    override: { effectiveFrom: '2026-04-01', price: 10.9 },
+    logAudit: harness.logAudit
+  });
+
+  assert.equal(outcome.overridden, false, '同じ結論に警告は出さない');
+  assert.equal(outcome.warning, '');
+});
+
+test('applyDrugPriceOverrideWithAudit restores the previous override when the audit log fails', async () => {
+  const harness = createHarness({ auditOk: false });
+  const previous = { effectiveFrom: '2024-04-01', price: 12.3 };
+  const { item, patches } = createItem({ drugPriceOverride: previous });
+
+  await assert.rejects(
+    () => applyDrugPriceOverrideWithAudit({
+      db: harness.db,
+      item,
+      itemDoc: item.doc,
+      drug: { priceHistory },
+      dispensingDate: '2026-06-14',
+      override: null,
+      logAudit: harness.logAudit
+    }),
+    new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack)
+  );
+
+  assert.deepEqual(patches, [{ drugPriceOverride: null }, { drugPriceOverride: previous }]);
+});
+
+test('buildDrugPriceOverrideAuditDetail names the drug', () => {
+  const detail = buildDrugPriceOverrideAuditDetail(
+    { dispensedDrug: 'ロキソプロフェン錠60mg' },
+    { price: 12.3, overridden: true, warning: '(警告文)' },
+    '2026-06-14'
+  );
+  assert.match(detail, /ロキソプロフェン錠60mg/);
+  assert.match(detail, /\(警告文\)/);
+});
+
+
+test('item-level actions refuse to run without the prescription item document', async () => {
+  // 画面の明細は toJSON() 由来で RxDocument を持たない。
+  // ここを黙って握りつぶすと、チェックを操作しても何も保存されない状態になる
+  // (実際にそうなっていた)。理由の分かる失敗にする。
+  const harness = createHarness();
+  const { item } = createItem();
+
+  await assert.rejects(
+    () => applyItemClaimFlagWithAudit({
+      db: harness.db,
+      item,
+      itemDoc: undefined,
+      field: 'claimPreparation',
+      value: false,
+      logAudit: harness.logAudit
+    }),
+    new Error(CLAIM_ACTION_MESSAGES.prescriptionItemNotFound)
+  );
+
+  await assert.rejects(
+    () => applyDrugPriceOverrideWithAudit({
+      db: harness.db,
+      item,
+      itemDoc: null,
+      drug: { priceHistory },
+      dispensingDate: '2026-06-14',
+      override: null,
+      logAudit: harness.logAudit
+    }),
+    new Error(CLAIM_ACTION_MESSAGES.prescriptionItemNotFound)
+  );
+
+  assert.deepEqual(harness.auditEntries, [], '保存できていないのに監査ログを書かない');
 });

@@ -98,7 +98,7 @@ test('print page delegates item-level claim flags to the audited claim action', 
   const body = section(printSource, 'const handleItemClaimToggle = async', 'const handleTokkanChange = async');
 
   assert.match(printSource, /function getClaimItemFlagValue/);
-  assert.match(body, /currentItem && currentItem\.itemId === itemId && currentItem\.doc/);
+  assert.match(body, /currentItem && currentItem\.itemId === itemId/);
   assert.match(body, /await applyItemClaimFlagWithAudit\(/);
   assert.match(body, /item: currentItem/);
   assert.doesNotMatch(body, /const auditOk = await logAuditAction\(/);
@@ -123,6 +123,28 @@ test('print page registers returns with a reason code, not free text', () => {
   // 監査ログを開くまで確認できない。
   assert.match(printSource, /data-testid="claim-registered-return-reason"/);
   assert.match(printSource, /formatClaimReturnReasonLabel\(claimLifecycle\.returnReasonCode\)/);
+});
+
+test('print page looks the prescription item document up before patching it', () => {
+  const body = section(printSource, 'const handleItemClaimToggle = async', 'const handleTokkanChange = async');
+
+  // 画面の明細は toJSON() 由来で RxDocument を持たない。
+  // currentItem.doc に頼ると条件が常に false になり、チェックを操作しても
+  // 何も保存されない状態に戻る (実際にそうなっていた)。
+  assert.doesNotMatch(body, /currentItem\.doc/);
+  assert.match(body, /await db\.prescription_items\.findOne\(itemId\)\.exec\(\)/);
+  assert.match(body, /itemDoc,/);
+});
+
+test('print page lets the pharmacist pick a drug price revision with a warning', () => {
+  const body = section(printSource, 'const handleDrugPriceOverrideChange = async', 'const handleTokkanChange = async');
+
+  assert.match(body, /await applyDrugPriceOverrideWithAudit\(/);
+  assert.match(body, /await db\.prescription_items\.findOne\(itemId\)\.exec\(\)/);
+  assert.match(printSource, /data-testid=\{`drug-price-revision-\$\{item\.itemId\}`\}/);
+  // 調剤日時点と違う版を選んだことが画面から消えないこと
+  assert.match(printSource, /data-testid=\{`drug-price-override-warning-\$\{item\.itemId\}`\}/);
+  assert.match(printSource, /drugPriceWarningByItemId\[item\.itemId\]/);
 });
 
 test('print page delegates claim lifecycle transitions to the audited claim action', () => {

@@ -19,6 +19,8 @@ export interface DrugPriceSource {
 }
 
 export type DrugPriceResolutionSource =
+  /** 薬剤師が版を選び直した */
+  | 'override'
   /** 調剤日に適用される版が履歴にあった */
   | 'history'
   /** 履歴が無いので現在薬価を使った（改定前から使っている薬品） */
@@ -32,6 +34,16 @@ export interface DrugPriceResolution {
   price?: number;
   source: DrugPriceResolutionSource;
   effectiveFrom?: string;
+  /** source が 'override' のとき、上書きしなければこうなっていたという解決結果 */
+  autoResolved?: DrugPriceResolution;
+}
+
+/** 処方薬ごとに薬剤師が選び直した薬価の版 */
+export interface DrugPriceOverride {
+  /** 選んだ版の適用開始日 */
+  effectiveFrom: string;
+  /** 選んだ版の薬価。履歴が後から訂正されても、適用した額が分かるように持つ */
+  price: number;
 }
 
 function toDateOnly(value: string): string {
@@ -137,4 +149,75 @@ export function isDrugPriceRevisionNeeded(
   const resolved = resolveDrugPrice(drug, effectiveFrom);
   if (resolved.source === 'unknown') return true;
   return resolved.price !== nextPrice;
+}
+
+/**
+ * 薬価の版の選択肢。調剤日時点で自動解決される版には isAutoSelected を立てる。
+ * 画面の選択 UI と、選び直したときの警告表示に使う。
+ */
+export interface DrugPriceRevisionChoice {
+  effectiveFrom: string;
+  price: number;
+  isAutoSelected: boolean;
+}
+
+export function listDrugPriceRevisionChoices(
+  drug: DrugPriceSource,
+  dispensingDate: string
+): DrugPriceRevisionChoice[] {
+  const history = sortedHistory(drug?.priceHistory);
+  if (history.length === 0) return [];
+  const auto = resolveDrugPrice(drug, dispensingDate);
+  return history
+    .map((revision) => ({
+      effectiveFrom: revision.effectiveFrom,
+      price: revision.price,
+      isAutoSelected: auto.effectiveFrom === revision.effectiveFrom
+    }))
+    .reverse();
+}
+
+/**
+ * 薬剤師が選び直した版があればそれを使い、無ければ調剤日で解決する。
+ *
+ * 選び直した版が調剤日時点の版と同じなら、上書きとしては扱わない
+ * (同じ結論に警告を出しても意味がない)。
+ */
+export function resolveDrugPriceWithOverride(
+  drug: DrugPriceSource,
+  dispensingDate: string,
+  override?: DrugPriceOverride | null
+): DrugPriceResolution {
+  const auto = resolveDrugPrice(drug, dispensingDate);
+  const effectiveFrom = toDateOnly(override?.effectiveFrom || '');
+  if (!override || !effectiveFrom || !Number.isFinite(override.price)) {
+    return auto;
+  }
+  if (auto.effectiveFrom === effectiveFrom && auto.price === override.price) {
+    return auto;
+  }
+  return {
+    price: override.price,
+    source: 'override',
+    effectiveFrom,
+    autoResolved: auto
+  };
+}
+
+/** 調剤日時点の版と違う版が選ばれているか */
+export function isDrugPriceOverridden(resolution: DrugPriceResolution): boolean {
+  return resolution.source === 'override';
+}
+
+/** 画面と監査ログで同じ文言を使う */
+export function formatDrugPriceOverrideWarning(
+  resolution: DrugPriceResolution,
+  dispensingDate: string
+): string {
+  if (resolution.source !== 'override') return '';
+  const auto = resolution.autoResolved;
+  const autoPart = auto?.price === undefined
+    ? '調剤日時点の薬価が特定できません'
+    : `調剤日時点は ${auto.price}円（適用 ${auto.effectiveFrom || '不明'}）`;
+  return `調剤日 ${toDateOnly(dispensingDate) || '不明'} と異なる薬価の版を適用しています: ${resolution.price}円（適用 ${resolution.effectiveFrom}） / ${autoPart}`;
 }

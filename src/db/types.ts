@@ -1,6 +1,6 @@
 import type { RxCollection, RxDatabase } from 'rxdb';
 import type { HighCostLimitCategory } from '../lib/receipt/dispensing_uke_code_tables';
-import type { DrugPriceRevision } from '../lib/drug_price_history';
+import type { DrugPriceOverride, DrugPriceRevision } from '../lib/drug_price_history';
 
 export type AiAssistMode = 'enabled' | 'limited' | 'disabled';
 
@@ -489,6 +489,11 @@ export interface PrescriptionItem {
   billingAgentGroupKey?: string;
   billingAgentGroupReason?: string;
   claimPreparation?: boolean;
+  /**
+   * 薬剤師が選び直した薬価の版。未設定なら調剤日時点の版で算定する。
+   * 調剤日時点と違う版を選ぶと点数が変わるため、画面警告・監査ログ・請求前チェックに出す。
+   */
+  drugPriceOverride?: DrugPriceOverride;
   claimManagement?: boolean;
   claimDrugFee?: boolean;
   isDiagnosticTest?: boolean;

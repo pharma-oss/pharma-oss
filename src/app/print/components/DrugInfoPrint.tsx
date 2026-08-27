@@ -32,6 +32,10 @@ export interface DrugInfoPrintProps {
   handleToggleIppoka: (itemId: string, checked: boolean, idx: number) => Promise<void>;
   handleToggleCrushed: (itemId: string, checked: boolean, idx: number) => Promise<void>;
   handleItemClaimToggle: (itemId: string, field: string, checked: boolean, idx: number) => Promise<void>;
+  dispensingDateForPrice: string;
+  drugPriceChoicesByItemId: Record<string, { effectiveFrom: string; price: number; isAutoSelected: boolean }[]>;
+  drugPriceWarningByItemId: Record<string, string>;
+  handleDrugPriceOverrideChange: (itemId: string, effectiveFrom: string, idx: number) => Promise<void>;
   handleTokkanChange: (itemId: string, value: string, idx: number) => Promise<void>;
   handleReceiptRemarkChange: (itemId: string, value: string, idx: number) => void;
   handleBillingAgentOverrideLocalChange: (itemId: string, field: string, value: string, idx: number) => void;
@@ -56,6 +60,10 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
   handleToggleIppoka,
   handleToggleCrushed,
   handleItemClaimToggle,
+  dispensingDateForPrice,
+  drugPriceChoicesByItemId,
+  drugPriceWarningByItemId,
+  handleDrugPriceOverrideChange,
   handleTokkanChange,
   handleReceiptRemarkChange,
   handleBillingAgentOverrideLocalChange,
@@ -239,6 +247,25 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
                       </select>
                     )}
 
+                    {(drugPriceChoicesByItemId[item.itemId] || []).length > 0 && (
+                      <select
+                        className="drug-price-revision-select"
+                        data-testid={`drug-price-revision-${item.itemId}`}
+                        value={item.drugPriceOverride?.effectiveFrom || ''}
+                        onChange={(e) => handleDrugPriceOverrideChange(item.itemId, e.target.value, idx)}
+                        disabled={!canEditBilling}
+                        title={`調剤日 ${dispensingDateForPrice || '不明'} 時点の薬価で算定します`}
+                      >
+                        <option value="">薬価: 調剤日時点（自動）</option>
+                        {(drugPriceChoicesByItemId[item.itemId] || []).map((choice) => (
+                          <option key={choice.effectiveFrom} value={choice.effectiveFrom}>
+                            薬価: {choice.price}円（適用 {choice.effectiveFrom}）
+                            {choice.isAutoSelected ? ' ※調剤日時点' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
                     <input
                       type="text"
                       list="receipt-remarks-list"
@@ -260,6 +287,17 @@ export const DrugInfoPrint = React.memo(function DrugInfoPrint({
                       />
                     </label>
                   </div>
+
+                  {drugPriceWarningByItemId[item.itemId] && (
+                    <p
+                      className="drug-price-override-warning no-print"
+                      data-testid={`drug-price-override-warning-${item.itemId}`}
+                      role="status"
+                    >
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      {drugPriceWarningByItemId[item.itemId]}
+                    </p>
+                  )}
                 </section>
               );
             })

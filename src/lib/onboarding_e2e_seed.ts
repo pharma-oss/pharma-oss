@@ -370,6 +370,11 @@ export function buildOnboardingE2ESeedRecords(seededAt: Date = new Date()): Onbo
         genericName: 'アムロジピンベシル酸塩',
         isAbolished: false,
         price: 10.1,
+        // 薬価改定をまたぐ調剤の確認用。調剤日で引く版と、選び直せる過去の版を持たせる。
+        priceHistory: [
+          { price: 11.7, effectiveFrom: '2024-04-01' },
+          { price: 10.1, effectiveFrom: '2026-04-01' }
+        ],
         stockQuantity: 100,
         isHighRisk: false
       },
