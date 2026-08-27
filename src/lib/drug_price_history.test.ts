@@ -96,6 +96,14 @@ test('re-importing the same effective date replaces that revision', () => {
   ]);
 });
 
+test('correcting a revision back to the previous price removes that revision', () => {
+  // 「2026-04-01 の改定でこの薬品の薬価は動かなかった」という訂正が来た場合。
+  // 同日の版を差し替えたうえで、直前と同額になった版は履歴から消えること。
+  const corrected = appendDrugPriceRevision(history, { price: 12.3, effectiveFrom: '2026-04-01' });
+  assert.deepEqual(corrected, [{ price: 12.3, effectiveFrom: '2024-04-01' }]);
+  assert.equal(resolveDrugPriceOn({ priceHistory: corrected }, '2026-06-01'), 12.3);
+});
+
 test('re-importing an unchanged price does not grow the history', () => {
   // マスター取込は毎月走る。値が同じなら版を増やさない。
   const unchanged = appendDrugPriceRevision(history, { price: 10.9, effectiveFrom: '2026-06-01' });
@@ -125,6 +133,52 @@ test('isDrugPriceRevisionNeeded only fires when the price actually changed', () 
   // 薬価が無いマスター行では版を作らない
   assert.equal(isDrugPriceRevisionNeeded({ price: 12.3 }, undefined, '2026-06-01'), false);
 });
+
+test('a back-filled revision is recorded even when it matches the extrapolated price', () => {
+  // 遡り取込。履歴より前の日付で引いた薬価は最古版で代用した推定値でしかないので、
+  // 一致しても「変わっていない」の根拠にならない。マスターが持ってきた事実を版にする。
+  const known = [{ price: 10.9, effectiveFrom: '2026-04-01' }];
+  assert.equal(
+    resolveDrugPrice({ price: 10.9, priceHistory: known }, '2024-04-01').source,
+    'earliest_known'
+  );
+  assert.equal(isDrugPriceRevisionNeeded({ price: 10.9, priceHistory: known }, 10.9, '2024-04-01'), true);
+  // 当時の薬価が違っていた場合も当然積む
+  assert.equal(isDrugPriceRevisionNeeded({ price: 10.9, priceHistory: known }, 12.3, '2024-04-01'), true);
+});
+
+test('back-filling absorbs a later revision that only repeats the same price', () => {
+  // 「実は 2024-04-01 から 10.9 だった」と分かったら、2026-04-01 の版は
+  // 薬価が変わっていない版になるので畳む。畳まないと選択 UI に同額が二つ並ぶ。
+  const absorbed = appendDrugPriceRevision(
+    [{ price: 10.9, effectiveFrom: '2026-04-01' }],
+    { price: 10.9, effectiveFrom: '2024-04-01' }
+  );
+  assert.deepEqual(absorbed, [{ price: 10.9, effectiveFrom: '2024-04-01' }]);
+  // 畳めるのは直後の版が同額のときだけ。薬価が変わっている版は残す。
+  const kept = appendDrugPriceRevision(
+    [{ price: 10.9, effectiveFrom: '2026-04-01' }],
+    { price: 12.3, effectiveFrom: '2024-04-01' }
+  );
+  assert.deepEqual(kept, [
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { price: 10.9, effectiveFrom: '2026-04-01' }
+  ]);
+});
+
+test('back-filling the same master twice does not grow the history', () => {
+  // 遡り取込をやり直しても版が積み上がらないこと
+  const drug = { price: 10.9, priceHistory: [{ price: 10.9, effectiveFrom: '2026-04-01' }] };
+  const first = appendDrugPriceRevision(drug.priceHistory, { price: 10.9, effectiveFrom: '2024-04-01' });
+  assert.equal(isDrugPriceRevisionNeeded({ price: drug.price, priceHistory: first }, 10.9, '2024-04-01'), false);
+
+  // 遡り取込のあと、その期間の調剤は推定ではなく記録として引ける
+  assert.deepEqual(
+    resolveDrugPrice({ price: 10.9, priceHistory: first }, '2025-01-01'),
+    { price: 10.9, source: 'history', effectiveFrom: '2024-04-01' }
+  );
+});
+
 
 test('history survives an out-of-order import of an older revision', () => {
   // 過去の改定を後から取り込んでも、調剤日での判定が壊れないこと

@@ -113,6 +113,8 @@ export function resolveDrugPriceOn(drug: DrugPriceSource, dispensingDate: string
  *
  * - 同じ適用開始日の版が既にあれば置き換える（取り込み直し）
  * - 直前の版と同じ薬価なら追加しない（マスターの再取込で履歴が膨らむのを防ぐ）
+ * - 直後の版が同じ薬価なら、その版を畳んで追加する版に含める
+ *   （遡り取込で「実はもっと前から同じ薬価だった」と分かる場合）
  * - 並びは適用開始日の昇順で保つ
  */
 export function appendDrugPriceRevision(
@@ -125,20 +127,29 @@ export function appendDrugPriceRevision(
   }
 
   const current = sortedHistory(history).filter((item) => item.effectiveFrom !== effectiveFrom);
-  const priceBefore = [...current]
-    .filter((item) => item.effectiveFrom < effectiveFrom)
-    .pop();
+  const before = current.filter((item) => item.effectiveFrom < effectiveFrom);
+  const after = current.filter((item) => item.effectiveFrom > effectiveFrom);
+
+  const priceBefore = before[before.length - 1];
   if (priceBefore && priceBefore.price === revision.price) {
     return current;
   }
 
-  return [...current, { price: revision.price, effectiveFrom }]
-    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  // 直後の版が同じ薬価なら、薬価が変わっていない版になるので畳む。
+  // 残すと選択 UI に同額の版が並び、どちらを選んでも同じという状態になる。
+  const kept = after[0] && after[0].price === revision.price ? after.slice(1) : after;
+
+  return [...before, { price: revision.price, effectiveFrom }, ...kept];
 }
 
 /**
  * マスター取込で薬価が変わったかどうか。
  * 変わっていないなら履歴を触らない。
+ *
+ * 比較できるのは「その日の薬価として記録されている値」だけ。
+ * 'unknown'（薬価が分からない）と 'earliest_known'（履歴より前の日付なので
+ * 最古版で代用した推定値）は記録ではないので、一致しても
+ * 「変わっていない」の根拠にならない。遡り取込ではこちらに入る。
  */
 export function isDrugPriceRevisionNeeded(
   drug: DrugPriceSource,
@@ -147,7 +158,7 @@ export function isDrugPriceRevisionNeeded(
 ): boolean {
   if (!Number.isFinite(nextPrice as number)) return false;
   const resolved = resolveDrugPrice(drug, effectiveFrom);
-  if (resolved.source === 'unknown') return true;
+  if (resolved.source === 'unknown' || resolved.source === 'earliest_known') return true;
   return resolved.price !== nextPrice;
 }
 
