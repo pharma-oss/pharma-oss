@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DRUG_PRICE_BEFORE_HISTORY_VALUE,
   appendDrugPriceRevision,
+  applyDrugMasterPrice,
   drugPriceOverrideValue,
   formatDrugPriceRevisionLabel,
   seedDrugPriceBeforeHistory,
@@ -345,6 +346,108 @@ test('history survives an out-of-order import of an older revision', () => {
 
 // 薬剤師が薬価の版を選び直せるようにした分。
 // 選び直しは点数を動かすので、「上書きしたこと」が消えないようにする。
+
+// --- マスター取込 ---------------------------------------------------------
+// 取込ループの薬価部分。画面を通さずに、月次取込と遡り取込の両方を通せるようにしてある。
+
+test('a master import that changes the price keeps the price it replaced', () => {
+  // これが無いと、改定を取り込んだ時点で改定前の調剤まで新薬価になる
+  const update = applyDrugMasterPrice({ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' });
+
+  assert.equal(update.revisionRecorded, true);
+  assert.deepEqual(update.priceHistory, [{ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' }]);
+  assert.equal(update.price, 10.9);
+  assert.equal(resolveDrugPriceOn({ price: update.price, priceHistory: update.priceHistory }, '2026-03-31'), 12.3);
+});
+
+test('a monthly master import that changes nothing leaves the drug alone', () => {
+  const drug = { price: 10.9, priceHistory: [{ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' }] };
+  const update = applyDrugMasterPrice(drug, { price: 10.9, effectiveFrom: '2026-04-01' });
+
+  assert.equal(update.revisionRecorded, false);
+  assert.deepEqual(update.priceHistory, drug.priceHistory);
+  assert.equal(update.price, 10.9);
+});
+
+test('importing an older master does not roll the current price backwards', () => {
+  // 遡り取込。取り込んだ行の薬価をそのまま現在薬価にすると、2024年の薬価が現在薬価になる。
+  const drug = {
+    price: 10.9,
+    priceHistory: [
+      { price: 12.3, effectiveFrom: '2024-04-01' },
+      { price: 10.9, effectiveFrom: '2026-04-01' }
+    ]
+  };
+  const update = applyDrugMasterPrice(drug, { price: 12.3, effectiveFrom: '2024-04-01' });
+
+  assert.equal(update.price, 10.9);
+  assert.equal(update.revisionRecorded, false);
+
+  // 版と版の間へ遡って入れた場合も、現在薬価は最も新しい版のまま
+  const filled = applyDrugMasterPrice(drug, { price: 11.5, effectiveFrom: '2025-04-01' });
+  assert.equal(filled.price, 10.9);
+  assert.deepEqual(filled.priceHistory, [
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { price: 11.5, effectiveFrom: '2025-04-01' },
+    { price: 10.9, effectiveFrom: '2026-04-01' }
+  ]);
+});
+
+test('a master row without a price leaves the price and the history untouched', () => {
+  const drug = { price: 10.9, priceHistory: [{ price: 10.9, effectiveFrom: '2026-04-01' }] };
+  const update = applyDrugMasterPrice(drug, { price: undefined, effectiveFrom: '2026-08-27' });
+
+  assert.equal(update.revisionRecorded, false);
+  assert.deepEqual(update.priceHistory, drug.priceHistory);
+  assert.equal(update.price, 10.9);
+  // 履歴も薬価も無い薬品では、書ける値が無い
+  assert.deepEqual(applyDrugMasterPrice({}, { price: undefined, effectiveFrom: '2026-08-27' }), {
+    revisionRecorded: false,
+    priceHistory: undefined,
+    price: undefined
+  });
+
+  // 開始日不明の版しか無い薬品でも、現在薬価はその版ではなく現在薬価のまま。
+  // 開始日不明の版は「今の薬価」ではなく「最初の改定より前の薬価」を指す。
+  const beforeHistoryOnly = { price: 10.9, priceHistory: [{ price: 12.3 }] };
+  assert.equal(
+    applyDrugMasterPrice(beforeHistoryOnly, { price: undefined, effectiveFrom: '2026-08-27' }).price,
+    10.9
+  );
+});
+
+test('a master row with an unreadable change date records no revision at all', () => {
+  // 版を作れないのに改定前の薬価だけ置くと、日付の付いた版が一つも無い履歴が残る。
+  // その状態では調剤日で引いても常に同じ薬価になり、版を持つ意味が無くなる。
+  const update = applyDrugMasterPrice({ price: 12.3 }, { price: 10.9, effectiveFrom: 'not-a-date' });
+
+  assert.equal(update.revisionRecorded, false);
+  assert.equal(update.priceHistory, undefined);
+  assert.equal(update.price, 10.9);
+});
+
+test('successive master imports build a history the dispensing date can be read against', () => {
+  let drug: { price?: number; priceHistory?: DrugPriceRevision[] } = { price: 12.3 };
+  for (const row of [
+    { price: 12.3, effectiveFrom: '2025-08-01' },
+    { price: 10.9, effectiveFrom: '2026-04-01' },
+    { price: 10.9, effectiveFrom: '2026-08-01' },
+    { price: 9.4, effectiveFrom: '2028-04-01' }
+  ]) {
+    const update = applyDrugMasterPrice(drug, row);
+    drug = { price: update.price, priceHistory: update.priceHistory };
+  }
+
+  assert.deepEqual(drug.priceHistory, [
+    { price: 12.3 },
+    { price: 10.9, effectiveFrom: '2026-04-01' },
+    { price: 9.4, effectiveFrom: '2028-04-01' }
+  ]);
+  assert.equal(drug.price, 9.4);
+  assert.equal(resolveDrugPriceOn(drug, '2026-03-31'), 12.3);
+  assert.equal(resolveDrugPriceOn(drug, '2027-06-01'), 10.9);
+  assert.equal(resolveDrugPriceOn(drug, '2028-04-01'), 9.4);
+});
 
 test('listDrugPriceRevisionChoices marks the revision that the dispensing date resolves to', () => {
   const choices = listDrugPriceRevisionChoices({ priceHistory: history }, '2026-06-14');

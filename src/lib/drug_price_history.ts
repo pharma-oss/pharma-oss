@@ -216,6 +216,57 @@ export function isDrugPriceRevisionNeeded(
   return resolved.price !== nextPrice;
 }
 
+/** マスター1行のうち、薬価に関わる部分 */
+export interface DrugMasterPriceRow {
+  price?: number;
+  /** 「変更年月日」。無い行では取込日が渡される */
+  effectiveFrom: string;
+}
+
+export interface DrugMasterPriceUpdate {
+  /** 保存する現在薬価 */
+  price?: number;
+  /** 保存する薬価の履歴。版を積まなかったときは元のまま */
+  priceHistory?: DrugPriceRevision[];
+  /** 版を積んだか。取込の監査ログで件数を数えるのに使う */
+  revisionRecorded: boolean;
+}
+
+/**
+ * マスター1行を薬価に反映する。
+ *
+ * - 薬価が変わっていれば版を積む。履歴が空なら、それまでの薬価を
+ *   開始日不明の版として先に残す（残さないと改定前の調剤が新薬価になる）
+ * - 現在薬価は「日付の付いた最も新しい版」から決める。取り込んだ行の薬価を
+ *   そのまま入れると、古いマスターを取り込んだときに現在薬価が巻き戻る
+ */
+export function applyDrugMasterPrice(
+  drug: DrugPriceSource,
+  row: DrugMasterPriceRow
+): DrugMasterPriceUpdate {
+  // 適用開始日が読めない行では版を作れない。作れないまま改定前の薬価だけ
+  // 置くと、日付の付いた版が一つも無い履歴が残ってしまう。
+  const effectiveFrom = toDateOnly(row?.effectiveFrom ?? '');
+  const revisionRecorded = effectiveFrom !== ''
+    && isDrugPriceRevisionNeeded(drug, row?.price, effectiveFrom);
+  const priceHistory = revisionRecorded
+    ? appendDrugPriceRevision(
+        seedDrugPriceBeforeHistory(drug?.priceHistory, drug?.price),
+        { price: row.price as number, effectiveFrom }
+      )
+    : drug?.priceHistory;
+
+  const latestDated = sortedHistory(priceHistory)
+    .filter((revision) => revision.effectiveFrom !== undefined)
+    .pop();
+
+  return {
+    revisionRecorded,
+    priceHistory,
+    price: latestDated ? latestDated.price : (row?.price ?? drug?.price)
+  };
+}
+
 /**
  * 薬価の版の選択肢。調剤日時点で自動解決される版には isAutoSelected を立てる。
  * 画面の選択 UI と、選び直したときの警告表示に使う。

@@ -5,11 +5,7 @@ import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
-import {
-  appendDrugPriceRevision,
-  isDrugPriceRevisionNeeded,
-  seedDrugPriceBeforeHistory
-} from '@/lib/drug_price_history';
+import { applyDrugMasterPrice } from '@/lib/drug_price_history';
 import {
   buildDrugMasterDiffCsv,
   buildDrugMasterUpdateArtifacts,
@@ -398,30 +394,24 @@ export function useDrugMasterSettings({
         if (targetDoc) {
           // 薬価が変わったら現在薬価を上書きするだけでなく、適用開始日つきの版を積む。
           // 版が無いと、改定後の取込で過去の調剤分まで新薬価で再計算されてしまう。
-          const priceRevisionNeeded = isDrugPriceRevisionNeeded(targetDoc, price, priceEffectiveFrom);
-          if (priceRevisionNeeded) {
+          const priceUpdate = applyDrugMasterPrice(targetDoc, { price, effectiveFrom: priceEffectiveFrom });
+          if (priceUpdate.revisionRecorded) {
             if (changeDate) {
               priceRevisionFromChangeDate++;
             } else {
               priceRevisionFromImportDate++;
             }
           }
-          // 履歴が空のまま改定を積むと、それまでの薬価がどこにも残らない。
-          // 現在薬価には適用開始日が付いてこないので、開始日不明の版として先に置く。
-          const priceHistory = priceRevisionNeeded
-            ? appendDrugPriceRevision(
-                seedDrugPriceBeforeHistory(targetDoc.priceHistory, targetDoc.price),
-                { price: price as number, effectiveFrom: priceEffectiveFrom }
-              )
-            : targetDoc.priceHistory;
 
           bulkUpsertMap.set(code, {
             ...targetDoc,
             name: name || targetDoc.name,
             yjCode: yjCode || targetDoc.yjCode,
             isAbolished: isAbolished,
-            price: price ?? targetDoc.price,
-            ...(priceHistory && priceHistory.length > 0 ? { priceHistory } : {})
+            price: priceUpdate.price,
+            ...(priceUpdate.priceHistory && priceUpdate.priceHistory.length > 0
+              ? { priceHistory: priceUpdate.priceHistory }
+              : {})
           });
         } else {
           const isGeneric = name.includes('【般】') || name.startsWith('般）') || name.startsWith('【般】') || Boolean(yjCode && yjCode.length >= 12 && (yjCode.charAt(11) === '2' || yjCode.charAt(11) === '3' || yjCode.charAt(11) === '4')) || genericMakers.some(maker => name.includes(`「${maker}」`) || name.includes(`(${maker})`));
