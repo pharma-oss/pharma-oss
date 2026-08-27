@@ -345,15 +345,21 @@ export async function applyDrugPriceOverrideWithAudit(
   };
 
   // 上書きを外すときは項目ごと消す (undefined を書くと RxDB の任意項目に残る)
-  // 開始日不明の版を選んだときは effectiveFrom を持たせない（undefined を書くと RxDB が拒む）
-  const patch = override
-    ? {
-        drugPriceOverride: override.effectiveFrom === undefined
-          ? { price: override.price }
-          : { effectiveFrom: override.effectiveFrom, price: override.price }
-      }
-    : { drugPriceOverride: null };
-  await itemDoc.patch(patch);
+  // 上書きを外すときは項目ごと消す。null を書くとスキーマ検証で落ち (RxError VD2)、
+  // undefined を書くと RxDB の任意項目に残る。
+  // 開始日不明の版を選んだときは effectiveFrom を持たせない。
+  const writeOverride = (data: any, next: DrugPriceOverride | null | undefined) => {
+    const document = { ...data };
+    if (!next) {
+      delete document.drugPriceOverride;
+    } else if (next.effectiveFrom === undefined) {
+      document.drugPriceOverride = { price: next.price };
+    } else {
+      document.drugPriceOverride = { effectiveFrom: next.effectiveFrom, price: next.price };
+    }
+    return document;
+  };
+  await itemDoc.modify((data: any) => writeOverride(data, override));
 
   const auditOk = await logAudit(
     db,
@@ -363,7 +369,7 @@ export async function applyDrugPriceOverrideWithAudit(
     patientName
   );
   if (!auditOk) {
-    await itemDoc.patch({ drugPriceOverride: previousOverride ?? null });
+    await itemDoc.modify((data: any) => writeOverride(data, previousOverride));
     throw new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack);
   }
 

@@ -256,15 +256,24 @@ export function applyDrugMasterPrice(
       )
     : drug?.priceHistory;
 
-  const latestDated = sortedHistory(priceHistory)
-    .filter((revision) => revision.effectiveFrom !== undefined)
-    .pop();
-
   return {
     revisionRecorded,
     priceHistory,
-    price: latestDated ? latestDated.price : (row?.price ?? drug?.price)
+    price: latestDatedDrugPrice(priceHistory) ?? row?.price ?? drug?.price
   };
+}
+
+/**
+ * 日付の付いた最も新しい版の薬価。
+ *
+ * 現在薬価はこれで決める。取り込んだ行の薬価をそのまま使うと、古いマスターの
+ * 取込で現在薬価が巻き戻る。開始日不明の版は「最初の改定より前」を指すので、
+ * 履歴に他の版が無くても現在薬価にはしない。
+ */
+export function latestDatedDrugPrice(history?: DrugPriceRevision[]): number | undefined {
+  return sortedHistory(history)
+    .filter((revision) => revision.effectiveFrom !== undefined)
+    .pop()?.price;
 }
 
 /**

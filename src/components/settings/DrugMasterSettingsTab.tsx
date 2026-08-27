@@ -8,6 +8,11 @@ import type { DrugMasterSpecificationPdfDiffReview } from '@/lib/drug_master_spe
 import { drugMasterCandidateKindLabel, drugMasterSpecPdfDiffFieldLabel } from '@/lib/drug_master_update_ui';
 import type { DrugDuplicateGroup, DrugDuplicateScanReport } from '@/lib/drug_duplicate_review';
 import type { DrugMergeExecutionPlan, DrugMergePlan } from '@/lib/drug_merge';
+import { formatDrugPriceRevisionLabel } from '@/lib/drug_price_history';
+import type {
+  DrugPriceHistoryDraftRow,
+  DrugPriceHistoryEditPlan
+} from '@/lib/drug_price_history_edit';
 
 interface DrugMasterSettingsTabProps {
   currentUser: User;
@@ -58,6 +63,23 @@ interface DrugMasterSettingsTabProps {
   } | null) => void;
   openDrugMergeReview: (group: DrugDuplicateGroup, sourceCode: string) => Promise<void>;
   isApplyingDrugMerge: boolean;
+  priceHistoryQuery: string;
+  setPriceHistoryQuery: (value: string) => void;
+  handleSearchDrugForPriceHistory: () => Promise<void>;
+  priceHistoryCandidates: { code: string; name: string; price?: number; revisionCount: number }[];
+  handleSelectDrugForPriceHistory: (drugCode: string) => Promise<void>;
+  closeDrugPriceHistoryEditor: () => void;
+  priceHistoryDrug: { code: string; name: string; price?: number } | null;
+  priceHistoryDraft: DrugPriceHistoryDraftRow[];
+  updateDrugPriceHistoryRow: (rowIndex: number, field: keyof DrugPriceHistoryDraftRow, value: string) => void;
+  addDrugPriceHistoryRow: () => void;
+  removeDrugPriceHistoryRow: (rowIndex: number) => void;
+  resetDrugPriceHistoryDraft: () => void;
+  drugPriceHistoryPlan: DrugPriceHistoryEditPlan | null;
+  priceHistoryMessage: string;
+  isLoadingPriceHistory: boolean;
+  isApplyingPriceHistory: boolean;
+  handleApplyDrugPriceHistoryEdit: () => Promise<void>;
   drugMergeReview: {
     groupId: string;
     sourceCode: string;
@@ -112,7 +134,24 @@ export default function DrugMasterSettingsTab({
   openDrugMergeReview,
   isApplyingDrugMerge,
   drugMergeReview,
-  handleApplyDrugMerge
+  handleApplyDrugMerge,
+  priceHistoryQuery,
+  setPriceHistoryQuery,
+  handleSearchDrugForPriceHistory,
+  priceHistoryCandidates,
+  handleSelectDrugForPriceHistory,
+  closeDrugPriceHistoryEditor,
+  priceHistoryDrug,
+  priceHistoryDraft,
+  updateDrugPriceHistoryRow,
+  addDrugPriceHistoryRow,
+  removeDrugPriceHistoryRow,
+  resetDrugPriceHistoryDraft,
+  drugPriceHistoryPlan,
+  priceHistoryMessage,
+  isLoadingPriceHistory,
+  isApplyingPriceHistory,
+  handleApplyDrugPriceHistoryEdit
 }: DrugMasterSettingsTabProps) {
   return (
         <>
@@ -526,7 +565,308 @@ export default function DrugMasterSettingsTab({
               </div>
             )}
           </section>
+
+          <section
+            aria-label="薬価の版の訂正"
+            data-testid="drug-price-history-section"
+            className="price-history-section"
+          >
+            <h3>薬価の版の訂正</h3>
+            <p className="help-text">
+              薬価の版が乱れたときに直します。レセプトは調剤日時点の薬価で計算するため、版を直すと過去の調剤の薬剤料が変わります。適用開始日を空欄にした版は「開始日不明・最初の改定より前」として扱われ、履歴の先頭に1つだけ置けます。訂正は監査ログに残ります。
+            </p>
+
+            <div className="price-history-search">
+              <input
+                type="search"
+                value={priceHistoryQuery}
+                onChange={(event) => setPriceHistoryQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleSearchDrugForPriceHistory();
+                  }
+                }}
+                placeholder="薬品コードまたは薬品名"
+                aria-label="薬価の版を直す薬品を検索"
+                data-testid="drug-price-history-query"
+                disabled={!canUpdateDrugMaster}
+              />
+              <button
+                type="button"
+                className="btn-secondary flex-center gap-2"
+                onClick={handleSearchDrugForPriceHistory}
+                disabled={!canUpdateDrugMaster || isLoadingPriceHistory}
+                title={!canUpdateDrugMaster ? getPermissionDeniedMessage(currentUser, 'update_drug_master') : undefined}
+                data-testid="drug-price-history-search"
+              >
+                {isLoadingPriceHistory ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}
+                <span>薬品を検索</span>
+              </button>
+            </div>
+
+            {priceHistoryMessage && <p className="help-text" role="status">{priceHistoryMessage}</p>}
+
+            {!priceHistoryDrug && priceHistoryCandidates.length > 0 && (
+              <ul className="price-history-candidates" data-testid="drug-price-history-candidates">
+                {priceHistoryCandidates.map((candidate) => (
+                  <li key={candidate.code}>
+                    <button type="button" onClick={() => handleSelectDrugForPriceHistory(candidate.code)}>
+                      <strong>{candidate.name}</strong>
+                      <span className="help-text">
+                        {candidate.code} / 現在薬価 {candidate.price ?? '不明'}円 / 版 {candidate.revisionCount}件
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {priceHistoryDrug && drugPriceHistoryPlan && (
+              <div className="price-history-editor" data-testid="drug-price-history-editor">
+                <div className="price-history-editor-head">
+                  <div>
+                    <strong>{priceHistoryDrug.name}</strong>
+                    <span className="help-text">
+                      {priceHistoryDrug.code} / 現在薬価 {drugPriceHistoryPlan.beforeCurrentPrice ?? '不明'}円
+                      {drugPriceHistoryPlan.afterCurrentPrice !== drugPriceHistoryPlan.beforeCurrentPrice && (
+                        <> → <strong>{drugPriceHistoryPlan.afterCurrentPrice ?? '不明'}円</strong></>
+                      )}
+                    </span>
+                  </div>
+                  <button type="button" className="btn-secondary" onClick={closeDrugPriceHistoryEditor}>
+                    閉じる
+                  </button>
+                </div>
+
+                <table className="price-history-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">薬価（円）</th>
+                      <th scope="col">適用開始日</th>
+                      <th scope="col">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {priceHistoryDraft.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="help-text">版がありません。この状態では現在薬価で算定します。</td>
+                      </tr>
+                    )}
+                    {priceHistoryDraft.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        <td>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={row.price}
+                            onChange={(event) => updateDrugPriceHistoryRow(rowIndex, 'price', event.target.value)}
+                            aria-label={`${rowIndex + 1}行目の薬価`}
+                            data-testid={`drug-price-history-price-${rowIndex}`}
+                            disabled={!canUpdateDrugMaster}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.effectiveFrom}
+                            onChange={(event) => updateDrugPriceHistoryRow(rowIndex, 'effectiveFrom', event.target.value)}
+                            placeholder="YYYY-MM-DD（空欄=開始日不明）"
+                            aria-label={`${rowIndex + 1}行目の適用開始日`}
+                            data-testid={`drug-price-history-date-${rowIndex}`}
+                            disabled={!canUpdateDrugMaster}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => removeDrugPriceHistoryRow(rowIndex)}
+                            aria-label={`${rowIndex + 1}行目の版を削除`}
+                            data-testid={`drug-price-history-remove-${rowIndex}`}
+                            disabled={!canUpdateDrugMaster}
+                          >
+                            削除
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="price-history-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={addDrugPriceHistoryRow}
+                    disabled={!canUpdateDrugMaster}
+                    data-testid="drug-price-history-add-row"
+                  >
+                    版を追加
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={resetDrugPriceHistoryDraft}
+                    disabled={!canUpdateDrugMaster || !drugPriceHistoryPlan.changed}
+                  >
+                    編集前に戻す
+                  </button>
+                </div>
+
+                {drugPriceHistoryPlan.issues.length > 0 && (
+                  <ul className="price-history-issues" data-testid="drug-price-history-issues">
+                    {drugPriceHistoryPlan.issues.map((issue, index) => (
+                      <li key={`${issue.code}-${index}`} className={issue.severity}>
+                        {issue.severity === 'error' ? '要修正' : '確認'}: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="help-text" data-testid="drug-price-history-impact-summary">
+                  {drugPriceHistoryPlan.changed
+                    ? drugPriceHistoryPlan.summary
+                    : '訂正内容がありません。'}
+                </p>
+
+                {drugPriceHistoryPlan.impact.length > 0 && (
+                  <table className="price-history-impact" data-testid="drug-price-history-impact">
+                    <thead>
+                      <tr>
+                        <th scope="col">調剤日</th>
+                        <th scope="col">患者</th>
+                        <th scope="col">薬価</th>
+                        <th scope="col">請求</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drugPriceHistoryPlan.impact.slice(0, 20).map((row) => (
+                        <tr key={row.itemId}>
+                          <td>{row.dispensingDate || '不明'}</td>
+                          <td>{row.patientName || row.visitId}</td>
+                          <td>{row.beforePrice ?? '不明'}円 → {row.afterPrice ?? '不明'}円</td>
+                          <td>{row.isSubmitted ? `提出済み（${row.claimStatus}）` : '未提出'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {drugPriceHistoryPlan.impact.length > 20 && (
+                  <p className="help-text">
+                    薬価が変わる調剤は {drugPriceHistoryPlan.impact.length}件です（先頭20件のみ表示）。
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleApplyDrugPriceHistoryEdit}
+                  disabled={!canUpdateDrugMaster || !drugPriceHistoryPlan.canApply || isApplyingPriceHistory}
+                  title={!canUpdateDrugMaster ? getPermissionDeniedMessage(currentUser, 'update_drug_master') : undefined}
+                  data-testid="drug-price-history-apply"
+                >
+                  {isApplyingPriceHistory ? '訂正中...' : '薬価の版を訂正'}
+                </button>
+              </div>
+            )}
+          </section>
         </div>
+
+        <style jsx>{`
+          .price-history-section {
+            margin-top: 1.5rem;
+          }
+          .price-history-search {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.75rem 0;
+          }
+          .price-history-search input {
+            flex: 1 1 220px;
+            min-width: min(220px, 100%);
+          }
+          .price-history-candidates {
+            list-style: none;
+            margin: 0.5rem 0;
+            padding: 0;
+            display: grid;
+            gap: 0.35rem;
+          }
+          .price-history-candidates button {
+            width: 100%;
+            text-align: left;
+            display: grid;
+            gap: 0.15rem;
+            padding: 0.5rem 0.6rem;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+          }
+          .price-history-editor {
+            margin-top: 0.75rem;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            border-radius: 8px;
+            padding: 0.85rem;
+          }
+          .price-history-editor-head {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.75rem;
+          }
+          .price-history-editor-head > div {
+            display: grid;
+            gap: 0.15rem;
+          }
+          .price-history-table,
+          .price-history-impact {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
+            font-size: var(--fs-sm);
+          }
+          .price-history-table th,
+          .price-history-table td,
+          .price-history-impact th,
+          .price-history-impact td {
+            border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+            padding: 0.35rem 0.4rem;
+            text-align: left;
+            vertical-align: middle;
+          }
+          .price-history-table input {
+            width: 100%;
+          }
+          .price-history-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.6rem;
+          }
+          .price-history-issues {
+            list-style: none;
+            margin: 0.75rem 0 0;
+            padding: 0;
+            display: grid;
+            gap: 0.3rem;
+            font-size: var(--fs-sm);
+          }
+          .price-history-issues .error {
+            color: #b91c1c;
+            font-weight: 600;
+          }
+          .price-history-issues .warning {
+            color: #b45309;
+          }
+          .price-history-impact {
+            overflow-x: auto;
+            display: block;
+          }
+        `}</style>
       </>
   );
 }

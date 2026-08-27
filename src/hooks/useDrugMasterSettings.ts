@@ -5,7 +5,15 @@ import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
-import { applyDrugMasterPrice } from '@/lib/drug_price_history';
+import { applyDrugMasterPrice, type DrugPriceRevision } from '@/lib/drug_price_history';
+import {
+  buildDrugPriceHistoryEditAuditDetail,
+  buildDrugPriceHistoryEditPlan,
+  toDrugPriceHistoryDraft,
+  type DrugPriceHistoryDraftRow,
+  type DrugPriceHistoryEditPlan,
+  type DrugPriceHistoryEditTarget
+} from '@/lib/drug_price_history_edit';
 import {
   buildDrugMasterDiffCsv,
   buildDrugMasterUpdateArtifacts,
@@ -114,6 +122,20 @@ export function useDrugMasterSettings({
     executionPlan: DrugMergeExecutionPlan;
   } | null>(null);
   const [isApplyingDrugMerge, setIsApplyingDrugMerge] = useState(false);
+
+  // 薬価の版の訂正
+  const [priceHistoryQuery, setPriceHistoryQuery] = useState('');
+  const [priceHistoryCandidates, setPriceHistoryCandidates] = useState<
+    { code: string; name: string; price?: number; revisionCount: number }[]
+  >([]);
+  const [priceHistoryDrug, setPriceHistoryDrug] = useState<
+    { code: string; name: string; price?: number; priceHistory?: DrugPriceRevision[] } | null
+  >(null);
+  const [priceHistoryTargets, setPriceHistoryTargets] = useState<DrugPriceHistoryEditTarget[]>([]);
+  const [priceHistoryDraft, setPriceHistoryDraft] = useState<DrugPriceHistoryDraftRow[]>([]);
+  const [priceHistoryMessage, setPriceHistoryMessage] = useState('');
+  const [isLoadingPriceHistory, setIsLoadingPriceHistory] = useState(false);
+  const [isApplyingPriceHistory, setIsApplyingPriceHistory] = useState(false);
 
   const canImportDrugMasterFromSourceUrl = /\.(csv|zip)(?:$|\?)/i.test(drugMasterSourceUrl.trim());
 
@@ -755,6 +777,221 @@ export function useDrugMasterSettings({
     }
   };
 
+  const handleSearchDrugForPriceHistory = async () => {
+    if (!db) {
+      toast.error('データベースの初期化が完了していません。');
+      return;
+    }
+    const query = priceHistoryQuery.trim();
+    if (query === '') {
+      setPriceHistoryCandidates([]);
+      setPriceHistoryMessage('薬品コードまたは薬品名を入れてください。');
+      return;
+    }
+
+    setIsLoadingPriceHistory(true);
+    try {
+      const docs = await db.drugs.find().exec();
+      const matched = docs
+        .map((doc) => ({
+          code: doc.get('code') as string,
+          name: (doc.get('name') as string) || '',
+          price: doc.get('price') as number | undefined,
+          revisionCount: ((doc.get('priceHistory') as DrugPriceRevision[] | undefined) || []).length
+        }))
+        .filter((entry) => entry.code.includes(query) || entry.name.includes(query));
+
+      setPriceHistoryCandidates(matched.slice(0, 50));
+      setPriceHistoryMessage(matched.length === 0
+        ? `「${query}」に一致する薬品はありませんでした。`
+        : `${matched.length}件が一致しました${matched.length > 50 ? '（先頭50件を表示）' : ''}。薬品を選んでください。`);
+    } catch (error) {
+      console.error('Failed to search drugs for price history:', error);
+      toast.error('薬品を検索できませんでした。');
+    } finally {
+      setIsLoadingPriceHistory(false);
+    }
+  };
+
+  /** 訂正の影響を測る対象。調剤日と請求の状態は来局側にしか無いので突き合わせる */
+  const loadPriceHistoryTargets = async (
+    database: PharmacyDatabase,
+    drugCode: string
+  ): Promise<DrugPriceHistoryEditTarget[]> => {
+    const [prescribedDocs, dispensedDocs] = await Promise.all([
+      database.prescription_items.find({ selector: { drugId: drugCode } }).exec(),
+      database.prescription_items.find({ selector: { dispensedDrugCode: drugCode } }).exec()
+    ]);
+    const itemsById = new Map<string, any>();
+    for (const doc of [...prescribedDocs, ...dispensedDocs]) {
+      itemsById.set(doc.get('itemId') as string, doc);
+    }
+    if (itemsById.size === 0) return [];
+
+    const visitIds = Array.from(new Set(
+      Array.from(itemsById.values()).map((doc) => doc.get('visitId') as string).filter(Boolean)
+    ));
+    const visitDocs = await database.visits.find({ selector: { visitId: { $in: visitIds } } }).exec();
+    const visitsById = new Map(visitDocs.map((doc) => [doc.get('visitId') as string, doc]));
+
+    const patientIds = Array.from(new Set(
+      visitDocs.map((doc) => doc.get('patientId') as string).filter(Boolean)
+    ));
+    const patientDocs = patientIds.length === 0
+      ? []
+      : await database.patients.find({ selector: { patientId: { $in: patientIds } } }).exec();
+    const patientNameById = new Map(
+      patientDocs.map((doc) => [doc.get('patientId') as string, doc.get('name') as string])
+    );
+
+    return Array.from(itemsById.values()).map((doc) => {
+      const visitId = doc.get('visitId') as string;
+      const visit = visitsById.get(visitId);
+      const patientId = visit?.get('patientId') as string | undefined;
+      return {
+        itemId: doc.get('itemId') as string,
+        visitId,
+        patientName: patientId ? patientNameById.get(patientId) : undefined,
+        dispensingDate: (visit?.get('dispensingDate') as string | undefined)
+          || (visit?.get('issueDate') as string | undefined)
+          || '',
+        claimStatus: (visit?.get('claimLifecycle') as { status?: string } | undefined)?.status,
+        drugPriceOverride: doc.get('drugPriceOverride') as DrugPriceHistoryEditTarget['drugPriceOverride']
+      };
+    });
+  };
+
+  const handleSelectDrugForPriceHistory = async (drugCode: string) => {
+    if (!db) return;
+    setIsLoadingPriceHistory(true);
+    try {
+      const doc = await db.drugs.findOne(drugCode).exec();
+      if (!doc) {
+        setPriceHistoryMessage('薬品が見つかりませんでした。検索し直してください。');
+        return;
+      }
+      const priceHistory = (doc.get('priceHistory') as DrugPriceRevision[] | undefined) || [];
+      const selected = {
+        code: doc.get('code') as string,
+        name: (doc.get('name') as string) || '',
+        price: doc.get('price') as number | undefined,
+        priceHistory
+      };
+      setPriceHistoryDrug(selected);
+      setPriceHistoryDraft(toDrugPriceHistoryDraft(priceHistory));
+      setPriceHistoryTargets(await loadPriceHistoryTargets(db, drugCode));
+      setPriceHistoryMessage('');
+    } catch (error) {
+      console.error('Failed to load drug price history:', error);
+      toast.error('薬価の版を読み込めませんでした。');
+    } finally {
+      setIsLoadingPriceHistory(false);
+    }
+  };
+
+  const closeDrugPriceHistoryEditor = () => {
+    setPriceHistoryDrug(null);
+    setPriceHistoryDraft([]);
+    setPriceHistoryTargets([]);
+    setPriceHistoryMessage('');
+  };
+
+  const updateDrugPriceHistoryRow = (
+    rowIndex: number,
+    field: keyof DrugPriceHistoryDraftRow,
+    value: string
+  ) => {
+    setPriceHistoryDraft((rows) => rows.map((row, index) =>
+      index === rowIndex ? { ...row, [field]: value } : row));
+  };
+
+  const addDrugPriceHistoryRow = () => {
+    setPriceHistoryDraft((rows) => [...rows, { price: '', effectiveFrom: '' }]);
+  };
+
+  const removeDrugPriceHistoryRow = (rowIndex: number) => {
+    setPriceHistoryDraft((rows) => rows.filter((_, index) => index !== rowIndex));
+  };
+
+  const resetDrugPriceHistoryDraft = () => {
+    setPriceHistoryDraft(toDrugPriceHistoryDraft(priceHistoryDrug?.priceHistory));
+  };
+
+  const drugPriceHistoryPlan: DrugPriceHistoryEditPlan | null = priceHistoryDrug
+    ? buildDrugPriceHistoryEditPlan({
+        drug: priceHistoryDrug,
+        draft: priceHistoryDraft,
+        targets: priceHistoryTargets
+      })
+    : null;
+
+  const handleApplyDrugPriceHistoryEdit = async () => {
+    if (!ensurePermission('update_drug_master')) return;
+    if (!db || !priceHistoryDrug || !drugPriceHistoryPlan) return;
+    const plan = drugPriceHistoryPlan;
+    if (!plan.canApply) {
+      setPriceHistoryMessage('訂正の内容を見直してください。');
+      return;
+    }
+
+    const confirmation = plan.submittedCount > 0
+      ? `薬価の版を訂正します。提出済みのレセプトに含まれる調剤 ${plan.submittedCount}件を含む、${plan.impact.length}件の薬価が変わります。実行しますか？`
+      : `薬価の版を訂正します。${plan.impact.length}件の調剤で薬価が変わります。実行しますか？`;
+    if (!window.confirm(confirmation)) return;
+
+    setIsApplyingPriceHistory(true);
+    try {
+      const doc = await db.drugs.findOne(priceHistoryDrug.code).exec();
+      if (!doc) {
+        setPriceHistoryMessage('薬品が見つかりませんでした。検索し直してください。');
+        return;
+      }
+
+      // 監査ログが残らない訂正は無かったことにする (点数が動く操作のため)
+      const previous = {
+        priceHistory: doc.get('priceHistory') as DrugPriceRevision[] | undefined,
+        price: doc.get('price') as number | undefined
+      };
+      // 版を全部消すときは項目ごと消す。null を書くとスキーマ検証で落ちる (RxError VD2)
+      const writeHistory = (
+        data: Drug,
+        history: DrugPriceRevision[] | undefined,
+        price: number | undefined
+      ): Drug => {
+        const next: Drug = { ...data };
+        if (history && history.length > 0) {
+          next.priceHistory = history;
+        } else {
+          delete next.priceHistory;
+        }
+        if (price !== undefined) next.price = price;
+        return next;
+      };
+
+      await doc.modify((data: Drug) => writeHistory(data, plan.after, plan.afterCurrentPrice));
+
+      const auditOk = await logAuditAction(
+        db,
+        'drug_master_update',
+        buildDrugPriceHistoryEditAuditDetail(plan)
+      );
+      if (!auditOk) {
+        const restored = await db.drugs.findOne(priceHistoryDrug.code).exec();
+        await restored?.modify((data: Drug) => writeHistory(data, previous.priceHistory, previous.price));
+        toast.error('監査ログを残せなかったため、薬価の版の訂正を元に戻しました。');
+        return;
+      }
+
+      toast.success('薬価の版を訂正しました。');
+      await handleSelectDrugForPriceHistory(priceHistoryDrug.code);
+    } catch (error: any) {
+      console.error('Failed to apply drug price history edit:', error);
+      toast.error(`薬価の版の訂正に失敗しました: ${error?.message || error}`);
+    } finally {
+      setIsApplyingPriceHistory(false);
+    }
+  };
+
   return {
     currentUser,
     canUpdateDrugMaster,
@@ -800,6 +1037,23 @@ export function useDrugMasterSettings({
     openDrugMergeReview,
     isApplyingDrugMerge,
     drugMergeReview,
-    handleApplyDrugMerge
+    handleApplyDrugMerge,
+    priceHistoryQuery,
+    setPriceHistoryQuery,
+    handleSearchDrugForPriceHistory,
+    priceHistoryCandidates,
+    handleSelectDrugForPriceHistory,
+    closeDrugPriceHistoryEditor,
+    priceHistoryDrug,
+    priceHistoryDraft,
+    updateDrugPriceHistoryRow,
+    addDrugPriceHistoryRow,
+    removeDrugPriceHistoryRow,
+    resetDrugPriceHistoryDraft,
+    drugPriceHistoryPlan,
+    priceHistoryMessage,
+    isLoadingPriceHistory,
+    isApplyingPriceHistory,
+    handleApplyDrugPriceHistoryEdit
   };
 }

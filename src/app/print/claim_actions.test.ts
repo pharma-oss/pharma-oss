@@ -72,17 +72,26 @@ function createHarness(options: { visit?: any | null; auditOk?: boolean } = {}):
 
 function createItem(overrides: Record<string, unknown> = {}) {
   const patches: Record<string, boolean>[] = [];
-  const item: any = {
+  // patch の中身ではなく「保存後に何が残ったか」で判定できるようにしておく。
+  // null を書けば patch の形は正しく見えるが、RxDB のスキーマ検証では落ちる。
+  let stored: Record<string, unknown> = {
     itemId: 'item_1',
     dispensedDrug: 'ロキソプロフェン錠60mg',
+    ...overrides
+  };
+  const item: any = {
+    ...stored,
     doc: {
       patch: async (patch: Record<string, boolean>) => {
         patches.push(patch);
+        stored = { ...stored, ...patch };
+      },
+      modify: async (mutate: (data: Record<string, unknown>) => Record<string, unknown>) => {
+        stored = mutate({ ...stored });
       }
-    },
-    ...overrides
+    }
   };
-  return { item, patches };
+  return { item, patches, stored: () => stored };
 }
 
 // ---------------------------------------------------------------------------
@@ -472,9 +481,13 @@ const priceHistory = [
   { price: 10.9, effectiveFrom: '2026-04-01' }
 ];
 
+function harness_stored_override(stored: Record<string, unknown>) {
+  return stored.drugPriceOverride;
+}
+
 test('applyDrugPriceOverrideWithAudit records the deviation from the dispensing-date price', async () => {
   const harness = createHarness();
-  const { item, patches } = createItem();
+  const { item, stored } = createItem();
 
   const outcome = await applyDrugPriceOverrideWithAudit({
     db: harness.db,
@@ -491,7 +504,7 @@ test('applyDrugPriceOverrideWithAudit records the deviation from the dispensing-
   assert.equal(outcome.price, 12.3);
   assert.equal(outcome.overridden, true);
   assert.match(outcome.warning, /調剤日時点は 10\.9円/);
-  assert.deepEqual(patches, [{ drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 } }]);
+  assert.deepEqual(harness_stored_override(stored()), { effectiveFrom: '2024-04-01', price: 12.3 });
 
   // 点数が変わる操作なので、違う版を当てたことが監査ログに必ず残る
   assert.equal(harness.auditEntries.length, 1);
@@ -502,7 +515,7 @@ test('applyDrugPriceOverrideWithAudit records the deviation from the dispensing-
 
 test('applyDrugPriceOverrideWithAudit clears the override and says it returned to the automatic price', async () => {
   const harness = createHarness();
-  const { item, patches } = createItem({
+  const { item, stored } = createItem({
     drugPriceOverride: { effectiveFrom: '2024-04-01', price: 12.3 }
   });
 
@@ -519,7 +532,8 @@ test('applyDrugPriceOverrideWithAudit clears the override and says it returned t
   assert.equal(outcome.overridden, false);
   assert.equal(outcome.price, 10.9);
   assert.equal(outcome.warning, '');
-  assert.deepEqual(patches, [{ drugPriceOverride: null }]);
+  // null を書くとスキーマ検証で落ちる。項目ごと消えていること。
+  assert.equal('drugPriceOverride' in stored(), false);
   assert.match(harness.auditEntries[0].details, /調剤日 2026-06-14 時点の薬価（10\.9円）へ戻しました/);
 });
 
@@ -544,7 +558,7 @@ test('choosing the dispensing-date revision is recorded without a deviation warn
 test('applyDrugPriceOverrideWithAudit restores the previous override when the audit log fails', async () => {
   const harness = createHarness({ auditOk: false });
   const previous = { effectiveFrom: '2024-04-01', price: 12.3 };
-  const { item, patches } = createItem({ drugPriceOverride: previous });
+  const { item, stored } = createItem({ drugPriceOverride: previous });
 
   await assert.rejects(
     () => applyDrugPriceOverrideWithAudit({
@@ -559,7 +573,27 @@ test('applyDrugPriceOverrideWithAudit restores the previous override when the au
     new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack)
   );
 
-  assert.deepEqual(patches, [{ drugPriceOverride: null }, { drugPriceOverride: previous }]);
+  assert.deepEqual(stored().drugPriceOverride, previous);
+});
+
+test('the revision with no start date is stored without an effective date', async () => {
+  // 開始日不明の版を選んだときに空文字の日付を書くと、
+  // 読み戻したときに「壊れた日付の版」として捨てられる。
+  const harness = createHarness();
+  const { item, stored } = createItem();
+
+  await applyDrugPriceOverrideWithAudit({
+    db: harness.db,
+    item,
+    itemDoc: item.doc,
+    drug: { price: 10.9, priceHistory: [{ price: 13.2 }, ...priceHistory] },
+    dispensingDate: '2026-06-14',
+    override: { price: 13.2 },
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(stored().drugPriceOverride, { price: 13.2 });
+  assert.equal('effectiveFrom' in (stored().drugPriceOverride as object), false);
 });
 
 test('buildDrugPriceOverrideAuditDetail names the drug', () => {
