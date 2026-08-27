@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import Ajv from 'ajv';
 import {
+  DRUG_SCHEMA,
   PATIENT_SCHEMA,
   VISIT_SCHEMA,
   PRESCRIPTION_ITEM_SCHEMA,
@@ -819,6 +820,41 @@ describe('Schema Validation', () => {
       assert.strictEqual(errors, null);
       assert.strictEqual(INTERVENTION_SCHEMA.version, 3);
       assert.ok(INTERVENTION_SCHEMA.encrypted?.includes('note'));
+    });
+  });
+
+  describe('DRUG_SCHEMA', () => {
+    test('should validate a drug carrying a price history', () => {
+      // 薬価は改定日ごとの版で持つ。レセプトは調剤日時点の薬価で計算する (drug schema v7)。
+      const drugWithHistory = {
+        code: '620000001',
+        name: 'テスト錠10mg',
+        isGeneric: false,
+        price: 10.9,
+        priceHistory: [
+          { price: 12.3, effectiveFrom: '2024-04-01' },
+          { price: 10.9, effectiveFrom: '2026-04-01' }
+        ]
+      };
+
+      assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithHistory), null);
+      assert.strictEqual(DRUG_SCHEMA.version, 7);
+    });
+
+    test('should reject a price revision without an effective date', () => {
+      const invalid = {
+        code: '620000001',
+        name: 'テスト錠10mg',
+        isGeneric: false,
+        priceHistory: [{ price: 12.3 }]
+      };
+
+      const errors = getErrors(DRUG_SCHEMA, invalid);
+      assert.ok(errors);
+      assert.deepStrictEqual(
+        errors.map((error: any) => error.params?.missingProperty),
+        ['effectiveFrom']
+      );
     });
   });
 

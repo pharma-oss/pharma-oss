@@ -492,7 +492,10 @@ const create = async () => {
                     return oldDoc;
                 },
                 4: keepDocument,
-                5: keepDocument
+                5: keepDocument,
+                // v6 -> v7: priceHistory (薬価の版) を追加。任意項目なのでそのまま持ち上げる。
+                // 既存ドキュメントは履歴なし = 現在薬価で解決される (drug_price_history.ts)。
+                6: keepDocument
             })
         },
         drug_stocks: {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { FacilitySettings, PatientMedicationInfoTemplate } from '@/db/types';
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
+import { resolveDrugPrice } from '@/lib/drug_price_history';
 
 export interface UsePrintVisitDataReturn {
   isLoading: boolean;
@@ -104,6 +105,10 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
       }
       setApprovedMedicationInfoTemplates(templatesByDrugCode);
 
+      // 薬価は「調剤日時点」で引く。現在のマスター薬価をそのまま使うと、
+      // 薬価改定後にマスターを取り込んだ時点で過去の調剤分まで点数が変わる。
+      const dispensingDateForPrice = visitJson.dispensingDate || visitJson.issueDate || '';
+
       const itemsData = new Array(items.length);
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -116,7 +121,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
           dispensedDrug: item.dispensedDrug || dispensedDrugDoc?.name || '',
           genericName: prescribedDrugDoc?.genericName || '',
           dispensedGenericName: dispensedDrugDoc?.genericName || '',
-          price: billingDrugDoc?.price || item.price || 0,
+          price: resolveDrugPrice(billingDrugDoc ?? {}, dispensingDateForPrice).price ?? item.price ?? 0,
           yjCode: billingDrugDoc?.yjCode || item.yjCode || '',
           isGeneric: billingDrugDoc?.isGeneric ?? item.isGeneric,
           isHighRisk: item.isHighRisk ?? prescribedDrugDoc?.isHighRisk ?? dispensedDrugDoc?.isHighRisk ?? false

@@ -920,7 +920,7 @@ export const INTERVENTION_SCHEMA: RxJsonSchema<Intervention> = {
 
 export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
   title: 'drug schema',
-  version: 6,
+  version: 7,
   description: 'Drug master data',
   primaryKey: 'code',
   type: 'object',
@@ -932,6 +932,17 @@ export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
     genericName: { type: 'string', maxLength: 200 },
     isAbolished: { type: 'boolean' },
     price: { type: 'number' },
+    priceHistory: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          price: { type: 'number' },
+          effectiveFrom: { type: 'string', maxLength: 10 }
+        },
+        required: ['price', 'effectiveFrom']
+      }
+    },
     stockQuantity: { type: 'number' },
     location: { type: 'string', maxLength: 100 },
     isNarcotic: { type: 'boolean' },

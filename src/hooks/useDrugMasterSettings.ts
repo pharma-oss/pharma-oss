@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
+import { appendDrugPriceRevision, isDrugPriceRevisionNeeded } from '@/lib/drug_price_history';
 import {
   buildDrugMasterDiffCsv,
   buildDrugMasterUpdateArtifacts,
@@ -294,6 +295,11 @@ export function useDrugMasterSettings({
         return false;
       }
 
+      // 薬価の版に付ける適用開始日。
+      // 医薬品マスターCSVは改定日を持たないため、取込日を適用開始日として扱う。
+      // 改定日当日に取り込む運用が前提で、遡って取り込む場合はこの版を手で直す必要がある。
+      const priceEffectiveFrom = new Date().toISOString().slice(0, 10);
+
       let updatedCount = 0;
       let newCount = 0;
       let abolishedCount = 0;
@@ -343,6 +349,7 @@ export function useDrugMasterSettings({
         genericName: existingDrugDoc.genericName,
         isAbolished: existingDrugDoc.isAbolished,
         price: existingDrugDoc.price,
+        priceHistory: existingDrugDoc.priceHistory,
         stockQuantity: existingDrugDoc.stockQuantity,
         location: existingDrugDoc.location,
         isNarcotic: existingDrugDoc.isNarcotic,
@@ -371,6 +378,7 @@ export function useDrugMasterSettings({
                 genericName: existingDrugDoc.genericName,
                 isAbolished: existingDrugDoc.isAbolished,
                 price: existingDrugDoc.price,
+                priceHistory: existingDrugDoc.priceHistory,
                 stockQuantity: existingDrugDoc.stockQuantity,
                 location: existingDrugDoc.location,
                 isNarcotic: existingDrugDoc.isNarcotic,
@@ -382,12 +390,22 @@ export function useDrugMasterSettings({
         }
 
         if (targetDoc) {
+          // 薬価が変わったら現在薬価を上書きするだけでなく、適用開始日つきの版を積む。
+          // 版が無いと、改定後の取込で過去の調剤分まで新薬価で再計算されてしまう。
+          const priceHistory = isDrugPriceRevisionNeeded(targetDoc, price, priceEffectiveFrom)
+            ? appendDrugPriceRevision(targetDoc.priceHistory, {
+                price: price as number,
+                effectiveFrom: priceEffectiveFrom
+              })
+            : targetDoc.priceHistory;
+
           bulkUpsertMap.set(code, {
             ...targetDoc,
             name: name || targetDoc.name,
             yjCode: yjCode || targetDoc.yjCode,
             isAbolished: isAbolished,
-            price: price ?? targetDoc.price
+            price: price ?? targetDoc.price,
+            ...(priceHistory && priceHistory.length > 0 ? { priceHistory } : {})
           });
         } else {
           const isGeneric = name.includes('【般】') || name.startsWith('般）') || name.startsWith('【般】') || Boolean(yjCode && yjCode.length >= 12 && (yjCode.charAt(11) === '2' || yjCode.charAt(11) === '3' || yjCode.charAt(11) === '4')) || genericMakers.some(maker => name.includes(`「${maker}」`) || name.includes(`(${maker})`));

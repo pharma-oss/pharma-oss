@@ -58,6 +58,7 @@ import {
 import { EmptyState } from './DashboardCards';
 import { ClaimWorkbenchRow } from './DashboardRows';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
+import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
 
 export interface ClaimWorkbenchSectionProps {
@@ -153,12 +154,16 @@ export function ClaimWorkbenchSection({
         continue;
       }
 
+      // 月次請求も薬価は「調剤日時点」で引く。現在のマスター薬価で組むと、
+      // 薬価改定後の再請求で過去分の点数が動いてしまう。
+      const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
+
       const items = rawItems.map((item: any) => {
         const drug = toPlain<any>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
         return {
           ...item,
           drugName: drug?.name || item.drugName || item.drugId,
-          price: drug?.price ?? item.price ?? 0,
+          price: resolveDrugPrice(drug ?? {}, dispensingDateForPrice).price ?? item.price ?? 0,
           yjCode: drug?.yjCode || item.yjCode,
           genericName: drug?.genericName || item.genericName,
           isHighRisk: !!(drug?.isHighRisk || item.isHighRisk)

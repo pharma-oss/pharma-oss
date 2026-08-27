@@ -1,5 +1,6 @@
 import type { RxCollection, RxDatabase } from 'rxdb';
 import type { HighCostLimitCategory } from '../lib/receipt/dispensing_uke_code_tables';
+import type { DrugPriceRevision } from '../lib/drug_price_history';
 
 export type AiAssistMode = 'enabled' | 'limited' | 'disabled';
 
@@ -53,6 +54,12 @@ export interface Drug {
   genericName?: string;
   isAbolished?: boolean;
   price?: number;
+  /**
+   * 薬価の版。改定日ごとに 1 件。レセプトは調剤日時点の薬価で計算するため、
+   * 現在薬価 (price) だけでは改定をまたぐ調剤を正しく算定できない。
+   * 解決は src/lib/drug_price_history.ts の resolveDrugPrice を使う。
+   */
+  priceHistory?: DrugPriceRevision[];
   stockQuantity?: number;
   location?: string;
   isNarcotic?: boolean;
