@@ -58,6 +58,14 @@ import {
   toDrugPriceOverride
 } from '@/lib/drug_price_history';
 import {
+  applyOfficialCopaymentFieldChange,
+  buildOfficialCopaymentAuditDetail,
+  isOfficialCopaymentChanged,
+  parseOfficialCopaymentDraft,
+  toOfficialCopaymentDraft,
+  type OfficialCopaymentDraft
+} from '@/lib/official_copayment_input';
+import {
   DEFAULT_CLAIM_RETURN_REASON_CODE,
   OFFICIAL_CLAIM_RETURN_REASONS,
   buildReturnCorrectionSummary,
@@ -358,6 +366,74 @@ export default function PrintPage() {
       options: nextOptions,
       onPersisted: applyPersistedClaimOptions
     });
+  };
+
+  // 一部負担金額 (HO第9・KO第7/第9)。窓口で徴収した額を記録する項目で、
+  // 点数×負担割合からは算出しない (高額療養費・減免で変わるため)。
+  const publicInsuranceCount = (patientData?.publicInsurances || []).length;
+  const storedCopayment = claimOptions as {
+    officialInsuranceCopaymentYen?: number;
+    officialPublicExpenseCopayments?: { copaymentYen?: number; publicBenefitCopaymentYen?: number }[];
+  };
+  const storedCopaymentSignature = JSON.stringify([
+    storedCopayment.officialInsuranceCopaymentYen ?? null,
+    storedCopayment.officialPublicExpenseCopayments ?? null,
+    publicInsuranceCount
+  ]);
+  const [copaymentDraft, setCopaymentDraft] = useState<OfficialCopaymentDraft>({
+    insuranceYen: '',
+    publicExpenses: []
+  });
+  useEffect(() => {
+    setCopaymentDraft(toOfficialCopaymentDraft(storedCopayment, publicInsuranceCount));
+    // 保存済みの値が変わったときだけ入力欄を組み直す (保存直後の正規化を含む)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedCopaymentSignature]);
+
+  const copaymentParsed = parseOfficialCopaymentDraft(copaymentDraft);
+  const copaymentIssueByField = new Map(copaymentParsed.issues.map((issue) => [issue.field, issue]));
+
+  const updateCopaymentDraft = (field: string, value: string) => {
+    setCopaymentDraft((draft) => applyOfficialCopaymentFieldChange(draft, field, value));
+  };
+
+  const persistCopaymentDraft = async () => {
+    if (!ensurePermission('change_billing')) return;
+    if (claimEditBlocked) {
+      alert(getClaimEditBlockedMessage(claimLifecycle, 'billing'));
+      return;
+    }
+    const parsed = parseOfficialCopaymentDraft(copaymentDraft);
+    if (parsed.issues.length > 0) return;
+    if (!isOfficialCopaymentChanged(storedCopayment, parsed)) return;
+
+    const previousOptions = claimOptions;
+    const nextOptions = {
+      ...claimOptions,
+      officialInsuranceCopaymentYen: parsed.insuranceCopaymentYen,
+      officialPublicExpenseCopayments: parsed.publicExpenseCopayments
+    } as FeeCalculationOptions;
+    try {
+      const outcome = await applyClaimOptionsWithAudit({
+        db,
+        visitId,
+        previousOptions,
+        nextOptions,
+        auditDetail: buildOfficialCopaymentAuditDetail(storedCopayment, parsed),
+        rollbackMessage: CLAIM_ACTION_MESSAGES.officialCopaymentAuditRolledBack,
+        patientId: visitData?.patientId,
+        patientName: patientData?.name,
+        applyOptions: setClaimOptions,
+        onPersisted: applyPersistedClaimOptions
+      });
+      if (outcome.status === 'rolled_back') {
+        alert(outcome.message);
+      }
+    } catch (e) {
+      setClaimOptions(previousOptions);
+      console.error('Failed to persist copayment amounts:', e);
+      alert('一部負担金額の保存に失敗しました。');
+    }
   };
 
   const handleDrugFeeOnlyChange = async (drugFeeOnly: boolean) => {
@@ -1743,6 +1819,70 @@ export default function PrintPage() {
                 </label>
               );
             })}
+          </div>
+
+          <div className="copayment-block" data-testid="official-copayment-block">
+            <h4>一部負担金額（窓口で徴収した額）</h4>
+            <p className="copayment-help">
+              公式レセプトの HO 第9項目・KO 第7/第9項目です。
+              <strong>点数×負担割合からは算出しません。</strong>
+              高額療養費の現物給付・世帯合算・減免で変わるため、窓口で実際に徴収した額を入れてください。
+              空欄は「記録しない」で、0円を記録したいときは 0 と入れてください。
+              計算上の患者負担額は ¥{formatYen(insuranceAmounts.patientCopayYen)}（{insuranceAmounts.burdenRatio}%）です。
+            </p>
+
+            <label className="copayment-field">
+              <span>保険 一部負担金額（円）</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={copaymentDraft.insuranceYen}
+                onChange={(e) => updateCopaymentDraft('insurance', e.target.value)}
+                onBlur={persistCopaymentDraft}
+                disabled={!canEditBilling}
+                data-testid="official-copayment-insurance"
+                aria-invalid={copaymentIssueByField.has('insurance')}
+              />
+            </label>
+
+            {copaymentDraft.publicExpenses.map((row, index) => (
+              <div className="copayment-public-row" key={index}>
+                <label className="copayment-field">
+                  <span>公費{index + 1} 一部負担金額（円）</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.copaymentYen}
+                    onChange={(e) => updateCopaymentDraft(`public-${index}-copayment`, e.target.value)}
+                    onBlur={persistCopaymentDraft}
+                    disabled={!canEditBilling}
+                    data-testid={`official-copayment-public-${index}`}
+                    aria-invalid={copaymentIssueByField.has(`public-${index}-copayment`)}
+                  />
+                </label>
+                <label className="copayment-field">
+                  <span>公費{index + 1} 公費負担額（円）</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={row.publicBenefitCopaymentYen}
+                    onChange={(e) => updateCopaymentDraft(`public-${index}-benefit`, e.target.value)}
+                    onBlur={persistCopaymentDraft}
+                    disabled={!canEditBilling}
+                    data-testid={`official-copayment-benefit-${index}`}
+                    aria-invalid={copaymentIssueByField.has(`public-${index}-benefit`)}
+                  />
+                </label>
+              </div>
+            ))}
+
+            {copaymentParsed.issues.length > 0 && (
+              <ul className="copayment-issues" data-testid="official-copayment-issues" role="alert">
+                {copaymentParsed.issues.map((issue) => (
+                  <li key={issue.field}>{issue.message}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
 

@@ -34,6 +34,7 @@ export const CLAIM_ACTION_MESSAGES = {
   itemClaimToggleAuditRolledBack: '処方薬別算定切替の監査ログ記録に失敗したため、変更を元に戻しました。',
   prescriptionItemNotFound: '対象の処方明細が見つかりません。',
   drugPriceOverrideAuditRolledBack: '薬価の版変更の監査ログ記録に失敗したため、変更を元に戻しました。',
+  officialCopaymentAuditRolledBack: '一部負担金額の監査ログ記録に失敗したため、記録を元に戻しました。',
   claimLifecycleVisitNotFound: 'Visit was not found.',
   claimLifecycleAuditRolledBack: '請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。'
 } as const;
@@ -90,11 +91,36 @@ export interface PersistClaimOptionsParams {
   onPersisted?: (options: FeeCalculationOptions) => void;
 }
 
+/**
+ * 保存済みの claimOptions を画面の state にする。
+ *
+ * 既知の3項目だけを組み直すと、公式レセプト専用の項目 (一部負担金額・特記事項など)
+ * が画面に出てこないまま、次の保存で消える。持っているものはすべて持ち回す。
+ */
+export function readClaimOptionsState(stored: FeeCalculationOptions | undefined): FeeCalculationOptions {
+  return {
+    ...(stored || {}),
+    drugFeeOnly: !!stored?.drugFeeOnly,
+    disabledFeeCodes: Array.from(stored?.disabledFeeCodes || []),
+    disabledFeeRationales: { ...(stored?.disabledFeeRationales || {}) }
+  };
+}
+
+/** 値が undefined の項目は書き込まない (項目ごと消したいときに使う) */
+function withoutUndefined(options: FeeCalculationOptions): FeeCalculationOptions {
+  return Object.fromEntries(
+    Object.entries(options as Record<string, unknown>).filter(([, value]) => value !== undefined)
+  ) as FeeCalculationOptions;
+}
+
 export async function persistClaimOptions(params: PersistClaimOptionsParams): Promise<void> {
-  const { db, visitId, options, onPersisted } = params;
+  const { db, visitId, onPersisted } = params;
   if (!db) throw new Error(CLAIM_ACTION_MESSAGES.databaseNotReady);
   const visitDoc = await db.visits.findOne(visitId).exec();
   if (!visitDoc) throw new Error(CLAIM_ACTION_MESSAGES.visitNotFound);
+  // claimOptions は丸ごと置き換わる。呼び出し側は保存済みの全項目を持った
+  // state を渡すこと (readClaimOptionsState)。渡し漏れた項目は消える。
+  const options = withoutUndefined(params.options);
   await visitDoc.patch({ claimOptions: options } as any);
   onPersisted?.(options);
 }

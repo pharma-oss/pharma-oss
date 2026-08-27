@@ -226,7 +226,7 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithSpecialPublicExpense);
       assert.strictEqual(errors, null);
-      assert.strictEqual(VISIT_SCHEMA.version, 21);
+      assert.strictEqual(VISIT_SCHEMA.version, 22);
     });
 
     test('should validate a returned claim carrying a return reason code', () => {
@@ -564,6 +564,36 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithAcceptedClaim);
       assert.strictEqual(errors, null);
+    });
+  });
+
+  describe('VISIT_SCHEMA claimOptions', () => {
+    test('should validate the copayment amounts collected at the window', () => {
+      // 窓口で徴収した額の記録 (HO第9・KO第7/第9)。点数からは算出しない (visit schema v22)。
+      const visit = {
+        visitId: 'visit_1',
+        patientId: 'patient_1',
+        issueDate: '2026-08-27T10:00:00Z',
+        status: 'completed',
+        claimOptions: {
+          officialInsuranceCopaymentYen: 1250,
+          officialPublicExpenseCopayments: [{ copaymentYen: 0, publicBenefitCopaymentYen: 300 }]
+        }
+      };
+
+      assert.strictEqual(getErrors(VISIT_SCHEMA, visit), null);
+    });
+
+    test('should reject a negative copayment amount', () => {
+      const visit = {
+        visitId: 'visit_1',
+        patientId: 'patient_1',
+        issueDate: '2026-08-27T10:00:00Z',
+        status: 'completed',
+        claimOptions: { officialInsuranceCopaymentYen: -1 }
+      };
+
+      assert.ok(getErrors(VISIT_SCHEMA, visit));
     });
   });
 

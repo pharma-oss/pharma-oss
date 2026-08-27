@@ -3,6 +3,7 @@ import type { FacilitySettings, PatientMedicationInfoTemplate } from '@/db/types
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
 import { resolveDrugPriceWithOverride } from '@/lib/drug_price_history';
+import { readClaimOptionsState } from '@/app/print/claim_actions';
 
 export interface UsePrintVisitDataReturn {
   isLoading: boolean;
@@ -48,11 +49,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
 
       const visitJson = visit.toJSON();
       setVisitData(visitJson);
-      setClaimOptions({
-        drugFeeOnly: !!visitJson.claimOptions?.drugFeeOnly,
-        disabledFeeCodes: Array.from(visitJson.claimOptions?.disabledFeeCodes || []),
-        disabledFeeRationales: { ...(visitJson.claimOptions?.disabledFeeRationales || {}) }
-      });
+      setClaimOptions(readClaimOptionsState(visitJson.claimOptions));
 
       const patientPromise = db.patients.findOne(visit.patientId).exec();
       const alertsPromise = db.alerts.find({ selector: { patientId: visit.patientId } }).exec();

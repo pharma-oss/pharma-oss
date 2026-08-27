@@ -9,6 +9,7 @@ import {
   buildPrintAuditDetail,
   persistClaimLifecycleWithAudit,
   persistClaimOptions,
+  readClaimOptionsState,
   printDocumentsWithAuditLog,
   applyDrugPriceOverrideWithAudit,
   buildDrugPriceOverrideAuditDetail,
@@ -93,6 +94,64 @@ function createItem(overrides: Record<string, unknown> = {}) {
   };
   return { item, patches, stored: () => stored };
 }
+
+// ---------------------------------------------------------------------------
+// claimOptions: 公式レセプト専用の項目を落とさない
+// ---------------------------------------------------------------------------
+
+test('readClaimOptionsState keeps the official-only options the screen does not know about', () => {
+  // 既知の3項目だけを組み直すと、一部負担金額が画面に出てこないまま次の保存で消える
+  const state = readClaimOptionsState({
+    drugFeeOnly: true,
+    officialInsuranceCopaymentYen: 1250,
+    officialPublicExpenseCopayments: [{ copaymentYen: 500 }],
+    specialPublicExpenseRecord: { category: '01', branch: '1' }
+  } as any);
+
+  assert.equal((state as any).officialInsuranceCopaymentYen, 1250);
+  assert.deepEqual((state as any).officialPublicExpenseCopayments, [{ copaymentYen: 500 }]);
+  assert.deepEqual((state as any).specialPublicExpenseRecord, { category: '01', branch: '1' });
+  // 既知の3項目は形を揃える
+  assert.equal(state.drugFeeOnly, true);
+  assert.deepEqual(state.disabledFeeCodes, []);
+  assert.deepEqual(state.disabledFeeRationales, {});
+});
+
+test('readClaimOptionsState fills in the known options for a visit that has none', () => {
+  assert.deepEqual(readClaimOptionsState(undefined), {
+    drugFeeOnly: false,
+    disabledFeeCodes: [],
+    disabledFeeRationales: {}
+  });
+});
+
+test('a fee toggle saved from the loaded state leaves the official-only options in place', () => {
+  // 実際の経路: 読み込み → 画面が既知の項目だけ差し替え → 保存
+  const stored = {
+    drugFeeOnly: false,
+    officialInsuranceCopaymentYen: 1250
+  } as any;
+  const next = { ...readClaimOptionsState(stored), drugFeeOnly: true };
+
+  assert.equal((next as any).officialInsuranceCopaymentYen, 1250);
+});
+
+test('persistClaimOptions removes an option the caller cleared instead of leaving the old value', async () => {
+  const harness = createHarness({ visit: { visitId: 'v_0001' } });
+  const persisted: any[] = [];
+
+  await persistClaimOptions({
+    db: harness.db,
+    visitId: 'v_0001',
+    options: { drugFeeOnly: false, officialInsuranceCopaymentYen: undefined } as any,
+    onPersisted: (options) => persisted.push(options)
+  });
+
+  const written = harness.visitPatches[0].claimOptions;
+  assert.equal('officialInsuranceCopaymentYen' in written, false);
+  // 画面側にも同じものを渡す (state と DB がずれない)
+  assert.deepEqual(persisted[0], written);
+});
 
 // ---------------------------------------------------------------------------
 // 印刷: 監査ログの後ろでしか印刷しない

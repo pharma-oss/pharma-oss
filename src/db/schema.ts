@@ -166,7 +166,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 21,
+  version: 22,
   primaryKey: 'visitId',
   type: 'object',
   properties: {
@@ -513,6 +513,19 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
             supplementalCode: { type: 'string', maxLength: 50 }
           },
           required: ['category', 'branch']
+        },
+        // HO第9項目。窓口で実際に徴収した額で、点数×負担割合からは算出しない。
+        officialInsuranceCopaymentYen: { type: 'number', minimum: 0 },
+        // KO第7・第9項目。patient.publicInsurances と同じ並びで対応させる。
+        officialPublicExpenseCopayments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              copaymentYen: { type: 'number', minimum: 0 },
+              publicBenefitCopaymentYen: { type: 'number', minimum: 0 }
+            }
+          }
         }
       }
     },

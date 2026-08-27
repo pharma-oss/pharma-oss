@@ -343,7 +343,10 @@ const create = async () => {
                 19: keepDocument,
                 // v20 -> v21: claimLifecycle.returnReasonCode と history[].reasonCode を追加。
                 // どちらも任意項目なので、既存ドキュメントはそのまま持ち上げる。
-                20: keepDocument
+                20: keepDocument,
+                // v21 -> v22: claimOptions に一部負担金額 (HO第9・KO第7/第9) を追加。
+                // 任意項目で、記録が無い受付はこれまでどおり項目ごと出力しない。
+                21: keepDocument
             })
         },
         prescription_items: {

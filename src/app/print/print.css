@@ -1114,6 +1114,63 @@
           background: #f8fafc;
         }
 
+        .copayment-block {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .copayment-block h4 {
+          margin: 0 0 4px;
+          font-size: 14px;
+        }
+
+        .copayment-help {
+          margin: 0 0 8px;
+          font-size: 12px;
+          line-height: 1.6;
+          color: #475569;
+        }
+
+        .copayment-field {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          font-size: 13px;
+        }
+
+        .copayment-field > span {
+          flex: 0 0 190px;
+        }
+
+        .copayment-field input {
+          flex: 1 1 120px;
+          min-width: 100px;
+          padding: 4px 6px;
+          border: 1px solid #cbd5e1;
+          border-radius: 4px;
+          text-align: right;
+        }
+
+        .copayment-field input[aria-invalid='true'] {
+          border-color: #b91c1c;
+          background: #fef2f2;
+        }
+
+        .copayment-public-row {
+          padding-left: 12px;
+          border-left: 2px solid #e2e8f0;
+        }
+
+        .copayment-issues {
+          margin: 8px 0 0;
+          padding-left: 18px;
+          font-size: 12px;
+          color: #b91c1c;
+        }
+
         .claim-lifecycle-panel {
           grid-column: 1 / -1;
           background: #fff7ed;
