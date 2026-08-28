@@ -22,6 +22,17 @@ import {
 } from '@/lib/receipt/dispensing_uke_spec_pdf';
 import type { DispensingUkeOfficialSpecPdfFetchResult } from '@/lib/receipt/dispensing_uke_official_spec_pdf';
 import { downloadTextFile } from '@/lib/blob_download';
+import {
+  buildClaimPointsDriftCsv,
+  buildClaimPointsDriftReview,
+  formatClaimPointsDriftSummary,
+  makeClaimPointsDriftCsvFileName,
+  type ClaimPointsDriftInput,
+  type ClaimPointsDriftReview
+} from '@/lib/claim_points_drift';
+import { calculateDispensingFees, getTotalPoints } from '@/lib/calculator';
+import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
+import { readClaimOptionsState } from '@/app/print/claim_actions';
 
 export function makeDispensingUkeSpecReviewCsvFileName(): string {
   return `dispensing_uke_spec_review_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -225,8 +236,107 @@ export function useOfficialAuditSettings({
     }
   };
 
+  // 出力済みの請求と、いま計算し直した点数のずれ。
+  // 算定を直したあと「どの請求が影響を受けたか」を運用者が把握するための一覧。
+  const [claimPointsDrift, setClaimPointsDrift] = useState<ClaimPointsDriftReview | null>(null);
+  const [isReviewingClaimPointsDrift, setIsReviewingClaimPointsDrift] = useState(false);
+
+  const handleReviewClaimPointsDrift = async () => {
+    if (!ensurePermission('view_official_audit')) return;
+    if (!db) {
+      toast.error('データベースの初期化が完了していません。');
+      return;
+    }
+    setIsReviewingClaimPointsDrift(true);
+    try {
+      const [visits, settingsDoc] = await Promise.all([
+        db.visits.find().exec(),
+        db.facility_settings.findOne('default').exec()
+      ]);
+      const settings = settingsDoc ? settingsDoc.toJSON() : null;
+
+      const inputs: ClaimPointsDriftInput[] = [];
+      for (const visitDoc of visits) {
+        const visit: any = visitDoc.toJSON();
+        const snapshot = visit.claimLifecycle?.exportSnapshot;
+        if (!snapshot || !Number.isFinite(snapshot.totalPoints)) continue;
+
+        const [patientDoc, itemDocs] = await Promise.all([
+          db.patients.findOne(visit.patientId).exec(),
+          db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
+        ]);
+        const patient: any = patientDoc ? patientDoc.toJSON() : null;
+
+        // 薬価は調剤日時点で引く。印刷画面と同じ関数を通さないと薬剤料が算定されず、
+        // ずれていない請求まで「点数が減った」と出てしまう。
+        const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
+        const drugCodes = new Set<string>();
+        for (const doc of itemDocs) {
+          if (doc.drugId) drugCodes.add(String(doc.drugId));
+          if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
+        }
+        const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
+        const items = itemDocs.map((doc: any) => ({
+          ...doc.toJSON(),
+          ...resolveClaimItemPricing(
+            doc,
+            {
+              prescribed: drugsMap.get(doc.drugId) as any,
+              dispensed: doc.dispensedDrugCode ? (drugsMap.get(doc.dispensedDrugCode) as any) : undefined
+            },
+            dispensingDateForPrice
+          )
+        }));
+
+        // 施設設定か患者が引けない受付は計算し直せない。落とさずに「再計算できず」で出す。
+        let currentPoints: number | undefined;
+        if (settings && patient) {
+          const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';
+          currentPoints = getTotalPoints(
+            calculateDispensingFees(settings, items, patient, visitDate, readClaimOptionsState(visit.claimOptions))
+          );
+        }
+
+        inputs.push({
+          visitId: visit.visitId,
+          patientName: patient?.name,
+          dispensingDate: visit.dispensingDate || visit.issueDate,
+          claimStatus: visit.claimLifecycle?.status,
+          exportedAt: visit.claimLifecycle?.exportedAt,
+          exportedFileName: visit.claimLifecycle?.exportedFileName,
+          exportedPoints: snapshot.totalPoints,
+          currentPoints
+        });
+      }
+
+      const review = buildClaimPointsDriftReview(inputs);
+      setClaimPointsDrift(review);
+      await logAuditAction(db, 'claim_points_review', `請求点数の変動点検: ${formatClaimPointsDriftSummary(review)}`);
+      if (refreshAuditEvidence) await refreshAuditEvidence();
+      toast.success(formatClaimPointsDriftSummary(review));
+    } catch (error: any) {
+      console.error('Failed to review claim points drift:', error);
+      toast.error(`請求点数の変動点検に失敗しました: ${error?.message || error}`);
+    } finally {
+      setIsReviewingClaimPointsDrift(false);
+    }
+  };
+
+  const handleExportClaimPointsDriftCsv = () => {
+    if (!claimPointsDrift) return;
+    downloadTextFile(
+      makeClaimPointsDriftCsvFileName(new Date()),
+      `\ufeff${buildClaimPointsDriftCsv(claimPointsDrift)}`,
+      'text/csv;charset=utf-8'
+    );
+  };
+
   return {
     canViewOfficialAudit,
+    claimPointsDrift,
+    isReviewingClaimPointsDrift,
+    handleReviewClaimPointsDrift,
+    handleExportClaimPointsDriftCsv,
     dispensingUkeSpecPdfText,
     setDispensingUkeSpecPdfText,
     setDispensingUkeSpecCompletionGate,

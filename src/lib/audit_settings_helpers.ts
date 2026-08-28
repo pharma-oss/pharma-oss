@@ -37,7 +37,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditLog['actionType'], string> = {
   backup_external_transfer_manifest: '外部保存連携JSON',
   backup_drill: '復旧テスト',
   backup_import: 'バックアップ復旧',
-  official_spec_review: '公式仕様点検'
+  official_spec_review: '公式仕様点検',
+  claim_points_review: '請求点数の変動点検'
 };
 
 export function auditActionLabel(actionType: AuditLog['actionType']): string {

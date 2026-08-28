@@ -671,7 +671,8 @@ export type AuditActionType =
   | 'backup_external_transfer_manifest'
   | 'backup_drill'
   | 'backup_import'
-  | 'official_spec_review';
+  | 'official_spec_review'
+  | 'claim_points_review';
 
 
 export interface DrugInfo {

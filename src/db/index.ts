@@ -566,7 +566,10 @@ const create = async () => {
                 1: keepDocument,
                 2: keepDocument,
                 15: keepDocument,
-                16: keepDocument
+                16: keepDocument,
+                // v19 -> v20: actionType に claim_points_review を追加。
+                // 既存のログは種別が変わらないのでそのまま持ち上げる。
+                19: keepDocument
             })
         }
     };

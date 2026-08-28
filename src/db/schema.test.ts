@@ -1154,7 +1154,7 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(AUDIT_LOG_SCHEMA, validLog);
       assert.strictEqual(errors, null);
-      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 19);
+      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 20);
     });
 
     test('should validate per-terminal chained audit logs with terminalId', () => {

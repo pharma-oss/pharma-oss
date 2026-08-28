@@ -6,6 +6,7 @@ import {
   getOfficialAuditSummary,
   type OfficialAuditStatus
 } from '@/lib/official_audit';
+import { formatClaimPointsDriftSummary, type ClaimPointsDriftReview } from '@/lib/claim_points_drift';
 import {
   DISPENSING_UKE_RECORD_SPEC_SOURCE,
   buildDispensingUkeOfficialAllFieldDefinitionGate,
@@ -39,6 +40,10 @@ import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/
 
 interface OfficialAuditSettingsTabProps {
   canViewOfficialAudit: boolean;
+  claimPointsDrift: ClaimPointsDriftReview | null;
+  isReviewingClaimPointsDrift: boolean;
+  handleReviewClaimPointsDrift: () => Promise<void>;
+  handleExportClaimPointsDriftCsv: () => void;
   dispensingUkeSpecPdfText: string;
   setDispensingUkeSpecPdfText: (value: string) => void;
   setDispensingUkeSpecCompletionGate: (value: DispensingUkeSpecificationPdfAllFieldCompletionGate | null) => void;
@@ -60,6 +65,10 @@ interface OfficialAuditSettingsTabProps {
 
 export default function OfficialAuditSettingsTab({
   canViewOfficialAudit,
+  claimPointsDrift,
+  isReviewingClaimPointsDrift,
+  handleReviewClaimPointsDrift,
+  handleExportClaimPointsDriftCsv,
   dispensingUkeSpecPdfText,
   setDispensingUkeSpecPdfText,
   setDispensingUkeSpecCompletionGate,
@@ -193,6 +202,88 @@ export default function OfficialAuditSettingsTab({
                 <span>完了ゲートCSV</span>
               </button>
             </div>
+          </section>
+
+          <section
+            className="official-audit-review-workspace"
+            aria-labelledby="claim-points-drift-title"
+            data-testid="claim-points-drift-section"
+          >
+            <h3 id="claim-points-drift-title">請求点数の変動点検</h3>
+            <p className="help-text">
+              出力済みの請求について、<strong>出力時点に記録した点数</strong>と、
+              いま同じ受付を計算し直した点数を突き合わせます。
+              算定の実装を直したあと、どの請求が影響を受けたかを確かめるためのものです。
+              点数を作り直したり再提出したりはしません。
+            </p>
+
+            <div className="actions official-audit-review-actions">
+              <button
+                className="btn-primary flex-center gap-2"
+                onClick={handleReviewClaimPointsDrift}
+                disabled={isReviewingClaimPointsDrift || !canViewOfficialAudit}
+                type="button"
+                data-testid="claim-points-drift-run-button"
+              >
+                {isReviewingClaimPointsDrift ? (
+                  <Loader2 size={16} className="spin" aria-hidden="true" />
+                ) : (
+                  <AlertTriangle size={16} aria-hidden="true" />
+                )}
+                <span>{isReviewingClaimPointsDrift ? '点検中...' : '出力済みの請求を点検'}</span>
+              </button>
+              <button
+                className="btn-secondary flex-center gap-2"
+                onClick={handleExportClaimPointsDriftCsv}
+                disabled={!claimPointsDrift || claimPointsDrift.cases.length === 0}
+                type="button"
+                data-testid="claim-points-drift-csv-button"
+              >
+                <FileText size={16} aria-hidden="true" />
+                <span>変動一覧CSV</span>
+              </button>
+            </div>
+
+            {claimPointsDrift && (
+              <>
+                <p className="claim-points-drift-summary" data-testid="claim-points-drift-summary">
+                  {formatClaimPointsDriftSummary(claimPointsDrift)}
+                </p>
+
+                {claimPointsDrift.cases.length > 0 && (
+                  <div className="claim-points-drift-table-wrap">
+                    <table className="claim-points-drift-table" data-testid="claim-points-drift-table">
+                      <thead>
+                        <tr>
+                          <th>調剤日</th>
+                          <th>患者</th>
+                          <th>出力時点</th>
+                          <th>現在</th>
+                          <th>差</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {claimPointsDrift.cases.map((item) => (
+                          <tr key={item.visitId} data-kind={item.kind}>
+                            <td>{item.dispensingDate}</td>
+                            <td>{item.patientName}</td>
+                            <td className="num">{item.exportedPoints}点</td>
+                            <td className="num">
+                              {item.currentPoints === undefined ? '再計算できず' : `${item.currentPoints}点`}
+                            </td>
+                            <td className="num">
+                              {item.deltaPoints === undefined
+                                ? '-'
+                                : `${item.deltaPoints > 0 ? '+' : ''}${item.deltaPoints}点`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </section>
 
           <section
@@ -453,6 +544,46 @@ export default function OfficialAuditSettingsTab({
           background: rgba(255, 255, 255, 0.82);
           padding: 1rem;
           margin-bottom: 1.5rem;
+        }
+        .claim-points-drift-summary {
+          margin: 0.85rem 0 0;
+          font-size: var(--fs-sm);
+          font-weight: 700;
+        }
+        .claim-points-drift-table-wrap {
+          margin-top: 0.6rem;
+          overflow-x: auto;
+        }
+        .claim-points-drift-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: var(--fs-xs);
+        }
+        .claim-points-drift-table th,
+        .claim-points-drift-table td {
+          border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+          padding: 0.35rem 0.5rem;
+          text-align: left;
+          white-space: nowrap;
+        }
+        .claim-points-drift-table th {
+          font-weight: 800;
+          color: var(--primary);
+        }
+        .claim-points-drift-table td.num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .claim-points-drift-table tr[data-kind='increased'] td:last-child {
+          color: #b45309;
+          font-weight: 700;
+        }
+        .claim-points-drift-table tr[data-kind='decreased'] td:last-child {
+          color: #b91c1c;
+          font-weight: 700;
+        }
+        .claim-points-drift-table tr[data-kind='unknown'] {
+          background: rgba(254, 243, 199, 0.5);
         }
         .official-audit-review-header {
           display: flex;

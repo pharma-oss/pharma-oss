@@ -1035,7 +1035,7 @@ export const DRUG_INFO_SCHEMA: RxJsonSchema<DrugInfo> = {
 
 export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
   title: 'audit log schema',
-  version: 19,
+  version: 20,
   primaryKey: 'logId',
   type: 'object',
   properties: {
@@ -1044,7 +1044,7 @@ export const AUDIT_LOG_SCHEMA: RxJsonSchema<AuditLog> = {
     userId: { type: 'string', maxLength: 100 },
     userName: { type: 'string', maxLength: 100 },
     userRole: { type: 'string', enum: ['admin', 'pharmacist', 'clerk'], maxLength: 50 },
-    actionType: { type: 'string', enum: ['login', 'prescription_ocr', 'prescription_edit', 'billing_toggle', 'claim_lifecycle', 'daily_closing_approval', 'daily_closing_kpi_action', 'session_lock', 'print', 'uke_export', 'stock_update', 'user_switch', 'facility_settings_update', 'drug_master_update', 'patient_medication_info_template', 'follow_up_record', 'ai_suggestion_review', 'ai_draft_approved', 'ai_draft_modified', 'electronic_prescription', 'external_device_handoff', 'staff_create', 'staff_delete', 'staff_credential_recovery', 'passkey_register', 'audit_export', 'audit_retention_approval', 'backup_export', 'backup_schedule_update', 'backup_external_storage', 'backup_external_transfer_manifest', 'backup_drill', 'backup_import', 'official_spec_review'], maxLength: 50 },
+    actionType: { type: 'string', enum: ['login', 'prescription_ocr', 'prescription_edit', 'billing_toggle', 'claim_lifecycle', 'daily_closing_approval', 'daily_closing_kpi_action', 'session_lock', 'print', 'uke_export', 'stock_update', 'user_switch', 'facility_settings_update', 'drug_master_update', 'patient_medication_info_template', 'follow_up_record', 'ai_suggestion_review', 'ai_draft_approved', 'ai_draft_modified', 'electronic_prescription', 'external_device_handoff', 'staff_create', 'staff_delete', 'staff_credential_recovery', 'passkey_register', 'audit_export', 'audit_retention_approval', 'backup_export', 'backup_schedule_update', 'backup_external_storage', 'backup_external_transfer_manifest', 'backup_drill', 'backup_import', 'official_spec_review', 'claim_points_review'], maxLength: 50 },
     patientId: { type: 'string', maxLength: 100 },
     patientName: { type: 'string', maxLength: 100 },
     details: { type: 'string', maxLength: 2000 },

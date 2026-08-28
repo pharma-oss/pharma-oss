@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { FacilitySettings, PatientMedicationInfoTemplate } from '@/db/types';
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
-import { resolveDrugPriceWithOverride } from '@/lib/drug_price_history';
+import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
 
 export interface UsePrintVisitDataReturn {
@@ -111,12 +111,12 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
         const item = items[i];
         const dispensedDrugDoc = item.dispensedDrugCode ? drugsMap.get(item.dispensedDrugCode) : undefined;
         const prescribedDrugDoc = drugsMap.get(item.drugId);
-        const billingDrugDoc = dispensedDrugDoc || prescribedDrugDoc;
-        // 薬剤師が版を選び直していればそれを、無ければ調剤日時点の版を使う
-        const priceResolution = resolveDrugPriceWithOverride(
-          billingDrugDoc ?? {},
-          dispensingDateForPrice,
-          item.drugPriceOverride
+        // 薬剤師が版を選び直していればそれを、無ければ調剤日時点の版を使う。
+        // 点数の点検 (claim_points_drift) も同じ関数を通す。
+        const pricing = resolveClaimItemPricing(
+          item,
+          { prescribed: prescribedDrugDoc, dispensed: dispensedDrugDoc },
+          dispensingDateForPrice
         );
         itemsData[i] = {
           ...item.toJSON(),
@@ -124,15 +124,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
           dispensedDrug: item.dispensedDrug || dispensedDrugDoc?.name || '',
           genericName: prescribedDrugDoc?.genericName || '',
           dispensedGenericName: dispensedDrugDoc?.genericName || '',
-          price: priceResolution.price ?? item.price ?? 0,
-          // 算定 (calculateDispensingFees) と請求前チェックは drugPrice を見る。
-          // price だけを埋めていると薬剤料が算定されない。
-          drugPrice: priceResolution.price ?? item.price ?? 0,
-          drugPriceHistory: billingDrugDoc?.priceHistory,
-          drugPriceResolution: priceResolution,
-          yjCode: billingDrugDoc?.yjCode || item.yjCode || '',
-          isGeneric: billingDrugDoc?.isGeneric ?? item.isGeneric,
-          isHighRisk: item.isHighRisk ?? prescribedDrugDoc?.isHighRisk ?? dispensedDrugDoc?.isHighRisk ?? false
+          ...pricing
         };
       }
 
