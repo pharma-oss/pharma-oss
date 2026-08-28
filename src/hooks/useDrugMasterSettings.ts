@@ -11,6 +11,7 @@ import {
   reviewDrugMasterVintage,
   type DrugPriceRevision
 } from '@/lib/drug_price_history';
+import { resolveDrugMasterAttributes } from '@/lib/drug_master_attributes';
 import {
   buildDrugPriceHistoryEditAuditDetail,
   buildDrugPriceHistoryEditPlan,
@@ -328,6 +329,7 @@ export function useDrugMasterSettings({
       let priceRevisionFromChangeDate = 0;
       let priceRevisionFromImportDate = 0;
       let priceSkippedAsUnorderable = 0;
+      let attributesKeptStored = 0;
 
       let updatedCount = 0;
       let newCount = 0;
@@ -446,11 +448,22 @@ export function useDrugMasterSettings({
             priceSkippedAsUnorderable++;
           }
 
+          // 名称・YJコード・廃止フラグには適用開始日が無いので、古いファイルの値では
+          // 上書きしない。特に廃止フラグは、上書きすると廃止済みの薬品が復活する。
+          const attributes = resolveDrugMasterAttributes(
+            targetDoc,
+            { name, yjCode, isAbolished },
+            { sourceIsOlderThanStored: masterVintage.isOlderThanStored }
+          );
+          if (attributes.keptStored) {
+            attributesKeptStored++;
+          }
+
           bulkUpsertMap.set(code, {
             ...targetDoc,
-            name: name || targetDoc.name,
-            yjCode: yjCode || targetDoc.yjCode,
-            isAbolished: isAbolished,
+            name: attributes.name,
+            yjCode: attributes.yjCode,
+            isAbolished: attributes.isAbolished,
             price: priceUpdate.price,
             ...(priceUpdate.priceHistory && priceUpdate.priceHistory.length > 0
               ? { priceHistory: priceUpdate.priceHistory }
@@ -498,7 +511,7 @@ export function useDrugMasterSettings({
       await logAuditAction(
         db,
         'drug_master_update',
-        `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
+        `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}（名称・廃止フラグを据え置いた薬品 ${attributesKeptStored}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
       );
 
       if (refreshAuditEvidence) {
@@ -510,7 +523,8 @@ export function useDrugMasterSettings({
         // 現在薬価が巻き戻る事故を、件数とともに必ず目に入れる
         toast.warning(
           `取り込んだマスターは取込済みより古いファイルです（ファイル最新 ${masterVintage.fileNewestChangeDate} < 取込済み最新 ${masterVintage.storedNewestRevisionDate}）。`
-          + `版を持たない薬品 ${priceSkippedAsUnorderable}件は、現在薬価との前後を決められないため薬価に触れていません。`,
+          + `版を持たない薬品 ${priceSkippedAsUnorderable}件は、現在薬価との前後を決められないため薬価に触れていません。`
+          + `名称・YJコード・廃止フラグも、${attributesKeptStored}件で手元の値を残しています。`,
           { duration: 20000 }
         );
       }

@@ -244,3 +244,122 @@ test('validateDrugMasterRollbackPayload rejects unrelated JSON', () => {
 
   assert.strictEqual(validation.ok, false);
 });
+
+// 薬価の版はロールバックの復元行に含まれていないと、復元時に丸ごと消える。
+// 復元は bulkUpsert (ドキュメント全置換) なので、項目が無い＝消える。
+
+test('a rollback row carries the price history it has to restore', () => {
+  const artifacts = buildDrugMasterUpdateArtifacts({
+    sourceFileName: 'master.csv',
+    beforeRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 12.3,
+      priceHistory: [{ price: 13.2 }, { price: 12.3, effectiveFrom: '2024-04-01' }]
+    }],
+    afterRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 10.9,
+      priceHistory: [
+        { price: 13.2 },
+        { price: 12.3, effectiveFrom: '2024-04-01' },
+        { price: 10.9, effectiveFrom: '2026-04-01' }
+      ]
+    }],
+    createdAt: new Date('2026-08-28T00:00:00Z')
+  });
+
+  assert.strictEqual(artifacts.rollback.restoreRows.length, 1);
+  assert.deepStrictEqual(artifacts.rollback.restoreRows[0].priceHistory, [
+    { price: 13.2 },
+    { price: 12.3, effectiveFrom: '2024-04-01' }
+  ]);
+});
+
+test('an import that only added a revision is still recorded as a change', () => {
+  // 版だけが変わった薬品が変更として拾われないと、その取込は元へ戻せない
+  const artifacts = buildDrugMasterUpdateArtifacts({
+    sourceFileName: 'master.csv',
+    beforeRows: [{ code: '620000001', name: 'テスト錠', isGeneric: false, price: 10.9 }],
+    afterRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 10.9,
+      priceHistory: [{ price: 10.9, effectiveFrom: '2026-04-01' }]
+    }],
+    createdAt: new Date('2026-08-28T00:00:00Z')
+  });
+
+  assert.strictEqual(artifacts.changes.length, 1);
+  assert.strictEqual(artifacts.rollback.restoreRows[0].priceHistory, undefined);
+});
+
+test('an unchanged price history does not mark the drug as changed', () => {
+  // 参照で比べると、毎月の取込で全薬品が「変更あり」になり差分が使い物にならない
+  const history = () => [{ price: 13.2 }, { price: 10.9, effectiveFrom: '2026-04-01' }];
+  const artifacts = buildDrugMasterUpdateArtifacts({
+    sourceFileName: 'master.csv',
+    beforeRows: [{ code: '620000001', name: 'テスト錠', isGeneric: false, price: 10.9, priceHistory: history() }],
+    afterRows: [{ code: '620000001', name: 'テスト錠', isGeneric: false, price: 10.9, priceHistory: history() }],
+    createdAt: new Date('2026-08-28T00:00:00Z')
+  });
+
+  assert.strictEqual(artifacts.changes.length, 0);
+});
+
+test('a revision changing only its effective date counts as a change', () => {
+  const artifacts = buildDrugMasterUpdateArtifacts({
+    sourceFileName: 'master.csv',
+    beforeRows: [{ code: '620000001', name: 'テスト錠', isGeneric: false, price: 10.9, priceHistory: [{ price: 10.9 }] }],
+    afterRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 10.9,
+      priceHistory: [{ price: 10.9, effectiveFrom: '2024-04-01' }]
+    }],
+    createdAt: new Date('2026-08-28T00:00:00Z')
+  });
+
+  assert.strictEqual(artifacts.changes.length, 1);
+});
+
+test('a past revision corrected to a different price counts as a change', () => {
+  // 取込済みより古いファイルの取込では現在薬価が据え置かれるので、
+  // 過去の版だけが訂正される。日付しか見ないとこの訂正が差分にも
+  // ロールバックにも出てこず、元へ戻せなくなる。
+  const artifacts = buildDrugMasterUpdateArtifacts({
+    sourceFileName: 'master.csv',
+    beforeRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 10.9,
+      priceHistory: [
+        { price: 12.3, effectiveFrom: '2024-04-01' },
+        { price: 10.9, effectiveFrom: '2026-04-01' }
+      ]
+    }],
+    afterRows: [{
+      code: '620000001',
+      name: 'テスト錠',
+      isGeneric: false,
+      price: 10.9,
+      priceHistory: [
+        { price: 11.8, effectiveFrom: '2024-04-01' },
+        { price: 10.9, effectiveFrom: '2026-04-01' }
+      ]
+    }],
+    createdAt: new Date('2026-08-28T00:00:00Z')
+  });
+
+  assert.strictEqual(artifacts.changes.length, 1);
+  assert.deepStrictEqual(artifacts.rollback.restoreRows[0].priceHistory, [
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { price: 10.9, effectiveFrom: '2026-04-01' }
+  ]);
+});

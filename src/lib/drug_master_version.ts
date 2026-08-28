@@ -1,4 +1,5 @@
 import type { Drug } from '../db/types.ts';
+import type { DrugPriceRevision } from './drug_price_history.ts';
 
 export const DRUG_MASTER_ROLLBACK_APP = 'yakureki';
 export const DRUG_MASTER_ROLLBACK_TYPE = 'drug-master-rollback';
@@ -80,7 +81,10 @@ const DRUG_FIELDS: Array<keyof Drug> = [
   'isPsychotropic',
   'isPoisonous',
   'isHighRisk',
-  'documentUrl'
+  'documentUrl',
+  // 薬価の版。入れないと、ロールバックの復元行が版を持たないまま bulkUpsert され、
+  // 復元した薬品の履歴が丸ごと消える (過去の調剤が現在薬価で再計算されるようになる)。
+  'priceHistory'
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,8 +125,21 @@ export function normalizeDrugSnapshot(value: Partial<Drug>): Drug {
   return snapshot;
 }
 
+/** 薬価の版は配列なので、参照ではなく中身で比べる */
+function arePriceHistoriesEqual(a?: DrugPriceRevision[], b?: DrugPriceRevision[]): boolean {
+  const left = a || [];
+  const right = b || [];
+  if (left.length !== right.length) return false;
+  return left.every((revision, index) => revision?.price === right[index]?.price
+    && revision?.effectiveFrom === right[index]?.effectiveFrom);
+}
+
 function areDrugSnapshotsEqual(a: Drug, b: Drug): boolean {
   for (const field of DRUG_FIELDS) {
+    if (field === 'priceHistory') {
+      if (!arePriceHistoriesEqual(a.priceHistory, b.priceHistory)) return false;
+      continue;
+    }
     if (a[field] !== b[field]) return false;
   }
   return true;
