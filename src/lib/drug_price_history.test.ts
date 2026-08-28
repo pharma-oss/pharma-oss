@@ -5,6 +5,8 @@ import {
   appendDrugPriceRevision,
   applyDrugMasterPrice,
   drugPriceOverrideValue,
+  formatDrugMasterVintageLabel,
+  reviewDrugMasterVintage,
   formatDrugPriceRevisionLabel,
   seedDrugPriceBeforeHistory,
   toDrugPriceOverride,
@@ -525,4 +527,135 @@ test('formatDrugPriceOverrideWarning names both the applied and the automatic pr
 
   // 上書きしていないときは文言を出さない
   assert.equal(formatDrugPriceOverrideWarning(resolveDrugPrice({ priceHistory: history }, '2026-06-14'), '2026-06-14'), '');
+});
+
+// --- 取込済みより古いマスターファイル ---------------------------------------
+// 「変更年月日」はその行が最後に変わった日。ファイル全体の最大値が、そのファイルの新しさ。
+
+test('a master whose newest change date predates what is already recorded is older', () => {
+  const review = reviewDrugMasterVintage({
+    changeDates: ['2024-04-01', '2022-04-01', undefined, ''],
+    storedRevisionDates: ['2024-04-01', '2026-04-01']
+  });
+
+  assert.deepEqual(review, {
+    fileNewestChangeDate: '2024-04-01',
+    storedNewestRevisionDate: '2026-04-01',
+    isOlderThanStored: true
+  });
+});
+
+test('the current master is not older than what it produced', () => {
+  // 毎月の取込。ファイルの最大値は取込済みの最大値と同じかそれ以降になる。
+  assert.equal(
+    reviewDrugMasterVintage({
+      changeDates: ['2024-04-01', '2026-04-01'],
+      storedRevisionDates: ['2024-04-01', '2026-04-01']
+    }).isOlderThanStored,
+    false
+  );
+  assert.equal(
+    reviewDrugMasterVintage({
+      changeDates: ['2026-08-01'],
+      storedRevisionDates: ['2026-04-01']
+    }).isOlderThanStored,
+    false
+  );
+});
+
+test('a vintage that cannot be determined is not treated as older', () => {
+  // 版をまだ持っていない導入直後や、変更年月日の無いファイルで
+  // 取込を止めてしまわないこと
+  assert.equal(
+    reviewDrugMasterVintage({ changeDates: ['2024-04-01'], storedRevisionDates: [] }).isOlderThanStored,
+    false
+  );
+  assert.equal(
+    reviewDrugMasterVintage({ changeDates: [], storedRevisionDates: ['2026-04-01'] }).isOlderThanStored,
+    false
+  );
+  assert.equal(
+    reviewDrugMasterVintage({ changeDates: ['not-a-date'], storedRevisionDates: ['2026-04-01'] }).isOlderThanStored,
+    false
+  );
+});
+
+test('an older master leaves a drug with no revisions alone instead of guessing', () => {
+  // 現在薬価がいつからかを持っていないので、行の薬価との前後を決められない。
+  // 現在薬価として書けば巻き戻し、古い版として置けば以後の調剤を誤る。
+  const update = applyDrugMasterPrice(
+    { price: 10.9 },
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { sourceIsOlderThanStored: true }
+  );
+
+  assert.equal(update.skippedAsUnorderable, true);
+  assert.equal(update.revisionRecorded, false);
+  assert.equal(update.price, 10.9);
+  assert.equal(update.priceHistory, undefined);
+});
+
+test('an older master still fills a gap in a drug that already has dated revisions', () => {
+  // 版があれば前後が決まる。現在薬価は最も新しい版のままになる。
+  const drug = {
+    price: 10.9,
+    priceHistory: [
+      { price: 13.2 },
+      { price: 12.3, effectiveFrom: '2024-04-01' },
+      { price: 10.9, effectiveFrom: '2026-04-01' }
+    ]
+  };
+  const update = applyDrugMasterPrice(
+    drug,
+    { price: 11.5, effectiveFrom: '2025-04-01' },
+    { sourceIsOlderThanStored: true }
+  );
+
+  assert.equal(update.skippedAsUnorderable, undefined);
+  assert.equal(update.revisionRecorded, true);
+  assert.equal(update.price, 10.9);
+  assert.deepEqual(update.priceHistory?.map((revision) => revision.effectiveFrom), [
+    undefined,
+    '2024-04-01',
+    '2025-04-01',
+    '2026-04-01'
+  ]);
+});
+
+test('a drug holding only an undated revision is still unorderable against an older master', () => {
+  // 開始日不明の版だけでは、行の薬価が前か後かを決められない
+  const update = applyDrugMasterPrice(
+    { price: 10.9, priceHistory: [{ price: 13.2 }] },
+    { price: 12.3, effectiveFrom: '2024-04-01' },
+    { sourceIsOlderThanStored: true }
+  );
+
+  assert.equal(update.skippedAsUnorderable, true);
+  assert.deepEqual(update.priceHistory, [{ price: 13.2 }]);
+});
+
+test('the ordinary monthly import is unaffected by the option being absent', () => {
+  const update = applyDrugMasterPrice({ price: 12.3 }, { price: 10.9, effectiveFrom: '2026-04-01' });
+
+  assert.equal(update.skippedAsUnorderable, undefined);
+  assert.equal(update.revisionRecorded, true);
+  assert.equal(update.price, 10.9);
+});
+
+test('the vintage label names the two dates that decided it', () => {
+  const older = reviewDrugMasterVintage({
+    changeDates: ['2024-04-01'],
+    storedRevisionDates: ['2026-04-01']
+  });
+  const label = formatDrugMasterVintageLabel(older, 137);
+  assert.match(label, /取込済みより古い/);
+  assert.match(label, /ファイル最新 2024-04-01 < 取込済み最新 2026-04-01/);
+  assert.match(label, /薬価に触れなかった薬品 137件/);
+
+  // 通常の取込では件数を並べない
+  const current = reviewDrugMasterVintage({
+    changeDates: ['2026-04-01'],
+    storedRevisionDates: ['2026-04-01']
+  });
+  assert.equal(formatDrugMasterVintageLabel(current, 0), '取込済みより新しい');
 });

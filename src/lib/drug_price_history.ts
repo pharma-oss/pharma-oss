@@ -230,6 +230,22 @@ export interface DrugMasterPriceUpdate {
   priceHistory?: DrugPriceRevision[];
   /** 版を積んだか。取込の監査ログで件数を数えるのに使う */
   revisionRecorded: boolean;
+  /** 前後を決められないので薬価に触らなかったか（取込済みより古いファイルの場合） */
+  skippedAsUnorderable?: boolean;
+}
+
+export interface ApplyDrugMasterPriceOptions {
+  /**
+   * このマスターファイルが、取込済みの版より古いと分かっているか。
+   * 古いファイルでは、版を持たない薬品の現在薬価が「行の薬価より新しい」ことしか
+   * 分からず、いつからかを置けない。推測せずに薬価へ触らない。
+   */
+  sourceIsOlderThanStored?: boolean;
+}
+
+/** 日付の付いた版を持っているか */
+function hasDatedRevision(history?: DrugPriceRevision[]): boolean {
+  return sortedHistory(history).some((revision) => revision.effectiveFrom !== undefined);
 }
 
 /**
@@ -242,8 +258,21 @@ export interface DrugMasterPriceUpdate {
  */
 export function applyDrugMasterPrice(
   drug: DrugPriceSource,
-  row: DrugMasterPriceRow
+  row: DrugMasterPriceRow,
+  options?: ApplyDrugMasterPriceOptions
 ): DrugMasterPriceUpdate {
+  // 取込済みより古いファイルで、版をまだ持たない薬品。現在薬価がいつから
+  // 適用されているかを持っていないので、行の薬価との前後を決められない。
+  // 現在薬価として書けば巻き戻し、古い版として置けば以後の調剤を誤る。
+  if (options?.sourceIsOlderThanStored && !hasDatedRevision(drug?.priceHistory)) {
+    return {
+      revisionRecorded: false,
+      skippedAsUnorderable: true,
+      priceHistory: drug?.priceHistory,
+      price: drug?.price
+    };
+  }
+
   // 適用開始日が読めない行では版を作れない。作れないまま改定前の薬価だけ
   // 置くと、日付の付いた版が一つも無い履歴が残ってしまう。
   const effectiveFrom = toDateOnly(row?.effectiveFrom ?? '');
@@ -261,6 +290,53 @@ export function applyDrugMasterPrice(
     priceHistory,
     price: latestDatedDrugPrice(priceHistory) ?? row?.price ?? drug?.price
   };
+}
+
+/**
+ * 取り込もうとしているマスターが、既に取り込んだ版より古いかどうか。
+ *
+ * マスターの「変更年月日」はその行が最後に変わった日なので、ファイル全体の
+ * 最大値がそのファイルの新しさになる。取込済みの版の最大値より古ければ、
+ * そのファイルは手元のデータより前の状態を表している。
+ *
+ * 取込済み側は、そのファイルに載っている薬品の版から採る。実際のマスターは
+ * 2万行規模で、版を持つ薬品が必ず含まれるため判定できる。版を持つ薬品が
+ * 1件も無いファイル（導入直後や手作りの小さなファイル）では判定できないので、
+ * そのときは「古い」とは言わない（取込を止めない）。
+ */
+export function reviewDrugMasterVintage(input: {
+  /** 取り込むファイルの各行の変更年月日 */
+  changeDates: (string | undefined)[];
+  /** 取込済みの全薬品の版の適用開始日 */
+  storedRevisionDates: (string | undefined)[];
+}): { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; isOlderThanStored: boolean } {
+  const newest = (values: (string | undefined)[]) => values
+    .map((value) => toDateOnly(value ?? ''))
+    .filter((value) => value !== '')
+    .sort()
+    .pop();
+
+  const fileNewestChangeDate = newest(input?.changeDates ?? []);
+  const storedNewestRevisionDate = newest(input?.storedRevisionDates ?? []);
+
+  return {
+    ...(fileNewestChangeDate === undefined ? {} : { fileNewestChangeDate }),
+    ...(storedNewestRevisionDate === undefined ? {} : { storedNewestRevisionDate }),
+    // どちらかが分からないなら判定しない (判定できないことを「古い」にしない)
+    isOlderThanStored: fileNewestChangeDate !== undefined
+      && storedNewestRevisionDate !== undefined
+      && fileNewestChangeDate < storedNewestRevisionDate
+  };
+}
+
+/** 画面と監査ログで同じ文言を使う */
+export function formatDrugMasterVintageLabel(
+  review: { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; isOlderThanStored: boolean },
+  skippedCount: number
+): string {
+  if (!review?.isOlderThanStored) return '取込済みより新しい';
+  return `取込済みより古い（ファイル最新 ${review.fileNewestChangeDate} < 取込済み最新 ${review.storedNewestRevisionDate}）`
+    + ` / 前後を決められず薬価に触れなかった薬品 ${skippedCount}件`;
 }
 
 /**
