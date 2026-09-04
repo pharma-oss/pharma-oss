@@ -18,6 +18,8 @@ function normalizeLower(value) {
 function normalizeDrug(rawDrug, sortOrder) {
   const name = normalizeText(rawDrug.name);
   const genericName = rawDrug.genericName ? normalizeText(rawDrug.genericName) : undefined;
+  const unitText = rawDrug.unitText ? normalizeText(rawDrug.unitText) : undefined;
+  const unitCode = rawDrug.unitCode ? normalizeText(rawDrug.unitCode) : undefined;
   return {
     code: normalizeText(rawDrug.code),
     name,
@@ -35,6 +37,8 @@ function normalizeDrug(rawDrug, sortOrder) {
     documentUrl: rawDrug.documentUrl ? normalizeText(rawDrug.documentUrl) : undefined,
     searchNameLower: normalizeLower(rawDrug.searchNameLower || name),
     searchGenericLower: normalizeLower(rawDrug.searchGenericLower || genericName),
+    unitText: unitText || undefined,
+    unitCode: unitCode || undefined,
     sortOrder
   };
 }
@@ -65,7 +69,9 @@ function publicDrug(drug) {
     isHighRisk: !!drug.isHighRisk,
     documentUrl: drug.documentUrl || undefined,
     searchNameLower: normalizeLower(drug.searchNameLower || drug.name),
-    searchGenericLower: normalizeLower(drug.searchGenericLower || drug.genericName)
+    searchGenericLower: normalizeLower(drug.searchGenericLower || drug.genericName),
+    unitText: drug.unitText ? normalizeText(drug.unitText) : undefined,
+    unitCode: drug.unitCode ? normalizeText(drug.unitCode) : undefined
   };
 }
 
@@ -86,7 +92,9 @@ function rowToDrug(row) {
     isHighRisk: Number(row.isHighRisk) === 1,
     documentUrl: row.documentUrl,
     searchNameLower: row.searchNameLower,
-    searchGenericLower: row.searchGenericLower
+    searchGenericLower: row.searchGenericLower,
+    unitText: row.unitText,
+    unitCode: row.unitCode
   });
 }
 
@@ -143,7 +151,9 @@ function initializeSchema() {
       documentUrl TEXT,
       searchNameLower TEXT NOT NULL,
       searchGenericLower TEXT NOT NULL,
-      sortOrder INTEGER NOT NULL
+      sortOrder INTEGER NOT NULL,
+      unitText TEXT,
+      unitCode TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_drugs_name_lower ON drugs(searchNameLower);
     CREATE INDEX IF NOT EXISTS idx_drugs_generic_lower ON drugs(searchGenericLower);
@@ -157,6 +167,12 @@ function initializeSchema() {
     CREATE INDEX IF NOT EXISTS idx_usage_label_lower ON usage_options(searchLabelLower);
     PRAGMA user_version = 1;
   `);
+  try {
+    db.exec('ALTER TABLE drugs ADD COLUMN unitText TEXT;');
+  } catch (_) {}
+  try {
+    db.exec('ALTER TABLE drugs ADD COLUMN unitCode TEXT;');
+  } catch (_) {}
 }
 
 async function initSQLite(payload) {
@@ -237,8 +253,8 @@ function seedSQLite(payload) {
       INSERT INTO drugs (
         code, name, yjCode, isGeneric, genericName, isAbolished, price, stockQuantity,
         location, isNarcotic, isPsychotropic, isPoisonous, isHighRisk, documentUrl,
-        searchNameLower, searchGenericLower, sortOrder
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        searchNameLower, searchGenericLower, sortOrder, unitText, unitCode
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     try {
       payload.drugs.forEach((rawDrug, index) => {
@@ -261,7 +277,9 @@ function seedSQLite(payload) {
           drug.documentUrl || null,
           drug.searchNameLower,
           drug.searchGenericLower,
-          index
+          index,
+          drug.unitText || null,
+          drug.unitCode || null
         ]).stepReset();
       });
     } finally {

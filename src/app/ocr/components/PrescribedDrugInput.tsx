@@ -20,6 +20,46 @@ export interface PrescribedDrugInputProps {
   onOpenDrugSearch: (id: string, currentDrug: string, targetField: 'prescribed' | 'dispensed', prescribedCode?: string) => void;
 }
 
+export interface PrescribedDrugSelectUpdate {
+  field: string;
+  value: PrescriptionFieldValue;
+}
+
+export function calculatePrescribedDrugSelectUpdates(
+  drug: DrugMasterRecord,
+  prescription: Pick<Prescription, 'dispensedDrug' | 'electronicUnitConversion'>
+): PrescribedDrugSelectUpdate[] {
+  const auditMeta = getDrugAuditMeta(drug);
+  const updates: PrescribedDrugSelectUpdate[] = [
+    { field: 'drugName', value: formatDrugDisplayName(drug.name) },
+    { field: 'drugCode', value: drug.code },
+    { field: 'yjCode', value: auditMeta.yjCode },
+    { field: 'genericName', value: auditMeta.genericName },
+    { field: 'isHighRisk', value: auditMeta.isHighRisk },
+    { field: 'isAbolished', value: auditMeta.isAbolished },
+    { field: 'stockQuantity', value: auditMeta.stockQuantity },
+    { field: 'dispensedDrugCode', value: '' },
+    { field: 'dispensedYjCode', value: '' },
+    { field: 'dispensedGenericName', value: '' },
+    { field: 'dispensedIsHighRisk', value: false },
+    { field: 'dispensedIsAbolished', value: false },
+    { field: 'dispensedStockQuantity', value: undefined }
+  ];
+  if (drug.unitText && !prescription.electronicUnitConversion?.prescribedUnitText) {
+    updates.push({ field: 'unitText', value: drug.unitText });
+  }
+  if (drug.unitCode && !prescription.electronicUnitConversion?.prescribedUnitCode) {
+    updates.push({ field: 'unitCode', value: drug.unitCode });
+  }
+  if (!prescription.dispensedDrug || isNoSubstitutionValue(prescription.dispensedDrug)) {
+    updates.push(
+      { field: 'dispensedDrug', value: NO_SUBSTITUTION_LABEL },
+      { field: 'changeReason', value: '' }
+    );
+  }
+  return updates;
+}
+
 export const PrescribedDrugInput = React.memo(({
   prescription,
   index,
@@ -33,26 +73,19 @@ export const PrescribedDrugInput = React.memo(({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectDrug = useCallback((drug: DrugMasterRecord) => {
-    onChange(prescription.id, 'drugName', formatDrugDisplayName(drug.name), index);
-    onChange(prescription.id, 'drugCode', drug.code, index);
-    const auditMeta = getDrugAuditMeta(drug);
-    onChange(prescription.id, 'yjCode', auditMeta.yjCode, index);
-    onChange(prescription.id, 'genericName', auditMeta.genericName, index);
-    onChange(prescription.id, 'isHighRisk', auditMeta.isHighRisk, index);
-    onChange(prescription.id, 'isAbolished', auditMeta.isAbolished, index);
-    onChange(prescription.id, 'stockQuantity', auditMeta.stockQuantity, index);
-    onChange(prescription.id, 'dispensedDrugCode', '', index);
-    onChange(prescription.id, 'dispensedYjCode', '', index);
-    onChange(prescription.id, 'dispensedGenericName', '', index);
-    onChange(prescription.id, 'dispensedIsHighRisk', false, index);
-    onChange(prescription.id, 'dispensedIsAbolished', false, index);
-    onChange(prescription.id, 'dispensedStockQuantity', undefined, index);
-    if (!prescription.dispensedDrug || isNoSubstitutionValue(prescription.dispensedDrug)) {
-      onChange(prescription.id, 'dispensedDrug', NO_SUBSTITUTION_LABEL, index);
-      onChange(prescription.id, 'changeReason', '', index);
+    const updates = calculatePrescribedDrugSelectUpdates(drug, prescription);
+    for (const update of updates) {
+      onChange(prescription.id, update.field, update.value, index);
     }
     setShowDropdown(false);
-  }, [index, onChange, prescription.dispensedDrug, prescription.id]);
+  }, [
+    index,
+    onChange,
+    prescription.dispensedDrug,
+    prescription.electronicUnitConversion?.prescribedUnitCode,
+    prescription.electronicUnitConversion?.prescribedUnitText,
+    prescription.id
+  ]);
 
   useEffect(() => {
     let isMounted = true;

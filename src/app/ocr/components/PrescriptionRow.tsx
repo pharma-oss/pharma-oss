@@ -50,6 +50,18 @@ export const PrescriptionRow = React.memo(({
             onChange={(e) => onChange(prescription.id, 'amount', e.target.value, index)}
           />
         </div>
+        <div className="field-stack unit-stack">
+          <span className="field-label">単位</span>
+          <input
+            type="text"
+            className="unit-text"
+            aria-label={`単位 ${index + 1}`}
+            placeholder="単位"
+            maxLength={10}
+            value={prescription.unitText || ''}
+            onChange={(e) => onChange(prescription.id, 'unitText', e.target.value, index)}
+          />
+        </div>
       </div>
       <div className="prescription-row-sub">
         <span className="sub-row-label">調剤薬</span>
@@ -182,7 +194,7 @@ export const PrescriptionRow = React.memo(({
 
         .prescription-row {
           display: grid;
-          grid-template-columns: 26px minmax(0, 1fr) 92px;
+          grid-template-columns: 26px minmax(0, 1fr) 72px 64px;
           gap: 0.65rem;
           margin-bottom: 0.55rem;
           align-items: end;
@@ -204,6 +216,10 @@ export const PrescriptionRow = React.memo(({
           min-width: 0;
         }
 
+        .unit-stack {
+          min-width: 0;
+        }
+
         .prescription-row :global(input.amount) {
           width: 100%;
           min-width: 0;
@@ -220,6 +236,27 @@ export const PrescriptionRow = React.memo(({
         }
 
         .prescription-row :global(input.amount:focus) {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
+        }
+
+        .prescription-row :global(input.unit-text) {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          min-height: 38px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: #ffffff;
+          color: var(--text-main);
+          font-size: var(--fs-base);
+          font-weight: 700;
+          text-align: left;
+          padding: 0.45rem 0.55rem;
+        }
+
+        .prescription-row :global(input.unit-text:focus) {
           outline: none;
           border-color: var(--primary);
           box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);

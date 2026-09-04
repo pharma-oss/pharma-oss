@@ -1,10 +1,27 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getDrugMasterRecordsFromJson } from './sqlite_seed';
+import { getDrugMasterRecordsFromJson, normalizeDrugMasterRecord } from './sqlite_seed';
 import drugsData from '../data/drugs.json' with { type: 'json' };
 import generalDrugsData from '../data/general_drugs.json' with { type: 'json' };
 
 describe('Drug master merge and sqlite seed contracts', () => {
+  it('normalizeDrugMasterRecord preserves unitText and unitCode when present, and omits them when absent', () => {
+    const withUnit = normalizeDrugMasterRecord({
+      code: '610406053',
+      name: 'アモキシシリンカプセル２５０ｍｇ',
+      unitText: 'カプセル',
+      unitCode: '003'
+    });
+    assert.equal(withUnit.unitText, 'カプセル');
+    assert.equal(withUnit.unitCode, '003');
+
+    const withoutUnit = normalizeDrugMasterRecord({
+      code: '610406054',
+      name: 'テスト薬'
+    });
+    assert.equal(withoutUnit.unitText, undefined);
+    assert.equal(withoutUnit.unitCode, undefined);
+  });
   it('drug master merge does not duplicate price-master drugs via drug_infos', async () => {
     const records = await getDrugMasterRecordsFromJson();
 

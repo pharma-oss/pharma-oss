@@ -14,6 +14,52 @@ interface UseOcrDrugSearchModalOptions {
   setPrescriptions: React.Dispatch<React.SetStateAction<Prescription[]>>;
 }
 
+export function applyDrugSelectionToPrescriptions({
+  prescriptions,
+  editingRowId,
+  modalTargetField,
+  drug,
+  changeReason
+}: {
+  prescriptions: Prescription[];
+  editingRowId: string;
+  modalTargetField: 'prescribed' | 'dispensed';
+  drug: Drug;
+  changeReason: string;
+}): Prescription[] {
+  const index = prescriptions.findIndex((p) => p.id === editingRowId);
+  if (index === -1) return prescriptions;
+  const next = [...prescriptions];
+  if (modalTargetField === 'prescribed') {
+    const auditMeta = getDrugAuditMeta(drug);
+    const shouldSetUnitText = !next[index].electronicUnitConversion?.prescribedUnitText && Boolean(drug.unitText);
+    const shouldSetUnitCode = !next[index].electronicUnitConversion?.prescribedUnitCode && Boolean(drug.unitCode);
+    next[index] = {
+      ...next[index],
+      drugCode: drug.code,
+      drugName: formatDrugDisplayName(drug.name),
+      ...(shouldSetUnitText ? { unitText: drug.unitText } : {}),
+      ...(shouldSetUnitCode ? { unitCode: drug.unitCode } : {}),
+      ...auditMeta,
+      ...clearDispensedDrugAuditMeta,
+      dispensedDrug: (!next[index].dispensedDrug || isNoSubstitutionValue(next[index].dispensedDrug))
+        ? NO_SUBSTITUTION_LABEL
+        : next[index].dispensedDrug,
+      dispensedDrugCode: '',
+      changeReason: ''
+    };
+  } else {
+    next[index] = {
+      ...next[index],
+      ...getDispensedDrugAuditMeta(drug),
+      dispensedDrug: formatDrugDisplayName(drug.name),
+      dispensedDrugCode: drug.code,
+      changeReason
+    };
+  }
+  return next;
+}
+
 export function useOcrDrugSearchModal({ setPrescriptions }: UseOcrDrugSearchModalOptions) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -40,35 +86,13 @@ export function useOcrDrugSearchModal({ setPrescriptions }: UseOcrDrugSearchModa
 
   const handleModalSelect = useCallback((drug: Drug, changeReason: string) => {
     if (editingRowId) {
-      setPrescriptions((prev) => {
-        const index = prev.findIndex((p) => p.id === editingRowId);
-        if (index === -1) return prev;
-        const next = [...prev];
-        if (modalTargetField === 'prescribed') {
-          const auditMeta = getDrugAuditMeta(drug);
-          next[index] = {
-            ...next[index],
-            drugCode: drug.code,
-            drugName: formatDrugDisplayName(drug.name),
-            ...auditMeta,
-            ...clearDispensedDrugAuditMeta,
-            dispensedDrug: (!next[index].dispensedDrug || isNoSubstitutionValue(next[index].dispensedDrug))
-              ? NO_SUBSTITUTION_LABEL
-              : next[index].dispensedDrug,
-            dispensedDrugCode: '',
-            changeReason: ''
-          };
-        } else {
-          next[index] = {
-            ...next[index],
-            ...getDispensedDrugAuditMeta(drug),
-            dispensedDrug: formatDrugDisplayName(drug.name),
-            dispensedDrugCode: drug.code,
-            changeReason
-          };
-        }
-        return next;
-      });
+      setPrescriptions((prev) => applyDrugSelectionToPrescriptions({
+        prescriptions: prev,
+        editingRowId,
+        modalTargetField,
+        drug,
+        changeReason
+      }));
     }
   }, [editingRowId, modalTargetField, setPrescriptions]);
 

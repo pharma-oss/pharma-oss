@@ -7,6 +7,8 @@ let cachedSeedPayload: MasterDataSeedPayload | null = null;
 export function normalizeDrugMasterRecord(rawDrug: any): DrugMasterRecord {
   const name = String(rawDrug.name || '');
   const genericName = rawDrug.genericName ? String(rawDrug.genericName) : undefined;
+  const unitText = rawDrug.unitText ? String(rawDrug.unitText) : undefined;
+  const unitCode = rawDrug.unitCode ? String(rawDrug.unitCode) : undefined;
 
   return {
     code: String(rawDrug.code || ''),
@@ -24,7 +26,9 @@ export function normalizeDrugMasterRecord(rawDrug: any): DrugMasterRecord {
     isPoisonous: !!rawDrug.isPoisonous,
     isHighRisk: !!rawDrug.isHighRisk,
     searchNameLower: name.toLowerCase(),
-    searchGenericLower: (genericName || '').toLowerCase()
+    searchGenericLower: (genericName || '').toLowerCase(),
+    ...(unitText ? { unitText } : {}),
+    ...(unitCode ? { unitCode } : {})
   };
 }
 
