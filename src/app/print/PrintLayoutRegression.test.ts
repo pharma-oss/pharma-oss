@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const pageSource = readFileSync(new URL('./[visitId]/page.tsx', import.meta.url), 'utf8');
 const printCssSource = readFileSync(new URL('./print.css', import.meta.url), 'utf8');
@@ -8,28 +8,13 @@ const packageJson = JSON.parse(readFileSync(new URL('../../../package.json', imp
 const workflowSource = readFileSync(new URL('../../../.github/workflows/onboarding-e2e.yml', import.meta.url), 'utf8');
 const printLayoutScript = readFileSync(new URL('../../../scripts/runPrintLayoutRegression.mjs', import.meta.url), 'utf8');
 
-const drugInfoSource = readFileSync(new URL('./components/DrugInfoPrint.tsx', import.meta.url), 'utf8');
-const receiptStatementSource = readFileSync(new URL('./components/ReceiptStatementPrint.tsx', import.meta.url), 'utf8');
-const receiptSource = readFileSync(new URL('./components/ReceiptPrint.tsx', import.meta.url), 'utf8');
-const medicineBagSource = readFileSync(new URL('./components/MedicineBagPrint.tsx', import.meta.url), 'utf8');
-const stickerSource = readFileSync(new URL('./components/MedicineNotebookStickerPrint.tsx', import.meta.url), 'utf8');
-const liquidLabelSource = readFileSync(new URL('./components/LiquidLabelSheetPrint.tsx', import.meta.url), 'utf8');
-const ointmentLabelSource = readFileSync(new URL('./components/OintmentLabelSheetPrint.tsx', import.meta.url), 'utf8');
-const dispensingRecordSource = readFileSync(new URL('./components/DispensingRecordPrint.tsx', import.meta.url), 'utf8');
-const emergencyKeySheetSource = readFileSync(new URL('./components/EmergencyRecoveryKeySheetPrint.tsx', import.meta.url), 'utf8');
+const componentsDir = new URL('./components/', import.meta.url);
+const componentsSources = readdirSync(componentsDir)
+  .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
+  .map((f) => readFileSync(new URL(f, componentsDir), 'utf8'))
+  .join('\n');
 
-const allSources = [
-  pageSource,
-  drugInfoSource,
-  receiptStatementSource,
-  receiptSource,
-  medicineBagSource,
-  stickerSource,
-  liquidLabelSource,
-  ointmentLabelSource,
-  dispensingRecordSource,
-  emergencyKeySheetSource
-].join('\n');
+const allSources = [pageSource, componentsSources].join('\n');
 
 const printDocumentTestIds = [
   'dispensing-record-doc',
