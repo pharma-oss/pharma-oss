@@ -1,4 +1,6 @@
 import React from 'react';
+import type { PrescriptionItem } from '@/db/types';
+import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
@@ -118,17 +120,59 @@ export function getRecordNotes(
   return notes.join(' / ');
 }
 
-export function getPickingEvidence(item: any): string {
-  if (item.gs1VerificationStatus === 'verified' || item.isPicked) {
-    return `GS1照合済み (${item.dispensedDrugCode || item.drugId})`;
-  }
-  return `未照合 (${item.drugId})`;
+export type AmountTextSourceItem = Partial<Pick<
+  PrescriptionItem,
+  'amount' | 'unitText' | 'electronicUnitConversion' | 'dosageCategory' | 'days' | 'usage'
+>>;
+
+export type PickingEvidenceSourceItem = Partial<Pick<
+  PrescriptionItem,
+  'isPicked' | 'pickedGs1Code' | 'pickedGtin' | 'pickedLotNumber'
+>>;
+
+export function getAmountLabel(item: AmountSemanticsItem): '1日量' | '全量' {
+  return isDailyAmountItem(item) ? '1日量' : '全量';
 }
 
-export function getAmountText(item: any): string {
-  const amount = item.amount || 0;
-  const unit = item.unit || '錠';
-  return `${amount} ${unit}`;
+export function getAmountText(item: AmountTextSourceItem): string {
+  if (!Number.isFinite(item.amount) || item.amount == null || item.amount <= 0) {
+    return '-';
+  }
+  const unit = item.unitText?.trim() || item.electronicUnitConversion?.prescribedUnitText?.trim() || '';
+  return unit ? `${item.amount} ${unit}` : `${item.amount}`;
+}
+
+export function getTotalAmountText(item: AmountTextSourceItem): string {
+  if (!Number.isFinite(item.amount) || item.amount == null || item.amount <= 0) {
+    return '-';
+  }
+  const unit = item.unitText?.trim() || item.electronicUnitConversion?.prescribedUnitText?.trim() || '';
+
+  if (isDailyAmountItem(item)) {
+    const days = typeof item.days === 'number' ? item.days : 0;
+    const total = Math.round(item.amount * days * 1000) / 1000;
+    return unit ? `${total} ${unit}` : `${total}`;
+  }
+
+  // 全量アイテム（外用・頓服・注射・内滴、または days <= 0）は amount がすでに総量
+  return unit ? `${item.amount} ${unit}` : `${item.amount}`;
+}
+
+export function getPickingEvidence(item: PickingEvidenceSourceItem): string {
+  const hasGs1 = Boolean(item.pickedGs1Code || item.pickedGtin);
+  if (hasGs1) {
+    if (item.pickedLotNumber) {
+      return `GS1照合済み (Lot ${item.pickedLotNumber})`;
+    }
+    if (item.pickedGtin) {
+      return `GS1照合済み (${item.pickedGtin})`;
+    }
+    return 'GS1照合済み';
+  }
+  if (item.isPicked) {
+    return 'ピッキング済み（GS1照合なし）';
+  }
+  return '未照合';
 }
 
 export function getBagDaysText(items: { days?: number }[]): string {

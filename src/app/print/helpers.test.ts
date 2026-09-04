@@ -16,7 +16,11 @@ import {
   getBagRpComments,
   getFormulationLabel,
   getDrugShapeClass,
-  getMedicationFlags
+  getMedicationFlags,
+  getAmountLabel,
+  getAmountText,
+  getTotalAmountText,
+  getPickingEvidence
 } from './helpers.ts';
 
 // PrintPickingFlow.test.ts がソース文字列でしか見ていなかった
@@ -180,5 +184,136 @@ test('getMedicationFlags aggregates special condition labels', () => {
     ['ハイリスク薬', '後発医薬品', '一包化対象', '粉砕対象']
   );
   assert.deepEqual(getMedicationFlags({}), []);
+});
+
+test('getAmountText formats amount with unit or returns dash for invalid/zero values', () => {
+  // 正常系：処方単位あり
+  assert.equal(getAmountText({ amount: 30, unitText: 'mL' }), '30 mL');
+  assert.equal(getAmountText({ amount: 25, unitText: 'g' }), '25 g');
+  assert.equal(getAmountText({ amount: 2, unitText: '錠' }), '2 錠');
+
+  // 電子処方箋単位換算からの取得
+  assert.equal(
+    getAmountText({
+      amount: 60,
+      electronicUnitConversion: {
+        conversionFactor: '1',
+        prescribedAmount: '60',
+        prescribedUnitText: 'mL'
+      }
+    }),
+    '60 mL'
+  );
+
+  // unitText 優先
+  assert.equal(
+    getAmountText({
+      amount: 10,
+      unitText: 'mL',
+      electronicUnitConversion: {
+        conversionFactor: '1',
+        prescribedAmount: '10',
+        prescribedUnitText: '本'
+      }
+    }),
+    '10 mL'
+  );
+
+  // 単位未設定時は勘で「錠」等を補完せず、数値のみ（余分な空白なし）
+  assert.equal(getAmountText({ amount: 3 }), '3');
+  assert.equal(getAmountText({ amount: 5, unitText: '' }), '5');
+  assert.equal(getAmountText({ amount: 5, unitText: '   ' }), '5');
+
+  // 未確定・ゼロ・負数・NaN は勘で 0 を置かず '-' を返却
+  assert.equal(getAmountText({}), '-');
+  assert.equal(getAmountText({ amount: 0, unitText: '錠' }), '-');
+  assert.equal(getAmountText({ amount: -1, unitText: '錠' }), '-');
+  assert.equal(getAmountText({ amount: Number.NaN, unitText: 'mL' }), '-');
+  assert.equal(getAmountText({ amount: Number.POSITIVE_INFINITY, unitText: 'mL' }), '-');
+});
+
+test('getTotalAmountText calculates total quantity for daily items and passes total items through', () => {
+  // 内服薬 (isDailyAmountItem === true): amount * days
+  assert.equal(
+    getTotalAmountText({ amount: 10, days: 3, unitText: 'mL', dosageCategory: 'internal', usage: '毎食後' }),
+    '30 mL'
+  );
+  // 浮動小数点丸め (0.3 * 3 = 0.9)
+  assert.equal(
+    getTotalAmountText({ amount: 0.3, days: 3, unitText: 'g', dosageCategory: 'internal' }),
+    '0.9 g'
+  );
+
+  // 外用薬 (dosageCategory: external): 日数があっても掛けずにそのまま
+  assert.equal(
+    getTotalAmountText({ amount: 25, days: 14, unitText: 'g', dosageCategory: 'external', usage: '1日1回貼付' }),
+    '25 g'
+  );
+
+  // 内滴 (dosageCategory: internal_drop): そのまま
+  assert.equal(
+    getTotalAmountText({ amount: 10, days: 7, unitText: 'mL', dosageCategory: 'internal_drop' }),
+    '10 mL'
+  );
+
+  // 頓服 (usage: 頓服): そのまま
+  assert.equal(
+    getTotalAmountText({ amount: 5, days: 5, unitText: '回分', usage: '頭痛時頓服' }),
+    '5 回分'
+  );
+
+  // 日数ゼロ (days: 0) はシステム規約通り総量扱い
+  assert.equal(
+    getTotalAmountText({ amount: 10, days: 0, unitText: 'g' }),
+    '10 g'
+  );
+
+  // 単位なし時の数値のみ
+  assert.equal(
+    getTotalAmountText({ amount: 2, days: 3 }),
+    '6'
+  );
+
+  // 不正値・ゼロ
+  assert.equal(getTotalAmountText({ amount: 0 }), '-');
+  assert.equal(getTotalAmountText({ amount: Number.NaN }), '-');
+});
+
+test('getAmountLabel distinguishes daily from total based on semantics', () => {
+  assert.equal(getAmountLabel({ days: 3, dosageCategory: 'internal' }), '1日量');
+  assert.equal(getAmountLabel({ days: 14, usage: '毎食後' }), '1日量');
+  assert.equal(getAmountLabel({ days: 14, dosageCategory: 'external' }), '全量');
+  assert.equal(getAmountLabel({ days: 5, usage: '頭痛時頓服' }), '全量');
+  assert.equal(getAmountLabel({ days: 0, usage: '毎食後' }), '全量');
+});
+
+test('getPickingEvidence distinguishes GS1 verified, manual picked, and unverified (3-value)', () => {
+  // GS1 照合済み (Lot 番号あり)
+  assert.equal(
+    getPickingEvidence({ isPicked: true, pickedGs1Code: '01049999999000011727063010E2ELOT', pickedLotNumber: 'E2ELOT' }),
+    'GS1照合済み (Lot E2ELOT)'
+  );
+
+  // GS1 照合済み (GTIN あり、Lot なし)
+  assert.equal(
+    getPickingEvidence({ isPicked: true, pickedGs1Code: '0104999999900001', pickedGtin: '04999999900001' }),
+    'GS1照合済み (04999999900001)'
+  );
+
+  // GS1 照合済み (コードのみ、GTIN/Lot なし)
+  assert.equal(
+    getPickingEvidence({ isPicked: true, pickedGs1Code: '0104999999900001' }),
+    'GS1照合済み'
+  );
+
+  // ピッキング済み（GS1 照合なし）: isPicked のみでコードなし
+  assert.equal(
+    getPickingEvidence({ isPicked: true }),
+    'ピッキング済み（GS1照合なし）'
+  );
+
+  // 未照合: isPicked が false または未設定
+  assert.equal(getPickingEvidence({ isPicked: false }), '未照合');
+  assert.equal(getPickingEvidence({}), '未照合');
 });
 
