@@ -67,6 +67,10 @@ export interface Drug {
   isPoisonous?: boolean;
   isHighRisk?: boolean;
   documentUrl?: string;
+  /** 調剤単位（薬価単位。例: '錠', 'ｍＬ', 'ｇ'） */
+  unitText?: string;
+  /** 単位コード（厚労省3桁コード。例: '001'） */
+  unitCode?: string;
 }
 
 export interface PublicInsurance {

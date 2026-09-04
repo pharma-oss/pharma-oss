@@ -915,7 +915,53 @@ describe('Schema Validation', () => {
       };
 
       assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithHistory), null);
-      assert.strictEqual(DRUG_SCHEMA.version, 8);
+      assert.strictEqual(DRUG_SCHEMA.version, 9);
+    });
+
+    test('should validate a drug carrying unitText and unitCode (drug schema v9)', () => {
+      const drugWithUnits = {
+        code: '620000002',
+        name: 'アンブロキソール塩酸塩シロップ0.3%',
+        isGeneric: false,
+        price: 3.5,
+        unitText: 'ｍＬ',
+        unitCode: '034'
+      };
+
+      assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithUnits), null);
+      assert.strictEqual(DRUG_SCHEMA.properties.unitText?.type, 'string');
+      assert.strictEqual(DRUG_SCHEMA.properties.unitCode?.type, 'string');
+    });
+
+    test('should reject a drug when unitText has invalid type or exceeds maxLength', () => {
+      const invalidType = {
+        code: '620000002',
+        name: 'シロップ',
+        isGeneric: false,
+        unitText: 12345
+      };
+      const typeErrors = getErrors(DRUG_SCHEMA, invalidType);
+      assert.ok(typeErrors, 'unitText as number must fail');
+
+      const tooLong = {
+        code: '620000002',
+        name: 'シロップ',
+        isGeneric: false,
+        unitText: 'a'.repeat(51)
+      };
+      const lengthErrors = getErrors(DRUG_SCHEMA, tooLong);
+      assert.ok(lengthErrors, 'unitText longer than 50 chars must fail');
+    });
+
+    test('should validate a drug without unitText and unitCode for backward compatibility', () => {
+      const legacyDrug = {
+        code: '620000003',
+        name: '旧マスター薬品',
+        isGeneric: true,
+        price: 15.0
+      };
+
+      assert.strictEqual(getErrors(DRUG_SCHEMA, legacyDrug), null);
     });
 
     test('should accept a price revision with no effective date as the unknown start', () => {

@@ -110,7 +110,7 @@ function persistResolvedDbPassword(password: string) {
     }
 }
 
-const legacyMigrationStrategies = (
+export const legacyMigrationStrategies = (
     schema: { version: number },
     zeroBasedStrategies: Record<number, (oldDoc: any) => any>
 ) => {
@@ -501,7 +501,9 @@ const create = async () => {
                 6: keepDocument,
                 // v7 -> v8: priceHistory の effectiveFrom を任意にした (開始日不明の版)。
                 // 既存の版はすべて日付を持っているのでそのまま持ち上げる。
-                7: keepDocument
+                7: keepDocument,
+                // v8 -> v9: unitText / unitCode (調剤単位・単位コード) を追加。任意項目なのでそのまま持ち上げる。
+                8: keepDocument
             })
         },
         drug_stocks: {
