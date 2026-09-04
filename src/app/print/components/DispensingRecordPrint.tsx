@@ -5,6 +5,7 @@ import type { PharmacyInfo } from '../types';
 import { ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS } from '../types';
 import {
   getRecordDrugName,
+  getAmountLabel,
   getAmountText,
   getRecordNotes
 } from '../helpers';
@@ -136,7 +137,7 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
               <tr>
                 <th>Rp</th>
                 <th>薬品名</th>
-                <th>1日量</th>
+                <th>用量</th>
                 <th>用法</th>
                 <th>日数</th>
                 <th>備考</th>
@@ -147,7 +148,7 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
                 <tr key={`record-${item.itemId}`}>
                   <td className="text-center">{item.rpNumber || '-'}</td>
                   <td>{getRecordDrugName(item)}</td>
-                  <td>{getAmountText(item)}</td>
+                  <td>{getAmountLabel(item)} {getAmountText(item)}</td>
                   <td>{item.usage || '未設定'}</td>
                   <td>{item.days ? `${item.days} 日分` : '-'}</td>
                   <td className="text-sm">{getRecordNotes(item, isFirstItemInRp(item, index)) || '-'}</td>

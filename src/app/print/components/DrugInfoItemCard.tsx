@@ -10,6 +10,7 @@ import type { PrintPrescriptionItem } from '../types';
 import {
   getDisplayDrugName,
   getPrescribedDrugName,
+  getAmountLabel,
   getAmountText,
   getFormulationLabel,
   getDrugShapeClass,
@@ -123,7 +124,7 @@ export const DrugInfoItemCard = React.memo(function DrugInfoItemCard({
           </div>
         </div>
         <div className="drug-info-fact">
-          <span>1日量</span>
+          <span>{getAmountLabel(item)}</span>
           <strong>{getAmountText(item)}</strong>
         </div>
         <div className="drug-info-fact">

@@ -3,6 +3,7 @@ import { BookOpen } from 'lucide-react';
 import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
+  getAmountLabel,
   getAmountText,
   getTimingBadges
 } from '../helpers';
@@ -41,7 +42,7 @@ export const MedicineNotebookStickerPrint = React.memo(function MedicineNotebook
             <div className="sticker-drug">{getDisplayDrugName(item)}</div>
             <div className="sticker-dose-panel">
               <div>
-                <span>1日量</span>
+                <span>{getAmountLabel(item)}</span>
                 <strong>{getAmountText(item)}</strong>
               </div>
               <div>

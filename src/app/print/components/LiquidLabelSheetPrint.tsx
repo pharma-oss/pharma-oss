@@ -3,7 +3,8 @@ import { Droplets } from 'lucide-react';
 import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
-  getAmountText
+  getAmountText,
+  getTotalAmountText
 } from '../helpers';
 
 export interface LiquidLabelSheetPrintProps {
@@ -44,6 +45,10 @@ export const LiquidLabelSheetPrint = React.memo(function LiquidLabelSheetPrint({
             <div className="label-dose-grid">
               <div>
                 <span>全量</span>
+                <strong>{getTotalAmountText(item)}</strong>
+              </div>
+              <div>
+                <span>1日量</span>
                 <strong>{getAmountText(item)}</strong>
               </div>
               <div>
@@ -149,7 +154,7 @@ export const LiquidLabelSheetPrint = React.memo(function LiquidLabelSheetPrint({
 
         .label-dose-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(3, 1fr);
           gap: 0.4rem;
           background: #f8fafc;
           border: 1px solid #e2e8f0;

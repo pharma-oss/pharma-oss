@@ -8,6 +8,7 @@ import {
   getDisplayDrugName,
   getMedicationFlags,
   getFormulationLabel,
+  getAmountLabel,
   getAmountText,
   getBagRpComments
 } from '../helpers';
@@ -87,7 +88,7 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
                       <strong>{getDisplayDrugName(item)}</strong>
                       <span>{getMedicationFlags(item).join(' / ') || getFormulationLabel(item)}</span>
                     </div>
-                    <em>1日量 {getAmountText(item)}</em>
+                    <em>{getAmountLabel(item)} {getAmountText(item)}</em>
                   </div>
                 ))}
               </div>

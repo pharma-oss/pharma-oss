@@ -3,7 +3,8 @@ import { Paintbrush } from 'lucide-react';
 import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
-  getAmountText
+  getAmountText,
+  getTotalAmountText
 } from '../helpers';
 
 export interface OintmentLabelSheetPrintProps {
@@ -44,7 +45,7 @@ export const OintmentLabelSheetPrint = React.memo(function OintmentLabelSheetPri
             <div className="label-dose-grid">
               <div>
                 <span>全量</span>
-                <strong>{getAmountText(item)}</strong>
+                <strong>{getTotalAmountText(item)}</strong>
               </div>
               <div>
                 <span>日数</span>

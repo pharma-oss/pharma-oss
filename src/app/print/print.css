@@ -3141,6 +3141,10 @@
           border: 1px solid #111;
         }
 
+        .liquid-label .label-dose-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
         .sticker-dose-panel > div,
         .label-dose-grid > div {
           min-height: 11mm;
