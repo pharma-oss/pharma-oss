@@ -1,23 +1,33 @@
 import type {
   FacilitySettings,
   PatientMedicationInfoTemplate,
+  PrescriptionItem,
   VisitElectronicPrescription,
   VisitElectronicPrescriptionHpkiVerification,
   VisitPharmacyDeviceHandoff
 } from '@/db/types';
 import type { FeeCode } from '@/lib/calculator';
+import type { ClaimItemPricing } from '@/lib/claim_item_pricing';
 import type { ElectronicPrescriptionOperationKind } from '@/lib/electronic_prescription';
 import type { PrintDocumentType, PrintPreset } from '@/lib/print_presets';
 
 export type {
   FacilitySettings,
   PatientMedicationInfoTemplate,
+  PrescriptionItem,
   VisitElectronicPrescription,
   VisitElectronicPrescriptionHpkiVerification,
   VisitPharmacyDeviceHandoff,
   PrintDocumentType,
   PrintPreset
 };
+
+export type PrintPrescriptionItem = PrescriptionItem & ClaimItemPricing & {
+  drugName: string;
+  genericName: string;
+  dispensedGenericName: string;
+};
+
 
 export type PatientIdentityMark = {
   label: string;

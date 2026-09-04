@@ -1,8 +1,9 @@
 import React from 'react';
+import type { PrintPrescriptionItem } from '../types';
 import { getDisplayDrugName } from '../helpers';
 
 export interface DrugInfoClaimToolsProps {
-  prescriptionItems: any[];
+  prescriptionItems: PrintPrescriptionItem[];
   canEditBilling: boolean;
   remarks: Record<string, string>;
   handleToggleIppoka: (itemId: string, checked: boolean, idx: number) => Promise<void>;

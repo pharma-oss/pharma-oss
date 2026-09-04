@@ -4,6 +4,7 @@ import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
 import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
+import type { PrintPrescriptionItem } from '@/app/print/types';
 
 export interface UsePrintVisitDataReturn {
   isLoading: boolean;
@@ -11,12 +12,12 @@ export interface UsePrintVisitDataReturn {
   patientData: any;
   patientAlerts: any[];
   settingsData: FacilitySettings | null;
-  prescriptionItems: any[];
+  prescriptionItems: PrintPrescriptionItem[];
   approvedMedicationInfoTemplates: Record<string, PatientMedicationInfoTemplate>;
   remarks: Record<string, string>;
   claimOptions: FeeCalculationOptions;
   setVisitData: React.Dispatch<React.SetStateAction<any>>;
-  setPrescriptionItems: React.Dispatch<React.SetStateAction<any[]>>;
+  setPrescriptionItems: React.Dispatch<React.SetStateAction<PrintPrescriptionItem[]>>;
   setRemarks: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setClaimOptions: React.Dispatch<React.SetStateAction<FeeCalculationOptions>>;
   reloadVisitData: () => Promise<void>;
@@ -28,7 +29,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
   const [patientData, setPatientData] = useState<any>(null);
   const [patientAlerts, setPatientAlerts] = useState<any[]>([]);
   const [settingsData, setSettingsData] = useState<FacilitySettings | null>(null);
-  const [prescriptionItems, setPrescriptionItems] = useState<any[]>([]);
+  const [prescriptionItems, setPrescriptionItems] = useState<PrintPrescriptionItem[]>([]);
   const [approvedMedicationInfoTemplates, setApprovedMedicationInfoTemplates] = useState<Record<string, PatientMedicationInfoTemplate>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [claimOptions, setClaimOptions] = useState<FeeCalculationOptions>({ drugFeeOnly: false, disabledFeeCodes: [] });
@@ -106,7 +107,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
       // 薬価改定後にマスターを取り込んだ時点で過去の調剤分まで点数が変わる。
       const dispensingDateForPrice = visitJson.dispensingDate || visitJson.issueDate || '';
 
-      const itemsData = new Array(items.length);
+      const itemsData: PrintPrescriptionItem[] = new Array(items.length);
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         const dispensedDrugDoc = item.dispensedDrugCode ? drugsMap.get(item.dispensedDrugCode) : undefined;

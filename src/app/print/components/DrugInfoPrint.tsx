@@ -4,13 +4,13 @@ import { DrugInfoItemCard } from './DrugInfoItemCard';
 import { DrugInfoClaimTools } from './DrugInfoClaimTools';
 import { COMMON_RECEIPT_REMARKS } from '@/lib/data/receipt_remarks';
 import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
-import type { PharmacyInfo } from '../types';
+import type { PharmacyInfo, PrintPrescriptionItem } from '../types';
 import type { DrugPriceRevisionChoice } from '@/lib/drug_price_history';
 
 export interface DrugInfoPrintProps {
   patientData: any;
   visitData: any;
-  prescriptionItems: any[];
+  prescriptionItems: PrintPrescriptionItem[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
   receiptRunId: string;
@@ -18,7 +18,7 @@ export interface DrugInfoPrintProps {
   dispensingDateStr: string;
   prescriptionDateStr: string;
   medicationInfoFallbackCount: number;
-  getMedicationInfoContent: (item: any) => MedicationInfoPrintContent;
+  getMedicationInfoContent: (item: PrintPrescriptionItem) => MedicationInfoPrintContent;
   canEditBilling: boolean;
   remarks: Record<string, string>;
   renderIdentityMark: (variant?: 'paper' | 'compact' | 'tiny') => React.ReactNode;

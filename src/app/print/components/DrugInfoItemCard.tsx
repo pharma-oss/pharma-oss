@@ -6,6 +6,7 @@ import {
   formatDrugPriceRevisionLabel,
   type DrugPriceRevisionChoice
 } from '@/lib/drug_price_history';
+import type { PrintPrescriptionItem } from '../types';
 import {
   getDisplayDrugName,
   getPrescribedDrugName,
@@ -42,7 +43,7 @@ export function formatMedicationSourceText(medicationInfo: { source?: string; so
 }
 
 export interface DrugInfoItemCardProps {
-  item: any;
+  item: PrintPrescriptionItem;
   idx: number;
   medicationInfo: MedicationInfoPrintContent;
   canEditBilling: boolean;

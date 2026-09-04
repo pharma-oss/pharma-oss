@@ -60,15 +60,15 @@ export function getPatientIdentityMark(patientIdOrId: string, visitId: string): 
   return PATIENT_IDENTITY_MARKS[hash % PATIENT_IDENTITY_MARKS.length];
 }
 
-export function getDisplayDrugName(item: any): string {
+export function getDisplayDrugName(item: { dispensedDrug?: string; drugName?: string; drugId?: string }): string {
   return item.dispensedDrug || item.drugName || item.drugId || '';
 }
 
-export function getPrescribedDrugName(item: any): string {
+export function getPrescribedDrugName(item: { drugName?: string; drugId?: string }): string {
   return item.drugName || item.drugId || '';
 }
 
-export function getRecordDrugName(item: any): string {
+export function getRecordDrugName(item: { dispensedDrug?: string; drugName?: string; drugId?: string }): string {
   const dispensedDrug = String(item.dispensedDrug || '').trim();
   if (dispensedDrug && !['変更なし', '変更調剤なし'].includes(dispensedDrug)) {
     return dispensedDrug;
@@ -76,19 +76,29 @@ export function getRecordDrugName(item: any): string {
   return getPrescribedDrugName(item);
 }
 
-export function isLiquidItem(item: any): boolean {
+export function isLiquidItem(item: { usage?: string; dispensedDrug?: string; drugName?: string; drugId?: string }): boolean {
   const usage = String(item.usage || '');
   const drugName = getDisplayDrugName(item);
   return /シロップ|ドライシロップ|内用液|液剤|水剤/.test(drugName) || /内滴|水剤|内用液/.test(usage);
 }
 
-export function isOintmentItem(item: any): boolean {
+export function isOintmentItem(item: { usage?: string; dispensedDrug?: string; drugName?: string; drugId?: string }): boolean {
   const usage = String(item.usage || '');
   const drugName = getDisplayDrugName(item);
   return /軟膏|クリーム|ローション|ゲル|テープ|パップ|外用/.test(drugName) || /塗布|貼付|外用/.test(usage);
 }
 
-export function getRecordNotes(item: any, isFirstItem?: boolean): string {
+export function getRecordNotes(
+  item: {
+    dispensedDrug?: string;
+    drugName?: string;
+    changeReason?: string;
+    isIppoka?: boolean;
+    isCrushed?: boolean;
+    rpComment?: string;
+  },
+  isFirstItem?: boolean
+): string {
   const notes: string[] = [];
   if (item.dispensedDrug && item.dispensedDrug !== item.drugName) {
     notes.push(`後発変更: ${item.dispensedDrug}`);
@@ -121,15 +131,15 @@ export function getAmountText(item: any): string {
   return `${amount} ${unit}`;
 }
 
-export function getBagDaysText(items: any[]): string {
-  const daysList = items.map((i) => i.days).filter((d) => typeof d === 'number' && d > 0);
+export function getBagDaysText(items: { days?: number }[]): string {
+  const daysList = items.map((i) => i.days).filter((d): d is number => typeof d === 'number' && d > 0);
   if (daysList.length === 0) return '';
   const maxDays = Math.max(...daysList);
   return `${maxDays}日分`;
 }
 
-export function getBagRpComments(items: any[]): string[] {
-  const comments = items.map((i) => i.rpComment).filter(Boolean);
+export function getBagRpComments(items: { rpComment?: string }[]): string[] {
+  const comments = items.map((i) => i.rpComment).filter(Boolean) as string[];
   return Array.from(new Set(comments));
 }
 
@@ -157,7 +167,7 @@ export function getFeeSectionLabel(code?: FeeCode): string {
   }
 }
 
-export function getFormulationLabel(item: any): string {
+export function getFormulationLabel(item: { yjCode?: string; usage?: string; dispensedDrug?: string; drugName?: string; drugId?: string }): string {
   if (isLiquidItem(item)) return '内用液剤';
   if (isOintmentItem(item)) return '外用塗布剤';
   const type: FormulationType = getFormulationType(item.yjCode);
@@ -170,7 +180,7 @@ export function getFormulationLabel(item: any): string {
   }
 }
 
-export function getDrugShapeClass(item: any): string {
+export function getDrugShapeClass(item: { isHighRisk?: boolean; yjCode?: string; usage?: string; dispensedDrug?: string; drugName?: string; drugId?: string }): string {
   if (item.isHighRisk) return 'high-risk';
   if (isLiquidItem(item)) return 'liquid';
   if (isOintmentItem(item)) return 'ointment';
@@ -194,7 +204,7 @@ export function getTimingBadges(usage?: string): string[] {
   return badges;
 }
 
-export function getMedicationFlags(item: any): string[] {
+export function getMedicationFlags(item: { isHighRisk?: boolean; isGeneric?: boolean; isIppoka?: boolean; isCrushed?: boolean }): string[] {
   const flags: string[] = [];
   if (item.isHighRisk) flags.push('ハイリスク薬');
   if (item.isGeneric) flags.push('後発医薬品');
@@ -215,9 +225,9 @@ export function getElectronicPrescriptionDocumentKinds(electronicPrescription: a
     : [electronicPrescription?.documentKind || 'prescription'];
 }
 
-export function getClaimItemFlagValue(item: any, field: string): boolean {
+export function getClaimItemFlagValue(item: object, field: string): boolean {
   if (field === 'isDiagnosticTest') {
-    return !!item.isDiagnosticTest;
+    return !!(item as { isDiagnosticTest?: unknown }).isDiagnosticTest;
   }
-  return item[field] !== false;
+  return (item as Record<string, unknown>)[field] !== false;
 }
