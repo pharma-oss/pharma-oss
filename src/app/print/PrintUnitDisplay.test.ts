@@ -93,3 +93,34 @@ test('OintmentLabelSheetPrint renders g unit, total amount, and NO tablet unit',
   assert.ok(!html.includes('錠'), '軟膏ラベルに「錠」が一切含まれないこと');
   assert.ok(!html.includes('175 g'), '外用薬の全量が日数倍 (25*7=175) されていないこと');
 });
+
+test('OintmentLabelSheetPrint renders multiplied total for daily-like ointment (dosageCategory undefined, unclassified usage) and kills mutation #9', () => {
+  // 1日量 5g, 7日分, dosageCategory 未設定, usage に「塗布」等の外用キーワードなし（「塗る」）
+  const dailyOintmentItem = {
+    itemId: 'item-ointment-daily-1',
+    visitId: 'v1',
+    drugId: 'drug-ointment-daily',
+    drugName: 'プロペト',
+    amount: 5,
+    days: 7,
+    unitText: 'g',
+    usage: '1日2回患部に塗る'
+  };
+
+  const element = React.createElement(OintmentLabelSheetPrint, {
+    patientData: dummyPatientData,
+    ointmentItems: [dailyOintmentItem],
+    pharmacyInfo: dummyPharmacyInfo,
+    pharmacyAddressLine: dummyPharmacyInfo.address,
+    currentDateStr: '2026/09/04',
+    renderIdentityMark: () => React.createElement('span', null, 'MARK')
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  // isDailyAmountItem が true となり、getTotalAmountText により 5g * 7日分 = 35 g が全量として出力されること
+  assert.ok(html.includes('全量'), '全量ラベルが含まれること');
+  assert.ok(html.includes('35 g'), '5g * 7日分 = 35 g が全量として含まれること（getAmountText だと 5 g となり検出可能）');
+  assert.ok(html.includes('7日分'), '7日分が含まれること');
+});
+
