@@ -307,3 +307,37 @@ test('parseDrugMasterUpdateCsv rejects an impossible change date instead of pass
 
   assert.strictEqual(parsed.rows[0].changeDate, '', '13月は日付として使わない');
 });
+
+test('parseDrugMasterUpdateCsv extracts unitText and unitCode from SSK standard layout', () => {
+  const csv = makeStandardDrugMasterRow({ 2: '620000001', 7: '001', 9: '錠' }).join(',');
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+
+  assert.strictEqual(parsed.rows[0].unitCode, '001');
+  assert.strictEqual(parsed.rows[0].unitText, '錠');
+});
+
+test('parseDrugMasterUpdateCsv extracts unitText and unitCode from header CSV with unit aliases', () => {
+  const csv = [
+    '"医薬品名","薬価","医薬品コード","変更区分","単位漢字名称","単位コード"',
+    '"テストシロップ","3.5","620000002","2","ｍＬ","034"',
+    '"テスト軟膏","15.0","620000003","2","単位","022"'
+  ].join('\n');
+
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+  assert.strictEqual(parsed.rows[0].unitText, 'ｍＬ');
+  assert.strictEqual(parsed.rows[0].unitCode, '034');
+  assert.strictEqual(parsed.rows[1].unitText, '単位');
+  assert.strictEqual(parsed.rows[1].unitCode, '022');
+});
+
+test('parseDrugMasterUpdateCsv leaves unitText and unitCode undefined when CSV has no unit column', () => {
+  const csv = [
+    '"医薬品名","薬価","医薬品コード","変更区分"',
+    '"テスト錠","10.0","620000004","2"'
+  ].join('\n');
+
+  const parsed = parseDrugMasterUpdateCsv(csv, { today: new Date('2026-06-14T09:00:00+09:00') });
+  assert.strictEqual(parsed.rows[0].unitText, undefined);
+  assert.strictEqual(parsed.rows[0].unitCode, undefined);
+});
+

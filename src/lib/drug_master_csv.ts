@@ -11,6 +11,8 @@ export interface DrugMasterCsvColumnLayout {
   yjCode?: number;
   abolishDate?: number;
   changeDate?: number;
+  unitText?: number;
+  unitCode?: number;
   headerRowNumber?: number;
 }
 
@@ -28,6 +30,10 @@ export interface DrugMasterCsvRow {
    */
   changeDate: string;
   isAbolished: boolean;
+  /** 項番10 単位漢字名称（例: '錠', 'ｍＬ', 'ｇ'） */
+  unitText?: string;
+  /** 項番8 単位コード（例: '001'） */
+  unitCode?: string;
 }
 
 export interface DrugMasterCsvIssue {
@@ -97,7 +103,9 @@ const SSK_STANDARD_LAYOUT: DrugMasterCsvColumnLayout = {
   price: 11,
   yjCode: 31,
   abolishDate: 33,
-  changeDate: 29
+  changeDate: 29,
+  unitCode: 7,
+  unitText: 9
 };
 
 export const DRUG_MASTER_SPECIFICATION_SOURCE: DrugMasterSpecificationSource = {
@@ -162,7 +170,9 @@ const HEADER_ALIASES = {
   price: ['薬価', '単位薬価', '薬価基準'],
   yjCode: ['YJコード', 'ＹＪコード'],
   abolishDate: ['廃止年月日', '廃止日', '経過措置年月日', '経過措置期限'],
-  changeDate: ['変更年月日', '変更日']
+  changeDate: ['変更年月日', '変更日'],
+  unitText: ['単位', '単位漢字名称', '単位名称'],
+  unitCode: ['単位コード']
 } as const;
 
 type HeaderField = keyof typeof HEADER_ALIASES;
@@ -174,10 +184,12 @@ const REQUIRED_COLUMN_LABELS: Record<'changeType' | 'code' | 'name' | 'price', s
   price: '薬価'
 };
 
-const OPTIONAL_COLUMN_LABELS: Record<'yjCode' | 'abolishDate' | 'changeDate', string> = {
+const OPTIONAL_COLUMN_LABELS: Record<'yjCode' | 'abolishDate' | 'changeDate' | 'unitText' | 'unitCode', string> = {
   yjCode: '薬価基準収載医薬品コード',
   abolishDate: '経過措置年月日又は商品名医薬品コード使用期限',
-  changeDate: '変更年月日'
+  changeDate: '変更年月日',
+  unitText: '単位漢字名称',
+  unitCode: '単位コード'
 };
 
 const SSK_STANDARD_SPEC_COLUMNS = {
@@ -188,7 +200,9 @@ const SSK_STANDARD_SPEC_COLUMNS = {
   price: { label: '新又は現金額', index: 11 },
   yjCode: { label: '薬価基準収載医薬品コード', index: 31 },
   abolishDate: { label: '経過措置年月日又は商品名医薬品コード使用期限', index: 33 },
-  changeDate: { label: '変更年月日', index: 29 }
+  changeDate: { label: '変更年月日', index: 29 },
+  unitCode: { label: '単位コード', index: 7 },
+  unitText: { label: '単位漢字名称', index: 9 }
 } as const;
 
 export function parseDrugMasterCsvLine(line: string): string[] {
@@ -245,6 +259,8 @@ function buildHeaderLayout(cols: string[]): DrugMasterCsvColumnLayout | null {
     yjCode: findHeaderIndex(cols, 'yjCode'),
     abolishDate: findHeaderIndex(cols, 'abolishDate'),
     changeDate: findHeaderIndex(cols, 'changeDate'),
+    unitText: findHeaderIndex(cols, 'unitText'),
+    unitCode: findHeaderIndex(cols, 'unitCode'),
     headerRowNumber: 1
   };
 
@@ -267,6 +283,8 @@ function buildHeaderLayout(cols: string[]): DrugMasterCsvColumnLayout | null {
     yjCode: layout.yjCode,
     abolishDate: layout.abolishDate,
     changeDate: layout.changeDate,
+    unitText: layout.unitText,
+    unitCode: layout.unitCode,
     headerRowNumber: 1
   };
 }
@@ -556,6 +574,8 @@ export function parseDrugMasterUpdateCsv(csvText: string, options: { today?: Dat
     const yjCode = getOptionalColumn(cols, layout.yjCode);
     const abolishDate = getOptionalColumn(cols, layout.abolishDate);
     const changeDate = toIsoDateOrEmpty(getOptionalColumn(cols, layout.changeDate));
+    const unitText = getOptionalColumn(cols, layout.unitText);
+    const unitCode = getOptionalColumn(cols, layout.unitCode);
     const masterType = getStandardMasterType(cols, layout);
 
     if (layout.source === 'ssk-standard' && masterType !== 'Y') {
@@ -589,7 +609,9 @@ export function parseDrugMasterUpdateCsv(csvText: string, options: { today?: Dat
       yjCode,
       abolishDate,
       changeDate,
-      isAbolished: isAbolishedRow(changeType, abolishDate, todayDigits)
+      isAbolished: isAbolishedRow(changeType, abolishDate, todayDigits),
+      ...(unitText ? { unitText } : {}),
+      ...(unitCode ? { unitCode } : {})
     });
   }
 

@@ -12,18 +12,24 @@ export interface DrugMasterAttributeSource {
   name: string;
   yjCode?: string;
   isAbolished?: boolean;
+  unitText?: string;
+  unitCode?: string;
 }
 
 export interface DrugMasterAttributeRow {
   name?: string;
   yjCode?: string;
   isAbolished: boolean;
+  unitText?: string;
+  unitCode?: string;
 }
 
 export interface DrugMasterAttributeUpdate {
   name: string;
   yjCode?: string;
   isAbolished: boolean;
+  unitText?: string;
+  unitCode?: string;
   /** 古いファイルなので手元の値を残したか */
   keptStored: boolean;
 }
@@ -50,14 +56,21 @@ export function resolveDrugMasterAttributes(
       yjCode: stored.yjCode,
       // 項目を持たない既存ドキュメントは「廃止されていない」として扱う
       isAbolished: stored.isAbolished ?? false,
+      ...(stored.unitText ? { unitText: stored.unitText } : {}),
+      ...(stored.unitCode ? { unitCode: stored.unitCode } : {}),
       keptStored: true
     };
   }
+
+  const unitText = row?.unitText || stored.unitText;
+  const unitCode = row?.unitCode || stored.unitCode;
 
   return {
     name: row?.name || stored.name,
     yjCode: row?.yjCode || stored.yjCode,
     isAbolished: row.isAbolished,
+    ...(unitText ? { unitText } : {}),
+    ...(unitCode ? { unitCode } : {}),
     keptStored: false
   };
 }

@@ -387,7 +387,9 @@ export function useDrugMasterSettings({
         isPsychotropic: existingDrugDoc.isPsychotropic,
         isPoisonous: existingDrugDoc.isPoisonous,
         isHighRisk: existingDrugDoc.isHighRisk,
-        documentUrl: existingDrugDoc.documentUrl
+        documentUrl: existingDrugDoc.documentUrl,
+        unitText: existingDrugDoc.unitText,
+        unitCode: existingDrugDoc.unitCode
       }));
 
       // 取込済みより古いマスターを取り込むと、版を持たない薬品の現在薬価が巻き戻る。
@@ -402,7 +404,7 @@ export function useDrugMasterSettings({
       const genericMakers = ['東和', '日医工', '沢井', 'サワイ', 'トーワ', 'タイヨー', '武田テバ', 'サンド', 'マイラン', 'あすか', '杏林', '高田', 'タカタ', 'ファイファイ', '明治', 'アメル', '大興', 'ケミファ', 'JG'];
 
       for (let i = 0; i < parsedMasterCsv.rows.length; i++) {
-        const { code, name, price, yjCode, isAbolished, changeDate } = parsedMasterCsv.rows[i];
+        const { code, name, price, yjCode, isAbolished, changeDate, unitText, unitCode } = parsedMasterCsv.rows[i];
         const priceEffectiveFrom = changeDate || importedOn;
 
         let targetDoc: Drug | null;
@@ -425,7 +427,9 @@ export function useDrugMasterSettings({
                 isPsychotropic: existingDrugDoc.isPsychotropic,
                 isPoisonous: existingDrugDoc.isPoisonous,
                 isHighRisk: existingDrugDoc.isHighRisk,
-                documentUrl: existingDrugDoc.documentUrl
+                documentUrl: existingDrugDoc.documentUrl,
+                unitText: existingDrugDoc.unitText,
+                unitCode: existingDrugDoc.unitCode
             } : null;
         }
 
@@ -452,7 +456,7 @@ export function useDrugMasterSettings({
           // 上書きしない。特に廃止フラグは、上書きすると廃止済みの薬品が復活する。
           const attributes = resolveDrugMasterAttributes(
             targetDoc,
-            { name, yjCode, isAbolished },
+            { name, yjCode, isAbolished, unitText, unitCode },
             { sourceIsOlderThanStored: masterVintage.isOlderThanStored }
           );
           if (attributes.keptStored) {
@@ -464,6 +468,8 @@ export function useDrugMasterSettings({
             name: attributes.name,
             yjCode: attributes.yjCode,
             isAbolished: attributes.isAbolished,
+            ...(attributes.unitText ? { unitText: attributes.unitText } : {}),
+            ...(attributes.unitCode ? { unitCode: attributes.unitCode } : {}),
             price: priceUpdate.price,
             ...(priceUpdate.priceHistory && priceUpdate.priceHistory.length > 0
               ? { priceHistory: priceUpdate.priceHistory }
@@ -480,7 +486,9 @@ export function useDrugMasterSettings({
             isGeneric: isGeneric,
             genericName: genericName || name || '',
             isAbolished: isAbolished,
-            price: price
+            price: price,
+            ...(unitText ? { unitText } : {}),
+            ...(unitCode ? { unitCode } : {})
           });
         }
       }

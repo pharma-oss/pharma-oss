@@ -77,3 +77,40 @@ test('a stored drug missing the abolished flag is read as not abolished', () => 
   assert.equal(update.isAbolished, false);
   assert.equal(update.yjCode, undefined);
 });
+
+test('resolveDrugMasterAttributes takes unitText and unitCode from master and preserves stored when missing', () => {
+  const storedWithUnit = {
+    name: '現行名',
+    yjCode: '1234567F1020',
+    unitText: '錠',
+    unitCode: '001'
+  };
+
+  // 通常取込で新しい単位があれば更新
+  const updated = resolveDrugMasterAttributes(storedWithUnit, {
+    name: '現行名',
+    isAbolished: false,
+    unitText: 'カプセル',
+    unitCode: '002'
+  });
+  assert.equal(updated.unitText, 'カプセル');
+  assert.equal(updated.unitCode, '002');
+
+  // 取込元に単位列がない場合は手元の単位を保持
+  const preserved = resolveDrugMasterAttributes(storedWithUnit, {
+    name: '現行名',
+    isAbolished: false
+  });
+  assert.equal(preserved.unitText, '錠');
+  assert.equal(preserved.unitCode, '001');
+
+  // 古いファイルの場合は手元の単位を保持
+  const olderPreserved = resolveDrugMasterAttributes(
+    storedWithUnit,
+    { name: '古い名', isAbolished: false, unitText: '包', unitCode: '003' },
+    { sourceIsOlderThanStored: true }
+  );
+  assert.equal(olderPreserved.unitText, '錠');
+  assert.equal(olderPreserved.unitCode, '001');
+});
+
