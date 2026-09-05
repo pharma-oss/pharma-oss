@@ -806,7 +806,7 @@ export function normalizeElectronicPrescriptionDispensingResultPayload(
     const drugNameVerificationCheckedAt = limitedString(item.drugNameVerificationCheckedAt, 50);
     const amount = limitedString(item.amount, 80);
     const unitCode = limitedString(item.unitCode, 50);
-    const unitText = limitedString(item.unitText || item.unit, 50);
+    const unitText = limitedString(item.unitText, 50);
     const unitConversion = normalizeElectronicPrescriptionUnitConversion(item.unitConversion);
     const usageCode = limitedString(item.usageCode, 50);
     const usageFallbackText = limitedString(item.usageFallbackText, 200);

@@ -111,7 +111,7 @@ export function usePrintDeviceIntegration({
       amount: Number(item.amount || 0),
       usage: String(item.usage || ''),
       days: Number(item.days || 0),
-      unit: item.unit || undefined
+      unit: item.unitText || undefined
     }))
   }), [visitId, visitData, patientData, prescriptionItems]);
 

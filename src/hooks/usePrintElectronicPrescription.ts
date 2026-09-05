@@ -118,7 +118,7 @@ export function usePrintElectronicPrescription({
       drugNameVerificationCheckedAt: item.electronicDrugNameVerificationCheckedAt || undefined,
       amount: String(item.amount || ''),
       unitCode: item.unitCode || undefined,
-      unitText: item.unitText || item.unit || undefined,
+      unitText: item.unitText || undefined,
       unitConversion: item.electronicUnitConversion || undefined,
       usageCode: item.electronicUsageCode || undefined,
       usage: item.usage || '',
