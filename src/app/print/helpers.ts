@@ -130,32 +130,59 @@ export type PickingEvidenceSourceItem = Partial<Pick<
   'isPicked' | 'pickedGs1Code' | 'pickedGtin' | 'pickedLotNumber'
 >>;
 
+export interface AmountPresentationPair {
+  amount: number;
+  unit: string;
+}
+
+export function getAmountPresentationPair(item: AmountTextSourceItem): AmountPresentationPair | null {
+  const conv = item.electronicUnitConversion;
+  if (conv?.prescribedUnitText?.trim() && conv.prescribedAmount != null && conv.prescribedAmount.trim() !== '') {
+    const parsedAmount = Number(conv.prescribedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return null;
+    }
+    return {
+      amount: parsedAmount,
+      unit: conv.prescribedUnitText.trim()
+    };
+  }
+
+  if (item.amount == null || !Number.isFinite(item.amount) || item.amount <= 0) {
+    return null;
+  }
+  return {
+    amount: item.amount,
+    unit: item.unitText?.trim() || ''
+  };
+}
+
 export function getAmountLabel(item: AmountSemanticsItem): '1日量' | '全量' {
   return isDailyAmountItem(item) ? '1日量' : '全量';
 }
 
 export function getAmountText(item: AmountTextSourceItem): string {
-  if (!Number.isFinite(item.amount) || item.amount == null || item.amount <= 0) {
+  const pair = getAmountPresentationPair(item);
+  if (!pair) {
     return '-';
   }
-  const unit = item.unitText?.trim() || item.electronicUnitConversion?.prescribedUnitText?.trim() || '';
-  return unit ? `${item.amount} ${unit}` : `${item.amount}`;
+  return pair.unit ? `${pair.amount} ${pair.unit}` : `${pair.amount}`;
 }
 
 export function getTotalAmountText(item: AmountTextSourceItem): string {
-  if (!Number.isFinite(item.amount) || item.amount == null || item.amount <= 0) {
+  const pair = getAmountPresentationPair(item);
+  if (!pair) {
     return '-';
   }
-  const unit = item.unitText?.trim() || item.electronicUnitConversion?.prescribedUnitText?.trim() || '';
 
   if (isDailyAmountItem(item)) {
     const days = typeof item.days === 'number' ? item.days : 0;
-    const total = Math.round(item.amount * days * 1000) / 1000;
-    return unit ? `${total} ${unit}` : `${total}`;
+    const total = Math.round(pair.amount * days * 1000) / 1000;
+    return pair.unit ? `${total} ${pair.unit}` : `${total}`;
   }
 
   // 全量アイテム（外用・頓服・注射・内滴、または days <= 0）は amount がすでに総量
-  return unit ? `${item.amount} ${unit}` : `${item.amount}`;
+  return pair.unit ? `${pair.amount} ${pair.unit}` : `${pair.amount}`;
 }
 
 export function getPickingEvidence(item: PickingEvidenceSourceItem): string {

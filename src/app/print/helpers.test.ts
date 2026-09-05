@@ -18,6 +18,7 @@ import {
   getDrugShapeClass,
   getMedicationFlags,
   getAmountLabel,
+  getAmountPresentationPair,
   getAmountText,
   getTotalAmountText,
   getPickingEvidence
@@ -186,37 +187,104 @@ test('getMedicationFlags aggregates special condition labels', () => {
   assert.deepEqual(getMedicationFlags({}), []);
 });
 
+test('getAmountPresentationPair strictly pairs quantity and unit from the same source', () => {
+  // 1. 換算情報あり: 処方単位ペア (prescribedAmount, prescribedUnitText) を取得
+  assert.deepEqual(
+    getAmountPresentationPair({
+      amount: 750,
+      unitText: 'mL',
+      electronicUnitConversion: {
+        conversionFactor: '250',
+        prescribedAmount: '3',
+        prescribedUnitText: '缶'
+      }
+    }),
+    { amount: 3, unit: '缶' },
+    '換算がある場合は処方単位ペア（3 缶）が返り、amount 750 や unitText mL と混ざらないこと'
+  );
+
+  // 2. 換算情報なし: 薬価単位ペア (amount, unitText) を取得
+  assert.deepEqual(
+    getAmountPresentationPair({
+      amount: 10,
+      unitText: '錠'
+    }),
+    { amount: 10, unit: '錠' }
+  );
+
+  // 3. 単位未設定: 数値と空文字単位
+  assert.deepEqual(
+    getAmountPresentationPair({
+      amount: 5
+    }),
+    { amount: 5, unit: '' }
+  );
+
+  // 4. 処方単位側の不正値（<= 0, NaN, 空文字）は安全のため null 返却（'-' へ）
+  assert.equal(
+    getAmountPresentationPair({
+      amount: 750,
+      unitText: 'mL',
+      electronicUnitConversion: {
+        conversionFactor: '250',
+        prescribedAmount: '0',
+        prescribedUnitText: '缶'
+      }
+    }),
+    null
+  );
+  assert.equal(
+    getAmountPresentationPair({
+      amount: 750,
+      unitText: 'mL',
+      electronicUnitConversion: {
+        conversionFactor: '250',
+        prescribedAmount: 'invalid',
+        prescribedUnitText: '缶'
+      }
+    }),
+    null
+  );
+
+  // 5. 薬価単位側の不正値（<= 0, NaN）は null 返却
+  assert.equal(getAmountPresentationPair({ amount: 0, unitText: '錠' }), null);
+  assert.equal(getAmountPresentationPair({ amount: -1, unitText: '錠' }), null);
+  assert.equal(getAmountPresentationPair({ amount: Number.NaN, unitText: 'mL' }), null);
+  assert.equal(getAmountPresentationPair({}), null);
+});
+
 test('getAmountText formats amount with unit or returns dash for invalid/zero values', () => {
   // 正常系：処方単位あり
   assert.equal(getAmountText({ amount: 30, unitText: 'mL' }), '30 mL');
   assert.equal(getAmountText({ amount: 25, unitText: 'g' }), '25 g');
   assert.equal(getAmountText({ amount: 2, unitText: '錠' }), '2 錠');
 
-  // 電子処方箋単位換算からの取得
-  assert.equal(
-    getAmountText({
-      amount: 60,
-      electronicUnitConversion: {
-        conversionFactor: '1',
-        prescribedAmount: '60',
-        prescribedUnitText: 'mL'
-      }
-    }),
-    '60 mL'
-  );
+  // PR-D1 現状担保: 取込が両ペアに同じ値を入れている現行状態では同一文字列を返すこと
+  const currentPrD1Item = {
+    amount: 3,
+    unitText: '缶',
+    electronicUnitConversion: {
+      conversionFactor: '250',
+      prescribedAmount: '3',
+      prescribedUnitText: '缶'
+    }
+  };
+  assert.equal(getAmountText(currentPrD1Item), '3 缶');
+  assert.equal(getAmountText(currentPrD1Item), getAmountText({ amount: 3, unitText: '缶' }));
 
-  // unitText 優先
+  // PR-D2 安全網: 内部を薬価単位化（amount: 750, unitText: mL）した後も処方単位ペア（3 缶）で安全に出力されること
   assert.equal(
     getAmountText({
-      amount: 10,
+      amount: 750,
       unitText: 'mL',
       electronicUnitConversion: {
-        conversionFactor: '1',
-        prescribedAmount: '10',
-        prescribedUnitText: '本'
+        conversionFactor: '250',
+        prescribedAmount: '3',
+        prescribedUnitText: '缶'
       }
     }),
-    '10 mL'
+    '3 缶',
+    '750 缶 や 3 mL に決してならず、処方指示どおり「3 缶」と表示されること'
   );
 
   // 単位未設定時は勘で「錠」等を補完せず、数値のみ（余分な空白なし）
@@ -272,6 +340,40 @@ test('getTotalAmountText calculates total quantity for daily items and passes to
   assert.equal(
     getTotalAmountText({ amount: 2, days: 3 }),
     '6'
+  );
+
+  // 換算情報あり (処方単位ペアで日数積を算出)
+  assert.equal(
+    getTotalAmountText({
+      amount: 750,
+      days: 14,
+      unitText: 'mL',
+      dosageCategory: 'internal',
+      electronicUnitConversion: {
+        conversionFactor: '250',
+        prescribedAmount: '3',
+        prescribedUnitText: '缶'
+      }
+    }),
+    '42 缶',
+    '換算あり内服薬は処方単位ペア 3 缶 * 14 日 = 42 缶 となること（750*14=10500 缶 や 42 mL にならないこと）'
+  );
+
+  // 換算情報あり (外用全量アイテムは処方単位ペアをそのまま出力)
+  assert.equal(
+    getTotalAmountText({
+      amount: 250,
+      days: 7,
+      unitText: 'mL',
+      dosageCategory: 'external',
+      electronicUnitConversion: {
+        conversionFactor: '250',
+        prescribedAmount: '1',
+        prescribedUnitText: '本'
+      }
+    }),
+    '1 本',
+    '換算あり外用薬は処方単位ペア 1 本 がそのまま全量となること'
   );
 
   // 不正値・ゼロ
