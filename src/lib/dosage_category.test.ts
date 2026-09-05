@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { inferDosageCategory } from './dosage_category.ts';
+import { inferDosageCategory, resolveDosageCategory } from './dosage_category.ts';
 
 test('inferDosageCategory classifies oral solids as internal', () => {
   assert.strictEqual(inferDosageCategory('アムロジピン錠5mg', '1日1回朝食後'), 'internal');
@@ -34,4 +34,57 @@ test('inferDosageCategory falls back to as-needed from usage text', () => {
 test('inferDosageCategory defaults to internal when nothing matches', () => {
   assert.strictEqual(inferDosageCategory('', ''), 'internal');
   assert.strictEqual(inferDosageCategory('不明な薬品', undefined), 'internal');
+});
+
+test('resolveDosageCategory respects saved dosageCategory over inference', () => {
+  // 保存済み dosageCategory が manual の場合は必ず優先
+  assert.strictEqual(
+    resolveDosageCategory({
+      drugName: 'モーラステープL40mg',
+      usage: '1日1回貼付',
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }),
+    'internal'
+  );
+
+  // 保存済み dosageCategory が auto の場合も保存済みを優先
+  assert.strictEqual(
+    resolveDosageCategory({
+      drugName: 'モーラステープL40mg',
+      usage: '1日1回貼付',
+      dosageCategory: 'external',
+      dosageCategorySource: 'auto'
+    }),
+    'external'
+  );
+});
+
+test('resolveDosageCategory falls back to inferDosageCategory when dosageCategory is absent', () => {
+  // drugName から推論
+  assert.strictEqual(
+    resolveDosageCategory({
+      drugName: 'ヒルドイドソフト軟膏0.3%',
+      usage: '1日2回患部に外用'
+    }),
+    'external'
+  );
+
+  // dispensedDrug から推論（drugName がない場合）
+  assert.strictEqual(
+    resolveDosageCategory({
+      dispensedDrug: '小児用シロップ水剤「E2E」',
+      usage: '1日3回毎食後'
+    }),
+    'internal'
+  );
+
+  // usage から推論
+  assert.strictEqual(
+    resolveDosageCategory({
+      drugName: 'カロナール錠500',
+      usage: '疼痛時 1回1錠'
+    }),
+    'as_needed'
+  );
 });

@@ -54,3 +54,16 @@ export const inferDosageCategory = (drugName: string, usage?: string): DosageCat
   if (usage && AS_NEEDED_USAGE_PATTERN.test(usage)) return 'as_needed';
   return 'internal';
 };
+
+export function resolveDosageCategory(item: {
+  drugName?: string;
+  dispensedDrug?: string;
+  usage?: string;
+  dosageCategory?: DosageCategory;
+  dosageCategorySource?: 'auto' | 'manual';
+}): DosageCategory {
+  if (item.dosageCategory) {
+    return item.dosageCategory;
+  }
+  return inferDosageCategory(item.drugName || item.dispensedDrug || '', item.usage);
+}

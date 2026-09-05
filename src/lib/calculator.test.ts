@@ -1282,3 +1282,158 @@ test('Does not separate chewable tablet when only 2 normal internal agents exist
   assert.strictEqual(mgmt?.points, 10 * 3, 'Management fee should be for 3 agents');
   assert.ok(!mgmt?.receiptRemarks, 'Should NOT have receipt remarks because it was not separated to exceed 3 agents');
 });
+
+test('calculateDispensingFees formulation judgment table-driven tests', () => {
+  interface TestCase {
+    description: string;
+    item: ItemWithPrice;
+    expectedPrepPoints: number;
+    expectedDrugFeePoints?: number;
+    expectedMgmtPoints?: number;
+  }
+
+  const testCases: TestCase[] = [
+    {
+      description: 'テープ剤: days: 14, usage: 1日1回患部に貼付, dosageCategory: external → 外用として算定',
+      item: {
+        itemId: 'tape-1',
+        visitId: 'v1',
+        drugId: 'd-tape',
+        drugName: 'モーラステープL40mg',
+        amount: 7,
+        days: 14,
+        drugPrice: 20,
+        usage: '1日1回患部に貼付',
+        dosageCategory: 'external'
+      },
+      expectedPrepPoints: 10, // 外用1調剤 = 10点 (内服誤判定なら24点)
+      expectedDrugFeePoints: 14, // 7枚 * 20円 = 140円 -> 14点 (内服誤判定なら14点*14日=196点)
+      expectedMgmtPoints: 10 // 調剤管理料2 (内服なし)
+    },
+    {
+      description: '軟膏: days: 7, usage: 1日2回 患部に外用, dosageCategory 未設定 → 外用として算定 (シード同形)',
+      item: {
+        itemId: 'oint-1',
+        visitId: 'v1',
+        drugId: 'd-oint',
+        drugName: 'プロペト',
+        amount: 10,
+        days: 7,
+        drugPrice: 12.4,
+        usage: '1日2回 患部に外用'
+      },
+      expectedPrepPoints: 10, // 外用1調剤 = 10点 (内服誤判定なら24点)
+      expectedDrugFeePoints: 12, // 10g * 12.4円 = 124円 -> 12点 (内服誤判定なら12点*7日=84点)
+      expectedMgmtPoints: 10 // 調剤管理料2
+    },
+    {
+      description: '屯服: days: 0, usage: 疼痛時 (「頓服」の語なし) → 屯服として算定',
+      item: {
+        itemId: 'ton-1',
+        visitId: 'v1',
+        drugId: 'd-ton',
+        drugName: 'カロナール錠500',
+        amount: 10,
+        days: 0,
+        drugPrice: 10,
+        usage: '疼痛時'
+      },
+      expectedPrepPoints: 21, // 屯服 = 21点 (外用誤判定なら10点)
+      expectedDrugFeePoints: 10, // 10錠 * 10円 = 100円 -> 10点
+      expectedMgmtPoints: 10 // 調剤管理料2
+    },
+    {
+      description: '注射: usage: 静脈内注射 → 注射として算定',
+      item: {
+        itemId: 'inj-1',
+        visitId: 'v1',
+        drugId: 'd-inj',
+        drugName: '注射薬',
+        amount: 1,
+        days: 1,
+        drugPrice: 100,
+        usage: '静脈内注射'
+      },
+      expectedPrepPoints: 26, // 注射 = 26点
+      expectedDrugFeePoints: 10,
+      expectedMgmtPoints: 10
+    },
+    {
+      description: '通常の内服: days: 14, usage: 1日3回毎食後 → 従来どおり内服として算定 (単調拡張の確認)',
+      item: {
+        itemId: 'oral-1',
+        visitId: 'v1',
+        drugId: 'd-oral',
+        drugName: 'アムロジピン錠5mg',
+        amount: 1,
+        days: 14,
+        drugPrice: 10,
+        usage: '1日3回毎食後'
+      },
+      expectedPrepPoints: 24, // 内服1剤 = 24点
+      expectedDrugFeePoints: 14, // 1日分10円(1点) * 14日 = 14点
+      expectedMgmtPoints: 10 // 調剤管理料1 (14日分 = 10点)
+    },
+    {
+      description: '外用優先ガード: 薬品名外用パターン非一致、用法「かゆみ時に塗布」、dosageCategory 未設定 → 屯服に奪われず外用として算定',
+      item: {
+        itemId: 'loco-1',
+        visitId: 'v1',
+        drugId: 'd-loco',
+        drugName: 'ロコイド',
+        amount: 10,
+        days: 0,
+        drugPrice: 10,
+        usage: 'かゆみ時に塗布'
+      },
+      expectedPrepPoints: 10, // 外用 = 10点 (!isExternal && ガードなしだと屯服21点になる)
+      expectedDrugFeePoints: 10,
+      expectedMgmtPoints: 10
+    },
+    {
+      description: '内滴: dosageCategory: internal_drop、用法に「内滴」語なし → 内滴として算定',
+      item: {
+        itemId: 'drop-1',
+        visitId: 'v1',
+        drugId: 'd-drop',
+        drugName: 'ラキソベロン内用液0.75%',
+        amount: 1,
+        days: 7,
+        drugPrice: 15.5,
+        usage: '就寝前'
+      },
+      expectedPrepPoints: 10, // 内滴 = 10点 (内服誤判定なら24点)
+      expectedDrugFeePoints: 2, // 総量1回: 15.5円 -> 2点 (内服誤判定なら2点*7日=14点)
+      expectedMgmtPoints: 10
+    }
+  ];
+
+  for (const tc of testCases) {
+    const results = calculateDispensingFees(mockSettings, [tc.item], mockPatient, '2024-01-01');
+
+    const prep = results.find(r => r.name === '薬剤調製料');
+    assert.strictEqual(
+      prep?.points,
+      tc.expectedPrepPoints,
+      `[${tc.description}] 薬剤調製料: expected ${tc.expectedPrepPoints}, got ${prep?.points}`
+    );
+
+    if (tc.expectedDrugFeePoints !== undefined) {
+      const drugFee = results.find(r => r.name === '薬剤料');
+      assert.strictEqual(
+        drugFee?.points,
+        tc.expectedDrugFeePoints,
+        `[${tc.description}] 薬剤料: expected ${tc.expectedDrugFeePoints}, got ${drugFee?.points}`
+      );
+    }
+
+    if (tc.expectedMgmtPoints !== undefined) {
+      const mgmt = results.find(r => r.name === '調剤管理料');
+      assert.strictEqual(
+        mgmt?.points,
+        tc.expectedMgmtPoints,
+        `[${tc.description}] 調剤管理料: expected ${tc.expectedMgmtPoints}, got ${mgmt?.points}`
+      );
+    }
+  }
+});

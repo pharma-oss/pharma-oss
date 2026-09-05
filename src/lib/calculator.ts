@@ -1,4 +1,5 @@
 import type { FacilitySettings, PrescriptionItem, Patient } from '@/db/types';
+import { resolveDosageCategory } from './dosage_category.ts';
 
 export type FeeCode =
   | 'base_fee'
@@ -552,9 +553,11 @@ export function calculateDispensingFees(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const usage = item.usage || '';
-    const isNaiteki = usage.includes('内滴') || usage.includes('内用滴剤');
-    const isTonpuku = usage.includes('頓服');
-    const isInjection = usage.includes('注射');
+    const category = resolveDosageCategory(item);
+    const isExternal = category === 'external' || /外用|貼付|塗布|点眼|点鼻|点耳|吸入|坐剤|注入/.test(usage);
+    const isTonpuku = !isExternal && (category === 'as_needed' || usage.includes('頓服'));
+    const isNaiteki = !isExternal && (category === 'internal_drop' || usage.includes('内滴') || usage.includes('内用滴剤'));
+    const isInjection = category === 'injection' || usage.includes('注射');
     const normalizedUsg = normalizeUsage(usage);
     const days = item.days || 0;
 
@@ -577,6 +580,7 @@ export function calculateDispensingFees(
       && !isNaiteki
       && !isTonpuku
       && !isInjection
+      && !isExternal
     );
     const automaticAgentGroupKey = getAutomaticInternalAgentGroupKey(normalizedUsg, intermittentSchedule);
 
