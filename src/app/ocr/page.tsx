@@ -70,6 +70,7 @@ import {
   auditSeverityLabel,
   historyChangeLabel,
   createEmptyPrescription,
+  buildPrescriptionFromElectronicItem,
   toDateInputValue,
   dateInputToIso,
   normalizeDateInputValue,
@@ -564,34 +565,14 @@ export default function OcrPage() {
         }
       }
 
-      const nextPrescriptions = prescription.items.map((item, index) => {
-        const rpNumber = item.rpNumber || index + 1;
-        return createEmptyPrescription(`rp_ep_${prescription.prescriptionId}_${rpNumber}`, {
-          id: `item_ep_${generateUUID()}`,
-          drugCode: item.drugCode || item.receiptCode || item.yjCode || '',
-          drugName: item.drugName,
-          amount: item.unitConversion?.prescribedAmount || item.amount,
-          unitCode: item.unitConversion?.prescribedUnitCode || item.unitCode || '',
-          unitText: item.unitConversion?.prescribedUnitText || item.unitText || '',
-          electronicUnitConversion: item.unitConversion,
-          electronicUsageCode: item.usageCode || '',
-          electronicUsageFallbackText: item.usageFallbackText || '',
-          electronicUsageSupplementText: item.usageSupplementText || '',
-          prescribedDrugCodeStatus: item.drugCodeStatus || 'unknown',
-          prescribedDrugCodeAbolishedAt: item.drugCodeAbolishedAt || '',
-          electronicSourceDrugName: item.sourceDrugName || '',
-          electronicMasterDrugName: item.masterDrugName || '',
-          electronicDrugNameVerificationStatus: item.drugNameVerificationStatus || 'not_checked',
-          electronicDrugNameVerificationCheckedAt: item.drugNameVerificationCheckedAt || '',
-          usage: [item.usage || item.usageFallbackText || '', item.usageSupplementText || '']
-            .filter(Boolean)
-            .join(' '),
-          days: item.days,
-          rpComment: item.rpComment || '',
-          dispensedDrug: NO_SUBSTITUTION_LABEL,
-          changeReason: ''
-        });
-      });
+      const nextPrescriptions = prescription.items.map((item, index) =>
+        buildPrescriptionFromElectronicItem(
+          item,
+          prescription.prescriptionId || 'unknown',
+          index,
+          generateUUID
+        )
+      );
       setPrescriptions((current) => isAppending
         ? [...current, ...nextPrescriptions]
         : nextPrescriptions.length > 0

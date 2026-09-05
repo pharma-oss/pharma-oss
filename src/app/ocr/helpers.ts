@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Drug, Visit, InsuranceEligibilityStatus } from '@/db/types';
 import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
+import type { ElectronicPrescriptionItem } from '@/lib/electronic_prescription';
 import type { Prescription, PrescriptionGroup } from './types';
 
 export type EligibilityStatus = 'unchecked' | 'checking' | 'confirmed' | 'warning' | 'unavailable';
@@ -205,3 +206,43 @@ export const sortDrugSuggestions = (drugs: DrugMasterRecord[], query: string) =>
     return a.name.localeCompare(b.name, 'ja');
   });
 };
+
+/**
+ * 電子処方箋明細を編集フォーム用 Prescription に変換する純粋関数。
+ * 【PR-D2】調剤・レセプト・在庫計算のため、amount / unitCode / unitText には
+ * 薬価単位側（item.amount / item.unitCode / item.unitText）を格納し、
+ * 処方指示（換算前用量・単位）は electronicUnitConversion に保持する。
+ */
+export function buildPrescriptionFromElectronicItem(
+  item: ElectronicPrescriptionItem,
+  prescriptionId: string,
+  index: number,
+  idGenerator: () => string = () => Math.random().toString(36).substring(2, 9)
+): Prescription {
+  const rpNumber = item.rpNumber || index + 1;
+  return createEmptyPrescription(`rp_ep_${prescriptionId}_${rpNumber}`, {
+    id: `item_ep_${idGenerator()}`,
+    drugCode: item.drugCode || item.receiptCode || item.yjCode || '',
+    drugName: item.drugName,
+    amount: item.amount,
+    unitCode: item.unitCode || '',
+    unitText: item.unitText || '',
+    electronicUnitConversion: item.unitConversion,
+    electronicUsageCode: item.usageCode || '',
+    electronicUsageFallbackText: item.usageFallbackText || '',
+    electronicUsageSupplementText: item.usageSupplementText || '',
+    prescribedDrugCodeStatus: item.drugCodeStatus || 'unknown',
+    prescribedDrugCodeAbolishedAt: item.drugCodeAbolishedAt || '',
+    electronicSourceDrugName: item.sourceDrugName || '',
+    electronicMasterDrugName: item.masterDrugName || '',
+    electronicDrugNameVerificationStatus: item.drugNameVerificationStatus || 'not_checked',
+    electronicDrugNameVerificationCheckedAt: item.drugNameVerificationCheckedAt || '',
+    usage: [item.usage || item.usageFallbackText || '', item.usageSupplementText || '']
+      .filter(Boolean)
+      .join(' '),
+    days: item.days,
+    rpComment: item.rpComment || '',
+    dispensedDrug: NO_SUBSTITUTION_LABEL,
+    changeReason: ''
+  });
+}
