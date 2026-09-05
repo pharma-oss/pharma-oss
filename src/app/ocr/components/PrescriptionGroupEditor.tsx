@@ -93,7 +93,8 @@ export const PrescriptionGroupEditor = React.memo(({
       <div className="prescription-row-header" aria-hidden="true">
         <span></span>
         <span>薬品名</span>
-        <span>1日量</span>
+        <span className="header-amount">1日量</span>
+        <span className="header-unit">単位</span>
       </div>
 
       {group.prescriptions.map((prescription, itemIndex) => (
@@ -317,13 +318,21 @@ export const PrescriptionGroupEditor = React.memo(({
 
         .prescription-row-header {
           display: grid;
-          grid-template-columns: 26px minmax(0, 1fr) 92px;
+          grid-template-columns: 26px minmax(0, 1fr) 72px 64px;
           gap: 0.65rem;
           margin-bottom: 0.45rem;
           color: var(--text-muted);
           font-size: var(--fs-xs);
           font-weight: 800;
-          padding: 0 0.55rem;
+          padding: 0 calc(0.55rem + 1px);
+        }
+
+        .prescription-row-header .header-amount {
+          text-align: right;
+        }
+
+        .prescription-row-header .header-unit {
+          text-align: left;
         }
 
         .rp-prescription-footer {
@@ -409,7 +418,7 @@ export const PrescriptionGroupEditor = React.memo(({
           }
 
           .prescription-row-header {
-            grid-template-columns: 26px minmax(0, 1fr) 86px;
+            display: none;
           }
 
           .rp-prescription-footer {

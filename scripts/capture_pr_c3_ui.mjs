@@ -166,6 +166,7 @@ async function run() {
     console.log('3. Inspecting .prescription-row and .unit-stack...');
     const report = await page.evaluate(() => {
       const row = document.querySelector('.prescription-row');
+      const header = document.querySelector('.prescription-row-header');
       const unitStack = document.querySelector('.unit-stack');
       const unitInput = document.querySelector('input.unit-text');
       const amountInput = document.querySelector('input.amount');
@@ -174,6 +175,9 @@ async function run() {
       return {
         hasRow: Boolean(row),
         gridTemplateColumns: row ? window.getComputedStyle(row).gridTemplateColumns : null,
+        hasHeader: Boolean(header),
+        headerGridTemplateColumns: header ? window.getComputedStyle(header).gridTemplateColumns : null,
+        headerChildrenText: header ? Array.from(header.children).map(c => c.textContent) : null,
         hasUnitStack: Boolean(unitStack),
         hasUnitInput: Boolean(unitInput),
         unitInputAriaLabel: unitInput ? unitInput.getAttribute('aria-label') : null,
@@ -188,6 +192,7 @@ async function run() {
     console.log('DOM & Style inspection report:', JSON.stringify(report, null, 2));
 
     if (!report.hasRow) throw new Error('No .prescription-row found');
+    if (!report.hasHeader) throw new Error('No .prescription-row-header found');
     if (!report.hasUnitStack) throw new Error('No .unit-stack found');
     if (!report.hasUnitInput) throw new Error('No input.unit-text found');
 
@@ -217,6 +222,14 @@ async function run() {
     const outViewport = join(artifactDir, 'pr_c3_ocr_prescription_viewport.png');
     await page.screenshot({ path: outViewport, fullPage: false });
     console.log(`Saved prescription viewport screenshot: ${outViewport}`);
+
+    // Capture focused screenshot of prescription group (header + row)
+    const groupEl = await page.$('.rp-group');
+    if (groupEl) {
+      const outGroup = join(artifactDir, 'pr_c3_ocr_prescription_group.png');
+      await groupEl.screenshot({ path: outGroup });
+      console.log(`Saved focused prescription group screenshot: ${outGroup}`);
+    }
 
     // Capture focused screenshot of prescription row
     const rowEl = await page.$('.prescription-row');
