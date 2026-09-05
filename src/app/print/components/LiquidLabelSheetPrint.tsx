@@ -4,7 +4,8 @@ import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
   getAmountText,
-  getTotalAmountText
+  getTotalAmountText,
+  getDispensingTotalAmountText
 } from '../helpers';
 
 export interface LiquidLabelSheetPrintProps {
@@ -33,37 +34,43 @@ export const LiquidLabelSheetPrint = React.memo(function LiquidLabelSheetPrint({
       </div>
 
       <div className="print-document label-sheet" data-testid="liquid-label-sheet-doc">
-        {liquidItems.map((item) => (
-          <div className="bottle-label liquid-label" key={`liquid-${item.itemId}`}>
-            <div className="label-head">
-              <div className="label-title">水剤</div>
-              {renderIdentityMark('tiny')}
-            </div>
-            <div className="label-patient">{patientData.name} 様</div>
-            <div className="label-drug">{getDisplayDrugName(item)}</div>
-            <div className="label-usage">{item.usage || '用法未設定'}</div>
-            <div className="label-dose-grid">
-              <div>
-                <span>全量</span>
-                <strong>{getTotalAmountText(item)}</strong>
+        {liquidItems.map((item) => {
+          const dispensingTotalText = getDispensingTotalAmountText(item);
+          return (
+            <div className="bottle-label liquid-label" key={`liquid-${item.itemId}`}>
+              <div className="label-head">
+                <div className="label-title">水剤</div>
+                {renderIdentityMark('tiny')}
               </div>
-              <div>
-                <span>1日量</span>
-                <strong>{getAmountText(item)}</strong>
+              <div className="label-patient">{patientData.name} 様</div>
+              <div className="label-drug">{getDisplayDrugName(item)}</div>
+              <div className="label-usage">{item.usage || '用法未設定'}</div>
+              <div className="label-dose-grid">
+                <div>
+                  <span>全量</span>
+                  <strong>{getTotalAmountText(item)}</strong>
+                </div>
+                <div>
+                  <span>1日量</span>
+                  <strong>{getAmountText(item)}</strong>
+                </div>
+                <div>
+                  <span>日数</span>
+                  <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+                </div>
               </div>
-              <div>
-                <span>日数</span>
-                <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+              {dispensingTotalText && (
+                <div className="label-dispensing-total">調剤量 {dispensingTotalText}</div>
+              )}
+              <div className="label-warning">使用前によく振り、量を確認してください</div>
+              <div className="label-footer">
+                <strong>{pharmacyInfo.name}</strong>
+                <span>{pharmacyAddressLine} / TEL: {pharmacyInfo.phone}</span>
+                <span>調剤薬剤師: {pharmacyInfo.pharmacistName} / {currentDateStr}</span>
               </div>
             </div>
-            <div className="label-warning">使用前によく振り、量を確認してください</div>
-            <div className="label-footer">
-              <strong>{pharmacyInfo.name}</strong>
-              <span>{pharmacyAddressLine} / TEL: {pharmacyInfo.phone}</span>
-              <span>調剤薬剤師: {pharmacyInfo.pharmacistName} / {currentDateStr}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <style jsx>{`
@@ -172,6 +179,12 @@ export const LiquidLabelSheetPrint = React.memo(function LiquidLabelSheetPrint({
           display: block;
           font-size: 0.8rem;
           color: #0f172a;
+        }
+
+        .label-dispensing-total {
+          margin-top: -0.15rem;
+          font-size: 0.62rem;
+          color: #475569;
         }
 
         .label-warning {

@@ -21,6 +21,7 @@ import {
   getAmountPresentationPair,
   getAmountText,
   getTotalAmountText,
+  getDispensingTotalAmountText,
   getPickingEvidence
 } from './helpers.ts';
 
@@ -419,3 +420,66 @@ test('getPickingEvidence distinguishes GS1 verified, manual picked, and unverifi
   assert.equal(getPickingEvidence({}), '未照合');
 });
 
+
+test('getDispensingTotalAmountText annotates the dispensing-unit total only when a unit conversion exists', () => {
+  const converted = {
+    amount: 750,
+    days: 14,
+    unitText: 'mL',
+    usage: '1日3回毎食後',
+    dosageCategory: 'internal' as const,
+    electronicUnitConversion: {
+      conversionFactor: '250',
+      masterUnitText: 'mL',
+      prescribedAmount: '3',
+      prescribedUnitText: '缶'
+    }
+  };
+  // 表示は処方単位、併記は調剤単位の実量
+  assert.equal(getTotalAmountText(converted), '42 缶');
+  assert.equal(getDispensingTotalAmountText(converted), '10500 mL');
+
+  // 換算なしは併記不要（表示ペアがすでに薬価単位ペア）
+  assert.equal(
+    getDispensingTotalAmountText({ amount: 10, days: 3, unitText: 'mL', dosageCategory: 'internal', usage: '毎食後' }),
+    ''
+  );
+
+  // 全量アイテム（外用）は日数を掛けずそのまま
+  assert.equal(
+    getDispensingTotalAmountText({
+      amount: 50,
+      days: 0,
+      unitText: 'g',
+      dosageCategory: 'external',
+      electronicUnitConversion: {
+        conversionFactor: '10',
+        prescribedAmount: '5',
+        prescribedUnitText: '本'
+      }
+    }),
+    '50 g'
+  );
+
+  // 薬価単位側の数量が不正なら併記しない（勘で数字を出さない）
+  const invalidAmount = {
+    amount: Number.NaN,
+    days: 14,
+    unitText: 'mL',
+    dosageCategory: 'internal' as const,
+    electronicUnitConversion: { conversionFactor: '250', prescribedAmount: '3', prescribedUnitText: '缶' }
+  };
+  assert.equal(getDispensingTotalAmountText(invalidAmount), '');
+
+  // 薬価単位側に単位がなければ数値のみ（勘で単位を補完しない）
+  assert.equal(
+    getDispensingTotalAmountText({
+      amount: 750,
+      days: 14,
+      usage: '1日3回毎食後',
+      dosageCategory: 'internal',
+      electronicUnitConversion: { conversionFactor: '250', prescribedAmount: '3', prescribedUnitText: '缶' }
+    }),
+    '10500'
+  );
+});

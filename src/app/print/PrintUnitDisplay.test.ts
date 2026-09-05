@@ -124,3 +124,71 @@ test('OintmentLabelSheetPrint renders multiplied total for daily-like ointment (
   assert.ok(html.includes('7日分'), '7日分が含まれること');
 });
 
+
+test('LiquidLabelSheetPrint annotates the dispensing total when a unit conversion exists', () => {
+  // 医師は「1日3缶」と処方、係数250、薬価単位 mL の実量は 1日 750 mL、14日分
+  const convertedLiquidItem = {
+    itemId: 'item-liquid-conv-1',
+    visitId: 'v1',
+    drugId: 'drug-liquid-conv',
+    drugName: '□□内用液',
+    amount: 750,
+    days: 14,
+    unitText: 'mL',
+    usage: '1日3回毎食後',
+    dosageCategory: 'internal' as const,
+    electronicUnitConversion: {
+      conversionFactor: '250',
+      masterUnitText: 'mL',
+      prescribedAmount: '3',
+      prescribedUnitText: '缶'
+    }
+  };
+
+  const element = React.createElement(LiquidLabelSheetPrint, {
+    patientData: dummyPatientData,
+    liquidItems: [convertedLiquidItem],
+    pharmacyInfo: dummyPharmacyInfo,
+    pharmacyAddressLine: dummyPharmacyInfo.address,
+    currentDateStr: '2026/09/05',
+    renderIdentityMark: () => React.createElement('span', null, 'MARK')
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  // 表示は医師の処方通り（3缶 × 14日分 = 42 缶）
+  assert.ok(html.includes('42 缶'), '処方単位の全量 42 缶 が含まれること');
+  assert.ok(html.includes('3 缶'), '処方単位の1日量 3 缶 が含まれること');
+  // 投薬瓶の中身は調剤単位の実量（750 mL × 14日分 = 10500 mL）
+  assert.ok(html.includes('10500 mL'), '調剤単位の実量 10500 mL が併記されること');
+  assert.ok(!html.includes('錠'), '水剤ラベルに「錠」が一切含まれないこと');
+});
+
+test('LiquidLabelSheetPrint omits the dispensing annotation when there is no unit conversion', () => {
+  // 換算なし＝表示ペアが薬価単位ペアそのものなので、括弧書きは出さない
+  const plainSyrupItem = {
+    itemId: 'item-liquid-plain-1',
+    visitId: 'v1',
+    drugId: 'drug-liquid-plain',
+    drugName: 'アンブロキソール塩酸塩シロップ0.3%',
+    amount: 10,
+    days: 3,
+    unitText: 'mL',
+    usage: '1日3回毎食後',
+    dosageCategory: 'internal' as const
+  };
+
+  const element = React.createElement(LiquidLabelSheetPrint, {
+    patientData: dummyPatientData,
+    liquidItems: [plainSyrupItem],
+    pharmacyInfo: dummyPharmacyInfo,
+    pharmacyAddressLine: dummyPharmacyInfo.address,
+    currentDateStr: '2026/09/05',
+    renderIdentityMark: () => React.createElement('span', null, 'MARK')
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  assert.ok(html.includes('30 mL'), '全量 30 mL が含まれること');
+  assert.ok(!html.includes('調剤量'), '換算がない明細では調剤量の併記が出ないこと');
+});

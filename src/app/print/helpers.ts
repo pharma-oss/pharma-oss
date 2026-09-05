@@ -185,6 +185,28 @@ export function getTotalAmountText(item: AmountTextSourceItem): string {
   return pair.unit ? `${pair.amount} ${pair.unit}` : `${pair.amount}`;
 }
 
+/**
+ * 水剤ラベルの全量欄に併記する「調剤単位(薬価単位)での実量」。
+ * 全量欄は投薬瓶の中身そのものを指すため、処方単位(例: 缶)だけでは患者が計量できない。
+ * 換算がない明細は表示ペア = 薬価単位ペアなので併記不要 = 空文字を返す。
+ */
+export function getDispensingTotalAmountText(item: AmountTextSourceItem): string {
+  const conv = item.electronicUnitConversion;
+  if (!conv?.prescribedUnitText?.trim()) {
+    return '';
+  }
+  if (item.amount == null || !Number.isFinite(item.amount) || item.amount <= 0) {
+    return '';
+  }
+  const unit = item.unitText?.trim() || '';
+  // isDailyAmountItem が true のときは days > 0 が保証される (days <= 0 なら false を返す)
+  const days = typeof item.days === 'number' ? item.days : 0;
+  const total = isDailyAmountItem(item)
+    ? Math.round(item.amount * days * 1000) / 1000
+    : item.amount;
+  return unit ? `${total} ${unit}` : `${total}`;
+}
+
 export function getPickingEvidence(item: PickingEvidenceSourceItem): string {
   const hasGs1 = Boolean(item.pickedGs1Code || item.pickedGtin);
   if (hasGs1) {
