@@ -27,7 +27,7 @@ export interface PrescribedDrugSelectUpdate {
 
 export function calculatePrescribedDrugSelectUpdates(
   drug: DrugMasterRecord,
-  prescription: Pick<Prescription, 'dispensedDrug' | 'electronicUnitConversion'>
+  prescription: Pick<Prescription, 'dispensedDrug' | 'electronicUnitConversion' | 'unitText' | 'unitCode'>
 ): PrescribedDrugSelectUpdate[] {
   const auditMeta = getDrugAuditMeta(drug);
   const updates: PrescribedDrugSelectUpdate[] = [
@@ -45,10 +45,10 @@ export function calculatePrescribedDrugSelectUpdates(
     { field: 'dispensedIsAbolished', value: false },
     { field: 'dispensedStockQuantity', value: undefined }
   ];
-  if (drug.unitText && !prescription.electronicUnitConversion?.prescribedUnitText) {
+  if (drug.unitText && (prescription.electronicUnitConversion?.prescribedUnitText || !prescription.unitText?.trim())) {
     updates.push({ field: 'unitText', value: drug.unitText });
   }
-  if (drug.unitCode && !prescription.electronicUnitConversion?.prescribedUnitCode) {
+  if (drug.unitCode && (prescription.electronicUnitConversion?.prescribedUnitCode || !prescription.unitCode?.trim())) {
     updates.push({ field: 'unitCode', value: drug.unitCode });
   }
   if (!prescription.dispensedDrug || isNoSubstitutionValue(prescription.dispensedDrug)) {
@@ -84,6 +84,8 @@ export const PrescribedDrugInput = React.memo(({
     prescription.dispensedDrug,
     prescription.electronicUnitConversion?.prescribedUnitCode,
     prescription.electronicUnitConversion?.prescribedUnitText,
+    prescription.unitText,
+    prescription.unitCode,
     prescription.id
   ]);
 

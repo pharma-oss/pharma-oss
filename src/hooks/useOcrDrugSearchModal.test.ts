@@ -43,7 +43,7 @@ test('applyDrugSelectionToPrescriptions in prescribed mode sets master unitText 
   assert.equal(result[0].unitCode, '003');
 });
 
-test('applyDrugSelectionToPrescriptions in prescribed mode protects electronic prescription unit from master unit overwrite', () => {
+test('applyDrugSelectionToPrescriptions in prescribed mode overwrites unitText/unitCode with master unit when conversion exists', () => {
   const prescriptionFromEp: Prescription = {
     ...basePrescription,
     unitText: '包',
@@ -66,8 +66,30 @@ test('applyDrugSelectionToPrescriptions in prescribed mode protects electronic p
 
   assert.equal(result.length, 1);
   assert.equal(result[0].drugCode, '620000002');
-  assert.equal(result[0].unitText, '包', '電子処方箋の処方単位 "包" がマスタの "カプセル" で上書きされないこと');
-  assert.equal(result[0].unitCode, '005', '電子処方箋の処方単位コード "005" が保持されること');
+  assert.equal(result[0].unitText, 'カプセル', '換算あり明細はマスタ単位 "カプセル" で上書きされること');
+  assert.equal(result[0].unitCode, '003', '換算あり明細はマスタ単位コード "003" で上書きされること');
+});
+
+test('applyDrugSelectionToPrescriptions in prescribed mode protects existing unitText/unitCode when no conversion exists', () => {
+  const prescriptionWithoutConversion: Prescription = {
+    ...basePrescription,
+    unitText: '包',
+    unitCode: '005',
+    electronicUnitConversion: undefined
+  };
+
+  const result = applyDrugSelectionToPrescriptions({
+    prescriptions: [prescriptionWithoutConversion],
+    editingRowId: 'row-1',
+    modalTargetField: 'prescribed',
+    drug: masterDrugWithUnit,
+    changeReason: ''
+  });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].drugCode, '620000002');
+  assert.equal(result[0].unitText, '包', '換算なし明細で既に単位がある場合、手入力・QR単位 "包" が保持されること');
+  assert.equal(result[0].unitCode, '005', '換算なし明細で既にコードがある場合、"005" が保持されること');
 });
 
 test('applyDrugSelectionToPrescriptions in dispensed mode does not modify prescribed unitText or unitCode', () => {

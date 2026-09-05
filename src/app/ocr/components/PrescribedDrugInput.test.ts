@@ -20,6 +20,8 @@ const mockDrugWithUnit: DrugMasterRecord = {
 test('calculatePrescribedDrugSelectUpdates produces unitText and unitCode updates when drug has unit', () => {
   const updates = calculatePrescribedDrugSelectUpdates(mockDrugWithUnit, {
     dispensedDrug: '',
+    unitText: '',
+    unitCode: '',
     electronicUnitConversion: undefined
   });
 
@@ -32,9 +34,11 @@ test('calculatePrescribedDrugSelectUpdates produces unitText and unitCode update
   assert.equal(unitCodeUpdate?.value, '007');
 });
 
-test('calculatePrescribedDrugSelectUpdates suppresses unitText/unitCode updates when electronic conversion exists', () => {
+test('calculatePrescribedDrugSelectUpdates overwrites unitText/unitCode with master unit when electronic conversion exists', () => {
   const updates = calculatePrescribedDrugSelectUpdates(mockDrugWithUnit, {
     dispensedDrug: '',
+    unitText: '本',
+    unitCode: '010',
     electronicUnitConversion: {
       conversionFactor: '1',
       prescribedAmount: '10',
@@ -46,8 +50,25 @@ test('calculatePrescribedDrugSelectUpdates suppresses unitText/unitCode updates 
   const unitTextUpdate = updates.find((u) => u.field === 'unitText');
   const unitCodeUpdate = updates.find((u) => u.field === 'unitCode');
 
-  assert.equal(unitTextUpdate, undefined, '電子処方箋の処方単位がある場合、マスタ単位による更新は抑止されること');
-  assert.equal(unitCodeUpdate, undefined, '電子処方箋の処方単位コードがある場合、マスタ単位コードによる更新は抑止されること');
+  assert.ok(unitTextUpdate, '換算あり明細は表示が処方単位ペアで保護されるため、マスタ単位で上書きされること');
+  assert.equal(unitTextUpdate?.value, 'ｍＬ');
+  assert.ok(unitCodeUpdate, '換算あり明細はマスタ単位コードで上書きされること');
+  assert.equal(unitCodeUpdate?.value, '007');
+});
+
+test('calculatePrescribedDrugSelectUpdates protects existing unitText/unitCode when no conversion exists (QR/manual entry)', () => {
+  const updates = calculatePrescribedDrugSelectUpdates(mockDrugWithUnit, {
+    dispensedDrug: '',
+    unitText: '本',
+    unitCode: '010',
+    electronicUnitConversion: undefined
+  });
+
+  const unitTextUpdate = updates.find((u) => u.field === 'unitText');
+  const unitCodeUpdate = updates.find((u) => u.field === 'unitCode');
+
+  assert.equal(unitTextUpdate, undefined, '換算なし明細で既に単位がある場合、手入力・QR単位が保護されること');
+  assert.equal(unitCodeUpdate, undefined, '換算なし明細で既にコードがある場合、保護されること');
 });
 
 test('calculatePrescribedDrugSelectUpdates suppresses unitText/unitCode when master drug does not carry unit', () => {
@@ -59,6 +80,8 @@ test('calculatePrescribedDrugSelectUpdates suppresses unitText/unitCode when mas
 
   const updates = calculatePrescribedDrugSelectUpdates(drugWithoutUnit, {
     dispensedDrug: '',
+    unitText: '',
+    unitCode: '',
     electronicUnitConversion: undefined
   });
 

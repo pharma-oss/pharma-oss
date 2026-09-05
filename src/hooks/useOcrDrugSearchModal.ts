@@ -32,8 +32,12 @@ export function applyDrugSelectionToPrescriptions({
   const next = [...prescriptions];
   if (modalTargetField === 'prescribed') {
     const auditMeta = getDrugAuditMeta(drug);
-    const shouldSetUnitText = !next[index].electronicUnitConversion?.prescribedUnitText && Boolean(drug.unitText);
-    const shouldSetUnitCode = !next[index].electronicUnitConversion?.prescribedUnitCode && Boolean(drug.unitCode);
+    const shouldSetUnitText = Boolean(
+      drug.unitText && (next[index].electronicUnitConversion?.prescribedUnitText || !next[index].unitText?.trim())
+    );
+    const shouldSetUnitCode = Boolean(
+      drug.unitCode && (next[index].electronicUnitConversion?.prescribedUnitCode || !next[index].unitCode?.trim())
+    );
     next[index] = {
       ...next[index],
       drugCode: drug.code,
