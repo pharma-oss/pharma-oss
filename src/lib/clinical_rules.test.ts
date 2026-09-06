@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { evaluateUsageWarningCondition } from './clinical_rules.ts';
+import { evaluateUsageWarning, evaluateUsageWarningCondition } from './clinical_rules.ts';
 
 test('evaluateUsageWarningCondition evaluates numeric amount and age comparisons', () => {
   const context = { amount: 41, age: 14, diseases: [] };
@@ -29,3 +29,36 @@ test('evaluateUsageWarningCondition rejects unsupported expressions without exec
   assert.strictEqual(evaluateUsageWarningCondition('globalThis.alert("x")', context), false);
   assert.strictEqual(evaluateUsageWarningCondition('amount > 0 || age > 0', context), false);
 });
+
+test('evaluateUsageWarning returns triggered and unevaluable statuses (PR-E4)', () => {
+  // age 未設定/undefined のとき unevaluable: true
+  assert.deepStrictEqual(
+    evaluateUsageWarning('age < 15', { amount: 1, age: undefined, diseases: [] }),
+    { triggered: false, unevaluable: true }
+  );
+
+  // age 10 (小児) のとき triggered: true, unevaluable: false
+  assert.deepStrictEqual(
+    evaluateUsageWarning('age < 15', { amount: 1, age: 10, diseases: [] }),
+    { triggered: true, unevaluable: false }
+  );
+
+  // age 40 (成人) のとき triggered: false, unevaluable: false
+  assert.deepStrictEqual(
+    evaluateUsageWarning('age < 15', { amount: 1, age: 40, diseases: [] }),
+    { triggered: false, unevaluable: false }
+  );
+
+  // 年齢以外の条件 (amount > 40) で age が undefined でも unevaluable に巻き込まれないこと
+  assert.deepStrictEqual(
+    evaluateUsageWarning('amount > 40', { amount: 50, age: undefined, diseases: [] }),
+    { triggered: true, unevaluable: false }
+  );
+
+  // 回帰: evaluateUsageWarningCondition の動作が従来通りであること
+  assert.strictEqual(evaluateUsageWarningCondition('age < 15', { amount: 1, age: undefined, diseases: [] }), false);
+  assert.strictEqual(evaluateUsageWarningCondition('age < 15', { amount: 1, age: 10, diseases: [] }), true);
+  assert.strictEqual(evaluateUsageWarningCondition('age < 15', { amount: 1, age: 40, diseases: [] }), false);
+  assert.strictEqual(evaluateUsageWarningCondition('amount > 40', { amount: 50, age: undefined, diseases: [] }), true);
+});
+

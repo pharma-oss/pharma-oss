@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, FacilitySettings, InsuranceEligibilityStatus, PrescriptionItem, PublicInsurance, SoapRecord as DbSoapRecord, SoapStructuredAssessment, TracingReportStatus, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport, VisitTracingReport } from '@/db/types';
-import { evaluateUsageWarningCondition } from '@/lib/clinical_rules';
+import { evaluateUsageWarning, evaluateUsageWarningCondition } from '@/lib/clinical_rules';
+import { calculatePatientAge } from '@/lib/patient_age';
 import { findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
@@ -1080,18 +1081,13 @@ useEffect(() => {
 
         const newWarnings = [];
 
-        let patientAgeVal = 0;
+        let patientAge: number | undefined;
         let activePatientAlertsArr: Alert[] = [];
         try {
             const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
             const patient = patients[0];
-            if (patient && patient.birthDate) {
-                const birth = new Date(patient.birthDate);
-                const today = new Date();
-                patientAgeVal = today.getFullYear() - birth.getFullYear();
-                if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
-                    patientAgeVal--;
-                }
+            if (patient) {
+                patientAge = calculatePatientAge(patient.birthDate);
             }
 
             const alerts = await db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
@@ -1213,6 +1209,8 @@ useEffect(() => {
           });
         }
 
+        let hasUnevaluableAgeWarning = false;
+
         for (let i = 0; i < items.length; i++) {
            const item = items[i];
            const drug = drugsMap.get(item.drugId);
@@ -1226,13 +1224,13 @@ useEffect(() => {
               // Check usage warnings dynamically based on the parsed condition
               if (info.usageWarnings) {
                  for (const warning of info.usageWarnings) {
-                    const isWarningTriggered = evaluateUsageWarningCondition(warning.condition, {
+                    const evaluation = evaluateUsageWarning(warning.condition, {
                        amount: item.amount,
-                       age: patientAgeVal,
+                       age: patientAge,
                        diseases: contraindicatedConditionPatientTexts
                     });
 
-                    if (isWarningTriggered) {
+                    if (evaluation.triggered) {
                        newWarnings.push({
                           type: 'usage',
                           severity: warning.severity || 'warning',
@@ -1240,9 +1238,21 @@ useEffect(() => {
                           message: warning.message
                        });
                     }
+                    if (evaluation.unevaluable) {
+                       hasUnevaluableAgeWarning = true;
+                    }
                  }
               }
            }
+        }
+
+        if (hasUnevaluableAgeWarning) {
+           newWarnings.push({
+              type: 'usage',
+              severity: 'warning',
+              drug: '（患者情報）',
+              message: '生年月日が未登録または不正なため、年齢に基づく警告を判定できませんでした。患者情報を確認してください。'
+           });
         }
 
         setWarnings(newWarnings);

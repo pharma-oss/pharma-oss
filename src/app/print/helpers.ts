@@ -45,18 +45,7 @@ export function toDateOnly(value: unknown): string {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 }
 
-export function calculatePatientAge(birthDate?: string): number | undefined {
-  if (!birthDate) return undefined;
-  const birth = new Date(birthDate);
-  if (Number.isNaN(birth.getTime())) return undefined;
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
-  return Number.isFinite(age) ? age : undefined;
-}
+export { calculatePatientAge } from '@/lib/patient_age';
 
 export function getPatientIdentityMark(patientIdOrId: string, visitId: string): PatientIdentityMark {
   const hash = stableHashText(`${patientIdOrId || ''}:${visitId}`);

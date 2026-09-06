@@ -9,6 +9,7 @@ import {
   toDateInputValue,
   compressQuestionnaireImage
 } from '@/lib/emr_helpers';
+import { calculatePatientAge } from '@/lib/patient_age';
 import { extractInitialQuestionnaireOcrDraft } from '@/lib/initial_questionnaire_ocr';
 import {
   type MynaReadInsuranceDisplay,
@@ -58,21 +59,14 @@ export const PatientBanner = React.memo(function PatientBanner({
   }, [db, targetVisitId]);
 
   const calcAge = useMemo(() => {
-    if (!patientData || !patientData.birthDate) return null;
-    const birth = new Date(patientData.birthDate);
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
-        age--;
-    }
-    return age;
-  }, [patientData]);
+    return calculatePatientAge(patientData?.birthDate);
+  }, [patientData?.birthDate]);
 
   const calcBirthDate = patientData?.birthDate ? patientData.birthDate.replace(/-/g, '/') + '生' : '生年月日未登録';
   const patientName = patientData?.name || '患者未選択';
   const patientGender = patientData?.gender === 'female' ? '女性' : patientData?.gender === 'male' ? '男性' : '';
   const patientTitle = patientData
-    ? `${patientName} (${[calcAge !== null ? `${calcAge}歳` : '年齢不明', patientGender].filter(Boolean).join(' / ')})`
+    ? `${patientName} (${[calcAge != null ? `${calcAge}歳` : '年齢不明', patientGender].filter(Boolean).join(' / ')})`
     : patientName;
   const patientInitials = patientName
     .split(/\s|　/)
