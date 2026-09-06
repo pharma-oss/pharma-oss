@@ -96,3 +96,44 @@ test('documents and locks known divergence between amount_semantics and calculat
   assert.equal(calculatorIsInternal, true, '現行 calculator 側は internal と判定すること（既知の乖離）');
   assert.notEqual(printIsDaily, calculatorIsInternal, '帳票側と算定側で判定が乖離していることを固定');
 });
+
+test('amount semantics infers dosage category when dosageCategory is undefined (PR-E2)', async () => {
+  const { getAmountLabel, getTotalAmountText } = await import('../app/print/helpers');
+
+  // テープ剤 (dosageCategory 未設定) -> 全量, 14 枚 (196 枚に膨張しないこと)
+  const tapeItem = {
+    drugName: 'モーラステープ20mg',
+    usage: '1日1回患部に貼る',
+    amount: 14,
+    days: 14,
+    unitText: '枚'
+  };
+  assert.equal(isDailyAmountItem(tapeItem), false);
+  assert.equal(getAmountLabel(tapeItem), '全量');
+  assert.equal(getTotalAmountText(tapeItem), '14 枚');
+
+  // 点眼液 (dosageCategory 未設定) -> 全量 3 mL (90 mL に膨張しないこと)
+  const eyeDropItem = {
+    drugName: 'ヒアレイン点眼液0.1%',
+    usage: '1日5回両眼に1滴ずつ',
+    amount: 3,
+    days: 30,
+    unitText: 'mL'
+  };
+  assert.equal(isDailyAmountItem(eyeDropItem), false);
+  assert.equal(getAmountLabel(eyeDropItem), '全量');
+  assert.equal(getTotalAmountText(eyeDropItem), '3 mL');
+
+  // 内服の回帰 (dosageCategory 未設定) -> 1日量, 28 錠
+  const internalItem = {
+    drugName: 'アムロジピン錠5mg',
+    usage: '1日1回朝食後',
+    amount: 1,
+    days: 28,
+    unitText: '錠'
+  };
+  assert.equal(isDailyAmountItem(internalItem), true);
+  assert.equal(getAmountLabel(internalItem), '1日量');
+  assert.equal(getTotalAmountText(internalItem), '28 錠');
+});
+

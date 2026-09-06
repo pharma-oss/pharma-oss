@@ -192,3 +192,33 @@ test('LiquidLabelSheetPrint omits the dispensing annotation when there is no uni
   assert.ok(html.includes('30 mL'), '全量 30 mL が含まれること');
   assert.ok(!html.includes('調剤量'), '換算がない明細では調剤量の併記が出ないこと');
 });
+
+test('OintmentLabelSheetPrint renders total amount 14 枚 (not 196) for tape with undefined dosageCategory (PR-E2)', () => {
+  const tapeItem = {
+    itemId: 'item-tape-1',
+    visitId: 'v1',
+    drugId: 'drug-tape-1',
+    drugName: 'モーラステープ20mg',
+    amount: 14,
+    days: 14,
+    unitText: '枚',
+    usage: '1日1回患部に貼る'
+    // dosageCategory is intentionally undefined
+  };
+
+  const element = React.createElement(OintmentLabelSheetPrint, {
+    patientData: dummyPatientData,
+    ointmentItems: [tapeItem],
+    pharmacyInfo: dummyPharmacyInfo,
+    pharmacyAddressLine: dummyPharmacyInfo.address,
+    currentDateStr: '2026/09/06',
+    renderIdentityMark: () => React.createElement('span', null, 'MARK')
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  assert.ok(html.includes('全量'), '全量ラベルが含まれること');
+  assert.ok(html.includes('14 枚'), '外用テープ剤の全量 14 枚 がそのまま含まれること');
+  assert.ok(!html.includes('196 枚'), '14枚 * 14日 = 196 枚 に過大乗算されていないこと');
+});
+

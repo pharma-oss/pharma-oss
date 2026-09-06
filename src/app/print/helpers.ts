@@ -122,8 +122,10 @@ export function getRecordNotes(
 
 export type AmountTextSourceItem = Partial<Pick<
   PrescriptionItem,
-  'amount' | 'unitText' | 'electronicUnitConversion' | 'dosageCategory' | 'days' | 'usage'
->>;
+  'amount' | 'unitText' | 'electronicUnitConversion' | 'dosageCategory' | 'days' | 'usage' | 'dispensedDrug'
+>> & {
+  drugName?: string;
+};
 
 export type PickingEvidenceSourceItem = Partial<Pick<
   PrescriptionItem,

@@ -1,12 +1,15 @@
-// 印字専用。calculator.ts の isInternalMedicine とは判定軸が異なります。
-// テープ剤 days > 0 などの既知の乖離があり、算定側（calculator.ts）の剤形判定見直しは別宿題として扱います。
+// 印字用の数量セマンティクス判定。剤形判定は算定側と同じ resolveDosageCategory を使う。
+// 「1日量か全量か」の軸のみがここの責務で、算定上の剤形区分そのものは dosage_category.ts が正本。
 
 import type { PrescriptionItem } from '@/db/types';
+import { resolveDosageCategory } from './dosage_category.ts';
 
 export type AmountSemanticsItem = Partial<Pick<
   PrescriptionItem,
-  'amount' | 'days' | 'usage' | 'dosageCategory'
->>;
+  'amount' | 'days' | 'usage' | 'dosageCategory' | 'dosageCategorySource' | 'dispensedDrug'
+>> & {
+  drugName?: string;
+};
 
 /**
  * 印字用数量セマンティクス判定器
@@ -28,17 +31,13 @@ export function isDailyAmountItem(item: AmountSemanticsItem): boolean {
     return false;
   }
 
-  const cat = item.dosageCategory;
+  const cat = resolveDosageCategory(item);
   if (
     cat === 'external' ||
     cat === 'injection' ||
     cat === 'as_needed' ||
     cat === 'internal_drop'
   ) {
-    return false;
-  }
-
-  if (/外用|貼付|塗布|点眼|点鼻|点耳|吸入|坐剤|注入/.test(usage)) {
     return false;
   }
 
