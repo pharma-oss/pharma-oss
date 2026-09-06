@@ -452,6 +452,14 @@ function normalizeDate(value: string): string {
   ].join('-');
 }
 
+export function isNormalizedIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
 function normalizeGender(value: string): Patient['gender'] | undefined {
   const text = normalizeHeader(value);
   if (!text) return undefined;
@@ -739,7 +747,8 @@ export function buildPatientCsvMigrationPreview(
     const line = i + 1;
     const patientId = getOptional(fields, indexes, 'patientId');
     const name = getOptional(fields, indexes, 'name');
-    const birthDate = normalizeDate(getOptional(fields, indexes, 'birthDate'));
+    const rawBirthDate = getOptional(fields, indexes, 'birthDate');
+    const birthDate = normalizeDate(rawBirthDate);
     const kana = getOptional(fields, indexes, 'kana');
     const gender = normalizeGender(getOptional(fields, indexes, 'gender'));
     const insuranceProvider = getOptional(fields, indexes, 'insuranceProvider');
@@ -747,8 +756,10 @@ export function buildPatientCsvMigrationPreview(
     const insuranceBurdenRatio = parseBurdenRatio(getOptional(fields, indexes, 'insuranceBurdenRatio'));
     const insuranceType = getOptional(fields, indexes, 'insuranceType');
     const insuranceRelationship = getOptional(fields, indexes, 'insuranceRelationship');
-    const insuranceValidFrom = normalizeDate(getOptional(fields, indexes, 'insuranceValidFrom'));
-    const insuranceValidTo = normalizeDate(getOptional(fields, indexes, 'insuranceValidTo'));
+    const rawInsuranceValidFrom = getOptional(fields, indexes, 'insuranceValidFrom');
+    const rawInsuranceValidTo = getOptional(fields, indexes, 'insuranceValidTo');
+    const insuranceValidFrom = normalizeDate(rawInsuranceValidFrom);
+    const insuranceValidTo = normalizeDate(rawInsuranceValidTo);
 
     if (!patientId) {
       issues.push({
@@ -759,7 +770,7 @@ export function buildPatientCsvMigrationPreview(
         line
       });
     }
-    if (!name || !birthDate) {
+    if (!name || !rawBirthDate) {
       issues.push({
         severity: 'error',
         code: 'patient_migration_csv_required_value_missing',
@@ -768,6 +779,35 @@ export function buildPatientCsvMigrationPreview(
         line
       });
       continue;
+    }
+    if (!isNormalizedIsoDate(birthDate)) {
+      issues.push({
+        severity: 'error',
+        code: 'patient_migration_csv_birth_date_invalid',
+        title: '生年月日を日付として読み取れません',
+        message: `${line}行目の生年月日「${rawBirthDate}」を YYYY-MM-DD として読み取れませんでした。西暦の年月日に直してから取り込んでください。`,
+        line
+      });
+      continue;
+    }
+
+    if (rawInsuranceValidFrom && !isNormalizedIsoDate(insuranceValidFrom)) {
+      issues.push({
+        severity: 'warning',
+        code: 'patient_migration_csv_insurance_date_invalid',
+        title: '保険有効開始日を日付として読み取れません',
+        message: `${line}行目の保険有効開始日「${rawInsuranceValidFrom}」を YYYY-MM-DD として読み取れませんでした。元の値を保持して取り込みます。`,
+        line
+      });
+    }
+    if (rawInsuranceValidTo && !isNormalizedIsoDate(insuranceValidTo)) {
+      issues.push({
+        severity: 'warning',
+        code: 'patient_migration_csv_insurance_date_invalid',
+        title: '保険有効期限を日付として読み取れません',
+        message: `${line}行目の保険有効期限「${rawInsuranceValidTo}」を YYYY-MM-DD として読み取れませんでした。元の値を保持して取り込みます。`,
+        line
+      });
     }
 
     rows.push({

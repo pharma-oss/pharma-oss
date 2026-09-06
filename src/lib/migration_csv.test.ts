@@ -7,7 +7,8 @@ import {
   buildDrugStockCsvMigrationPreview,
   buildPatientCsvMigrationPreview,
   buildSoapCsvMigrationPreview,
-  buildVisitCsvMigrationPreview
+  buildVisitCsvMigrationPreview,
+  isNormalizedIsoDate
 } from './migration_csv.ts';
 
 test('buildPatientCsvMigrationPreview maps patient CSV aliases into backup patients', () => {
@@ -379,4 +380,60 @@ test('buildMigrationPackageReadinessReview marks missing required core CSVs as b
     && !source.required
     && source.status === 'attention'
   )));
+});
+
+test('isNormalizedIsoDate validates strictly YYYY-MM-DD format', () => {
+  assert.strictEqual(isNormalizedIsoDate('1970-03-02'), true);
+  assert.strictEqual(isNormalizedIsoDate('2026-12-31'), true);
+  assert.strictEqual(isNormalizedIsoDate('昭和45年3月2日'), false);
+  assert.strictEqual(isNormalizedIsoDate('S45.3.2'), false);
+  assert.strictEqual(isNormalizedIsoDate('1970/03/02'), false);
+  assert.strictEqual(isNormalizedIsoDate('19700302'), false);
+  assert.strictEqual(isNormalizedIsoDate(''), false);
+  assert.strictEqual(isNormalizedIsoDate('2026-02-30'), false);
+});
+
+test('buildPatientCsvMigrationPreview rejects Japanese era birth dates as error and keeps valid rows (Evidence D)', () => {
+  const csv = [
+    '患者番号,氏名,生年月日',
+    'P001,患者 一郎,昭和45年3月2日',
+    'P002,患者 二郎,S45.3.2',
+    'P003,患者 三郎,1970-03-02'
+  ].join('\n');
+
+  const preview = buildPatientCsvMigrationPreview(csv);
+
+  assert.strictEqual(preview.status, 'blocked');
+  const invalidDateIssues = preview.issues.filter(
+    (issue) => issue.code === 'patient_migration_csv_birth_date_invalid'
+  );
+  assert.strictEqual(invalidDateIssues.length, 2);
+  assert.strictEqual(invalidDateIssues[0].severity, 'error');
+  assert.strictEqual(invalidDateIssues[0].line, 2);
+  assert.match(invalidDateIssues[0].message, /昭和45年3月2日/);
+  assert.strictEqual(invalidDateIssues[1].severity, 'error');
+  assert.strictEqual(invalidDateIssues[1].line, 3);
+  assert.match(invalidDateIssues[1].message, /S45\.3\.2/);
+
+  assert.strictEqual(preview.rows.length, 1);
+  assert.strictEqual(preview.rows[0].patient.patientId, 'P003');
+  assert.strictEqual(preview.rows[0].patient.birthDate, '1970-03-02');
+});
+
+test('buildPatientCsvMigrationPreview warns on invalid insurance dates without skipping row', () => {
+  const csv = [
+    '患者番号,氏名,生年月日,保険有効開始日',
+    'P001,山田 太郎,1980-04-03,令和8年4月1日'
+  ].join('\n');
+
+  const preview = buildPatientCsvMigrationPreview(csv);
+
+  const insuranceIssues = preview.issues.filter(
+    (issue) => issue.code === 'patient_migration_csv_insurance_date_invalid'
+  );
+  assert.strictEqual(insuranceIssues.length, 1);
+  assert.strictEqual(insuranceIssues[0].severity, 'warning');
+  assert.strictEqual(preview.rows.length, 1);
+  assert.strictEqual(preview.rows[0].patient.patientId, 'P001');
+  assert.strictEqual(preview.rows[0].patient.insuranceInfo?.validFrom, '令和8年4月1日');
 });
