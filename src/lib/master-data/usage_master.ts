@@ -2,12 +2,21 @@ import { getMasterDataSeedPayload } from './sqlite_seed';
 import { canUseSQLiteMasterDataStore, getSeededSQLiteMasterDataStore } from './sqlite_master_store';
 import { ELECTRONIC_USAGE_OPTIONS } from './usage_options';
 import type { ElectronicUsageOption } from './types';
+import type { DosageCategory } from '@/lib/dosage_category';
 
 export { ELECTRONIC_USAGE_OPTIONS };
 export type { ElectronicUsageOption };
 
 export function formatElectronicUsage(option: ElectronicUsageOption): string {
   return `${option.code} ${option.label}`;
+}
+
+/** 指定した剤形で選べる用法候補。category 未設定の候補（未コード化用法など）は常に含める。 */
+export function filterUsageOptionsByCategory(
+  options: ElectronicUsageOption[],
+  category: DosageCategory
+): ElectronicUsageOption[] {
+  return options.filter((option) => !option.category || option.category === category);
 }
 
 async function getSeededUsageStore() {

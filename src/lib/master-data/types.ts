@@ -1,4 +1,5 @@
 import type { Drug } from '@/db/types';
+import type { DosageCategory } from '@/lib/dosage_category';
 
 export type DrugMasterRecord = Drug & {
   searchNameLower: string;
@@ -9,6 +10,8 @@ export type DrugMasterRecord = Drug & {
 export interface ElectronicUsageOption {
   code: string;
   label: string;
+  /** 用法が属する剤形。未設定はマスタ側に区分情報が無いことを表す。 */
+  category?: DosageCategory;
 }
 
 export interface MasterDataSeedPayload {
