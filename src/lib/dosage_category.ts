@@ -73,3 +73,25 @@ export function resolveDosageCategory(item: {
   }
   return inferDosageCategory(item.drugName || item.dispensedDrug || '', item.usage);
 }
+
+/**
+ * 保存済み区分・用法・名称を突き合わせた実効剤形。
+ * 手動指定 (dosageCategorySource === 'manual') は薬剤師の判断として最優先で尊重する。
+ * それ以外では、用法の外用表現を保存済みの自動推定値より優先する
+ * (保存値が PR-E1 以前の推定で 'internal' のまま残っている明細を救うため)。
+ */
+export function resolveEffectiveDosageCategory(item: {
+  drugName?: string;
+  dispensedDrug?: string;
+  usage?: string;
+  dosageCategory?: DosageCategory;
+  dosageCategorySource?: 'auto' | 'manual';
+}): DosageCategory {
+  if (item.dosageCategorySource === 'manual' && item.dosageCategory) {
+    return item.dosageCategory;
+  }
+  if (EXTERNAL_USAGE_PATTERN.test(item.usage || '')) {
+    return 'external';
+  }
+  return resolveDosageCategory(item);
+}

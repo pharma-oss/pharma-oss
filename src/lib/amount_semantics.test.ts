@@ -137,3 +137,50 @@ test('amount semantics infers dosage category when dosageCategory is undefined (
   assert.equal(getTotalAmountText(internalItem), '28 錠');
 });
 
+test('amount semantics restores usage-based external override for legacy records (PR-E7)', async () => {
+  const { getAmountLabel, getTotalAmountText } = await import('../app/print/helpers');
+
+  // 耳科用液 (PR-E1以前に保存され dosageCategory: 'internal', dosageCategorySource: 'auto' となったレガシー明細)
+  // -> 全量, 5 mL (70 mL に14倍過大表示されないこと)
+  const legacyEarDropItem = {
+    drugName: 'タリビッド耳科用液',
+    usage: '1日2回点耳',
+    amount: 5,
+    days: 14,
+    unitText: 'mL',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'auto' as const
+  };
+  assert.equal(isDailyAmountItem(legacyEarDropItem), false);
+  assert.equal(getAmountLabel(legacyEarDropItem), '全量');
+  assert.equal(getTotalAmountText(legacyEarDropItem), '5 mL');
+
+  // 手動指定 (dosageCategorySource === 'manual') は最優先で尊重されること
+  const manualOverrideItem = {
+    drugName: 'ヒアレイン点眼液0.1%',
+    usage: '1日5回点眼',
+    amount: 1,
+    days: 14,
+    unitText: '本',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'manual' as const
+  };
+  assert.equal(isDailyAmountItem(manualOverrideItem), true);
+  assert.equal(getAmountLabel(manualOverrideItem), '1日量');
+  assert.equal(getTotalAmountText(manualOverrideItem), '14 本');
+
+  // 内服の回帰 (アムロジピン 1錠/28日) -> 1日量, 28 錠
+  const internalItem = {
+    drugName: 'アムロジピン錠5mg',
+    usage: '1日1回朝食後',
+    amount: 1,
+    days: 28,
+    unitText: '錠',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'auto' as const
+  };
+  assert.equal(isDailyAmountItem(internalItem), true);
+  assert.equal(getAmountLabel(internalItem), '1日量');
+  assert.equal(getTotalAmountText(internalItem), '28 錠');
+});
+

@@ -2,7 +2,7 @@ import React from 'react';
 import type { PrescriptionItem, VisitElectronicPrescription } from '@/db/types';
 import type { ElectronicPrescriptionDocumentKind } from '@/lib/electronic_prescription';
 import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
-import { resolveDosageCategory, type DosageCategory } from '@/lib/dosage_category';
+import { resolveDosageCategory, resolveEffectiveDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
@@ -113,7 +113,7 @@ export function getRecordNotes(
 
 export type AmountTextSourceItem = Partial<Pick<
   PrescriptionItem,
-  'amount' | 'unitText' | 'electronicUnitConversion' | 'dosageCategory' | 'days' | 'usage' | 'dispensedDrug'
+  'amount' | 'unitText' | 'electronicUnitConversion' | 'dosageCategory' | 'dosageCategorySource' | 'days' | 'usage' | 'dispensedDrug'
 >> & {
   drugName?: string;
 };
@@ -327,7 +327,7 @@ export function getBagDosageCategory(items: BagCategorySourceItem[]): DosageCate
   let highestPriority = 0;
 
   for (const item of items) {
-    const cat = resolveDosageCategory(item);
+    const cat = resolveEffectiveDosageCategory(item);
     const p = priority[cat] ?? 1;
     if (p > highestPriority) {
       highestPriority = p;

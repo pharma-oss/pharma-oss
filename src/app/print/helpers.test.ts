@@ -544,3 +544,30 @@ test('getBagDosageCategory and getBagKindLabel classify bag kinds correctly (PR-
   assert.equal(getBagKindLabel('injection'), '注射薬');
 });
 
+test('getBagDosageCategory respects resolveEffectiveDosageCategory for legacy auto records (PR-E7)', () => {
+  // 耳科用液 (PR-E1以前に保存され dosageCategory: 'internal', dosageCategorySource: 'auto')
+  // -> 用法の外用判定が優先され 'external' / '外用薬'
+  const legacyEarDropGroup = [
+    {
+      drugName: 'タリビッド耳科用液',
+      usage: '1日2回点耳',
+      dosageCategory: 'internal' as const,
+      dosageCategorySource: 'auto' as const
+    }
+  ];
+  assert.equal(getBagDosageCategory(legacyEarDropGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(legacyEarDropGroup)), '外用薬');
+
+  // 手動指定 (dosageCategorySource === 'manual') は最優先で尊重され 'internal' / '内服薬'
+  const manualOverrideGroup = [
+    {
+      drugName: 'ヒアレイン点眼液0.1%',
+      usage: '1日5回点眼',
+      dosageCategory: 'internal' as const,
+      dosageCategorySource: 'manual' as const
+    }
+  ];
+  assert.equal(getBagDosageCategory(manualOverrideGroup), 'internal');
+  assert.equal(getBagKindLabel(getBagDosageCategory(manualOverrideGroup)), '内服薬');
+});
+

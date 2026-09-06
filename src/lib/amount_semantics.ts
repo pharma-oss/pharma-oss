@@ -1,8 +1,8 @@
-// 印字用の数量セマンティクス判定。剤形判定は算定側と同じ resolveDosageCategory を使う。
+// 印字用の数量セマンティクス判定。実効剤形判定は resolveEffectiveDosageCategory を使う。
 // 「1日量か全量か」の軸のみがここの責務で、算定上の剤形区分そのものは dosage_category.ts が正本。
 
 import type { PrescriptionItem } from '@/db/types';
-import { resolveDosageCategory } from './dosage_category.ts';
+import { resolveDosageCategory, resolveEffectiveDosageCategory } from './dosage_category.ts';
 
 export type AmountSemanticsItem = Partial<Pick<
   PrescriptionItem,
@@ -31,7 +31,7 @@ export function isDailyAmountItem(item: AmountSemanticsItem): boolean {
     return false;
   }
 
-  const cat = resolveDosageCategory(item);
+  const cat = resolveEffectiveDosageCategory(item);
   if (
     cat === 'external' ||
     cat === 'injection' ||
