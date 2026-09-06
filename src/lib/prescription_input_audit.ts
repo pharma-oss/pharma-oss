@@ -1,4 +1,7 @@
 import type { Alert } from '@/db/types';
+import type { DosageCategory } from './dosage_category';
+import { DOSAGE_CATEGORY_LABELS } from './dosage_category';
+import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from './master-data/usage_master';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
 
 export type PrescriptionInputAuditSeverity = 'error' | 'warning' | 'info';
@@ -6,6 +9,7 @@ export type PrescriptionInputAuditSeverity = 'error' | 'warning' | 'info';
 export interface PrescriptionInputAuditItem {
   id?: string;
   rpId?: string;
+  rpNumber?: number;
   drugCode?: string;
   drugName?: string;
   dispensedDrug?: string;
@@ -14,6 +18,8 @@ export interface PrescriptionInputAuditItem {
   amount?: string | number;
   usage?: string;
   days?: string | number;
+  dosageCategory?: DosageCategory;
+  dosageCategorySource?: 'auto' | 'manual';
   rpComment?: string;
   receiptRemark?: string;
   isIppoka?: boolean;
@@ -307,19 +313,43 @@ export function buildPrescriptionInputAudit(
     });
   }
 
+  let rpLoopIndex = 0;
   for (const [rpId, group] of rpGroups.entries()) {
-    if (group.length <= 1) continue;
-    const usages = new Set(group.map((item) => normalizeText(item.usage)).filter(Boolean));
-    const days = new Set(group.map((item) => normalizeText(item.days)).filter(Boolean));
-    if (usages.size > 1 || days.size > 1) {
-      addIssue(issues, {
-        severity: 'warning',
-        code: 'rp_fields_mismatch',
-        title: '同一Rp内で用法または日数が揃っていません',
-        message: '同じRpの薬品は用法・日数が揃っているか確認してください。',
-        itemIds: group.map((item) => item.id).filter(Boolean) as string[],
-        rpId
-      });
+    rpLoopIndex++;
+    if (group.length > 1) {
+      const usages = new Set(group.map((item) => normalizeText(item.usage)).filter(Boolean));
+      const days = new Set(group.map((item) => normalizeText(item.days)).filter(Boolean));
+      if (usages.size > 1 || days.size > 1) {
+        addIssue(issues, {
+          severity: 'warning',
+          code: 'rp_fields_mismatch',
+          title: '同一Rp内で用法または日数が揃っていません',
+          message: '同じRpの薬品は用法・日数が揃っているか確認してください。',
+          itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+          rpId
+        });
+      }
+    }
+
+    const itemWithCategory = group.find((item) => item.dosageCategory);
+    const dosageCategory = itemWithCategory?.dosageCategory;
+    const usage = normalizeText(group.find((item) => normalizeText(item.usage))?.usage);
+
+    if (usage && dosageCategory) {
+      const allowedOptions = filterUsageOptionsByCategory(ELECTRONIC_USAGE_OPTIONS, dosageCategory);
+      const isMatched = allowedOptions.some((opt) => opt.label === usage);
+      if (!isMatched) {
+        const categoryLabel = DOSAGE_CATEGORY_LABELS[dosageCategory] || dosageCategory;
+        const rpNum = group[0]?.rpNumber ?? rpLoopIndex;
+        addIssue(issues, {
+          severity: 'warning',
+          code: 'usage_dosage_category_mismatch',
+          title: `Rp${rpNum} の用法が調剤区分「${categoryLabel}」の候補にありません`,
+          message: '用法を選び直すか、調剤区分を確認してください。このままでも保存できます。',
+          itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+          rpId
+        });
+      }
     }
   }
 

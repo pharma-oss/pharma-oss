@@ -148,3 +148,89 @@ test('buildPrescriptionInputAudit accepts clean prescriptions', () => {
 
   assert.deepStrictEqual(audit.issues, []);
 });
+
+test('buildPrescriptionInputAudit flags usage_dosage_category_mismatch as warning (G5-3, G5-4)', () => {
+  // 1. 剤形 external ＋ 用法「１日３回朝昼夕食後　服用」（内服） → warning 1件
+  const audit1 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '1',
+      usage: '１日３回朝昼夕食後　服用',
+      days: '14',
+      dosageCategory: 'external'
+    }
+  ]);
+  const mismatch1 = audit1.issues.filter((issue) => issue.code === 'usage_dosage_category_mismatch');
+  assert.equal(mismatch1.length, 1, '外用に内服用法を指定した場合は不一致警告が1件出ること');
+  assert.equal(mismatch1[0].severity, 'warning', '不一致は error ではなく warning であること (G5-3)');
+  assert.match(mismatch1[0].title, /外用/);
+
+  // 2. 剤形 internal_drop ＋ 用法「便秘時　服用」 → issue が出ないこと（許可リストに含まれるため） (G5-4)
+  const audit2 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ラキソベロン内用液0.75%',
+      amount: '1',
+      usage: '便秘時　服用',
+      days: '1',
+      dosageCategory: 'internal_drop'
+    }
+  ]);
+  const mismatch2 = audit2.issues.filter((issue) => issue.code === 'usage_dosage_category_mismatch');
+  assert.equal(mismatch2.length, 0, '内滴に許可リスト「便秘時　服用」を指定した場合は警告が出ないこと');
+
+  // 3. 剤形 internal_drop ＋ 用法「１日３回朝昼夕食後　服用」 → warning 1件（内滴3件に含まれない）
+  const audit3 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ラキソベロン内用液0.75%',
+      amount: '1',
+      usage: '１日３回朝昼夕食後　服用',
+      days: '1',
+      dosageCategory: 'internal_drop'
+    }
+  ]);
+  const mismatch3 = audit3.issues.filter((issue) => issue.code === 'usage_dosage_category_mismatch');
+  assert.equal(mismatch3.length, 1, '内滴に内服の一般用法を指定した場合は警告が1件出ること');
+  assert.equal(mismatch3[0].severity, 'warning');
+
+  // 4. 剤形 external ＋ 用法「疼痛時　貼付」 → issue が出ないこと
+  const audit4 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '1',
+      usage: '疼痛時　貼付',
+      days: '14',
+      dosageCategory: 'external'
+    }
+  ]);
+  const mismatch4 = audit4.issues.filter((issue) => issue.code === 'usage_dosage_category_mismatch');
+  assert.equal(mismatch4.length, 0, '外用に外服用法を指定した場合は警告が出ないこと');
+
+  // 5. 用法未入力 → usage_dosage_category_mismatch は出ないこと（usage_missing の担当）
+  const audit5 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '1',
+      usage: '',
+      days: '14',
+      dosageCategory: 'external'
+    }
+  ]);
+  const mismatch5 = audit5.issues.filter((issue) => issue.code === 'usage_dosage_category_mismatch');
+  assert.equal(mismatch5.length, 0, '用法未入力時は剤形不一致警告は出ないこと');
+});
+

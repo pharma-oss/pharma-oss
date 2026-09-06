@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Plus } from 'lucide-react';
 import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, type DosageCategory } from '@/lib/dosage_category';
-import { ELECTRONIC_USAGE_OPTIONS } from '@/lib/master-data/usage_master';
+import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from '@/lib/master-data/usage_master';
 import type { PrescriptionGroup, PrescriptionFieldValue } from '../types';
 import { getGroupDosageCategory } from '../helpers';
 import { PrescriptionRow } from './PrescriptionRow';
+import { UsageSearchModal } from './UsageSearchModal';
 
 export interface PrescriptionGroupEditorProps {
   group: PrescriptionGroup;
@@ -35,8 +36,14 @@ export const PrescriptionGroupEditor = React.memo(({
   onAddRpAfter,
   onDelete
 }: PrescriptionGroupEditorProps) => {
-  const usageOptionsId = `usage-options-${group.rpId}`;
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const { category: dosageCategory, isManual: isManualDosageCategory } = getGroupDosageCategory(group);
+
+  const hasUsageCategoryMismatch = useMemo(() => {
+    if (!group.usage?.trim()) return false;
+    const allowed = filterUsageOptionsByCategory(ELECTRONIC_USAGE_OPTIONS, dosageCategory);
+    return !allowed.some((opt) => opt.label === group.usage.trim());
+  }, [dosageCategory, group.usage]);
 
   return (
     <div className="rp-group">
@@ -67,6 +74,14 @@ export const PrescriptionGroupEditor = React.memo(({
               <em className="rp-category-source" title="薬品名・用法から自動判定しています">自動</em>
             )}
           </span>
+          {hasUsageCategoryMismatch && (
+            <span
+              className="rp-category-mismatch-badge"
+              title={`用法が調剤区分「${DOSAGE_CATEGORY_LABELS[dosageCategory]}」の候補にありません（このままでも保存できます）`}
+            >
+              ⚠️ 用法と調剤区分が不一致
+            </span>
+          )}
         </div>
         <div className="rp-actions">
           <button
@@ -112,24 +127,39 @@ export const PrescriptionGroupEditor = React.memo(({
       ))}
 
       <div className="rp-prescription-footer">
-        <label className="rp-usage-field">
+        <div className="rp-usage-field">
           <span>用法</span>
-          <input
-            type="text"
-            className="usage"
-            aria-label={`Rp ${groupIndex + 1} 用法`}
-            placeholder="例: 1日1回朝食後"
-            list={usageOptionsId}
-            maxLength={200}
-            value={group.usage}
-            onChange={(e) => onRpFieldChange(group.rpId, 'usage', e.target.value)}
-          />
-        </label>
-        <datalist id={usageOptionsId}>
-          {ELECTRONIC_USAGE_OPTIONS.map((usage) => (
-            <option key={usage.code} value={usage.label} label={usage.code} />
-          ))}
-        </datalist>
+          <div className="usage-selector-wrap">
+            <input
+              type="text"
+              className="usage usage-readonly"
+              readOnly
+              aria-label={`Rp ${groupIndex + 1} 用法`}
+              placeholder="「用法を選ぶ」から選択"
+              value={group.usage}
+              onClick={() => setIsUsageModalOpen(true)}
+            />
+            <button
+              type="button"
+              className="btn-select-usage"
+              onClick={() => setIsUsageModalOpen(true)}
+              aria-label={`Rp ${groupIndex + 1} 用法を選ぶ`}
+            >
+              用法を選ぶ
+            </button>
+            {group.usage && (
+              <button
+                type="button"
+                className="btn-clear-usage"
+                onClick={() => onRpFieldChange(group.rpId, 'usage', '')}
+                title="用法をクリア"
+                aria-label={`Rp ${groupIndex + 1} 用法をクリア`}
+              >
+                クリア
+              </button>
+            )}
+          </div>
+        </div>
         <label className="rp-days-field">
           <span>日数</span>
           <div className="days-input-wrap">
@@ -146,6 +176,19 @@ export const PrescriptionGroupEditor = React.memo(({
           </div>
         </label>
       </div>
+
+      {isUsageModalOpen && (
+        <UsageSearchModal
+          isOpen={isUsageModalOpen}
+          onClose={() => setIsUsageModalOpen(false)}
+          onSelect={(option) => {
+            onRpFieldChange(group.rpId, 'usage', option.label);
+            setIsUsageModalOpen(false);
+          }}
+          dosageCategory={dosageCategory}
+          currentUsage={group.usage}
+        />
+      )}
 
       <label className="rp-comment-row">
         <span>Rpコメント</span>
@@ -393,6 +436,72 @@ export const PrescriptionGroupEditor = React.memo(({
           width: 100%;
           resize: vertical;
           line-height: 1.45;
+        }
+
+        .rp-category-mismatch-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+          color: #b45309;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 4px;
+          padding: 2px 8px;
+          margin-left: 0.5rem;
+        }
+
+        .usage-selector-wrap {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+
+        .usage-readonly {
+          cursor: pointer;
+          flex: 1;
+        }
+
+        .usage-readonly:hover {
+          border-color: var(--primary);
+        }
+
+        .btn-select-usage {
+          height: 38px;
+          padding: 0 0.85rem;
+          background: var(--primary-light);
+          border: 1px solid var(--primary);
+          color: var(--primary-dark);
+          border-radius: 6px;
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background var(--transition-fast), color var(--transition-fast);
+        }
+
+        .btn-select-usage:hover {
+          background: var(--primary);
+          color: #ffffff;
+        }
+
+        .btn-clear-usage {
+          height: 38px;
+          padding: 0 0.6rem;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          color: var(--text-muted);
+          border-radius: 6px;
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .btn-clear-usage:hover {
+          background: #f1f5f9;
+          color: var(--text-main);
         }
 
         .rp-prescription-footer input.days {

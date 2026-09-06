@@ -396,9 +396,20 @@ export default function OcrPage() {
       specialPrepCount
     };
   }, [prescriptions, prescriptionGroups]);
-  const prescriptionAudit = useMemo(() => (
-    buildPrescriptionInputAudit(prescriptions, { patientAlerts: activePatientAlerts })
-  ), [activePatientAlerts, prescriptions]);
+  const prescriptionAudit = useMemo(() => {
+    const auditItems = prescriptions.map((p) => {
+      const group = prescriptionGroups.find((g) => g.rpId === p.rpId);
+      const groupCategory = group ? getGroupDosageCategory(group) : undefined;
+      const groupIndex = group ? prescriptionGroups.indexOf(group) : undefined;
+      return {
+        ...p,
+        dosageCategory: groupCategory?.category ?? p.dosageCategory,
+        dosageCategorySource: (groupCategory?.isManual ? 'manual' : 'auto') as 'auto' | 'manual',
+        rpNumber: groupIndex !== undefined ? groupIndex + 1 : undefined
+      };
+    });
+    return buildPrescriptionInputAudit(auditItems, { patientAlerts: activePatientAlerts });
+  }, [activePatientAlerts, prescriptions, prescriptionGroups]);
   const ocrConfidenceReport = useMemo(() => buildOcrConfidenceReport({
     ocrText: ocrResult,
     patientName,
