@@ -52,3 +52,41 @@ test('PrescriptionGroupEditor renders 4-column header matching prescription row 
   assert.ok(html.includes('<span class="header-amount">1日量</span>'), '「1日量」ヘッダー（.header-amount）が存在すること');
   assert.ok(html.includes('<span class="header-unit">単位</span>'), '「単位」ヘッダー（.header-unit）が存在すること');
 });
+
+test('PrescriptionGroupEditor usage datalist options do not contain code numbers in value', () => {
+  const element = React.createElement(PrescriptionGroupEditor, {
+    group: mockGroup,
+    groupIndex: 0,
+    onChange: () => {},
+    onOpenDrugSearch: () => {},
+    onToggleIppoka: () => {},
+    onToggleCrushed: () => {},
+    onToggleReceiptRemark: () => {},
+    onRpFieldChange: () => {},
+    onRpDosageCategoryChange: () => {},
+    onAddDrugToRp: () => {},
+    onAddRpAfter: () => {},
+    onDelete: () => {}
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  // <option value="..." label="..." /> から value を抽出
+  const optionValueMatches = Array.from(html.matchAll(/<option\s+value="([^"]+)"/g)).map((m) => m[1]);
+  assert.ok(optionValueMatches.length > 0, '用法候補の option が生成されていること');
+
+  // いずれの value も 3桁コード+空白（例: "001 "）で始まらないこと
+  for (const value of optionValueMatches) {
+    assert.equal(
+      /^\d{3}\s/.test(value),
+      false,
+      `用法候補の value にコード番号が含まれてはならない: observed "${value}"`
+    );
+  }
+
+  // 代表的な用法名称（例: "1日3回食後服用"）が value として含まれていること
+  assert.ok(
+    optionValueMatches.includes('1日3回食後服用'),
+    '用法名称そのものが value として含まれていること'
+  );
+});

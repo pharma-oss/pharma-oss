@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
 import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, type DosageCategory } from '@/lib/dosage_category';
-import { ELECTRONIC_USAGE_OPTIONS, formatElectronicUsage } from '@/lib/master-data/usage_master';
+import { ELECTRONIC_USAGE_OPTIONS } from '@/lib/master-data/usage_master';
 import type { PrescriptionGroup, PrescriptionFieldValue } from '../types';
 import { getGroupDosageCategory } from '../helpers';
 import { PrescriptionRow } from './PrescriptionRow';
@@ -127,7 +127,7 @@ export const PrescriptionGroupEditor = React.memo(({
         </label>
         <datalist id={usageOptionsId}>
           {ELECTRONIC_USAGE_OPTIONS.map((usage) => (
-            <option key={usage.code} value={formatElectronicUsage(usage)} label={usage.code} />
+            <option key={usage.code} value={usage.label} label={usage.code} />
           ))}
         </datalist>
         <label className="rp-days-field">

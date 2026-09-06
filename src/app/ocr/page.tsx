@@ -40,7 +40,6 @@ import {
 import { findDrugMasterRecordByCode, findSubstitutionCandidates, isGeneralNameDrugRecord, searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { buildProviderHistory, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
-import { ELECTRONIC_USAGE_OPTIONS, formatElectronicUsage } from '@/lib/master-data/usage_master';
 import { buildPrescriptionInputAudit, type PrescriptionInputAuditResult } from '@/lib/prescription_input_audit';
 import { comparePrescriptionHistoryTimeline, type PrescriptionHistoryItem, type PrescriptionHistorySnapshot, type PrescriptionHistoryTimelineEntry } from '@/lib/prescription_history_compare';
 import {
