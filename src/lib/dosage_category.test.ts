@@ -88,3 +88,19 @@ test('resolveDosageCategory falls back to inferDosageCategory when dosageCategor
     'as_needed'
   );
 });
+
+test('inferDosageCategory classifies external usage pattern with precedence over as-needed (PR-E1)', () => {
+  // 点耳（名称に外用キーワードがなく用法に点耳がある場合）
+  assert.strictEqual(inferDosageCategory('タリビッド耳科用液', '1日2回点耳'), 'external');
+
+  // 屯服より外用が優先されること（坐剤＋発熱時）
+  assert.strictEqual(inferDosageCategory('ボラザG坐剤', '発熱時に1回1個 肛門内に挿入'), 'external');
+  assert.strictEqual(inferDosageCategory('解熱薬', '発熱時に1回1個 坐剤を肛門内に挿入'), 'external');
+
+  // 既存の屯服判定が壊れていないこと
+  assert.strictEqual(inferDosageCategory('カロナール錠200', '疼痛時に1回1錠'), 'as_needed');
+
+  // 内服の回帰
+  assert.strictEqual(inferDosageCategory('アムロジピン錠5mg', '1日1回朝食後'), 'internal');
+});
+

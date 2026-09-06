@@ -1,5 +1,5 @@
 import type { FacilitySettings, PrescriptionItem, Patient } from '@/db/types';
-import { resolveDosageCategory } from './dosage_category.ts';
+import { resolveDosageCategory, EXTERNAL_USAGE_PATTERN } from './dosage_category.ts';
 
 export type FeeCode =
   | 'base_fee'
@@ -554,7 +554,7 @@ export function calculateDispensingFees(
     const item = items[i];
     const usage = item.usage || '';
     const category = resolveDosageCategory(item);
-    const isExternal = category === 'external' || /外用|貼付|塗布|点眼|点鼻|点耳|吸入|坐剤|注入/.test(usage);
+    const isExternal = category === 'external' || EXTERNAL_USAGE_PATTERN.test(usage);
     const isTonpuku = !isExternal && (category === 'as_needed' || usage.includes('頓服'));
     const isNaiteki = !isExternal && (category === 'internal_drop' || usage.includes('内滴') || usage.includes('内用滴剤'));
     const isInjection = category === 'injection' || usage.includes('注射');

@@ -41,6 +41,9 @@ const INJECTION_NAME_PATTERN = new RegExp(
 // 同成分でも錠・ドライシロップは内服のままにする。
 const INTERNAL_DROP_NAME_PATTERN = /滴|(?:ピコスルファート|ラキソベロン|シンラック)(?:[^錠]*?)(?:内用液|液)/;
 
+// 算定側 (calculator.ts) と印字側で同一の判定を使うための正本。
+export const EXTERNAL_USAGE_PATTERN = /外用|貼付|塗布|点眼|点鼻|点耳|吸入|坐剤|注入/;
+
 // 屯服: 用法の頓用表現から拾う(名称からは判定できない)
 const AS_NEEDED_USAGE_PATTERN = /頓服|頓用|とん服|発作時|疼痛時|痛む時|痛い時|発熱時|不眠時|便秘時|嘔気時|悪心時|頭痛時|必要時|不安時|かゆみ時/;
 
@@ -51,7 +54,10 @@ export const inferDosageCategory = (drugName: string, usage?: string): DosageCat
     if (INJECTION_NAME_PATTERN.test(name)) return 'injection';
     if (INTERNAL_DROP_NAME_PATTERN.test(name)) return 'internal_drop';
   }
-  if (usage && AS_NEEDED_USAGE_PATTERN.test(usage)) return 'as_needed';
+  if (usage) {
+    if (EXTERNAL_USAGE_PATTERN.test(usage)) return 'external';
+    if (AS_NEEDED_USAGE_PATTERN.test(usage)) return 'as_needed';
+  }
   return 'internal';
 };
 
