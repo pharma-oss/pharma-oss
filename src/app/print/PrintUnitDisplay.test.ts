@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LiquidLabelSheetPrint } from './components/LiquidLabelSheetPrint';
 import { OintmentLabelSheetPrint } from './components/OintmentLabelSheetPrint';
+import { MedicineBagPrint } from './components/MedicineBagPrint';
 import type { PharmacyInfo } from './types';
 
 const dummyPharmacyInfo: PharmacyInfo = {
@@ -221,4 +222,39 @@ test('OintmentLabelSheetPrint renders total amount 14 枚 (not 196) for tape wit
   assert.ok(html.includes('14 枚'), '外用テープ剤の全量 14 枚 がそのまま含まれること');
   assert.ok(!html.includes('196 枚'), '14枚 * 14日 = 196 枚 に過大乗算されていないこと');
 });
+
+test('MedicineBagPrint renders external-bag class and 外用薬 ribbon for tape item (PR-E3)', () => {
+  const tapeItem = {
+    itemId: 'item-tape-bag-1',
+    visitId: 'v1',
+    drugId: 'drug-tape-1',
+    drugName: 'モーラステープ20mg',
+    amount: 14,
+    days: 14,
+    unitText: '枚',
+    usage: '1日1回患部に貼る'
+  };
+
+  const usage = '1日1回患部に貼る';
+  const element = React.createElement(MedicineBagPrint, {
+    patientData: dummyPatientData,
+    groupedForBags: {
+      [usage]: [tapeItem]
+    },
+    pharmacyInfo: dummyPharmacyInfo,
+    pharmacyAddressLine: dummyPharmacyInfo.address,
+    receiptRunId: 'RUN-001',
+    dispensingDateStr: '2026/09/06',
+    renderIdentityMark: () => React.createElement('span', null, 'MARK')
+  });
+
+  const html = renderToStaticMarkup(element);
+
+  // external-bag クラスを持ち、リボンに「外用薬」が出ること（「内服薬」でないこと）
+  assert.ok(html.includes('external-bag'), 'テープ剤の薬袋は external-bag クラスを持つこと');
+  assert.ok(!html.includes('internal-bag'), 'テープ剤の薬袋に internal-bag クラスが付かないこと');
+  assert.ok(html.includes('外用薬'), 'リボンに「外用薬」が含まれること');
+  assert.ok(!html.includes('内服薬'), 'リボンに「内服薬」が含まれないこと');
+});
+
 

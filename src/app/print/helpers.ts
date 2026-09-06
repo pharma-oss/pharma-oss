@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PrescriptionItem } from '@/db/types';
 import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
+import { resolveDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
@@ -308,10 +309,58 @@ export function getMedicationFlags(item: { isHighRisk?: boolean; isGeneric?: boo
   return flags;
 }
 
-export function getBagKindLabel(usage: string): string {
-  if (/外用|塗布|貼付|点眼|点鼻|吸入/.test(usage)) return '外用薬';
-  if (/頓服|痛むとき|発熱時|発作時/.test(usage)) return '頓服薬';
-  return '内服薬';
+export type BagCategorySourceItem = {
+  drugName?: string;
+  dispensedDrug?: string;
+  usage?: string;
+  dosageCategory?: DosageCategory;
+  dosageCategorySource?: 'auto' | 'manual';
+};
+
+export function getBagDosageCategory(items: BagCategorySourceItem[]): DosageCategory {
+  if (!items || items.length === 0) return 'internal';
+
+  const manualItem = items.find((p) => p.dosageCategorySource === 'manual' && p.dosageCategory);
+  if (manualItem?.dosageCategory) {
+    return manualItem.dosageCategory;
+  }
+
+  const priority: Record<DosageCategory, number> = {
+    external: 5,
+    injection: 4,
+    as_needed: 3,
+    internal_drop: 2,
+    internal: 1
+  };
+
+  let highestCategory: DosageCategory = 'internal';
+  let highestPriority = 0;
+
+  for (const item of items) {
+    const cat = resolveDosageCategory(item);
+    const p = priority[cat] ?? 1;
+    if (p > highestPriority) {
+      highestPriority = p;
+      highestCategory = cat;
+    }
+  }
+
+  return highestCategory;
+}
+
+export function getBagKindLabel(category: DosageCategory): string {
+  switch (category) {
+    case 'external':
+      return '外用薬';
+    case 'injection':
+      return '注射薬';
+    case 'as_needed':
+      return '頓服薬';
+    case 'internal_drop':
+    case 'internal':
+    default:
+      return '内服薬';
+  }
 }
 
 export function getElectronicPrescriptionDocumentKinds(electronicPrescription: any): any[] {

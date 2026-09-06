@@ -22,7 +22,9 @@ import {
   getAmountText,
   getTotalAmountText,
   getDispensingTotalAmountText,
-  getPickingEvidence
+  getPickingEvidence,
+  getBagDosageCategory,
+  getBagKindLabel
 } from './helpers.ts';
 
 // PrintPickingFlow.test.ts がソース文字列でしか見ていなかった
@@ -483,3 +485,62 @@ test('getDispensingTotalAmountText annotates the dispensing-unit total only when
     '10500'
   );
 });
+
+test('getBagDosageCategory and getBagKindLabel classify bag kinds correctly (PR-E3)', () => {
+  // 証拠A: テープ剤・点眼液・坐剤・耳科用液 -> 外用薬
+  const tapeGroup = [{ drugName: 'モーラステープ20mg', usage: '1日1回患部に貼る' }];
+  assert.equal(getBagDosageCategory(tapeGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(tapeGroup)), '外用薬');
+
+  const eyeDropGroup = [{ drugName: 'ヒアレイン点眼液0.1%', usage: '1日5回両眼に1滴ずつ' }];
+  assert.equal(getBagDosageCategory(eyeDropGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(eyeDropGroup)), '外用薬');
+
+  const suppositoryGroup = [{ drugName: 'ボラザG坐剤', usage: '1日2回肛門内に挿入' }];
+  assert.equal(getBagDosageCategory(suppositoryGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(suppositoryGroup)), '外用薬');
+
+  const earDropGroup = [{ drugName: 'タリビッド耳科用液', usage: '1日2回点耳' }];
+  assert.equal(getBagDosageCategory(earDropGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(earDropGroup)), '外用薬');
+
+  // 証拠A: カロナール錠200 / 疼痛時に1回1錠 -> 頓服薬
+  const tonpukuGroup = [{ drugName: 'カロナール錠200', usage: '疼痛時に1回1錠' }];
+  assert.equal(getBagDosageCategory(tonpukuGroup), 'as_needed');
+  assert.equal(getBagKindLabel(getBagDosageCategory(tonpukuGroup)), '頓服薬');
+
+  // 内服の回帰: アムロジピン錠5mg / 1日1回朝食後 -> 内服薬
+  const internalGroup = [{ drugName: 'アムロジピン錠5mg', usage: '1日1回朝食後' }];
+  assert.equal(getBagDosageCategory(internalGroup), 'internal');
+  assert.equal(getBagKindLabel(getBagDosageCategory(internalGroup)), '内服薬');
+
+  // 手動指定の優先: 手動で internal 指定された明細があれば、外用明細が混在していても '内服薬'
+  const manualOverrideGroup = [
+    {
+      drugName: 'モーラステープ20mg',
+      usage: '1日1回患部に貼る',
+      dosageCategory: 'internal' as const,
+      dosageCategorySource: 'manual' as const
+    },
+    {
+      drugName: 'ヒアレイン点眼液0.1%',
+      usage: '1日1回点眼'
+    }
+  ];
+  assert.equal(getBagDosageCategory(manualOverrideGroup), 'internal');
+  assert.equal(getBagKindLabel(getBagDosageCategory(manualOverrideGroup)), '内服薬');
+
+  // 混在袋: 内服明細と外用明細が同一グループにある場合に '外用薬'（安全側優先）
+  const mixedGroup = [
+    { drugName: 'アムロジピン錠5mg', usage: '用法共通' },
+    { drugName: 'モーラステープ20mg', usage: '用法共通' }
+  ];
+  assert.equal(getBagDosageCategory(mixedGroup), 'external');
+  assert.equal(getBagKindLabel(getBagDosageCategory(mixedGroup)), '外用薬');
+
+  // 空明細のフォールバック
+  assert.equal(getBagDosageCategory([]), 'internal');
+  assert.equal(getBagKindLabel('internal'), '内服薬');
+  assert.equal(getBagKindLabel('injection'), '注射薬');
+});
+

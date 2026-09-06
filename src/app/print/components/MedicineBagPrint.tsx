@@ -2,6 +2,7 @@ import React from 'react';
 import { Package } from 'lucide-react';
 import type { PharmacyInfo } from '../types';
 import {
+  getBagDosageCategory,
   getBagKindLabel,
   getBagDaysText,
   getTimingBadges,
@@ -39,7 +40,8 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
       </div>
 
       {Object.entries(groupedForBags).map(([usage, groupItems]) => {
-        const isExternalBag = /外用|塗布|貼付|点眼|点鼻|吸入/.test(usage);
+        const bagCategory = getBagDosageCategory(groupItems);
+        const isExternalBag = bagCategory === 'external' || bagCategory === 'injection';
         const bagComments = getBagRpComments(groupItems);
 
         return (
@@ -49,7 +51,7 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
             key={`bag-${usage}`}
           >
             <div className="yakutai-ribbon">
-              <span>{getBagKindLabel(usage)}</span>
+              <span>{getBagKindLabel(bagCategory)}</span>
               <strong>おくすり袋</strong>
             </div>
 
