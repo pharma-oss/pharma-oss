@@ -189,7 +189,7 @@ export interface ItemClaimFlagPatches {
  * 巻き戻しでは 3 つとも元へ戻す必要がある。
  */
 export function buildItemClaimFlagPatches(
-  item: any,
+  item: object,
   field: string,
   value: boolean
 ): ItemClaimFlagPatches {
@@ -204,8 +204,9 @@ export function buildItemClaimFlagPatches(
   return { patch, previousPatch };
 }
 
-export function buildItemClaimFlagAuditDetail(item: any, field: string, value: boolean): string {
-  const drugLabel = item?.dispensedDrug || item?.drugName || item?.drugId;
+export function buildItemClaimFlagAuditDetail(item: object, field: string, value: boolean): string {
+  const itemRecord = item as { dispensedDrug?: unknown; drugName?: unknown; drugId?: unknown };
+  const drugLabel = itemRecord?.dispensedDrug || itemRecord?.drugName || itemRecord?.drugId;
   return `処方薬別算定切替: 薬品「${drugLabel}」の「${field}」を ${value ? 'ON' : 'OFF'} に変更しました。`;
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import type { PrescriptionItem } from '@/db/types';
+import type { PrescriptionItem, VisitElectronicPrescription } from '@/db/types';
+import type { ElectronicPrescriptionDocumentKind } from '@/lib/electronic_prescription';
 import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
 import { resolveDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
@@ -352,10 +353,12 @@ export function getBagKindLabel(category: DosageCategory): string {
   }
 }
 
-export function getElectronicPrescriptionDocumentKinds(electronicPrescription: any): any[] {
+export function getElectronicPrescriptionDocumentKinds(
+  electronicPrescription?: VisitElectronicPrescription | null
+): ElectronicPrescriptionDocumentKind[] {
   return electronicPrescription?.linkedPrescriptions?.length
-    ? electronicPrescription.linkedPrescriptions.map((link: any) => link.documentKind)
-    : [electronicPrescription?.documentKind || 'prescription'];
+    ? electronicPrescription.linkedPrescriptions.map((link) => link.documentKind)
+    : [electronicPrescription?.documentKind || 'electronic_prescription'];
 }
 
 export function getClaimItemFlagValue(item: object, field: string): boolean {
