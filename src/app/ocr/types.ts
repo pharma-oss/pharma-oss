@@ -41,6 +41,7 @@ export interface Prescription {
   changeReason: string; // 変更理由
   amount: string;
   usage: string;
+  usageSupplementText?: string;
   days: string;
   rpComment?: string;
   dosageCategory?: DosageCategory;
@@ -59,6 +60,7 @@ export interface PrescriptionGroup {
   prescriptions: Prescription[];
   startIndex: number;
   usage: string;
+  usageSupplementText: string;
   days: string;
   rpComment: string;
 }
@@ -79,6 +81,7 @@ export const groupPrescriptionsByRp = (prescriptions: Prescription[]): Prescript
         prescriptions: [prescription],
         startIndex: i,
         usage: prescription.usage || '',
+        usageSupplementText: prescription.usageSupplementText || '',
         days: prescription.days || '',
         rpComment: prescription.rpComment || ''
       });

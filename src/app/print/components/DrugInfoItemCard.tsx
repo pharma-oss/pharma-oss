@@ -33,8 +33,9 @@ export function formatDaysText(days: number | string | undefined | null): string
   return days ? `${days}日分` : '-';
 }
 
-export function formatUsageText(usage: string | undefined | null): string {
-  return usage || '用法未設定';
+export function formatUsageText(usage: string | undefined | null, supplementText?: string | null): string {
+  const base = usage || '用法未設定';
+  return supplementText ? `${base}（${supplementText}）` : base;
 }
 
 export function formatMedicationSourceText(medicationInfo: { source?: string; sourceRevisionDate?: string }): string {
@@ -116,7 +117,7 @@ export const DrugInfoItemCard = React.memo(function DrugInfoItemCard({
       <div className="drug-info-counseling-grid">
         <div className="drug-info-usage-hero">
           <span>使い方</span>
-          <strong>{formatUsageText(item.usage)}</strong>
+          <strong>{formatUsageText(item.usage, item.usageSupplementText || item.electronicUsageSupplementText)}</strong>
           <div className="drug-info-timing-row">
             {(getTimingBadges(item.usage).length > 0 ? getTimingBadges(item.usage) : ['指示どおり']).map((badge) => (
               <em key={`${item.itemId}-timing-${badge}`}>{badge}</em>

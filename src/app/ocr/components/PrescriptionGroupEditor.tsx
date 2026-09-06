@@ -15,7 +15,7 @@ export interface PrescriptionGroupEditorProps {
   onToggleIppoka: (id: string, checked: boolean, index: number) => void;
   onToggleCrushed: (id: string, checked: boolean, index: number) => void;
   onToggleReceiptRemark: (id: string, checked: boolean, index: number) => void;
-  onRpFieldChange: (rpId: string, field: 'usage' | 'days' | 'rpComment', value: string) => void;
+  onRpFieldChange: (rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string) => void;
   onRpDosageCategoryChange: (rpId: string, category: DosageCategory | null) => void;
   onAddDrugToRp: (rpId: string) => void;
   onAddRpAfter: (rpId: string) => void;
@@ -160,6 +160,18 @@ export const PrescriptionGroupEditor = React.memo(({
             )}
           </div>
         </div>
+        <label className="rp-supplement-field">
+          <span>用法補足（手入力）</span>
+          <input
+            type="text"
+            className="usage-supplement"
+            aria-label={`Rp ${groupIndex + 1} 用法補足`}
+            placeholder="例: 入浴後、患部に、疼痛時"
+            maxLength={500}
+            value={group.usageSupplementText || ''}
+            onChange={(e) => onRpFieldChange(group.rpId, 'usageSupplementText', e.target.value)}
+          />
+        </label>
         <label className="rp-days-field">
           <span>日数</span>
           <div className="days-input-wrap">
@@ -380,7 +392,7 @@ export const PrescriptionGroupEditor = React.memo(({
 
         .rp-prescription-footer {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 116px;
+          grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 116px;
           align-items: end;
           gap: 0.65rem;
           margin-top: 0.65rem;
@@ -391,6 +403,7 @@ export const PrescriptionGroupEditor = React.memo(({
         }
 
         .rp-usage-field,
+        .rp-supplement-field,
         .rp-days-field,
         .rp-comment-row {
           min-width: 0;
@@ -399,6 +412,7 @@ export const PrescriptionGroupEditor = React.memo(({
         }
 
         .rp-usage-field span,
+        .rp-supplement-field span,
         .rp-days-field span,
         .rp-comment-row span {
           color: var(--text-muted);

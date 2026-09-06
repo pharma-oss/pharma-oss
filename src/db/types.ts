@@ -479,6 +479,7 @@ export interface PrescriptionItem {
   electronicUsageCode?: string;
   electronicUsageFallbackText?: string;
   electronicUsageSupplementText?: string;
+  usageSupplementText?: string;
   changeReason?: string;
   amount: number;
   usage?: string;

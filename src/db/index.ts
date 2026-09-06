@@ -219,6 +219,46 @@ async function seedInitialAdminUser(db: PharmacyDatabase) {
     }
 }
 
+export const PRESCRIPTION_ITEM_ZERO_BASED_STRATEGIES: Record<number, (oldDoc: any) => any> = {
+    0: keepDocument,
+    1: (oldDoc) => {
+        oldDoc.tokkanType = oldDoc.tokkanType || 'none';
+        return oldDoc;
+    },
+    2: (oldDoc) => {
+        oldDoc.claimPreparation = oldDoc.claimPreparation !== false;
+        oldDoc.claimManagement = oldDoc.claimManagement !== false;
+        oldDoc.claimDrugFee = oldDoc.claimDrugFee !== false;
+        oldDoc.isDiagnosticTest = !!oldDoc.isDiagnosticTest;
+        return oldDoc;
+    },
+    3: (oldDoc) => {
+        oldDoc.claimPreparation = oldDoc.claimPreparation !== false;
+        oldDoc.claimManagement = oldDoc.claimManagement !== false;
+        oldDoc.claimDrugFee = oldDoc.claimDrugFee !== false;
+        oldDoc.isDiagnosticTest = !!oldDoc.isDiagnosticTest;
+        return oldDoc;
+    },
+    4: (oldDoc) => {
+        oldDoc.isPicked = !!oldDoc.isPicked;
+        return oldDoc;
+    },
+    5: keepDocument,
+    6: keepDocument,
+    9: (oldDoc) => {
+        oldDoc.billingAgentGroupKey = oldDoc.billingAgentGroupKey || '';
+        oldDoc.billingAgentGroupReason = oldDoc.billingAgentGroupReason || '';
+        return oldDoc;
+    },
+    10: keepDocument,
+    11: keepDocument,
+    17: keepDocument
+};
+
+export function getPrescriptionItemMigrationStrategies() {
+    return legacyMigrationStrategies(PRESCRIPTION_ITEM_SCHEMA, PRESCRIPTION_ITEM_ZERO_BASED_STRATEGIES);
+}
+
 type CollectionDefinitions = Parameters<PharmacyDatabase['addCollections']>[0];
 
 async function createSatelliteDatabase(collectionDefinitions: CollectionDefinitions): Promise<PharmacyDatabase> {
@@ -349,42 +389,10 @@ const create = async () => {
                 21: keepDocument
             })
         },
+
         prescription_items: {
             schema: PRESCRIPTION_ITEM_SCHEMA,
-            migrationStrategies: legacyMigrationStrategies(PRESCRIPTION_ITEM_SCHEMA, {
-                0: keepDocument,
-                1: (oldDoc) => {
-                    oldDoc.tokkanType = oldDoc.tokkanType || 'none';
-                    return oldDoc;
-                },
-                2: (oldDoc) => {
-                    oldDoc.claimPreparation = oldDoc.claimPreparation !== false;
-                    oldDoc.claimManagement = oldDoc.claimManagement !== false;
-                    oldDoc.claimDrugFee = oldDoc.claimDrugFee !== false;
-                    oldDoc.isDiagnosticTest = !!oldDoc.isDiagnosticTest;
-                    return oldDoc;
-                },
-                3: (oldDoc) => {
-                    oldDoc.claimPreparation = oldDoc.claimPreparation !== false;
-                    oldDoc.claimManagement = oldDoc.claimManagement !== false;
-                    oldDoc.claimDrugFee = oldDoc.claimDrugFee !== false;
-                    oldDoc.isDiagnosticTest = !!oldDoc.isDiagnosticTest;
-                    return oldDoc;
-                },
-                4: (oldDoc) => {
-                    oldDoc.isPicked = !!oldDoc.isPicked;
-                    return oldDoc;
-                },
-                5: keepDocument,
-                6: keepDocument,
-                9: (oldDoc) => {
-                    oldDoc.billingAgentGroupKey = oldDoc.billingAgentGroupKey || '';
-                    oldDoc.billingAgentGroupReason = oldDoc.billingAgentGroupReason || '';
-                    return oldDoc;
-                },
-                10: keepDocument,
-                11: keepDocument
-            })
+            migrationStrategies: getPrescriptionItemMigrationStrategies()
         },
         soap_records: {
             schema: SOAP_RECORD_SCHEMA,

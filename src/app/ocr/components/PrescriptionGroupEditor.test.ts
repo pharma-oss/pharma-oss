@@ -9,6 +9,7 @@ const mockGroup: PrescriptionGroup = {
   rpId: 'rp-1',
   startIndex: 0,
   usage: '1日1回朝食後',
+  usageSupplementText: '',
   days: '14',
   rpComment: '',
   prescriptions: [

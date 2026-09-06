@@ -43,6 +43,7 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
         const bagCategory = getBagDosageCategory(groupItems);
         const isExternalBag = bagCategory === 'external' || bagCategory === 'injection';
         const bagComments = getBagRpComments(groupItems);
+        const supplementText = groupItems.find((i) => i.usageSupplementText || i.electronicUsageSupplementText)?.usageSupplementText || groupItems.find((i) => i.electronicUsageSupplementText)?.electronicUsageSupplementText;
 
         return (
           <div
@@ -69,7 +70,10 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
 
               <div className="yakutai-usage-hero">
                 <span>使い方</span>
-                <strong>{usage}</strong>
+                <strong>
+                  {usage}
+                  {supplementText ? <span className="yakutai-usage-supplement">（{supplementText}）</span> : null}
+                </strong>
                 <em>{getBagDaysText(groupItems)}</em>
               </div>
 

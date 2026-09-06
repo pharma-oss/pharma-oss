@@ -50,7 +50,10 @@ export const MedicineNotebookStickerPrint = React.memo(function MedicineNotebook
                 <strong>{item.days ? `${item.days}日分` : '-'}</strong>
               </div>
             </div>
-            <div className="sticker-usage">{item.usage || '用法未設定'}</div>
+            <div className="sticker-usage">
+              {item.usage || '用法未設定'}
+              {item.usageSupplementText || item.electronicUsageSupplementText ? `（${item.usageSupplementText || item.electronicUsageSupplementText}）` : ''}
+            </div>
             <div className="sticker-timing-row">
               {(getTimingBadges(item.usage).length > 0 ? getTimingBadges(item.usage) : ['指示どおり']).map((badge) => (
                 <span key={`sticker-${item.itemId}-${badge}`}>{badge}</span>

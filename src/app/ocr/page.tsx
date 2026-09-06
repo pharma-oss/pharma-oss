@@ -403,6 +403,7 @@ export default function OcrPage() {
       const groupIndex = group ? prescriptionGroups.indexOf(group) : undefined;
       return {
         ...p,
+        usageSupplementText: p.usageSupplementText || group?.usageSupplementText,
         dosageCategory: groupCategory?.category ?? p.dosageCategory,
         dosageCategorySource: (groupCategory?.isManual ? 'manual' : 'auto') as 'auto' | 'manual',
         rpNumber: groupIndex !== undefined ? groupIndex + 1 : undefined
@@ -989,7 +990,7 @@ export default function OcrPage() {
     });
   }, []);
 
-  const handleRpFieldChange = useCallback((rpId: string, field: 'usage' | 'days' | 'rpComment', value: string) => {
+  const handleRpFieldChange = useCallback((rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string) => {
     setPrescriptions((prev) => prev.map((prescription) => (
       prescription.rpId === rpId ? { ...prescription, [field]: value } : prescription
     )));
@@ -1285,6 +1286,7 @@ export default function OcrPage() {
           electronicUsageCode: item.electronicUsageCode || '',
           electronicUsageFallbackText: item.electronicUsageFallbackText || '',
           electronicUsageSupplementText: item.electronicUsageSupplementText || '',
+          usageSupplementText: item.usageSupplementText?.trim() || '',
           changeReason: item.changeReason,
           amount: parseFloat(item.amount) || 1,
           usage: item.usage,

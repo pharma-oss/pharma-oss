@@ -1,5 +1,8 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { MedicineBagPrint } from './components/MedicineBagPrint';
 import {
   getClaimItemFlagValue,
   calculatePatientAge,
@@ -570,4 +573,41 @@ test('getBagDosageCategory respects resolveEffectiveDosageCategory for legacy au
   assert.equal(getBagDosageCategory(manualOverrideGroup), 'internal');
   assert.equal(getBagKindLabel(getBagDosageCategory(manualOverrideGroup)), '内服薬');
 });
+
+test('MedicineBagPrint renders usage supplement text next to usage hero (G6-4)', () => {
+  const element = React.createElement(MedicineBagPrint, {
+    patientData: { name: '山田 太郎' },
+    groupedForBags: {
+      '１日１回就寝前　服用': [
+        {
+          itemId: 'item-1',
+          drugName: 'ロヒプノール錠1mg',
+          amount: 1,
+          days: 14,
+          dosageCategory: 'internal',
+          usageSupplementText: '就寝30分前に水で服用'
+        }
+      ]
+    },
+    pharmacyInfo: {
+      name: 'テスト薬局',
+      code: 'PH-001',
+      postalCode: '100-0001',
+      address: '東京都千代田区',
+      phone: '03-1234-5678',
+      registrationNumber: 'REG-001',
+      pharmacistName: '薬剤師 太郎'
+    },
+    pharmacyAddressLine: '東京都千代田区',
+    receiptRunId: 'RUN-001',
+    dispensingDateStr: '2026/09/06',
+    renderIdentityMark: () => null
+  });
+
+  const html = renderToStaticMarkup(element);
+  assert.ok(html.includes('１日１回就寝前　服用'), '用法名が含まれること');
+  assert.ok(html.includes('就寝30分前に水で服用'), '用法補足テキストが薬袋に描画されること (G6-4)');
+  assert.ok(html.includes('yakutai-usage-supplement'), '補足用のスタイル要素が存在すること');
+});
+
 

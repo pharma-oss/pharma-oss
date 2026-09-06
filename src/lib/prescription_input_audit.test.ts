@@ -234,3 +234,76 @@ test('buildPrescriptionInputAudit flags usage_dosage_category_mismatch as warnin
   assert.equal(mismatch5.length, 0, '用法未入力時は剤形不一致警告は出ないこと');
 });
 
+test('buildPrescriptionInputAudit flags required usage supplement omissions (G6-3)', () => {
+  // 1. 「適宜　服用」（asNeededCondition: true）＋ 補足空 → warning 1件
+  const audit1 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'カロナール錠300',
+      amount: '1',
+      usage: '適宜　服用',
+      usageSupplementText: '',
+      days: '10',
+      dosageCategory: 'as_needed'
+    }
+  ]);
+  const condIssues1 = audit1.issues.filter((i) => i.code === 'usage_supplement_required_condition');
+  assert.equal(condIssues1.length, 1, '「適宜　服用」で補足が空なら warning 1件 (G6-3)');
+  assert.equal(condIssues1[0].severity, 'warning');
+
+  // 補足あり → 0件
+  const audit1WithSupplement = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'カロナール錠300',
+      amount: '1',
+      usage: '適宜　服用',
+      usageSupplementText: '頭痛時または38.5度以上の発熱時',
+      days: '10',
+      dosageCategory: 'as_needed'
+    }
+  ]);
+  const condIssues1WithSupp = audit1WithSupplement.issues.filter((i) => i.code === 'usage_supplement_required_condition');
+  assert.equal(condIssues1WithSupp.length, 0, '「適宜　服用」に補足があれば警告は出ないこと');
+
+  // 2. 「疼痛時　貼付」（site: 'required'）＋ 補足空 → warning 1件
+  const audit2 = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '1',
+      usage: '疼痛時　貼付',
+      usageSupplementText: '',
+      days: '14',
+      dosageCategory: 'external'
+    }
+  ]);
+  const siteIssues2 = audit2.issues.filter((i) => i.code === 'usage_supplement_required_site');
+  assert.equal(siteIssues2.length, 1, '「疼痛時　貼付」で部位補足が空なら warning 1件 (G6-3)');
+  assert.equal(siteIssues2[0].severity, 'warning');
+
+  // 補足あり → 0件
+  const audit2WithSupplement = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '1',
+      usage: '疼痛時　貼付',
+      usageSupplementText: '腰部または右肩',
+      days: '14',
+      dosageCategory: 'external'
+    }
+  ]);
+  const siteIssues2WithSupp = audit2WithSupplement.issues.filter((i) => i.code === 'usage_supplement_required_site');
+  assert.equal(siteIssues2WithSupp.length, 0, '「疼痛時　貼付」に部位補足があれば警告は出ないこと');
+});
+
+

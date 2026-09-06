@@ -17,6 +17,7 @@ export interface PrescriptionInputAuditItem {
   changeReason?: string;
   amount?: string | number;
   usage?: string;
+  usageSupplementText?: string;
   days?: string | number;
   dosageCategory?: DosageCategory;
   dosageCategorySource?: 'auto' | 'manual';
@@ -349,6 +350,58 @@ export function buildPrescriptionInputAudit(
           itemIds: group.map((item) => item.id).filter(Boolean) as string[],
           rpId
         });
+      }
+    }
+
+    if (usage) {
+      const matchingUsage = ELECTRONIC_USAGE_OPTIONS.find((opt) => opt.label === usage);
+      if (matchingUsage) {
+        const supplement = matchingUsage.supplement;
+        const supplementText = normalizeText(group.find((item) => normalizeText(item.usageSupplementText))?.usageSupplementText);
+        const rpNum = group[0]?.rpNumber ?? rpLoopIndex;
+
+        if (!supplementText) {
+          if (supplement?.asNeededCondition) {
+            addIssue(issues, {
+              severity: 'warning',
+              code: 'usage_supplement_required_condition',
+              title: `Rp${rpNum} の用法に頓用条件の補足が必要です`,
+              message: '「頭痛時」「発熱時」などの具体的な服用条件を用法補足欄に入力してください。',
+              itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+              rpId
+            });
+          }
+          if (supplement?.administrationTime) {
+            addIssue(issues, {
+              severity: 'warning',
+              code: 'usage_supplement_required_time',
+              title: `Rp${rpNum} の用法に投与時刻の補足が必要です`,
+              message: '具体的な投与時刻（例: 朝8時、就寝30分前など）を用法補足欄に入力してください。',
+              itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+              rpId
+            });
+          }
+          if (supplement?.site === 'required') {
+            addIssue(issues, {
+              severity: 'warning',
+              code: 'usage_supplement_required_site',
+              title: `Rp${rpNum} の用法に部位の補足が必要です`,
+              message: '貼付・塗布する部位（例: 腰部、患部など）を用法補足欄に入力してください。',
+              itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+              rpId
+            });
+          }
+          if (matchingUsage.codeKind === 'guide') {
+            addIssue(issues, {
+              severity: 'warning',
+              code: 'usage_supplement_required_guide',
+              title: `Rp${rpNum} の用法に詳細指示の補足が必要です`,
+              message: '案内用法のため、具体的な指示内容を用法補足欄に入力してください。',
+              itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+              rpId
+            });
+          }
+        }
       }
     }
   }

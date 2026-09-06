@@ -628,11 +628,26 @@ describe('Schema Validation', () => {
         dosageCategory: 'internal',
         dosageCategorySource: 'auto',
         billingAgentGroupKey: 'mtx-weekly',
-        billingAgentGroupReason: '地域審査の運用に合わせて週1回用法を別剤確認'
+        billingAgentGroupReason: '地域審査の運用に合わせて週1回用法を別剤確認',
+        usageSupplementText: '入浴後に患部へ塗布'
       };
       const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, validItem);
       assert.strictEqual(errors, null);
-      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 17);
+      assert.strictEqual(PRESCRIPTION_ITEM_SCHEMA.version, 18, 'PRESCRIPTION_ITEM_SCHEMA version must be 18');
+      assert.ok(PRESCRIPTION_ITEM_SCHEMA.properties?.usageSupplementText, 'usageSupplementText property must exist');
+    });
+
+    test('should fail if usageSupplementText exceeds maxLength 500', () => {
+      const invalidItem = {
+        itemId: 'item_1',
+        visitId: 'v_123',
+        drugId: 'drug_456',
+        amount: 2,
+        days: 7,
+        usageSupplementText: 'a'.repeat(501)
+      };
+      const errors = getErrors(PRESCRIPTION_ITEM_SCHEMA, invalidItem);
+      assert.notStrictEqual(errors, null, 'usageSupplementText over 500 chars must fail validation');
     });
 
     test('should fail if dosage category is not a known value', () => {

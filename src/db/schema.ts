@@ -679,7 +679,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
 
 export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
   title: 'prescription item schema',
-  version: 17,
+  version: 18,
   primaryKey: 'itemId',
   type: 'object',
   properties: {
@@ -720,6 +720,7 @@ export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {
     electronicUsageCode: { type: 'string', maxLength: 50 },
     electronicUsageFallbackText: { type: 'string', maxLength: 2000 },
     electronicUsageSupplementText: { type: 'string', maxLength: 500 },
+    usageSupplementText: { type: 'string', maxLength: 500 },
     changeReason: { type: 'string', maxLength: 200 },
     amount: { type: 'number' },
     usage: { type: 'string', maxLength: 2000 },
