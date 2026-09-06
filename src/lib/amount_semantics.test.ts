@@ -1,6 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isDailyAmountItem, type AmountSemanticsItem } from './amount_semantics';
+import { calculateDispensingFees, type ItemWithPrice } from './calculator.ts';
+import type { FacilitySettings, Patient } from '../db/types.ts';
+
+const mockSettings: FacilitySettings = {
+  id: 'test-settings',
+  baseFeeCategory: '1',
+  regionalSupportAddition: 'none',
+  medicalDxAddition: false,
+  postGenericAddition: 'none',
+  genericDispensingReduction: false
+};
+
+const mockPatient: Patient = {
+  patientId: 'test-patient',
+  name: 'テスト 患者',
+  kana: 'テスト カンジャ',
+  birthDate: '1980-01-01'
+};
 
 test('isDailyAmountItem classifies typical domain cases correctly via table driven tests', () => {
   const cases: { item: AmountSemanticsItem; expected: boolean; description: string }[] = [
@@ -75,26 +93,45 @@ test('isDailyAmountItem classifies typical domain cases correctly via table driv
   }
 });
 
-test('documents and locks known divergence between amount_semantics and calculator.ts for tape with days', () => {
-  // モーラステープ days: 14 「1日1回貼付」:
-  // 帳票側（amount_semantics）: 臨床安全のため外用・全量（false）として印字。
-  // 算定側（calculator.ts:575）: isInternalMedicine は days>0 かつ 頓服/内滴/注射語なしで true（内服算定）。
-  // この既知の乖離をテストで固定し、算定側の改修時に検知できるようにする。
-  const tapeItem = { days: 14, usage: '1日1回貼付', dosageCategory: 'external' as const };
+test('amount semantics and calculator agreement for tape with days (PR-E8)', () => {
+  // モーラステープ days: 14 「1日1回患部に貼る」:
+  // 帳票側（amount_semantics）: 外用全量（isDailyAmountItem === false）と判定。
+  // 算定側（calculator.ts calculateDispensingFees）: 外用薬（薬剤調製料 10点、調剤管理料2）として算定。
+  // 帳票側と算定側の判定が一致し、内服として誤算定・誤印字されない契約を本物の関数同士で担保する。
+  const tapeItem: ItemWithPrice = {
+    itemId: 'tape-1',
+    visitId: 'v-1',
+    drugId: 'drug-tape',
+    drugName: 'モーラステープ20mg',
+    amount: 14,
+    days: 14,
+    unitText: '枚',
+    usage: '1日1回患部に貼る',
+    dosageCategory: 'external',
+    dosageCategorySource: 'auto',
+    drugPrice: 30
+  };
 
+  // 帳票側の検証: 外用全量
   const printIsDaily = isDailyAmountItem(tapeItem);
   assert.equal(printIsDaily, false, '帳票側は外用全量（isDailyAmountItem === false）と判定すること');
 
-  // calculator.ts:575 の判定ロジックの直接再現
-  const usage = tapeItem.usage || '';
-  const isNaiteki = usage.includes('内滴') || usage.includes('内用滴剤');
-  const isTonpuku = usage.includes('頓服');
-  const isInjection = usage.includes('注射');
-  const days = tapeItem.days || 0;
-  const calculatorIsInternal = !!(days > 0 && !isNaiteki && !isTonpuku && !isInjection);
+  // 算定側の実地検証: 本物の calculateDispensingFees を実行
+  const results = calculateDispensingFees(mockSettings, [tapeItem], mockPatient, '2024-01-01');
+  const prepFee = results.find((r) => r.code === 'drug_preparation');
+  assert.ok(prepFee, '薬剤調製料が算定されること');
+  assert.equal(
+    prepFee.points,
+    10,
+    '算定側は外用調製料（10点）として算定し、内服調製料（24点）としないこと'
+  );
 
-  assert.equal(calculatorIsInternal, true, '現行 calculator 側は internal と判定すること（既知の乖離）');
-  assert.notEqual(printIsDaily, calculatorIsInternal, '帳票側と算定側で判定が乖離していることを固定');
+  const mgmtFee = results.find((r) => r.code === 'dispensing_management');
+  assert.ok(mgmtFee, '調剤管理料が算定されること');
+  assert.ok(
+    mgmtFee.rationale?.includes('内服薬以外'),
+    '算定側も内服薬以外（調剤管理料2）として扱うこと'
+  );
 });
 
 test('amount semantics infers dosage category when dosageCategory is undefined (PR-E2)', async () => {
