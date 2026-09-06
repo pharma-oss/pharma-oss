@@ -84,9 +84,9 @@ test('PrescriptionGroupEditor usage datalist options do not contain code numbers
     );
   }
 
-  // 代表的な用法名称（例: "1日3回食後服用"）が value として含まれていること
+  // 代表的な用法名称（例: "１日３回朝昼夕食後　服用"）が value として含まれていること
   assert.ok(
-    optionValueMatches.includes('1日3回食後服用'),
+    optionValueMatches.includes('１日３回朝昼夕食後　服用'),
     '用法名称そのものが value として含まれていること'
   );
 });

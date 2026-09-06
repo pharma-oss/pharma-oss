@@ -11,11 +11,39 @@ export function formatElectronicUsage(option: ElectronicUsageOption): string {
   return `${option.code} ${option.label}`;
 }
 
+/**
+ * 内滴（内用滴剤）で選べる用法。
+ * 用法マスタに内滴の基本用法区分が無く、実務で使う用法も限られるため、
+ * 利用者判断により次の 3 件に限定する（表示順もこの順）。
+ */
+export const INTERNAL_DROP_USAGE_PRESCRIPTION_CODES = [
+  '1011100000000000', // １日１回就寝前　服用
+  '1050W20000000000', // 適宜　服用
+  '1050410000000000', // 便秘時　服用
+] as const;
+
 /** 指定した剤形で選べる用法候補。category 未設定の候補（未コード化用法など）は常に含める。 */
 export function filterUsageOptionsByCategory(
   options: ElectronicUsageOption[],
   category: DosageCategory
 ): ElectronicUsageOption[] {
+  if (category === 'internal_drop') {
+    const map = new Map<string, ElectronicUsageOption>();
+    for (const option of options) {
+      if (option.prescriptionCode) {
+        map.set(option.prescriptionCode, option);
+      }
+    }
+    const results: ElectronicUsageOption[] = [];
+    for (const code of INTERNAL_DROP_USAGE_PRESCRIPTION_CODES) {
+      const option = map.get(code);
+      if (option) {
+        results.push(option);
+      }
+    }
+    return results;
+  }
+
   return options.filter((option) => !option.category || option.category === category);
 }
 
