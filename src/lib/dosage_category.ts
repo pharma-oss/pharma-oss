@@ -95,3 +95,66 @@ export function resolveEffectiveDosageCategory(item: {
   }
   return resolveDosageCategory(item);
 }
+
+export type DosageCategorySourceItem = {
+  drugName?: string;
+  dispensedDrug?: string;
+  usage?: string;
+  dosageCategory?: DosageCategory;
+  dosageCategorySource?: 'auto' | 'manual';
+};
+
+/**
+ * 処方グループ内の複数明細から代表となる剤形区分を決定する。
+ * 手動指定（manual）を最優先とし、自動判定時は external > injection > as_needed > internal_drop > internal の順で優先する。
+ */
+export function resolveGroupDosageCategory(items: DosageCategorySourceItem[]): DosageCategory {
+  if (!items || items.length === 0) return 'internal';
+
+  const manualItem = items.find((p) => p.dosageCategorySource === 'manual' && p.dosageCategory);
+  if (manualItem?.dosageCategory) {
+    return manualItem.dosageCategory;
+  }
+
+  const priority: Record<DosageCategory, number> = {
+    external: 5,
+    injection: 4,
+    as_needed: 3,
+    internal_drop: 2,
+    internal: 1
+  };
+
+  let highestCategory: DosageCategory = 'internal';
+  let highestPriority = 0;
+
+  for (const item of items) {
+    const cat = resolveEffectiveDosageCategory(item);
+    const p = priority[cat] ?? 1;
+    if (p > highestPriority) {
+      highestPriority = p;
+      highestCategory = cat;
+    }
+  }
+
+  return highestCategory;
+}
+
+/**
+ * 支払基金「レセプト電算処理システム記録条件仕様（調剤用）」別表11 剤形コード
+ * 出典: 令和8年6月版 iryokikan_in_07.pdf 31ページ
+ * 1: 内服
+ * 2: 内滴
+ * 3: 屯服
+ * 4: 注射
+ * 5: 外用
+ * 6: 浸煎（本システム未対応・仕様未確認のため既存挙動を維持）
+ * 7: 湯（本システム未対応・仕様未確認のため既存挙動を維持）
+ * 9: 材料（本システム未対応・仕様未確認のため既存挙動を維持）
+ */
+export const OFFICIAL_DOSAGE_FORM_CODE_MAP: Record<DosageCategory, string> = {
+  internal: '1',
+  internal_drop: '2',
+  as_needed: '3',
+  injection: '4',
+  external: '5'
+};

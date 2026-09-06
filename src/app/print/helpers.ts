@@ -2,7 +2,7 @@ import React from 'react';
 import type { PrescriptionItem, VisitElectronicPrescription } from '@/db/types';
 import type { ElectronicPrescriptionDocumentKind } from '@/lib/electronic_prescription';
 import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
-import { resolveDosageCategory, resolveEffectiveDosageCategory, type DosageCategory } from '@/lib/dosage_category';
+import { resolveDosageCategory, resolveEffectiveDosageCategory, resolveGroupDosageCategory, type DosageCategory, type DosageCategorySourceItem } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
@@ -299,43 +299,10 @@ export function getMedicationFlags(item: { isHighRisk?: boolean; isGeneric?: boo
   return flags;
 }
 
-export type BagCategorySourceItem = {
-  drugName?: string;
-  dispensedDrug?: string;
-  usage?: string;
-  dosageCategory?: DosageCategory;
-  dosageCategorySource?: 'auto' | 'manual';
-};
+export type BagCategorySourceItem = DosageCategorySourceItem;
 
 export function getBagDosageCategory(items: BagCategorySourceItem[]): DosageCategory {
-  if (!items || items.length === 0) return 'internal';
-
-  const manualItem = items.find((p) => p.dosageCategorySource === 'manual' && p.dosageCategory);
-  if (manualItem?.dosageCategory) {
-    return manualItem.dosageCategory;
-  }
-
-  const priority: Record<DosageCategory, number> = {
-    external: 5,
-    injection: 4,
-    as_needed: 3,
-    internal_drop: 2,
-    internal: 1
-  };
-
-  let highestCategory: DosageCategory = 'internal';
-  let highestPriority = 0;
-
-  for (const item of items) {
-    const cat = resolveEffectiveDosageCategory(item);
-    const p = priority[cat] ?? 1;
-    if (p > highestPriority) {
-      highestPriority = p;
-      highestCategory = cat;
-    }
-  }
-
-  return highestCategory;
+  return resolveGroupDosageCategory(items);
 }
 
 export function getBagKindLabel(category: DosageCategory): string {

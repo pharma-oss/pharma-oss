@@ -1553,3 +1553,119 @@ test('more copayment rows than public insurances is reported as an error', () =>
   assert.strictEqual(issue.severity, 'error');
   assert.match(issue.message, /公費は1件ですが、一部負担金額が2件/);
 });
+
+test('SH record dosage form code: external drug with days > 0 is mapped to 5 (not internal 1)', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    }
+  });
+  claim.items = [{
+    itemId: 'visit_1_item_tape',
+    visitId: 'visit_1',
+    rpNumber: 1,
+    drugId: 'drug_tape',
+    drugName: 'モーラステープ20mg 7枚',
+    dispensedDrugCode: '620000002',
+    drugPrice: 15,
+    amount: 2,
+    days: 14,
+    usage: '1日1回患部に貼付'
+  }];
+  const sh = officialRecordFields(claim, 'SH');
+  assert.notStrictEqual(sh[1], '1', 'days > 0 であっても外用薬が内服コード1になってはならない');
+  assert.strictEqual(sh[1], '5', '別表11の外用コード5が設定されること');
+});
+
+test('SH record dosage form code: as_needed drug is mapped to official code 3 (屯服)', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    }
+  });
+  claim.items = [{
+    itemId: 'visit_1_item_tonpuku',
+    visitId: 'visit_1',
+    rpNumber: 1,
+    drugId: 'drug_tonpuku',
+    drugName: 'カロナール錠300 300mg',
+    dispensedDrugCode: '620000003',
+    drugPrice: 9.8,
+    amount: 1,
+    days: 0,
+    usage: '疼痛時服用',
+    dosageCategory: 'as_needed'
+  }];
+  const sh = officialRecordFields(claim, 'SH');
+  assert.strictEqual(sh[1], '3', '別表11の屯服コード3が設定されること');
+});
+
+test('SH record dosage form code: internal drug with days: 28 is mapped to 1 (内服)', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    }
+  });
+  claim.items = [{
+    itemId: 'visit_1_item_internal',
+    visitId: 'visit_1',
+    rpNumber: 1,
+    drugId: 'drug_internal',
+    drugName: 'アムロジピン錠5mg',
+    dispensedDrugCode: '620124201',
+    drugPrice: 12.3,
+    amount: 1,
+    days: 28,
+    usage: '1日1回朝食後'
+  }];
+  const sh = officialRecordFields(claim, 'SH');
+  assert.strictEqual(sh[1], '1', '別表11の内服コード1が設定されること');
+});
+
+test('SH record dosage form code: manual dosageCategorySource takes precedence over inference', () => {
+  const claim = makeOfficialReadyCase({
+    visit: {
+      claimLifecycle: makeRebillingLifecycle(),
+      prescriptionDate: '2026-06-14',
+      dispensingDate: '2026-06-14'
+    }
+  });
+  // グループ内に自動判定で外用になる薬品（モーラステープ）が含まれていても、
+  // 薬剤師が手動で内服を指定した場合は手動指定が最優先されること
+  claim.items = [
+    {
+      itemId: 'visit_1_item_tape',
+      visitId: 'visit_1',
+      rpNumber: 1,
+      drugId: 'drug_tape',
+      drugName: 'モーラステープ20mg 7枚',
+      dispensedDrugCode: '620000002',
+      drugPrice: 15,
+      amount: 2,
+      days: 14,
+      usage: '1日1回患部に貼付'
+    },
+    {
+      itemId: 'visit_1_item_manual',
+      visitId: 'visit_1',
+      rpNumber: 1,
+      drugId: 'drug_manual',
+      drugName: 'テスト錠10mg',
+      dispensedDrugCode: '620124201',
+      drugPrice: 12.3,
+      amount: 1,
+      days: 14,
+      usage: '1日1回朝食後',
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }
+  ];
+  const sh = officialRecordFields(claim, 'SH');
+  assert.strictEqual(sh[1], '1', '手動指定された内服コード1が自動外用判定より優先されること');
+});

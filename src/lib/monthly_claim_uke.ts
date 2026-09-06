@@ -29,6 +29,10 @@ import {
   type EvidenceIntegrityReview,
   type EvidenceIntegrityStatus
 } from '@/lib/evidence_integrity';
+import {
+  OFFICIAL_DOSAGE_FORM_CODE_MAP,
+  resolveGroupDosageCategory
+} from './dosage_category.ts';
 
 export interface MonthlyClaimUkeCase {
   visit: Visit;
@@ -946,9 +950,11 @@ function allocateGroupFeePoints(
 }
 
 function deriveOfficialDosageFormCode(items: DispensingUkeItem[]): string {
-  if (items.some((item) => (item.days ?? 0) > 0)) return '1';
-  if (items.some((item) => /外|塗|貼|軟膏|クリーム|ローション/.test(String(item.usage || item.drugName || item.dispensedDrug || '')))) return '3';
-  return '1';
+  const category = resolveGroupDosageCategory(items);
+  // 支払基金「レセプト電算処理システム記録条件仕様（調剤用）」別表11 剤形コード
+  // （出典: 令和8年6月版 iryokikan_in_07.pdf 31ページ: 1内服, 2内滴, 3屯服, 4注射, 5外用）
+  // 浸煎(6)、湯(7)、材料(9)は本システム未対応。仕様未確認の区分は既存の挙動（'1'）を維持。
+  return OFFICIAL_DOSAGE_FORM_CODE_MAP[category] ?? '1';
 }
 
 function getOfficialDispensingQuantity(items: DispensingUkeItem[]): number {
