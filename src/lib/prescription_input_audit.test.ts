@@ -306,4 +306,72 @@ test('buildPrescriptionInputAudit flags required usage supplement omissions (G6-
   assert.equal(siteIssues2WithSupp.length, 0, '「疼痛時　貼付」に部位補足があれば警告は出ないこと');
 });
 
+test('buildPrescriptionInputAudit warns on dosage_days_mismatch for non-daily dosage categories with days > 0', () => {
+  // 1. 外用 ＋ days: 14 → dosage_days_mismatch が warning で 1 件出る
+  const auditExternalWithDays = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: 'd1',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '7',
+      usage: '1日1回貼付',
+      days: 14,
+      dosageCategory: 'external'
+    }
+  ]);
+  const externalIssues = auditExternalWithDays.issues.filter((i) => i.code === 'dosage_days_mismatch');
+  assert.equal(externalIssues.length, 1, '外用で days: 14 のとき dosage_days_mismatch が 1 件出ること');
+  assert.equal(externalIssues[0].severity, 'warning', 'severity は warning であること');
+
+  // 2. 内滴 ＋ days: 7 → 1 件出る
+  const auditInternalDropWithDays = buildPrescriptionInputAudit([
+    {
+      id: 'i2',
+      rpId: 'rp2',
+      drugCode: 'd2',
+      drugName: 'セレネース内用液0.2%',
+      amount: '5',
+      usage: '不穏時　点滴',
+      days: 7,
+      dosageCategory: 'internal_drop'
+    }
+  ]);
+  const dropIssues = auditInternalDropWithDays.issues.filter((i) => i.code === 'dosage_days_mismatch');
+  assert.equal(dropIssues.length, 1, '内滴で days: 7 のとき dosage_days_mismatch が 1 件出ること');
+  assert.equal(dropIssues[0].severity, 'warning', 'severity は warning であること');
+
+  // 3. 内服 ＋ days: 14 → 出ない
+  const auditInternalWithDays = buildPrescriptionInputAudit([
+    {
+      id: 'i3',
+      rpId: 'rp3',
+      drugCode: 'd3',
+      drugName: 'アムロジピン錠5mg',
+      amount: '1',
+      usage: '1日1回朝食後',
+      days: 14,
+      dosageCategory: 'internal'
+    }
+  ]);
+  const internalIssues = auditInternalWithDays.issues.filter((i) => i.code === 'dosage_days_mismatch');
+  assert.equal(internalIssues.length, 0, '内服で days: 14 のときは dosage_days_mismatch が出ないこと');
+
+  // 4. 外用 ＋ days: 0 → 出ない
+  const auditExternalZeroDays = buildPrescriptionInputAudit([
+    {
+      id: 'i4',
+      rpId: 'rp4',
+      drugCode: 'd4',
+      drugName: 'ロキソニンテープ50mg',
+      amount: '7',
+      usage: '1日1回貼付',
+      days: 0,
+      dosageCategory: 'external'
+    }
+  ]);
+  const zeroDaysIssues = auditExternalZeroDays.issues.filter((i) => i.code === 'dosage_days_mismatch');
+  assert.equal(zeroDaysIssues.length, 0, '外用で days: 0 のときは dosage_days_mismatch が出ないこと');
+});
+
 

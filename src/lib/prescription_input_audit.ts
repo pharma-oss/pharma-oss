@@ -1,6 +1,6 @@
 import type { Alert } from '@/db/types';
 import type { DosageCategory } from './dosage_category';
-import { DOSAGE_CATEGORY_LABELS } from './dosage_category';
+import { DOSAGE_CATEGORY_LABELS, resolveEffectiveDosageCategory } from './dosage_category';
 import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from './master-data/usage_master';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
 
@@ -347,6 +347,34 @@ export function buildPrescriptionInputAudit(
           code: 'usage_dosage_category_mismatch',
           title: `Rp${rpNum} の用法が調剤区分「${categoryLabel}」の候補にありません`,
           message: '用法を選び直すか、調剤区分を確認してください。このままでも保存できます。',
+          itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+          rpId
+        });
+      }
+    }
+
+    const representativeItem = group.find((item) => item.dosageCategory) || group[0];
+    if (representativeItem) {
+      const effectiveCategory = resolveEffectiveDosageCategory(representativeItem);
+      const isNonDailyCategory = (
+        effectiveCategory === 'external' ||
+        effectiveCategory === 'as_needed' ||
+        effectiveCategory === 'internal_drop' ||
+        effectiveCategory === 'injection'
+      );
+      const hasPositiveDays = group.some((item) => {
+        const d = typeof item.days === 'number' ? item.days : Number(item.days);
+        return Number.isFinite(d) && d > 0;
+      });
+
+      if (isNonDailyCategory && hasPositiveDays) {
+        const categoryLabel = DOSAGE_CATEGORY_LABELS[effectiveCategory] || effectiveCategory;
+        const rpNum = group[0]?.rpNumber ?? rpLoopIndex;
+        addIssue(issues, {
+          severity: 'warning',
+          code: 'dosage_days_mismatch',
+          title: `Rp${rpNum} は調剤区分「${categoryLabel}」ですが日数が入っています`,
+          message: '外用・屯服・内滴・注射の数量は総量です。日数を空欄にするか、調剤区分を確認してください。このままでも保存できます。',
           itemIds: group.map((item) => item.id).filter(Boolean) as string[],
           rpId
         });
