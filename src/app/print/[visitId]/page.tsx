@@ -1136,11 +1136,6 @@ export default function PrintPage() {
     return delegateHandlePharmacyDeviceOperation(operation);
   };
 
-  const getElectronicPrescriptionDocumentKinds = (prescription: any) => (
-    prescription?.linkedPrescriptions?.length
-      ? prescription.linkedPrescriptions.map((link: any) => link.documentKind)
-      : [prescription?.documentKind || 'prescription']
-  );
 
   const handleOpenPicking = () => {
     router.push(`/emr?visitId=${encodeURIComponent(visitId)}&openPicking=1`);

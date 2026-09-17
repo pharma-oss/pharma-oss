@@ -210,16 +210,34 @@ export function buildItemClaimFlagAuditDetail(item: object, field: string, value
   return `処方薬別算定切替: 薬品「${drugLabel}」の「${field}」を ${value ? 'ON' : 'OFF'} に変更しました。`;
 }
 
+export interface ClaimItemDocLike {
+  patch: (patch: Record<string, boolean>) => Promise<unknown>;
+}
+
+export interface PrescriptionItemOverrideData {
+  drugPriceOverride?: DrugPriceOverride;
+}
+
+export interface DrugPriceOverrideDocLike {
+  modify: (modifier: (data: any) => any) => Promise<unknown>;
+}
+
+export interface PrescriptionItemIdentityLike {
+  dispensedDrug?: unknown;
+  drugName?: unknown;
+  drugId?: unknown;
+}
+
 export interface ApplyItemClaimFlagWithAuditParams {
   db: PharmacyDatabase;
   /** 画面が持っている処方明細 (現在値の読み取りに使う) */
-  item: any;
+  item: object;
   /**
    * 保存先のRxDocument。画面の item は toJSON() 由来で doc を持たないため、
    * 呼び出し側が DB から引いて渡す。ここを item.doc に頼ると、
    * 画面では常に undefined になり保存が黙って行われなくなる。
    */
-  itemDoc: any;
+  itemDoc: ClaimItemDocLike | null | undefined;
   field: string;
   value: boolean;
   patientId?: string;
@@ -305,9 +323,11 @@ export async function persistClaimLifecycleWithAudit(
 export interface ApplyDrugPriceOverrideParams {
   db: PharmacyDatabase;
   /** 画面が持っている処方明細 */
-  item: any;
+  item: PrescriptionItemIdentityLike & {
+    drugPriceOverride?: DrugPriceOverride;
+  };
   /** 保存先のRxDocument。呼び出し側が DB から引いて渡す */
-  itemDoc: any;
+  itemDoc: DrugPriceOverrideDocLike | null | undefined;
   /** 算定に使う薬品マスター (調剤薬があればそちら) */
   drug: DrugPriceSource;
   dispensingDate: string;
@@ -328,7 +348,7 @@ export interface DrugPriceOverrideOutcome {
 }
 
 export function buildDrugPriceOverrideAuditDetail(
-  item: any,
+  item: PrescriptionItemIdentityLike,
   outcome: DrugPriceOverrideOutcome,
   dispensingDate: string
 ): string {
@@ -375,7 +395,10 @@ export async function applyDrugPriceOverrideWithAudit(
   // 上書きを外すときは項目ごと消す。null を書くとスキーマ検証で落ち (RxError VD2)、
   // undefined を書くと RxDB の任意項目に残る。
   // 開始日不明の版を選んだときは effectiveFrom を持たせない。
-  const writeOverride = (data: any, next: DrugPriceOverride | null | undefined) => {
+  const writeOverride = <T extends PrescriptionItemOverrideData>(
+    data: T,
+    next: DrugPriceOverride | null | undefined
+  ): T => {
     const document = { ...data };
     if (!next) {
       delete document.drugPriceOverride;
@@ -386,7 +409,7 @@ export async function applyDrugPriceOverrideWithAudit(
     }
     return document;
   };
-  await itemDoc.modify((data: any) => writeOverride(data, override));
+  await itemDoc.modify((data) => writeOverride(data, override));
 
   const auditOk = await logAudit(
     db,
@@ -396,7 +419,7 @@ export async function applyDrugPriceOverrideWithAudit(
     patientName
   );
   if (!auditOk) {
-    await itemDoc.modify((data: any) => writeOverride(data, previousOverride));
+    await itemDoc.modify((data) => writeOverride(data, previousOverride));
     throw new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack);
   }
 
