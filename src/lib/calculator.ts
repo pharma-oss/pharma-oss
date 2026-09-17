@@ -1,5 +1,8 @@
 import type { FacilitySettings, PrescriptionItem, Patient } from '@/db/types';
-import { resolveDosageCategory, EXTERNAL_USAGE_PATTERN } from './dosage_category.ts';
+import {
+  resolveCalculationDosageFlags,
+  type DosageCategoryResolution
+} from './dosage_category.ts';
 
 export type FeeCode =
   | 'base_fee'
@@ -28,6 +31,8 @@ export interface FeeCalculationOptions {
   disabledFeeRationales?: { [feeCode: string]: string };
   currentVisitId?: string;
   monthlyFeeHistory?: MonthlyFeeHistoryEntry[];
+  /** 既定は 'legacy'。点検画面の what-if 計算だけが 'respect_manual' を渡す */
+  dosageCategoryResolution?: DosageCategoryResolution;
 }
 
 export interface CalculationResultItem {
@@ -553,11 +558,10 @@ export function calculateDispensingFees(
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const usage = item.usage || '';
-    const category = resolveDosageCategory(item);
-    const isExternal = category === 'external' || EXTERNAL_USAGE_PATTERN.test(usage);
-    const isTonpuku = !isExternal && (category === 'as_needed' || usage.includes('頓服'));
-    const isNaiteki = !isExternal && (category === 'internal_drop' || usage.includes('内滴') || usage.includes('内用滴剤'));
-    const isInjection = category === 'injection' || usage.includes('注射');
+    const { isExternal, isTonpuku, isNaiteki, isInjection } = resolveCalculationDosageFlags(
+      item,
+      options?.dosageCategoryResolution
+    );
     const normalizedUsg = normalizeUsage(usage);
     const days = item.days || 0;
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { inferDosageCategory, resolveDosageCategory } from './dosage_category.ts';
+import { inferDosageCategory, resolveDosageCategory, resolveCalculationDosageFlags } from './dosage_category.ts';
 
 test('inferDosageCategory classifies oral solids as internal', () => {
   assert.strictEqual(inferDosageCategory('アムロジピン錠5mg', '1日1回朝食後'), 'internal');
@@ -102,5 +102,56 @@ test('inferDosageCategory classifies external usage pattern with precedence over
 
   // 内服の回帰
   assert.strictEqual(inferDosageCategory('アムロジピン錠5mg', '1日1回朝食後'), 'internal');
+});
+
+test('resolveCalculationDosageFlags defaults to legacy mode (PR-H1)', () => {
+  // 手動「内服」＋用法「点眼」の明細で、第2引数未指定時に legacy 判定（isExternal === true）になること
+  const item = {
+    drugName: '点眼テスト薬',
+    usage: '1日1回点眼',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'manual' as const
+  };
+  const flags = resolveCalculationDosageFlags(item);
+  assert.strictEqual(flags.isExternal, true, 'Default resolution must be legacy (isExternal should be true due to usage)');
+  assert.strictEqual(flags.isTonpuku, false);
+  assert.strictEqual(flags.isNaiteki, false);
+  assert.strictEqual(flags.isInjection, false);
+});
+
+test('resolveCalculationDosageFlags handles legacy mode with EXTERNAL_USAGE_PATTERN', () => {
+  const itemWithSavedInternalAndTopicalUsage = {
+    drugName: '一般的薬品X',
+    usage: '患部に1日2回外用塗布',
+    dosageCategory: 'internal' as const
+  };
+  const flags = resolveCalculationDosageFlags(itemWithSavedInternalAndTopicalUsage, 'legacy');
+  assert.strictEqual(flags.isExternal, true);
+  assert.strictEqual(flags.isTonpuku, false);
+});
+
+test('resolveCalculationDosageFlags handles respect_manual mode only when source is manual', () => {
+  // manual 指定の場合は手動区分をそのまま尊重
+  const manualItem = {
+    drugName: 'テスト薬',
+    usage: '1日1回点眼',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'manual' as const
+  };
+  const flagsManual = resolveCalculationDosageFlags(manualItem, 'respect_manual');
+  assert.strictEqual(flagsManual.isExternal, false);
+  assert.strictEqual(flagsManual.isTonpuku, false);
+  assert.strictEqual(flagsManual.isNaiteki, false);
+  assert.strictEqual(flagsManual.isInjection, false);
+
+  // dosageCategorySource が 'auto' の場合は用法正規表現が効いて legacy と同じ挙動になること
+  const autoItem = {
+    drugName: 'テスト薬',
+    usage: '1日1回点眼',
+    dosageCategory: 'internal' as const,
+    dosageCategorySource: 'auto' as const
+  };
+  const flagsAuto = resolveCalculationDosageFlags(autoItem, 'respect_manual');
+  assert.strictEqual(flagsAuto.isExternal, true, 'auto source should still fall back to usage pattern even in respect_manual mode');
 });
 

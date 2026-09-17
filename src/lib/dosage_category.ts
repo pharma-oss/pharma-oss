@@ -104,6 +104,51 @@ export type DosageCategorySourceItem = {
   dosageCategorySource?: 'auto' | 'manual';
 };
 
+export type DosageCategoryResolution = 'legacy' | 'respect_manual';
+
+export interface CalculationDosageFlags {
+  isExternal: boolean;
+  isTonpuku: boolean;
+  isNaiteki: boolean;
+  isInjection: boolean;
+}
+
+/**
+ * 算定側の剤形フラグ。
+ * 'legacy' は 2026-09-17 時点の calculator.ts の判定をそのまま保つ（既定）。
+ * 'respect_manual' は手動指定を最優先する。帳票側 (resolveEffectiveDosageCategory) と同じ扱いになる。
+ * 既定を 'respect_manual' に変えてはならない。点数が変わる（金科玉条 A-3 は要判断のまま）。
+ */
+export function resolveCalculationDosageFlags(
+  item: DosageCategorySourceItem,
+  resolution: DosageCategoryResolution = 'legacy'
+): CalculationDosageFlags {
+  const usage = item.usage || '';
+
+  if (resolution === 'respect_manual' && item.dosageCategorySource === 'manual' && item.dosageCategory) {
+    const cat = item.dosageCategory;
+    return {
+      isExternal: cat === 'external',
+      isTonpuku: cat === 'as_needed',
+      isNaiteki: cat === 'internal_drop',
+      isInjection: cat === 'injection'
+    };
+  }
+
+  const category = resolveDosageCategory(item);
+  const isExternal = category === 'external' || EXTERNAL_USAGE_PATTERN.test(usage);
+  const isTonpuku = !isExternal && (category === 'as_needed' || usage.includes('頓服'));
+  const isNaiteki = !isExternal && (category === 'internal_drop' || usage.includes('内滴') || usage.includes('内用滴剤'));
+  const isInjection = category === 'injection' || usage.includes('注射');
+
+  return {
+    isExternal,
+    isTonpuku,
+    isNaiteki,
+    isInjection
+  };
+}
+
 /**
  * 処方グループ内の複数明細から代表となる剤形区分を決定する。
  * 手動指定（manual）を最優先とし、自動判定時は external > injection > as_needed > internal_drop > internal の順で優先する。

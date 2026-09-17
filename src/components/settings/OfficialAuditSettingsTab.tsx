@@ -8,6 +8,10 @@ import {
 } from '@/lib/official_audit';
 import { formatClaimPointsDriftSummary, type ClaimPointsDriftReview } from '@/lib/claim_points_drift';
 import {
+  formatDosageCategoryConflictSummary,
+  type DosageCategoryConflictReview
+} from '@/lib/dosage_category_conflict';
+import {
   DISPENSING_UKE_RECORD_SPEC_SOURCE,
   buildDispensingUkeOfficialAllFieldDefinitionGate,
   formatDispensingUkeOfficialAllFieldDefinitionGate
@@ -31,7 +35,7 @@ import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/
 
   const auditPriorityLabel = (priority: 'critical' | 'high' | 'medium') => {
     return {
-      critical: '最重要',
+      critical: '最優先',
       high: '高',
       medium: '中'
     }[priority];
@@ -44,6 +48,10 @@ interface OfficialAuditSettingsTabProps {
   isReviewingClaimPointsDrift: boolean;
   handleReviewClaimPointsDrift: () => Promise<void>;
   handleExportClaimPointsDriftCsv: () => void;
+  dosageCategoryConflict: DosageCategoryConflictReview | null;
+  isReviewingDosageCategoryConflict: boolean;
+  handleReviewDosageCategoryConflict: () => Promise<void>;
+  handleExportDosageCategoryConflictCsv: () => void;
   dispensingUkeSpecPdfText: string;
   setDispensingUkeSpecPdfText: (value: string) => void;
   setDispensingUkeSpecCompletionGate: (value: DispensingUkeSpecificationPdfAllFieldCompletionGate | null) => void;
@@ -69,6 +77,10 @@ export default function OfficialAuditSettingsTab({
   isReviewingClaimPointsDrift,
   handleReviewClaimPointsDrift,
   handleExportClaimPointsDriftCsv,
+  dosageCategoryConflict,
+  isReviewingDosageCategoryConflict,
+  handleReviewDosageCategoryConflict,
+  handleExportDosageCategoryConflictCsv,
   dispensingUkeSpecPdfText,
   setDispensingUkeSpecPdfText,
   setDispensingUkeSpecCompletionGate,
@@ -278,6 +290,87 @@ export default function OfficialAuditSettingsTab({
                             </td>
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          <section
+            className="official-audit-review-workspace"
+            aria-labelledby="dosage-category-conflict-title"
+            data-testid="dosage-category-conflict-section"
+          >
+            <h3 id="dosage-category-conflict-title">剤形判定の食い違い点検</h3>
+            <p className="help-text">
+              全受付の処方明細を対象に、算定側（用法正規表現優先の現行ロジック）と帳票側（手動区分優先）の判定結果を突き合わせます。
+              <strong>この点検は算定結果を変えません。揃えるかどうかは未決です。</strong>
+            </p>
+
+            <div className="actions official-audit-review-actions">
+              <button
+                className="btn-primary flex-center gap-2"
+                onClick={handleReviewDosageCategoryConflict}
+                disabled={isReviewingDosageCategoryConflict || !canViewOfficialAudit}
+                type="button"
+                data-testid="dosage-category-conflict-run-button"
+              >
+                {isReviewingDosageCategoryConflict ? (
+                  <Loader2 size={16} className="spin" aria-hidden="true" />
+                ) : (
+                  <AlertTriangle size={16} aria-hidden="true" />
+                )}
+                <span>{isReviewingDosageCategoryConflict ? '点検中...' : '全処方の剤形食い違いを点検'}</span>
+              </button>
+              <button
+                className="btn-secondary flex-center gap-2"
+                onClick={handleExportDosageCategoryConflictCsv}
+                disabled={!dosageCategoryConflict || dosageCategoryConflict.cases.length === 0}
+                type="button"
+                data-testid="dosage-category-conflict-csv-button"
+              >
+                <FileText size={16} aria-hidden="true" />
+                <span>食い違い一覧CSV</span>
+              </button>
+            </div>
+
+            {dosageCategoryConflict && (
+              <>
+                <p className="claim-points-drift-summary" data-testid="dosage-category-conflict-summary">
+                  {formatDosageCategoryConflictSummary(dosageCategoryConflict)}
+                </p>
+
+                {dosageCategoryConflict.cases.length > 0 && (
+                  <div className="claim-points-drift-table-wrap">
+                    <table className="claim-points-drift-table" data-testid="dosage-category-conflict-table">
+                      <thead>
+                        <tr>
+                          <th>受付ID</th>
+                          <th>Rp番号</th>
+                          <th>現行算定判定</th>
+                          <th>実効剤形（帳票）</th>
+                          <th>点数差（what-if）</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dosageCategoryConflict.cases.map((item, idx) => {
+                          const delta = dosageCategoryConflict.deltaPointsByVisitId[item.visitId];
+                          return (
+                            <tr key={`${item.visitId}-${item.rpNumber ?? idx}`}>
+                              <td>{item.visitId}</td>
+                              <td>{item.rpNumber ?? '-'}</td>
+                              <td>{item.calculationCategoryLabel}</td>
+                              <td>{item.printCategoryLabel}</td>
+                              <td className="num">
+                                {delta === undefined
+                                  ? '-'
+                                  : `${delta > 0 ? '+' : ''}${delta}点`}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

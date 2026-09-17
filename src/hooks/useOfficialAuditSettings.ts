@@ -30,6 +30,15 @@ import {
   type ClaimPointsDriftInput,
   type ClaimPointsDriftReview
 } from '@/lib/claim_points_drift';
+import {
+  buildDosageCategoryConflictReview,
+  buildDosageCategoryConflictCsv,
+  makeDosageCategoryConflictCsvFileName,
+  formatDosageCategoryConflictSummary,
+  type DosageCategoryConflictInput,
+  type DosageCategoryConflictPoints,
+  type DosageCategoryConflictReview
+} from '@/lib/dosage_category_conflict';
 import { calculateDispensingFees, getTotalPoints } from '@/lib/calculator';
 import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
@@ -331,12 +340,131 @@ export function useOfficialAuditSettings({
     );
   };
 
+  // 算定と帳票の剤形判定の食い違い（手動指定 vs 用法正規表現）を運用者が把握するための一覧。
+  const [dosageCategoryConflict, setDosageCategoryConflict] = useState<DosageCategoryConflictReview | null>(null);
+  const [isReviewingDosageCategoryConflict, setIsReviewingDosageCategoryConflict] = useState(false);
+
+  const handleReviewDosageCategoryConflict = async () => {
+    if (!ensurePermission('view_official_audit')) return;
+    if (!db) {
+      toast.error('データベースの初期化が完了していません。');
+      return;
+    }
+    setIsReviewingDosageCategoryConflict(true);
+    try {
+      const [visits, settingsDoc, allItemDocs] = await Promise.all([
+        db.visits.find().exec(),
+        db.facility_settings.findOne('default').exec(),
+        db.prescription_items.find().exec()
+      ]);
+      const settings = settingsDoc ? settingsDoc.toJSON() : null;
+
+      const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc: any) => ({
+        visitId: doc.visitId,
+        rpNumber: doc.rpNumber,
+        itemId: doc.id,
+        drugName: doc.drugName,
+        dispensedDrug: doc.dispensedDrug,
+        usage: doc.usage,
+        dosageCategory: doc.dosageCategory,
+        dosageCategorySource: doc.dosageCategorySource
+      }));
+
+      // 一旦食い違いを特定し、食い違いを含む受付IDのみ点数計算の対象とする
+      const provisionalReview = buildDosageCategoryConflictReview(inputs);
+      const conflictVisitIds = new Set(provisionalReview.cases.map((c) => c.visitId));
+
+      const pointsList: DosageCategoryConflictPoints[] = [];
+      if (settings && conflictVisitIds.size > 0) {
+        const targetVisits = visits.filter((v: any) => conflictVisitIds.has(v.visitId));
+        for (const visitDoc of targetVisits) {
+          const visit: any = visitDoc.toJSON();
+          const [patientDoc, itemDocs] = await Promise.all([
+            db.patients.findOne(visit.patientId).exec(),
+            db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
+          ]);
+          const patient: any = patientDoc ? patientDoc.toJSON() : null;
+          if (!patient) continue;
+
+          const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
+          const drugCodes = new Set<string>();
+          for (const doc of itemDocs) {
+            if (doc.drugId) drugCodes.add(String(doc.drugId));
+            if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
+          }
+          const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
+          const items = itemDocs.map((doc: any) => ({
+            ...doc.toJSON(),
+            ...resolveClaimItemPricing(
+              doc,
+              {
+                prescribed: drugsMap.get(doc.drugId) as any,
+                dispensed: doc.dispensedDrugCode ? (drugsMap.get(doc.dispensedDrugCode) as any) : undefined
+              },
+              dispensingDateForPrice
+            )
+          }));
+
+          const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';
+          const claimOptions = readClaimOptionsState(visit.claimOptions);
+
+          const legacyPoints = getTotalPoints(
+            calculateDispensingFees(settings, items, patient, visitDate, {
+              ...claimOptions,
+              dosageCategoryResolution: 'legacy'
+            })
+          );
+          const respectManualPoints = getTotalPoints(
+            calculateDispensingFees(settings, items, patient, visitDate, {
+              ...claimOptions,
+              dosageCategoryResolution: 'respect_manual'
+            })
+          );
+
+          pointsList.push({
+            visitId: visit.visitId,
+            legacyPoints,
+            respectManualPoints
+          });
+        }
+      }
+
+      const review = buildDosageCategoryConflictReview(inputs, pointsList);
+      setDosageCategoryConflict(review);
+      await logAuditAction(
+        db,
+        'claim_points_review',
+        `剤形判定の食い違い点検: ${formatDosageCategoryConflictSummary(review)}`
+      );
+      if (refreshAuditEvidence) await refreshAuditEvidence();
+      toast.success(formatDosageCategoryConflictSummary(review));
+    } catch (error: any) {
+      console.error('Failed to review dosage category conflicts:', error);
+      toast.error(`剤形判定の食い違い点検に失敗しました: ${error?.message || error}`);
+    } finally {
+      setIsReviewingDosageCategoryConflict(false);
+    }
+  };
+
+  const handleExportDosageCategoryConflictCsv = () => {
+    if (!dosageCategoryConflict) return;
+    downloadTextFile(
+      makeDosageCategoryConflictCsvFileName(new Date()),
+      `\ufeff${buildDosageCategoryConflictCsv(dosageCategoryConflict)}`,
+      'text/csv;charset=utf-8'
+    );
+  };
+
   return {
     canViewOfficialAudit,
     claimPointsDrift,
     isReviewingClaimPointsDrift,
     handleReviewClaimPointsDrift,
     handleExportClaimPointsDriftCsv,
+    dosageCategoryConflict,
+    isReviewingDosageCategoryConflict,
+    handleReviewDosageCategoryConflict,
+    handleExportDosageCategoryConflictCsv,
     dispensingUkeSpecPdfText,
     setDispensingUkeSpecPdfText,
     setDispensingUkeSpecCompletionGate,
