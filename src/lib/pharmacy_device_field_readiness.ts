@@ -4,7 +4,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type PharmacyDeviceFieldStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type PharmacyDeviceFieldStatus = OpsReviewStatus;
 
 export interface PharmacyDeviceFieldEvidenceInput {
   capturedAt?: string;

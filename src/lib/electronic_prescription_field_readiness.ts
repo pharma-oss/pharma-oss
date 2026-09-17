@@ -5,7 +5,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type ElectronicPrescriptionFieldStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type ElectronicPrescriptionFieldStatus = OpsReviewStatus;
 
 export type ElectronicPrescriptionFieldScenarioId =
   | 'exchange_number_fetch'

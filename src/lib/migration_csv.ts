@@ -6,6 +6,7 @@ import {
   type BackupMigrationDiagnosticReport,
   type YakurekiBackup
 } from '@/lib/backup';
+import type { OpsReviewStatus } from '@/lib/ops_review_status';
 
 export type PatientCsvMigrationIssueSeverity = 'error' | 'warning';
 
@@ -102,7 +103,7 @@ export interface SoapCsvMigrationPreview {
 }
 
 export type MigrationPackageSourceKind = 'patients' | 'visits' | 'drug_stocks' | 'soap_records';
-export type MigrationPackageReadinessStatus = 'pass' | 'attention' | 'blocked';
+export type MigrationPackageReadinessStatus = OpsReviewStatus;
 
 export interface MigrationPackageSourceReview {
   kind: MigrationPackageSourceKind;

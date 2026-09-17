@@ -1,7 +1,9 @@
 import type { SupportCaseFocusArea, SupportCaseTriage } from './support_case_triage.ts';
 import { buildEvidenceIntegrityReview, type EvidenceIntegrityReview } from './evidence_integrity.ts';
 
-export type SupportCaseDrillStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type SupportCaseDrillStatus = OpsReviewStatus;
 
 export interface SupportCaseDrillEvidenceInput {
   scenarioId?: string;

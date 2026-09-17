@@ -1,4 +1,6 @@
-export type EvidenceIntegrityStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type EvidenceIntegrityStatus = OpsReviewStatus;
 
 export type EvidenceIntegritySeverity = 'warning' | 'error';
 

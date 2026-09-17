@@ -1,5 +1,6 @@
 import type { AuditLog, PharmacyDatabase } from '../db/types.ts';
 import CryptoJS from 'crypto-js';
+import type { OpsReviewStatus } from './ops_review_status.ts';
 
 export const BACKUP_APP_ID = 'yakureki';
 export const BACKUP_FORMAT_VERSION = 1;
@@ -333,7 +334,7 @@ export interface CollectionDiff {
   unchanged: number;
 }
 
-export type BackupRestoreDrillStatus = 'pass' | 'attention' | 'blocked';
+export type BackupRestoreDrillStatus = OpsReviewStatus;
 
 export interface BackupRestoreDrillCheck {
   id: string;

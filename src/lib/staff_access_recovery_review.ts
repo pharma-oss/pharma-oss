@@ -9,7 +9,9 @@ import {
   type StaffRecoveryReason
 } from './staff_recovery.ts';
 
-export type StaffAccessRecoveryReviewStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type StaffAccessRecoveryReviewStatus = OpsReviewStatus;
 export type StaffAccessRecoveryTargetRole = User['role'] | 'unknown';
 
 export interface StaffAccessRecoveryCaseEvidence {

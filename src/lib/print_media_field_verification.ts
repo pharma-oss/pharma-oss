@@ -3,7 +3,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type PrintMediaVerificationStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type PrintMediaVerificationStatus = OpsReviewStatus;
 
 export type PrintMediaType =
   | 'a4'

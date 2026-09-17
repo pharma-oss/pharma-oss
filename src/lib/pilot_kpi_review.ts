@@ -3,7 +3,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type PilotKpiReviewStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type PilotKpiReviewStatus = OpsReviewStatus;
 
 export interface PilotKpiSnapshotInput {
   storeId?: string;

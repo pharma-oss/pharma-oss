@@ -1,4 +1,6 @@
-export type OfficialDrugLabelQueueReviewStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type OfficialDrugLabelQueueReviewStatus = OpsReviewStatus;
 
 export interface OfficialDrugLabelQueueEntry {
   ingredient: string;

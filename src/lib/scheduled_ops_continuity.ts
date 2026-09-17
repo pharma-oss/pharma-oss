@@ -1,4 +1,6 @@
-export type ScheduledOpsContinuityStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type ScheduledOpsContinuityStatus = OpsReviewStatus;
 
 export interface ScheduledOpsDrillReceiptInput {
   type: 'scheduled-ops-drill-receipt';

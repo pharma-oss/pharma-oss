@@ -4,7 +4,9 @@ import {
 } from './evidence_integrity.ts';
 import type { OfficialDrugLabelQueueEntry } from './official_drug_label_queue_review.ts';
 
-export type OfficialDrugLabelNoCandidateReviewStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type OfficialDrugLabelNoCandidateReviewStatus = OpsReviewStatus;
 
 export interface OfficialDrugLabelNoCandidateEvidenceInput {
   capturedAt?: string;

@@ -7,7 +7,9 @@ import {
 import type { SupportCaseDrillReview } from './support_case_drill.ts';
 import type { SupportIncidentSlaReview } from './support_incident_sla.ts';
 
-export type ReleaseOpsAcceptanceStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type ReleaseOpsAcceptanceStatus = OpsReviewStatus;
 
 export interface ReleaseOpsAcceptanceEvidenceInput {
   acceptanceId?: string;

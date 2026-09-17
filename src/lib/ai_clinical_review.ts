@@ -4,7 +4,9 @@ import {
 } from './evidence_integrity.ts';
 import type { AiAssistMode } from '../db/types.ts';
 
-export type AiClinicalReviewStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type AiClinicalReviewStatus = OpsReviewStatus;
 export type AiClinicalReviewDomain =
   | 'soap_draft'
   | 'prescription_audit'

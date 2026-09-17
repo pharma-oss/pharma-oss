@@ -3,7 +3,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type ReleaseUpdateReadinessStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type ReleaseUpdateReadinessStatus = OpsReviewStatus;
 export type ReleaseUpdateRisk = 'critical' | 'high' | 'normal' | 'low';
 export type ReleaseUpdateKind = 'hotfix' | 'minor' | 'major' | 'maintenance';
 

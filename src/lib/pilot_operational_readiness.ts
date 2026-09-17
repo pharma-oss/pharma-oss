@@ -10,7 +10,9 @@ import type { PilotKpiReview } from './pilot_kpi_review.ts';
 import type { PrintMediaFieldVerificationReview } from './print_media_field_verification.ts';
 import type { ReleaseOpsAcceptanceReview } from './release_ops_acceptance.ts';
 
-export type PilotOperationalReadinessStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type PilotOperationalReadinessStatus = OpsReviewStatus;
 
 export interface PilotOperationalReadinessTargets {
   minPilotStoreCount: number;

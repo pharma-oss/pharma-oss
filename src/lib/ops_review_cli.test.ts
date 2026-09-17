@@ -60,6 +60,12 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+import {
+  OPS_REVIEW_STATUSES,
+  opsReviewStatusExitCode,
+  isOpsReviewStatus
+} from './ops_review_status.ts';
+
 interface OpsCliContract {
   /** package.json のスクリプト名 */
   npmScript: string;
@@ -71,6 +77,8 @@ interface OpsCliContract {
   outputs: Record<string, string>;
   /** 標準出力に evidenceIntegrityStatus を含むか */
   reportsEvidenceIntegrity?: boolean;
+  /** 標準出力に OpsReviewStatus を報告するか (既定は true) */
+  reportsStatus?: boolean;
   /** request_only 等のモード表記 */
   mode?: string;
 }
@@ -178,6 +186,7 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
   {
     npmScript: 'electronic-prescription:connector-preflight',
     outputDirEnv: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_PREFLIGHT_OUTPUT_DIR',
+    reportsStatus: false,
     outputs: {
       preflightJson: 'electronic-prescription-connector-preflight.json',
       connectorReadinessJson: 'electronic-prescription-connector-readiness.json',
@@ -227,6 +236,7 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     outputDirEnv: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_REQUEST_ONLY: '1' },
     mode: 'request_only',
+    reportsStatus: false,
     outputs: {
       checkRequest: 'electronic-prescription-field-check-request.json',
       checkRequestChecklist: 'electronic-prescription-field-check-request.txt'
@@ -237,6 +247,7 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     outputDirEnv: 'YAKUREKI_ELIGIBILITY_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_ELIGIBILITY_FIELD_REQUEST_ONLY: '1' },
     mode: 'request_only',
+    reportsStatus: false,
     outputs: {
       checkRequest: 'online-eligibility-field-check-request.json',
       checkRequestChecklist: 'online-eligibility-field-check-request.txt'
@@ -247,6 +258,7 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     outputDirEnv: 'YAKUREKI_PHARMACY_DEVICE_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_PHARMACY_DEVICE_FIELD_REQUEST_ONLY: '1' },
     mode: 'request_only',
+    reportsStatus: false,
     outputs: {
       checkRequest: 'pharmacy-device-field-check-request.json',
       checkRequestChecklist: 'pharmacy-device-field-check-request.txt'
@@ -257,6 +269,7 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     outputDirEnv: 'YAKUREKI_PRINT_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_PRINT_FIELD_REQUEST_ONLY: '1' },
     mode: 'request_only',
+    reportsStatus: false,
     outputs: {
       evidenceTemplate: 'print-media-field-evidence-template.json',
       checkRequest: 'print-media-field-check-request.json',
@@ -357,6 +370,17 @@ for (const contract of RUNNABLE_CLIS) {
         '証跡の真正性ステータスを標準出力へ出すこと'
       );
     }
+    if (contract.reportsStatus !== false) {
+      assert.ok(
+        isOpsReviewStatus(run.parsed.status),
+        `${contract.npmScript} の status (${run.parsed.status}) は OpsReviewStatus のいずれかであること`
+      );
+      assert.equal(
+        run.code,
+        opsReviewStatusExitCode(run.parsed.status),
+        `${contract.npmScript} の exit code (${run.code}) は status (${run.parsed.status}) の終了コード規約と一致すること (台帳 §0)`
+      );
+    }
 
     const outputs = run.parsed.outputs || {};
     assert.deepEqual(
@@ -405,5 +429,12 @@ test('ops review ledger covers every CLI exercised here', () => {
   ]);
   for (const npmScript of covered) {
     assert.ok(ledger.includes(npmScript), `台帳に ${npmScript} の記載がありません`);
+  }
+});
+
+test('ops review ledger defines every OpsReviewStatus', () => {
+  const ledger = readFileSync(new URL('../../docs/ops_review_ledger.md', import.meta.url), 'utf8');
+  for (const status of OPS_REVIEW_STATUSES) {
+    assert.match(ledger, new RegExp(`\\|\\s*\`${status}\`\\s*\\|`), `台帳 §0 の定義表に ${status} の記載がありません`);
   }
 });

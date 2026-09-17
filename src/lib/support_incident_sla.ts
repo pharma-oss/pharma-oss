@@ -1,7 +1,9 @@
 import type { SupportCaseFocusArea, SupportCasePriority, SupportCaseTriage } from './support_case_triage.ts';
 import { buildEvidenceIntegrityReview, type EvidenceIntegrityReview } from './evidence_integrity.ts';
 
-export type SupportIncidentSlaStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type SupportIncidentSlaStatus = OpsReviewStatus;
 export type SupportIncidentSeverity = 'critical' | 'major' | 'standard' | 'watch';
 
 export interface SupportIncidentSlaPolicy {

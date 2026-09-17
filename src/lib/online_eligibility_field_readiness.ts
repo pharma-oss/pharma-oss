@@ -5,7 +5,9 @@ import {
   type EvidenceIntegrityReview
 } from './evidence_integrity.ts';
 
-export type OnlineEligibilityFieldGateStatus = 'pass' | 'attention' | 'blocked';
+import type { OpsReviewStatus } from './ops_review_status.ts';
+
+export type OnlineEligibilityFieldGateStatus = OpsReviewStatus;
 
 export interface OnlineEligibilityAuthEvidenceInput {
   capturedAt?: string;
