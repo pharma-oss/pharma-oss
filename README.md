@@ -119,6 +119,7 @@ npm run dev
 - [現場運用マニュアル](docs/field_operation_manual.md) — 開局前・受付〜完了・閉局時・月次・デモ練習・トラブル対応
 - [取扱説明書](docs/user_manual.md) — 全機能の詳細（バックアップ、監査ログ保全、マスタ更新、外部連携など）
 - [開発者マニュアル](docs/developer_manual.md) — 開発・テスト・E2E・スクリーンショット回帰
+- [金科玉条と実装ロードマップ](docs/golden_rules_and_roadmap.md) — 完成形の定義・不可侵の十箇条・実装予定の機能と実装方針
 - [operational_issues.md](operational_issues.md) — 実運用に向けた課題と解決状況の一覧（正直に全部書いてあります）
 
 ## Production Notes
