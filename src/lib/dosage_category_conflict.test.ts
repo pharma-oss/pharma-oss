@@ -5,6 +5,8 @@ import {
   buildDosageCategoryConflictCsv,
   makeDosageCategoryConflictCsvFileName,
   formatDosageCategoryConflictSummary,
+  getCalculationDosageCategory,
+  getCalculationCategoryLabel,
   type DosageCategoryConflictInput,
   type DosageCategoryConflictPoints
 } from './dosage_category_conflict.ts';
@@ -147,3 +149,65 @@ test('formatDosageCategoryConflictSummary formats summary text correctly', () =>
     '処方明細 1件のうち 1件（1受付）で算定と帳票の剤形判定が食い違っています / 点数変動 1受付（差引 -15点）。'
   );
 });
+
+test('getCalculationDosageCategory maps calculation flags to DosageCategory enum correctly', () => {
+  assert.strictEqual(getCalculationDosageCategory({ isExternal: true, isTonpuku: false, isNaiteki: false, isInjection: false }), 'external');
+  assert.strictEqual(getCalculationDosageCategory({ isExternal: false, isTonpuku: true, isNaiteki: false, isInjection: false }), 'as_needed');
+  assert.strictEqual(getCalculationDosageCategory({ isExternal: false, isTonpuku: false, isNaiteki: true, isInjection: false }), 'internal_drop');
+  assert.strictEqual(getCalculationDosageCategory({ isExternal: false, isTonpuku: false, isNaiteki: false, isInjection: true }), 'injection');
+  assert.strictEqual(getCalculationDosageCategory({ isExternal: false, isTonpuku: false, isNaiteki: false, isInjection: false }), 'internal');
+});
+
+test('getCalculationCategoryLabel returns unified labels from DOSAGE_CATEGORY_LABELS', () => {
+  assert.strictEqual(getCalculationCategoryLabel({ isExternal: false, isTonpuku: true, isNaiteki: false, isInjection: false }), '屯服');
+  assert.strictEqual(getCalculationCategoryLabel({ isExternal: true, isTonpuku: false, isNaiteki: false, isInjection: false }), '外用');
+  assert.strictEqual(getCalculationCategoryLabel({ isExternal: false, isTonpuku: false, isNaiteki: false, isInjection: false }), '内服');
+});
+
+test('buildDosageCategoryConflictReview handles as_needed correctly without label mismatch bug', () => {
+  // 1. 算定側が屯服（usage: 頓服）かつ帳票側実効剤形が as_needed の場合: 食い違い 0 件であること
+  // （旧コードでは '頓服' !== '屯服' の文字列不一致により食い違いとして誤計上されていたケース）
+  const matchingTonpukuInputs: DosageCategoryConflictInput[] = [
+    {
+      visitId: 'v-tonpuku-1',
+      rpNumber: 1,
+      drugName: 'カロナール錠300',
+      usage: '頓服　疼痛時1回1錠',
+      dosageCategory: 'as_needed',
+      dosageCategorySource: 'auto'
+    },
+    {
+      visitId: 'v-tonpuku-2',
+      rpNumber: 1,
+      drugName: 'ロキソニン錠60mg',
+      usage: '頓服　頭痛時1回1錠',
+      dosageCategory: 'as_needed',
+      dosageCategorySource: 'manual'
+    }
+  ];
+
+  const matchReview = buildDosageCategoryConflictReview(matchingTonpukuInputs);
+  assert.strictEqual(matchReview.checkedItemCount, 2);
+  assert.strictEqual(matchReview.cases.length, 0, '算定・帳票ともに屯服の明細は食い違いとして検出されないこと');
+  assert.strictEqual(matchReview.affectedVisitCount, 0);
+
+  // 2. 算定側が屯服（usage: 頓服）だが、手動指定で internal に上書きされている場合: 食い違い 1 件が検出されること
+  const conflictInputs: DosageCategoryConflictInput[] = [
+    {
+      visitId: 'v-tonpuku-3',
+      rpNumber: 1,
+      drugName: 'ロキソニン錠60mg',
+      usage: '頓服　頭痛時1回1錠',
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }
+  ];
+
+  const conflictReview = buildDosageCategoryConflictReview(conflictInputs);
+  assert.strictEqual(conflictReview.checkedItemCount, 1);
+  assert.strictEqual(conflictReview.cases.length, 1);
+  assert.strictEqual(conflictReview.cases[0].calculationCategoryLabel, '屯服');
+  assert.strictEqual(conflictReview.cases[0].printCategoryLabel, '内服');
+  assert.strictEqual(conflictReview.affectedVisitCount, 1);
+});
+

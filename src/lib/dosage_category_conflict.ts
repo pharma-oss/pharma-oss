@@ -49,12 +49,17 @@ export interface DosageCategoryConflictReview {
   deltaPointsByVisitId: Record<string, number>;
 }
 
+export function getCalculationDosageCategory(flags: CalculationDosageFlags): DosageCategory {
+  if (flags.isExternal) return 'external';
+  if (flags.isTonpuku) return 'as_needed';
+  if (flags.isNaiteki) return 'internal_drop';
+  if (flags.isInjection) return 'injection';
+  return 'internal';
+}
+
 export function getCalculationCategoryLabel(flags: CalculationDosageFlags): string {
-  if (flags.isExternal) return '外用';
-  if (flags.isTonpuku) return '頓服';
-  if (flags.isNaiteki) return '内滴';
-  if (flags.isInjection) return '注射';
-  return '内服';
+  const category = getCalculationDosageCategory(flags);
+  return DOSAGE_CATEGORY_LABELS[category] || category;
 }
 
 export function buildDosageCategoryConflictReview(
@@ -65,17 +70,16 @@ export function buildDosageCategoryConflictReview(
 
   for (const input of inputs) {
     const calcFlags = resolveCalculationDosageFlags(input, 'legacy');
-    const calculationCategoryLabel = getCalculationCategoryLabel(calcFlags);
+    const calculationCategory = getCalculationDosageCategory(calcFlags);
 
     const effectiveCategory = resolveEffectiveDosageCategory(input);
-    const printCategoryLabel = DOSAGE_CATEGORY_LABELS[effectiveCategory] || effectiveCategory;
 
-    if (calculationCategoryLabel !== printCategoryLabel) {
+    if (calculationCategory !== effectiveCategory) {
       cases.push({
         visitId: input.visitId,
         rpNumber: input.rpNumber,
-        calculationCategoryLabel,
-        printCategoryLabel
+        calculationCategoryLabel: DOSAGE_CATEGORY_LABELS[calculationCategory] || calculationCategory,
+        printCategoryLabel: DOSAGE_CATEGORY_LABELS[effectiveCategory] || effectiveCategory
       });
     }
   }
