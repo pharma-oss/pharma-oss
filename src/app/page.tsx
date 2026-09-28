@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowRight,
   Barcode,
   CheckCircle2,
   Clock,
@@ -20,6 +19,8 @@ import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DailyClosingWizardModal } from '@/components/dashboard/DailyClosingWizardModal';
+import './dashboard.css';
+import { DashboardWorkflowSection } from '@/components/dashboard/DashboardWorkflowSection';
 import { FollowUpModal } from '@/components/dashboard/FollowUpModal';
 import { ClaimWorkbenchSection } from '@/components/dashboard/ClaimWorkbenchSection';
 import { OperationalClosingSection } from '@/components/dashboard/OperationalClosingSection';
@@ -43,14 +44,12 @@ import {
   normalizeAiAssistMode
 } from '@/lib/ai_assist_policy';
 import {
-  KanbanColumn,
   EmptyState,
   OperationTile,
   StatCard
 } from '@/components/dashboard/DashboardCards';
 import {
   AiPredictionRow,
-  PatientTaskCard,
   FollowUpCandidateRow,
   ClaimRiskRow
 } from '@/components/dashboard/DashboardRows';
@@ -124,8 +123,6 @@ export default function Dashboard() {
     return summarizeOperationalAiPredictions(operationalAiPredictions);
   }, [operationalAiPredictions]);
 
-  const standardTasks = tasks.filter((task) => task.priority === 'normal');
-  const reviewTasks = tasks.filter((task) => task.priority !== 'normal');
   const visibleClaimRisks = claimRisks.slice(0, 5);
   const visibleFollowUpCandidates = followUpCandidates.slice(0, 5);
   const visibleOperationalAiPredictions = operationalAiPredictions.slice(0, 5);
@@ -163,7 +160,7 @@ export default function Dashboard() {
   }, [router]);
 
   const handleNewReception = useCallback(() => {
-    router.push('/emr?newReception=1');
+    router.push('/ocr');
   }, [router]);
 
   const handleFocusClaimRisks = useCallback(() => {
@@ -204,17 +201,18 @@ export default function Dashboard() {
     <div className="dashboard-container">
       <header className="page-header dashboard-header">
         <div>
-          <h1>調剤・監査ダッシュボード</h1>
-          <p className="text-muted">本日の受付状況と業務タスクをリアルタイムに把握します。</p>
+          <span className="dashboard-section-label">調剤・監査ダッシュボード</span>
+          <h1>本日の業務</h1>
+          <p className="text-muted">受付から薬歴・請求まで、次の対応をここから。</p>
         </div>
-        <div className="flex gap-2">
+        <div className="dashboard-header-actions">
           <button
             className="btn-secondary"
             onClick={() => setIsClosingWizardOpen(true)}
             data-testid="daily-closing-wizard-button"
           >
             <ShieldCheck size={16} aria-hidden="true" />
-            <span>日次締めウィザード</span>
+            <span>日次締め</span>
           </button>
           <button className="btn-primary" onClick={handleNewReception}>
             <Plus size={16} aria-hidden="true" />
@@ -224,8 +222,8 @@ export default function Dashboard() {
       </header>
 
       {hasDemoData && (
-        <div className="notice info flex items-center justify-between" role="status" data-testid="demo-data-reminder">
-          <span>デモデータが読み込まれています。チュートリアル終了後に設定画面または直接片づけることができます。</span>
+        <div className="notice info dashboard-demo-notice" role="status" data-testid="demo-data-reminder">
+          <span>練習用のデモデータを表示中です。体験が終わったら片づけられます。</span>
           <div className="flex gap-2">
             <button className="btn-secondary compact" onClick={handleCleanupDemoData} data-testid="demo-data-cleanup-button">
               デモデータを片づける
@@ -238,24 +236,20 @@ export default function Dashboard() {
       )}
 
       <section className="stats-grid" aria-label="本日の状況">
-        <StatCard icon={Users} tone="blue" label="本日受付" value={counts.todayReceptionCount} subLabel="ローカルDB集計" />
-        <StatCard icon={Clock} tone="amber" label="受付待ち" value={pendingCount} subLabel="未処理の受付" />
-        <StatCard icon={AlertCircle} tone="red" label="要確認" value={reviewCount} subLabel="薬剤師確認" />
-        <StatCard icon={CheckCircle2} tone="green" label="完了" value={completedCount} subLabel="薬歴入力済み" />
+        <StatCard icon={Users} tone="blue" label="本日受付" value={isLoading ? '—' : counts.todayReceptionCount} subLabel="今日の受付総数" />
+        <StatCard icon={Clock} tone="amber" label="受付待ち" value={isLoading ? '—' : pendingCount} subLabel="受付内容の確認待ち" />
+        <StatCard icon={AlertCircle} tone="red" label="要確認" value={isLoading ? '—' : reviewCount} subLabel="薬剤師確認" />
+        <StatCard icon={CheckCircle2} tone="green" label="完了" value={isLoading ? '—' : completedCount} subLabel="薬歴入力済み" />
       </section>
 
-      <OperationalClosingSection
-        db={db}
-        kpis={kpis}
-        counts={counts}
-        claimRisks={claimRisks}
-        inventoryRisks={inventoryRisks}
-        claimWorkItems={claimWorkItems}
-        followUpCandidates={followUpCandidates}
-        auditLogs={auditLogs}
-        facilitySettings={facilitySettings}
-        backupSchedulePolicy={backupSchedulePolicy}
-        onRefresh={refresh}
+      <DashboardWorkflowSection
+        tasks={tasks}
+        pendingCount={pendingCount}
+        isLoading={isLoading}
+        error={error}
+        onOpenTask={handleOpenTask}
+        onOpenRecords={() => router.push('/emr')}
+        onRetry={refresh}
       />
 
       <section className="operations-grid" aria-label="運用キュー">
@@ -307,51 +301,6 @@ export default function Dashboard() {
           tone={urgentFollowUpCount > 0 ? 'red' : 'teal'}
           onClick={handleFocusFollowUps}
         />
-      </section>
-
-      <section id="operational-ai-predictions" className="ai-prediction-section" aria-label="AI補助予測スコア">
-        <div className="section-header">
-          <div>
-            <span className="ai-prediction-title-line">
-              <Sparkles size={16} aria-hidden="true" />
-              <h3>AI補助予測スコア</h3>
-            </span>
-            <p className="text-muted">返戻、在庫欠品、服薬フォローを横断し、優先して確認したい候補を根拠付きで表示します。</p>
-          </div>
-          <div className="section-metrics">
-            <span className="section-count">{AI_ASSIST_MODE_LABELS[aiAssistMode]}</span>
-            {operationalAiPredictionSummary.criticalCount > 0 && (
-              <span className="section-count urgent">高リスク {operationalAiPredictionSummary.criticalCount}</span>
-            )}
-            <span className="section-count">最高 {operationalAiPredictionSummary.maxScore}</span>
-            <span className="section-count">信頼度 {operationalAiPredictionSummary.averageConfidence}%</span>
-            <span className="section-count">{operationalAiPredictionSummary.totalCount}件</span>
-          </div>
-        </div>
-
-        <div className="ai-prediction-list">
-          {isLoading && <EmptyState text="AI補助予測を読み込んでいます..." tone="loading" />}
-          {!isLoading && allOperationalAiPredictions.length > operationalAiPredictions.length && (
-            <div className="ai-prediction-mode-notice" role="status" data-testid="operational-ai-mode-notice">
-              AI補助は「{AI_ASSIST_MODE_LABELS[aiAssistMode]}」です。
-              {aiAssistMode === 'disabled'
-                ? '候補表示を停止しています。通常の業務キューは継続します。'
-                : `高リスク以外の候補 ${allOperationalAiPredictions.length - operationalAiPredictions.length}件を非表示にしています。`}
-            </div>
-          )}
-          {!isLoading && visibleOperationalAiPredictions.map((prediction) => (
-            <AiPredictionRow
-              key={prediction.predictionId}
-              prediction={prediction}
-              onOpen={() => handleOpenAiPrediction(prediction)}
-            />
-          ))}
-          {!isLoading && allOperationalAiPredictions.length === 0 && <EmptyState text="現在、優先確認が必要なAI補助予測はありません。" />}
-        </div>
-
-        {!isLoading && visibleOperationalAiPredictions.length > 0 && (
-          <p className="ai-prediction-guardrail">{visibleOperationalAiPredictions[0].guardrail}</p>
-        )}
       </section>
 
       <section id="claim-risk-queue" className="claim-risk-section" aria-label="返戻・請求リスク" data-testid="claim-risk-queue">
@@ -406,73 +355,6 @@ export default function Dashboard() {
         isLoading={isLoading}
       />
 
-      <section className="workflow-section">
-        <div className="section-header">
-          <div>
-            <h3>進行中のタスク</h3>
-            <p className="text-muted">カードを開くと薬剤師確認・印刷画面へ移動します。</p>
-          </div>
-          <button className="text-link" type="button">
-            すべて表示
-            <ArrowRight size={16} aria-hidden="true" />
-          </button>
-        </div>
-
-        {error && (
-          <div className="notice danger" role="alert">
-            タスクの読み込みに失敗しました。画面を再読み込みしてください。
-          </div>
-        )}
-
-        <div className="task-kanban">
-          <KanbanColumn title="受付待ち" count={pendingCount} tone="neutral">
-            {pendingCount === 0 && <EmptyState text="現在、受付待ちのタスクはありません。" />}
-          </KanbanColumn>
-
-          <KanbanColumn title="調剤中・処方入力済み" count={standardTasks.length} tone="amber">
-            {isLoading && <EmptyState text="タスクを読み込んでいます..." tone="loading" />}
-            {!isLoading && standardTasks.map((task) => (
-              <PatientTaskCard
-                key={task.visitId}
-                visitId={task.visitId}
-                name={task.name}
-                age={task.age}
-                status={task.status}
-                time={task.time}
-                waitMinutes={task.waitMinutes}
-                prescriptionCount={task.prescriptionCount}
-                reviewFlags={task.reviewFlags}
-                priority={task.priority}
-                onOpen={() => handleOpenTask(task.visitId)}
-                interactive
-              />
-            ))}
-            {!isLoading && standardTasks.length === 0 && <EmptyState text="現在、該当するタスクはありません。" />}
-          </KanbanColumn>
-
-          <KanbanColumn title="薬剤師確認・服薬指導" count={reviewTasks.length} tone="green">
-            {isLoading && <EmptyState text="タスクを読み込んでいます..." tone="loading" />}
-            {!isLoading && reviewTasks.map((task) => (
-              <PatientTaskCard
-                key={task.visitId}
-                visitId={task.visitId}
-                name={task.name}
-                age={task.age}
-                status={task.status}
-                time={task.time}
-                waitMinutes={task.waitMinutes}
-                prescriptionCount={task.prescriptionCount}
-                reviewFlags={task.reviewFlags}
-                priority={task.priority}
-                onOpen={() => handleOpenTask(task.visitId)}
-                interactive
-              />
-            ))}
-            {!isLoading && reviewTasks.length === 0 && <EmptyState text="現在、監査待ちのタスクはありません。" />}
-          </KanbanColumn>
-        </div>
-      </section>
-
       <section id="followup-candidates" className="followup-section" aria-label="完了後フォロー候補">
         <div className="section-header">
           <div>
@@ -513,6 +395,65 @@ export default function Dashboard() {
         </div>
       </section>
 
+      <section id="operational-ai-predictions" className="ai-prediction-section" aria-label="AI補助予測スコア">
+        <div className="section-header">
+          <div>
+            <span className="ai-prediction-title-line">
+              <Sparkles size={16} aria-hidden="true" />
+              <h3>AI補助予測スコア</h3>
+            </span>
+            <p className="text-muted">返戻、在庫欠品、服薬フォローを横断し、優先して確認したい候補を根拠付きで表示します。</p>
+          </div>
+          <div className="section-metrics">
+            <span className="section-count">{AI_ASSIST_MODE_LABELS[aiAssistMode]}</span>
+            {operationalAiPredictionSummary.criticalCount > 0 && (
+              <span className="section-count urgent">高リスク {operationalAiPredictionSummary.criticalCount}</span>
+            )}
+            <span className="section-count">最高 {operationalAiPredictionSummary.maxScore}</span>
+            <span className="section-count">信頼度 {operationalAiPredictionSummary.averageConfidence}%</span>
+            <span className="section-count">{operationalAiPredictionSummary.totalCount}件</span>
+          </div>
+        </div>
+
+        <div className="ai-prediction-list">
+          {isLoading && <EmptyState text="AI補助予測を読み込んでいます..." tone="loading" />}
+          {!isLoading && allOperationalAiPredictions.length > operationalAiPredictions.length && (
+            <div className="ai-prediction-mode-notice" role="status" data-testid="operational-ai-mode-notice">
+              AI補助は「{AI_ASSIST_MODE_LABELS[aiAssistMode]}」です。
+              {aiAssistMode === 'disabled'
+                ? '候補表示を停止しています。通常の業務キューは継続します。'
+                : `高リスク以外の候補 ${allOperationalAiPredictions.length - operationalAiPredictions.length}件を非表示にしています。`}
+            </div>
+          )}
+          {!isLoading && visibleOperationalAiPredictions.map((prediction) => (
+            <AiPredictionRow
+              key={prediction.predictionId}
+              prediction={prediction}
+              onOpen={() => handleOpenAiPrediction(prediction)}
+            />
+          ))}
+          {!isLoading && allOperationalAiPredictions.length === 0 && <EmptyState text="現在、優先確認が必要なAI補助予測はありません。" />}
+        </div>
+
+        {!isLoading && visibleOperationalAiPredictions.length > 0 && (
+          <p className="ai-prediction-guardrail">{visibleOperationalAiPredictions[0].guardrail}</p>
+        )}
+      </section>
+
+      <OperationalClosingSection
+        db={db}
+        kpis={kpis}
+        counts={counts}
+        claimRisks={claimRisks}
+        inventoryRisks={inventoryRisks}
+        claimWorkItems={claimWorkItems}
+        followUpCandidates={followUpCandidates}
+        auditLogs={auditLogs}
+        facilitySettings={facilitySettings}
+        backupSchedulePolicy={backupSchedulePolicy}
+        onRefresh={refresh}
+      />
+
       <section className="quick-actions" aria-label="よく使う操作">
         <button type="button" className="quick-action" onClick={() => router.push('/ocr')}>
           <FilePlus2 size={20} aria-hidden="true" />
@@ -526,10 +467,10 @@ export default function Dashboard() {
           <Settings size={20} aria-hidden="true" />
           <span>施設設定</span>
         </button>
-        <button type="button" className="quick-action muted">
+        <div className="quick-action muted">
           <ShieldCheck size={20} aria-hidden="true" />
-          <span>ローカル保存中</span>
-        </button>
+          <span>ローカル保存</span>
+        </div>
       </section>
 
       {recordingFollowUp && (

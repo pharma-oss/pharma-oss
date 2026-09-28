@@ -5,7 +5,7 @@
 A local-first pharmacy EMR & dispensing-receipt (UKE) system for Japanese community pharmacies, built with Next.js and RxDB. Prescription intake (OCR / QR / e-prescription), GS1-verified picking, SOAP medication records with AI-drafts, R8 (2026) fee calculation, UKE export, inventory with lot/expiry tracking, tamper-evident audit logs, and encrypted offline-capable local storage — no server required.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1150%2B_passing-brightgreen.svg)](docs/developer_manual.md)
+[![Tests](https://img.shields.io/badge/tests-1700%2B_passing-brightgreen.svg)](docs/developer_manual.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 ![ダッシュボード](docs/images/dashboard.png)
@@ -104,7 +104,7 @@ npm run dev
 | 参照マスタ | SQLite WASM/OPFS（薬品検索・用法コード） |
 | OCR / バーコード | Tesseract.js（日本語）/ @zxing（GS1・QR） |
 | 帳票 | ブラウザ印刷（CSSレイアウト、実紙検証手順つき） |
-| テスト | node:test + tsx（ユニット 1,150+）、Puppeteer（E2E・印刷回帰） |
+| テスト | node:test + tsx（ユニット 1,700+）、Puppeteer（E2E・印刷回帰） |
 
 サーバーサイドの患者データ保存は既定ではありません（単独端末運用）。バックエンドAPIは開発用ユーティリティ（公式PDF照合など）のみです。店舗内で複数端末を使う場合のみ、メイン端末のNext.jsサーバー内（`node:sqlite`・AES-256-GCM暗号化）に正本を集約し、サテライト端末は患者データを端末に保存しません（`PHARMACY_SYNC_ROLE`、詳細は [docs/satellite_terminal_sync_plan.md](docs/satellite_terminal_sync_plan.md)）。
 

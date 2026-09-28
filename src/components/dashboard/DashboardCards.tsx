@@ -13,7 +13,7 @@ export const KanbanColumn = React.memo(function KanbanColumn({
   children: React.ReactNode;
 }) {
   return (
-    <div className="kanban-column">
+    <div className={`kanban-column tone-${tone}`}>
       <div className="column-header">
         <h4>{title}</h4>
         <span className={`badge ${tone}`}>{count}</span>

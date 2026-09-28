@@ -126,7 +126,7 @@ export const PatientTaskCard = React.memo(function PatientTaskCard({
     >
       <div className="card-top">
         <span className="name">{name}</span>
-        <span className="time">{time}</span>
+        <span className="time">受付 {time}</span>
       </div>
       <div className="card-bottom">
         <span className="age">{age}歳</span>
@@ -134,7 +134,7 @@ export const PatientTaskCard = React.memo(function PatientTaskCard({
       </div>
       <div className="task-meta-row">
         <span>{prescriptionCount}薬</span>
-        <span>{waitMinutes}分</span>
+        <span>待ち {waitMinutes}分</span>
       </div>
       {reviewFlags.length > 0 && (
         <div className="review-flags" aria-label="確認項目">
@@ -142,6 +142,9 @@ export const PatientTaskCard = React.memo(function PatientTaskCard({
             <span key={flag}>{flag}</span>
           ))}
         </div>
+      )}
+      {onOpen && (
+        <span className="task-open">確認画面へ<ArrowRight size={14} aria-hidden="true" /></span>
       )}
     </div>
   );
