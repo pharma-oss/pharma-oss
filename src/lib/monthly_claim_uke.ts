@@ -23,6 +23,13 @@ import {
   buildHighCostSpecialNoteCode,
   type HighCostSpecialNoteResult
 } from '@/lib/receipt/dispensing_uke_code_tables';
+import {
+  buildOfficialCopaymentRecords,
+  buildOfficialDailyFields,
+  buildOfficialDispensingDateRecords,
+  buildOfficialSplitDispensingRecords,
+  buildOfficialSupplementalRecords
+} from '@/lib/receipt/dispensing_uke_official_supplemental';
 import { generateUkeContent, type UkeRecord } from '@/lib/receipt/uke_generator';
 import {
   buildEvidenceIntegrityReview,
@@ -965,63 +972,28 @@ function hasOfficialPayerRecord(claim: MonthlyClaimUkeCase): boolean {
   return Boolean(claim.patient.insuranceInfo?.provider || (claim.patient.publicInsurances?.length ?? 0) > 0);
 }
 
-function buildOfficialDailyFields(values: Record<string, string | number> | undefined, padLength?: number): string[] {
-  return Array.from({ length: 31 }, (_, index) => {
-    const day = index + 1;
-    const value = values?.[String(day).padStart(2, '0')] ?? values?.[String(day)];
-    if (value === undefined || value === '') return '';
-    const text = String(value);
-    return padLength && /^\d+$/.test(text) ? text.padStart(padLength, '0') : text;
+function buildMonthlyClaimOfficialSupplementalRecords(claim: MonthlyClaimUkeCase): UkeRecord[] {
+  return buildOfficialSupplementalRecords({
+    claimOptions: claim.visit.claimOptions,
+    patientName: claim.patient.name,
+    hasPayerRecord: hasOfficialPayerRecord(claim)
   });
 }
 
-function buildMonthlyClaimOfficialSupplementalRecords(claim: MonthlyClaimUkeCase): UkeRecord[] {
-  const options = claim.visit.claimOptions;
-  const records = options?.officialSupplementalRecords ?? [];
-  if (records.length === 0) return [];
-  if (!hasOfficialPayerRecord(claim)) {
-    throw new Error(`${claim.patient.name} のSN補助情報はHOまたはKOがある受付でだけ公式提出できます。`);
-  }
-
-  return records.map((record) => ({
-    type: 'SN',
-    fields: [
-      record.payerCategory,
-      record.confirmationCategory,
-      record.insurerNumber ?? '',
-      record.symbol ?? '',
-      record.number ?? '',
-      record.branch ?? '',
-      record.recipientNumber ?? '',
-      record.reserve ?? ''
-    ]
-  }));
-}
-
 function buildMonthlyClaimOfficialDispensingDateRecords(claim: MonthlyClaimUkeCase): UkeRecord[] {
-  const records = claim.visit.claimOptions?.officialDispensingDateRecords ?? [];
-  if (records.length === 0) return [];
-  if (!hasOfficialPayerRecord(claim)) {
-    throw new Error(`${claim.patient.name} のJD調剤日情報はHOまたはKOがある受付でだけ公式提出できます。`);
-  }
-
-  return records.map((record) => ({
-    type: 'JD',
-    fields: [record.payerCategory, ...buildOfficialDailyFields(record.days)]
-  }));
+  return buildOfficialDispensingDateRecords({
+    claimOptions: claim.visit.claimOptions,
+    patientName: claim.patient.name,
+    hasPayerRecord: hasOfficialPayerRecord(claim)
+  });
 }
 
 function buildMonthlyClaimOfficialCopaymentRecords(claim: MonthlyClaimUkeCase): UkeRecord[] {
-  const records = claim.visit.claimOptions?.officialCopaymentRecords ?? [];
-  if (records.length === 0) return [];
-  if (!hasOfficialPayerRecord(claim)) {
-    throw new Error(`${claim.patient.name} のMF窓口負担額情報はHOまたはKOがある受付でだけ公式提出できます。`);
-  }
-
-  return records.map((record) => ({
-    type: 'MF',
-    fields: [record.category, ...buildOfficialDailyFields(record.dailyAmounts, 9)]
-  }));
+  return buildOfficialCopaymentRecords({
+    claimOptions: claim.visit.claimOptions,
+    patientName: claim.patient.name,
+    hasPayerRecord: hasOfficialPayerRecord(claim)
+  });
 }
 
 function buildMonthlyClaimOfficialSplitDispensingRecords(
@@ -1029,29 +1001,11 @@ function buildMonthlyClaimOfficialSplitDispensingRecords(
   prescriptionDate: string,
   dispensingDate: string
 ): UkeRecord[] {
-  return (claim.visit.claimOptions?.officialSplitDispensingRecords ?? []).map((record) => {
-    const publicTargetPoints = record.publicTargetPoints ?? [];
-    const publicAfterSplitPoints = record.publicAfterSplitPoints ?? [];
-    return {
-      type: 'ST',
-      fields: [
-        record.doctorNumber ?? String(claim.visit.doctorId || claim.visit.doctorName || '1'),
-        calendarDate(record.prescriptionDate || prescriptionDate, 'ST処方月日').replace(/-/g, ''),
-        calendarDate(record.dispensingDate || dispensingDate, 'ST調剤月日').replace(/-/g, ''),
-        String(record.receptionCount ?? 1),
-        String(record.splitCount),
-        record.insuranceTargetPoints === undefined ? '' : String(record.insuranceTargetPoints),
-        record.insuranceAfterSplitPoints === undefined ? '' : String(record.insuranceAfterSplitPoints),
-        publicTargetPoints[0] === undefined ? '' : String(publicTargetPoints[0]),
-        publicAfterSplitPoints[0] === undefined ? '' : String(publicAfterSplitPoints[0]),
-        publicTargetPoints[1] === undefined ? '' : String(publicTargetPoints[1]),
-        publicAfterSplitPoints[1] === undefined ? '' : String(publicAfterSplitPoints[1]),
-        publicTargetPoints[2] === undefined ? '' : String(publicTargetPoints[2]),
-        publicAfterSplitPoints[2] === undefined ? '' : String(publicAfterSplitPoints[2]),
-        publicTargetPoints[3] === undefined ? '' : String(publicTargetPoints[3]),
-        publicAfterSplitPoints[3] === undefined ? '' : String(publicAfterSplitPoints[3])
-      ]
-    };
+  return buildOfficialSplitDispensingRecords({
+    claimOptions: claim.visit.claimOptions,
+    defaultPrescriptionDate: prescriptionDate,
+    defaultDispensingDate: dispensingDate,
+    defaultDoctorId: claim.visit.doctorId || claim.visit.doctorName
   });
 }
 
