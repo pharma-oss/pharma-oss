@@ -17,6 +17,8 @@ import {
 } from './claim_workbench';
 import { calculateRequiredStockAmount, getStockDrugId, getTotalStock } from './stock';
 import { isDemoVisit } from './demo_data';
+import { getPublicInsuranceCategoryName } from './patient_public_insurance';
+import { evaluateInsuranceEligibility } from './insurance_eligibility';
 
 export interface DashboardTask {
   visitId: string;
@@ -95,6 +97,33 @@ export interface DashboardClaimWorkItem {
   latestEventLabel: string;
   reason?: string;
   actionLabel: string;
+  publicInsuranceSummary?: string;
+  eligibilityWarning?: {
+    severity: 'error' | 'warning';
+    code: string;
+    label: string;
+    message: string;
+  };
+}
+
+/**
+ * 患者の公費配列から月次ワークベンチ用の公費サマリー文字列（例: "指定難病(54)" や "指定難病 / 更生医療"）を生成する純粋関数
+ */
+export function buildClaimPublicInsuranceSummary(
+  publicInsurances?: ReadonlyArray<{ provider?: string; recipient?: string }> | null
+): string | undefined {
+  if (!publicInsurances || publicInsurances.length === 0) return undefined;
+  const parts = publicInsurances
+    .map((pub, idx) => {
+      const category = getPublicInsuranceCategoryName(pub.provider);
+      const prefix = pub.provider ? pub.provider.slice(0, 2) : '';
+      if (category) {
+        return prefix ? `${category}(${prefix})` : category;
+      }
+      return prefix ? `公費${prefix}` : `公費${idx + 1}`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(' / ') : undefined;
 }
 
 export interface DashboardFollowUpCandidate {
@@ -570,11 +599,36 @@ export function calculateDashboardClaimWorkItems({
       visit.issueDate;
     const patientDoc = patientMap.get(visit.patientId);
     const items = itemsByVisitId.get(visit.visitId) || [];
-    const priority = getClaimWorkbenchPriority({
+
+    const publicInsuranceSummary = buildClaimPublicInsuranceSummary(patientDoc?.publicInsurances);
+
+    let eligibilityWarning: DashboardClaimWorkItem['eligibilityWarning'] | undefined;
+    if (patientDoc) {
+      const issues = evaluateInsuranceEligibility({
+        patient: patientDoc,
+        serviceDate: visit.issueDate
+      });
+      const topError = issues.find((i) => i.severity === 'error');
+      const topWarning = issues.find((i) => i.severity === 'warning');
+      const primaryIssue = topError || topWarning;
+      if (primaryIssue) {
+        eligibilityWarning = {
+          severity: topError ? 'error' : 'warning',
+          code: primaryIssue.code,
+          label: primaryIssue.title,
+          message: primaryIssue.message
+        };
+      }
+    }
+
+    const basePriority = getClaimWorkbenchPriority({
       status,
       latestEventAt,
       basisDate
     });
+    // 公費期限切れ等の重大エラーがある場合は優先度を high（至急）に引き上げる
+    const priority = eligibilityWarning?.severity === 'error' ? 'high' : basePriority;
+
     const reason = status === 'returned'
       ? lifecycle?.returnReason
       : status === 'rebilling'
@@ -600,6 +654,8 @@ export function calculateDashboardClaimWorkItems({
       latestEventLabel: latestLabel,
       reason,
       actionLabel: getClaimWorkbenchActionLabel(status),
+      publicInsuranceSummary,
+      eligibilityWarning,
       sortKey: parseDateForSort(latestEventAt)
     });
   }
@@ -625,7 +681,9 @@ export function calculateDashboardClaimWorkItems({
     exportedFileName: item.exportedFileName,
     latestEventLabel: item.latestEventLabel,
     reason: item.reason,
-    actionLabel: item.actionLabel
+    actionLabel: item.actionLabel,
+    publicInsuranceSummary: item.publicInsuranceSummary,
+    eligibilityWarning: item.eligibilityWarning
   }));
 
   return { claimWorkItems, returnedClaimCount, rebillingClaimCount };

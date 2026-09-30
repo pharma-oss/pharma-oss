@@ -18,6 +18,7 @@ import {
   classifyDashboardVisits,
   aggregatePrescriptionItemRequirements,
   calculateDashboardStockShortages,
+  buildClaimPublicInsuranceSummary,
   EMPTY_COUNTS
 } from './dashboard_tasks';
 
@@ -355,6 +356,29 @@ describe('dashboard_tasks pure functions', () => {
     });
   });
 
+  describe('buildClaimPublicInsuranceSummary', () => {
+    it('returns formatted category name with prefix for legal categories', () => {
+      const summary = buildClaimPublicInsuranceSummary([
+        { provider: '54123456', recipient: '1234567' },
+        { provider: '21123456', recipient: '7654321' }
+      ]);
+      assert.equal(summary, '指定難病(54) / 精神通院医療(21)');
+    });
+
+    it('falls back to prefix when category name is not in master list', () => {
+      const summary = buildClaimPublicInsuranceSummary([
+        { provider: '99123456', recipient: '1234567' }
+      ]);
+      assert.equal(summary, '公費99');
+    });
+
+    it('returns undefined for empty or missing public insurances', () => {
+      assert.equal(buildClaimPublicInsuranceSummary([]), undefined);
+      assert.equal(buildClaimPublicInsuranceSummary(undefined), undefined);
+      assert.equal(buildClaimPublicInsuranceSummary(null), undefined);
+    });
+  });
+
   describe('calculateDashboardClaimWorkItems', () => {
     it('filters exported / returned / rebilling items and sets priority', () => {
       const monthlyClaimVisits = [
@@ -401,6 +425,130 @@ describe('dashboard_tasks pure functions', () => {
       assert.equal(returnedClaimCount, 1);
       assert.equal(claimWorkItems[0].status, 'returned');
       assert.equal(claimWorkItems[0].reason, '保険者番号相違');
+    });
+
+    it('populates publicInsuranceSummary and flags expired public insurance as high priority error', () => {
+      const monthlyClaimVisits = [
+        {
+          visitId: 'v_expired_pub',
+          patientId: 'p_pub_expired',
+          issueDate: '2026-08-15',
+          claimLifecycle: {
+            status: 'exported',
+            exportedAt: '2026-08-22', // recent, would normally be normal priority
+            exportedFileName: 'RECEIPTC.UKE',
+            totalPoints: 2100
+          }
+        }
+      ];
+      const patientMap = new Map([
+        ['p_pub_expired', {
+          id: 'p_pub_expired',
+          name: '公費 太郎',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 20,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-10'
+          },
+          publicInsurances: [
+            {
+              provider: '54123456',
+              recipient: '1234567',
+              burdenRatio: 10,
+              startDate: '2025-04-01',
+              endDate: '2026-03-31', // Expired on visit date 2026-08-15
+              monthlyLimitYen: 10000
+            }
+          ]
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_expired_pub', [{ itemId: 'item_1' }]]
+      ]);
+
+      const { claimWorkItems } = calculateDashboardClaimWorkItems({
+        monthlyClaimVisits,
+        patientMap,
+        itemsByVisitId,
+        basisDate: new Date('2026-08-23')
+      });
+
+      assert.equal(claimWorkItems.length, 1);
+      const item = claimWorkItems[0];
+      assert.equal(item.name, '公費 太郎');
+      assert.equal(item.publicInsuranceSummary, '指定難病(54)');
+      assert.ok(item.eligibilityWarning, 'Should have eligibilityWarning');
+      assert.equal(item.eligibilityWarning?.severity, 'error');
+      assert.equal(item.eligibilityWarning?.code, 'public_insurance_expired');
+      assert.equal(item.eligibilityWarning?.label, '公費1が期限切れです');
+      // Priority should be elevated to high because of error
+      assert.equal(item.priority, 'high');
+      assert.equal(item.priorityLabel, '至急');
+    });
+
+    it('flags warning when public insurance monthly limit is missing without elevating priority to high', () => {
+      const monthlyClaimVisits = [
+        {
+          visitId: 'v_warn_pub',
+          patientId: 'p_pub_warn',
+          issueDate: '2026-08-15',
+          claimLifecycle: {
+            status: 'exported',
+            exportedAt: '2026-08-22',
+            exportedFileName: 'RECEIPTC.UKE',
+            totalPoints: 1500
+          }
+        }
+      ];
+      const patientMap = new Map([
+        ['p_pub_warn', {
+          id: 'p_pub_warn',
+          name: '公費 次郎',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 20,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-10'
+          },
+          publicInsurances: [
+            {
+              provider: '54123456',
+              recipient: '1234567',
+              burdenRatio: 10,
+              startDate: '2026-04-01',
+              endDate: '2027-03-31', // Valid
+              monthlyLimitYen: undefined // Missing limit!
+            }
+          ]
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_warn_pub', [{ itemId: 'item_1' }]]
+      ]);
+
+      const { claimWorkItems } = calculateDashboardClaimWorkItems({
+        monthlyClaimVisits,
+        patientMap,
+        itemsByVisitId,
+        basisDate: new Date('2026-08-23')
+      });
+
+      assert.equal(claimWorkItems.length, 1);
+      const item = claimWorkItems[0];
+      assert.equal(item.name, '公費 次郎');
+      assert.equal(item.publicInsuranceSummary, '指定難病(54)');
+      assert.ok(item.eligibilityWarning, 'Should have eligibilityWarning');
+      assert.equal(item.eligibilityWarning?.severity, 'warning');
+      assert.equal(item.eligibilityWarning?.code, 'public_insurance_monthly_limit_missing');
+      assert.equal(item.eligibilityWarning?.label, '公費1の負担上限が未設定です');
+      // Priority remains normal
+      assert.equal(item.priority, 'normal');
+      assert.equal(item.priorityLabel, '通常');
     });
   });
 

@@ -56,6 +56,12 @@ import {
   type ElectronicPrescriptionFetchKeyKind,
   type ElectronicPrescriptionFetchResult
 } from '@/lib/electronic_prescription';
+import { evaluateInsuranceEligibility, type InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
+import {
+  buildPublicInsuranceBadgeList,
+  getPublicInsuranceCategoryName,
+  type PublicInsuranceBadgeItem
+} from '@/lib/patient_public_insurance';
 import DrugSearchModal from './components/DrugSearchModal';
 import PrescriptionQrReader from './components/PrescriptionQrReader';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
@@ -63,6 +69,8 @@ import type { Prescription, PrescriptionGroup, PrescriptionFieldValue } from './
 import { groupPrescriptionsByRp } from './types';
 import {
   toPatientEligibilityStatus,
+  filterReceptionEligibilityAlerts,
+  buildCandidatePublicInsuranceSummary,
   getDrugAuditMeta,
   getDispensedDrugAuditMeta,
   clearDispensedDrugAuditMeta,
@@ -459,6 +467,29 @@ export default function OcrPage() {
     () => patientCandidates.find((patient) => patient.patientId === selectedPatientId),
     [patientCandidates, selectedPatientId]
   );
+  const selectedPatientEligibilityIssues = useMemo(() => {
+    if (!selectedPatient) return [];
+    return evaluateInsuranceEligibility({ patient: selectedPatient });
+  }, [selectedPatient]);
+  const selectedPatientPublicBadges = useMemo(() => {
+    if (!selectedPatient) return [];
+    return buildPublicInsuranceBadgeList(selectedPatient.publicInsurances, selectedPatientEligibilityIssues);
+  }, [selectedPatient, selectedPatientEligibilityIssues]);
+  const selectedPatientReceptionAlerts = useMemo(() => {
+    return filterReceptionEligibilityAlerts(selectedPatientEligibilityIssues);
+  }, [selectedPatientEligibilityIssues]);
+  const candidatePublicSummaryByPatientId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildCandidatePublicInsuranceSummary>>();
+    for (const patient of patientCandidates) {
+      if (!patient.publicInsurances || patient.publicInsurances.length === 0) continue;
+      const issues = evaluateInsuranceEligibility({ patient });
+      const summary = buildCandidatePublicInsuranceSummary(patient, issues);
+      if (summary) {
+        map.set(patient.patientId, summary);
+      }
+    }
+    return map;
+  }, [patientCandidates]);
   const patientCandidateMatches = useMemo<PatientCandidateMatch<PatientCandidate>[]>(() => (
     buildPatientCandidateMatches(patientCandidates, {
       name: patientName,
@@ -1877,6 +1908,15 @@ export default function OcrPage() {
                                 {match.warning}
                               </span>
                             )}
+                            {candidatePublicSummaryByPatientId.get(patient.patientId) && (
+                              <span className="candidate-public-tags">
+                                <span className={`candidate-pub-badge ${candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired ? 'error' : candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning ? 'warning' : 'normal'}`}>
+                                  公費: {candidatePublicSummaryByPatientId.get(patient.patientId)?.summary}
+                                  {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired && '【期限切】'}
+                                  {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning && '【期限注意】'}
+                                </span>
+                              </span>
+                            )}
                           </button>
                           {canOpenMergeReview && (
                             <button
@@ -1900,8 +1940,47 @@ export default function OcrPage() {
                   </div>
                 )}
                 {selectedPatient && (
-                  <div className="selected-patient-note">
-                    選択中: {selectedPatient.name}（{selectedPatient.birthDate}）
+                  <div className="selected-patient-card" data-testid="selected-patient-card">
+                    <div className="selected-patient-header">
+                      <div className="selected-patient-title-line">
+                        <span className="selected-patient-badge">選択中患者</span>
+                        <strong className="selected-patient-name">{selectedPatient.name}</strong>
+                        <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
+                        <span className="selected-patient-insurance">
+                          保険者番号: {selectedPatient.insuranceInfo?.number || '未登録'}
+                        </span>
+                      </div>
+                      {selectedPatientPublicBadges.length > 0 && (
+                        <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
+                          {selectedPatientPublicBadges.map((badge) => (
+                            <span
+                              key={`selected-pub-badge-${badge.index}`}
+                              className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
+                              title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
+                            >
+                              公費{badge.index}: {badge.label}
+                              {badge.hasError && '【要確認】'}
+                              {badge.hasWarning && '【期限注意】'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedPatientReceptionAlerts.length > 0 && (
+                      <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
+                        {selectedPatientReceptionAlerts.map((issue) => (
+                          <div
+                            key={issue.code}
+                            className={`selected-patient-alert-item ${issue.severity}`}
+                          >
+                            <AlertTriangle size={13} aria-hidden="true" />
+                            <span className="alert-item-title">{issue.title}:</span>
+                            <span className="alert-item-message">{issue.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
@@ -2790,6 +2869,159 @@ export default function OcrPage() {
           color: var(--text-muted);
           font-size: 0.78rem;
           line-height: 1.45;
+        }
+
+        .candidate-public-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem;
+          margin-top: 0.15rem;
+        }
+
+        .candidate-pub-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.1rem 0.35rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.7rem;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .candidate-pub-badge.normal {
+          background: #f5f3ff;
+          color: #6d28d9;
+          border: 1px solid #ddd6fe;
+        }
+
+        .candidate-pub-badge.warning {
+          background: #fff7ed;
+          color: #c2410c;
+          border: 1px solid #fed7aa;
+        }
+
+        .candidate-pub-badge.error {
+          background: #fef2f2;
+          color: #dc2626;
+          border: 1px solid #fecaca;
+        }
+
+        .selected-patient-card {
+          border: 1px solid #bfdbfe;
+          background: #f0f7ff;
+          border-radius: var(--radius-md);
+          padding: 0.65rem 0.85rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+        }
+
+        .selected-patient-header {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+        }
+
+        .selected-patient-title-line {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.45rem;
+        }
+
+        .selected-patient-badge {
+          background: var(--primary, #2563eb);
+          color: white;
+          border-radius: var(--radius-sm);
+          padding: 0.08rem 0.38rem;
+          font-size: 0.7rem;
+          font-weight: 700;
+        }
+
+        .selected-patient-name {
+          font-size: 0.92rem;
+          font-weight: 800;
+          color: var(--text-main);
+        }
+
+        .selected-patient-birth,
+        .selected-patient-insurance {
+          font-size: 0.78rem;
+          color: var(--text-muted);
+        }
+
+        .selected-patient-public-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          margin-top: 0.15rem;
+        }
+
+        .selected-pub-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.12rem 0.45rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.74rem;
+          font-weight: 700;
+        }
+
+        .selected-pub-badge.normal {
+          background: #f5f3ff;
+          color: #6d28d9;
+          border: 1px solid #ddd6fe;
+        }
+
+        .selected-pub-badge.warning {
+          background: #fff7ed;
+          color: #c2410c;
+          border: 1px solid #fed7aa;
+        }
+
+        .selected-pub-badge.error {
+          background: #fef2f2;
+          color: #dc2626;
+          border: 1px solid #fecaca;
+        }
+
+        .selected-patient-alerts {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          border-top: 1px dashed #bfdbfe;
+          padding-top: 0.45rem;
+        }
+
+        .selected-patient-alert-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          padding: 0.35rem 0.55rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.76rem;
+          line-height: 1.4;
+        }
+
+        .selected-patient-alert-item.error {
+          background: #fee2e2;
+          border: 1px solid #f87171;
+          color: #b91c1c;
+          font-weight: 600;
+        }
+
+        .selected-patient-alert-item.warning {
+          background: #ffedd5;
+          border: 1px solid #fb923c;
+          color: #c2410c;
+        }
+
+        .selected-patient-alert-item .alert-item-title {
+          font-weight: 700;
+          white-space: nowrap;
+        }
+
+        .selected-patient-alert-item .alert-item-message {
+          flex: 1;
         }
 
         .candidate-reasons {

@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   FileCheck2,
@@ -301,6 +302,23 @@ export const ClaimWorkbenchRow = React.memo(function ClaimWorkbenchRow({
           <span className="claim-workbench-name">{item.name}</span>
           <span className={`claim-workbench-badge ${item.priority}`}>{item.priorityLabel}</span>
           <span className={`claim-workbench-status ${item.status}`}>{item.statusLabel}</span>
+          {item.publicInsuranceSummary && (
+            <span
+              className="claim-workbench-badge public-badge"
+              title={`公費制度: ${item.publicInsuranceSummary}`}
+            >
+              公費: {item.publicInsuranceSummary}
+            </span>
+          )}
+          {item.eligibilityWarning && (
+            <span
+              className={`claim-workbench-badge warning-${item.eligibilityWarning.severity}`}
+              title={item.eligibilityWarning.message}
+            >
+              <AlertTriangle size={11} aria-hidden="true" />
+              {item.eligibilityWarning.label}
+            </span>
+          )}
         </span>
         <span className="claim-workbench-meta">
           {item.issueDateLabel} / {item.monthLabel} / {item.totalPoints.toLocaleString('ja-JP')}点 /{' '}

@@ -1,8 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Drug, Visit, InsuranceEligibilityStatus } from '@/db/types';
+import type { Drug, Visit, InsuranceEligibilityStatus, Patient } from '@/db/types';
 import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import type { ElectronicPrescriptionItem } from '@/lib/electronic_prescription';
+import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
+import { getPublicInsuranceCategoryName } from '@/lib/patient_public_insurance';
 import type { Prescription, PrescriptionGroup } from './types';
 
 export type EligibilityStatus = 'unchecked' | 'checking' | 'confirmed' | 'warning' | 'unavailable';
@@ -245,4 +247,59 @@ export function buildPrescriptionFromElectronicItem(
     dispensedDrug: NO_SUBSTITUTION_LABEL,
     changeReason: ''
   });
+}
+
+/**
+ * 選択中患者の公費・保険適合性判定結果から、受付画面で表面化すべき警告（公費全般および保険期限切れ・資格不備）を抽出する純粋関数
+ */
+export function filterReceptionEligibilityAlerts(
+  issues: ReadonlyArray<InsuranceEligibilityIssue>
+): InsuranceEligibilityIssue[] {
+  return issues.filter((issue) => {
+    // 公費関連のエラー・警告はすべて表面化
+    if (issue.code.startsWith('public_insurance_')) return true;
+    // 保険資格切れ・開始日前・資格確認未完了などの重大警告も表面化
+    if (
+      issue.code === 'insurance_expired' ||
+      issue.code === 'insurance_expiring_soon' ||
+      issue.code === 'insurance_valid_from_future' ||
+      issue.code === 'insurance_eligibility_invalid' ||
+      issue.code === 'insurance_eligibility_unchecked' ||
+      issue.code === 'insurance_provider_format_invalid'
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * 患者候補カード表示用の公費サマリーおよび簡易バッジ情報を生成する純粋関数
+ */
+export function buildCandidatePublicInsuranceSummary(
+  patient: Pick<Patient, 'publicInsurances'>,
+  issues: ReadonlyArray<InsuranceEligibilityIssue>
+): {
+  summary: string;
+  hasExpired: boolean;
+  hasWarning: boolean;
+} | undefined {
+  if (!patient.publicInsurances || patient.publicInsurances.length === 0) {
+    return undefined;
+  }
+  const summaryParts: string[] = [];
+  for (const [idx, pub] of patient.publicInsurances.entries()) {
+    const cat = getPublicInsuranceCategoryName(pub.provider);
+    const prefix = pub.provider ? pub.provider.slice(0, 2) : '';
+    const name = cat || (prefix ? `公費${prefix}` : `公費${idx + 1}`);
+    summaryParts.push(name);
+  }
+  const hasExpired = issues.some((i) => i.code === 'public_insurance_expired');
+  const hasWarning = issues.some((i) => i.code.startsWith('public_insurance_') && i.severity === 'warning');
+
+  return {
+    summary: summaryParts.join(' / '),
+    hasExpired,
+    hasWarning
+  };
 }

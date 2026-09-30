@@ -1705,6 +1705,11 @@ button {
   white-space: nowrap;
 }
 
+.claim-workbench-badge svg {
+  margin-right: 2px;
+  vertical-align: -1px;
+}
+
 .claim-workbench-badge.high {
   border: 1px solid #fecaca;
   background: var(--danger-soft);
@@ -1721,6 +1726,24 @@ button {
   border: 1px solid #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.claim-workbench-badge.public-badge {
+  border: 1px solid #c7d2fe;
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.claim-workbench-badge.warning-error {
+  border: 1px solid #fecaca;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.claim-workbench-badge.warning-warning {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .claim-workbench-status.returned {
