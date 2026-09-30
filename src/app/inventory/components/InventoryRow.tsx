@@ -66,15 +66,6 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
 
     return (
         <tr>
-            {/* 一般名マスタ(【般】)はYJコードを持たないため一般名コードで代替表示する */}
-            <td>{drug.yjCode || drug.code}</td>
-            <td className={`text-right ${isTotalStockNegative ? 'stock-negative' : ''}`}>
-                {totalStock}
-            </td>
-            <td className="text-right">{pendingStock > 0 ? pendingStock : '-'}</td>
-            <td className={`text-right ${isAvailableStockNegative ? 'stock-negative' : ''}`}>
-                {availableStock}
-            </td>
             <td>
                 <div className="inventory-name-cell">
                     <span>{drug.name}</span>
@@ -91,6 +82,13 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
                     )}
                 </div>
             </td>
+            <td className={`text-right ${isTotalStockNegative ? 'stock-negative' : ''}`}>
+                {totalStock}
+            </td>
+            <td className={`text-right ${isAvailableStockNegative ? 'stock-negative' : ''}`}>
+                {availableStock}
+            </td>
+            <td className="text-right">{pendingStock > 0 ? pendingStock : '-'}</td>
             <td>
                 <LocationEditor
                     drug={drug}
@@ -98,6 +96,8 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
                     locations={locations}
                 />
             </td>
+            {/* 一般名マスタ(【般】)はYJコードを持たないため一般名コードで代替表示する */}
+            <td>{drug.yjCode || drug.code}</td>
         </tr>
     );
 });

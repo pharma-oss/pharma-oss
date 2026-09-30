@@ -802,12 +802,12 @@ export default function InventoryPage() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>YJコード</th>
-                                    <th>現在庫 (実在庫)</th>
-                                    <th>引き渡し予定</th>
-                                    <th>利用可能在庫</th>
                                     <th>医薬品名</th>
+                                    <th>現在庫 (実在庫)</th>
+                                    <th>利用可能在庫</th>
+                                    <th>引き渡し予定</th>
                                     <th>棚番地 (MAP)</th>
+                                    <th>YJコード</th>
                                 </tr>
                             </thead>
                             <tbody>
