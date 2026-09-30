@@ -136,6 +136,8 @@ import { OintmentLabelSheetPrint } from '../components/OintmentLabelSheetPrint';
 import { EmergencyRecoveryKeySheetPrint } from '../components/EmergencyRecoveryKeySheetPrint';
 import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffPanel';
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
+import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
+import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
 import {
   type DbKeyEscrowPayload,
   createDbKeyEscrow,
@@ -158,6 +160,7 @@ export default function PrintPage() {
   const [escrowPayload, setEscrowPayload] = useState<DbKeyEscrowPayload | null>(null);
   const [isGeneratingEscrow, setIsGeneratingEscrow] = useState(false);
   const [escrowError, setEscrowError] = useState<string | null>(null);
+  const [isOfficialUkeModalOpen, setIsOfficialUkeModalOpen] = useState(false);
 
   const isDemoOrE2E = visitId === 'e2e_onboarding_visit' || visitId.startsWith('demo_');
 
@@ -878,6 +881,24 @@ export default function PrintPage() {
     });
   };
 
+  const itemsForUke = useMemo(() => {
+    return prescriptionItems.map((item) => ({
+      ...item,
+      receiptRemark: remarks[item.itemId] ?? item.receiptRemark
+    }));
+  }, [prescriptionItems, remarks]);
+
+  const handleOfficialUkeExportSuccess = useCallback(async (result: SingleDispensingUkeOfficialResult) => {
+    if (!db) return;
+    await logAuditAction(
+      db,
+      'uke_export',
+      `公式レセプト（UKE / RECEIPTY.CYO）エクスポート: 患者「${patientData?.name}」の公式電子レセプト（点数: ${result.totalPoints}点、レコード数: ${result.records.length}行）を出力しました。`,
+      visitData?.patientId,
+      patientData?.name
+    );
+  }, [db, patientData?.name, visitData?.patientId]);
+
   const handleDownloadUke = async () => {
     if (!ensurePermission('export_uke')) return;
     if (isDemoVisit(visitData)) {
@@ -914,10 +935,6 @@ export default function PrintPage() {
       }
 
       const generatedAt = new Date();
-      const itemsForUke = prescriptionItems.map((item) => ({
-        ...item,
-        receiptRemark: remarks[item.itemId] ?? item.receiptRemark
-      }));
       const records = buildDispensingUkeRecords({
         visit: visitData,
         patient: patientData,
@@ -1346,6 +1363,17 @@ export default function PrintPage() {
           >
             <Download size={16} aria-hidden="true" />
             <span>UKE出力</span>
+          </button>
+          <button
+            type="button"
+            className="btn-secondary official-uke-btn"
+            onClick={() => setIsOfficialUkeModalOpen(true)}
+            disabled={!canExportUke || hasClaimErrors}
+            data-testid="print-official-uke-button"
+            title="公式提出用UKE（RECEIPTY.CYO / GO集計 / EOF 0x1A）の点検とダウンロード"
+          >
+            <FileCheck2 size={16} aria-hidden="true" />
+            <span>公式UKE</span>
           </button>
           <button
             type="button"
@@ -2063,6 +2091,20 @@ export default function PrintPage() {
           isDemoOrSample={isDemoOrE2E}
         />
       </div>
+
+      {/* 10. 公式提出用 UKE 点検・出力モーダル */}
+      {visitData && patientData && settingsData && (
+        <SingleOfficialUkeModal
+          isOpen={isOfficialUkeModalOpen}
+          onClose={() => setIsOfficialUkeModalOpen(false)}
+          visitData={visitData}
+          patientData={patientData}
+          settingsData={settingsData}
+          prescriptionItems={itemsForUke}
+          calculatedFees={calculatedFees}
+          onExportSuccess={handleOfficialUkeExportSuccess}
+        />
+      )}
     </div>
   );
 }

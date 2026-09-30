@@ -44,12 +44,26 @@ test('print page surfaces prescription audit before printing and UKE export', ()
   assert.match(printSource, /prescriptionAudit\.errorCount > 0/);
   assert.match(printSource, /data-testid="print-page"/);
   assert.match(printSource, /data-testid="print-uke-export-button"/);
+  assert.match(printSource, /data-testid="print-official-uke-button"/);
   assert.match(printSource, /data-testid="print-execute-button"/);
   assert.match(printSource, /data-testid="pharmacist-check-panel"/);
   assert.match(printSource, /data-testid="claim-check-panel"/);
   assert.match(printSource, /data-testid="claim-lifecycle-panel"/);
   assert.match(printSource, /data-testid="dispensing-record-doc"/);
   assert.match(printSource, /data-testid="receipt-statement-doc"/);
+});
+
+test('print page offers parallel official UKE preview/download alongside regular UKE', () => {
+  // 1. 通常 UKE と公式 UKE ボタンの両方が併設されていること（通常出力を独断で塞がない契約）
+  assert.match(printSource, /data-testid="print-uke-export-button"/);
+  assert.match(printSource, /data-testid="print-official-uke-button"/);
+  assert.match(printSource, />UKE出力</);
+  assert.match(printSource, />公式UKE</);
+
+  // 2. 公式 UKE モーダルコンポーネントが接続されていること
+  assert.match(printSource, /<SingleOfficialUkeModal/);
+  assert.match(printSource, /download-official-cyo-button/);
+  assert.match(printSource, /RECEIPTY\.CYO/);
 });
 
 // 以下 3 件は「監査ログが残らなければ操作を確定させない」契約。
