@@ -446,6 +446,26 @@ export const PrescriptionRow = React.memo(({
             margin-left: 0;
           }
         }
+
+        @media (max-width: 640px) {
+          .prescription-row-container {
+            padding: 0.55rem;
+          }
+
+          .prescription-flags {
+            gap: 0.35rem;
+          }
+
+          .agent-override-chip {
+            flex: 1 1 120px;
+          }
+
+          .agent-override-chip input {
+            flex: 1;
+            min-width: 40px;
+            width: auto;
+          }
+        }
       `}</style>
     </div>
   );

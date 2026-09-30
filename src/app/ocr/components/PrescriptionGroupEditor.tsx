@@ -470,11 +470,13 @@ export const PrescriptionGroupEditor = React.memo(({
           display: flex;
           align-items: center;
           gap: 0.4rem;
+          flex-wrap: wrap;
         }
 
         .usage-readonly {
           cursor: pointer;
-          flex: 1;
+          flex: 1 1 140px;
+          min-width: 0;
         }
 
         .usage-readonly:hover {
@@ -534,10 +536,12 @@ export const PrescriptionGroupEditor = React.memo(({
           .rp-group-header {
             align-items: flex-start;
             flex-direction: column;
+            gap: 0.5rem;
           }
 
           .rp-actions {
-            justify-content: flex-start;
+            width: 100%;
+            justify-content: flex-end;
           }
 
           .prescription-row-header {
@@ -546,6 +550,29 @@ export const PrescriptionGroupEditor = React.memo(({
 
           .rp-prescription-footer {
             grid-template-columns: 1fr;
+            padding: 0.5rem;
+          }
+
+          .usage-selector-wrap {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.35rem;
+          }
+
+          .btn-select-usage {
+            padding: 0 0.65rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .usage-selector-wrap {
+            grid-template-columns: 1fr;
+          }
+
+          .btn-select-usage,
+          .btn-clear-usage {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>

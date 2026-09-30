@@ -2188,7 +2188,8 @@ export default function OcrPage() {
                     disabled={isProcessing || isSaving}
                   >
                     {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-                    {isSaving ? "保存中..." : "外部連携・印刷・ピッキングへ"}
+                    <span className="btn-label-main">{isSaving ? "保存中..." : "外部連携・印刷"}</span>
+                    <span className="btn-label-sub">・ピッキングへ</span>
                   </button>
                 </span>
               </div>
@@ -3072,13 +3073,30 @@ export default function OcrPage() {
         .form-actions {
           position: sticky;
           bottom: 0;
-          z-index: 3;
+          z-index: 10;
           display: flex;
           justify-content: flex-end;
-          gap: 1rem;
+          align-items: center;
+          gap: var(--space-3);
           border-top: 1px solid var(--border);
-          padding: 1rem 0 0.1rem;
-          background: linear-gradient(180deg, rgba(248, 250, 252, 0), #ffffff 28%);
+          padding: 0.85rem 1rem;
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(8px);
+          box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .form-actions .btn-tooltip-wrapper {
+          display: inline-flex;
+        }
+
+        .form-actions .btn-label-main {
+          font-size: var(--fs-base);
+          font-weight: 700;
+        }
+
+        .form-actions .btn-label-sub {
+          font-size: var(--fs-base);
+          font-weight: 700;
         }
 
         .btn-trash {
@@ -3115,7 +3133,7 @@ export default function OcrPage() {
 
           /* 手入力受付では左カラムは案内文だけで実質空欄のため、幅の狭い画面では畳んで
              右の入力フォームを広げる(ヘッダーの「受付をやり直す」ボタンは残す)。 */
-          .side-by-side-container.manual-mode .manual-placeholder {
+          .side-by-side-container.manual-mode .visual-column {
             display: none;
           }
 
@@ -3150,7 +3168,49 @@ export default function OcrPage() {
           .provider-grid .form-group:nth-last-child(-n + 2) {
             max-width: none;
           }
+        }
 
+        @media (max-width: 640px) {
+          .ocr-page {
+            gap: 1rem;
+          }
+
+          .form-actions {
+            display: grid;
+            grid-template-columns: 0.9fr 1.6fr;
+            gap: var(--space-2);
+            padding: 0.65rem var(--space-2);
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .form-actions .btn-tooltip-wrapper {
+            width: 100%;
+          }
+
+          .form-actions button {
+            width: 100%;
+            min-height: 44px;
+            padding: 0.45rem 0.5rem;
+            justify-content: center;
+          }
+
+          .form-actions .btn-label-main {
+            font-size: var(--fs-sm);
+          }
+
+          .form-actions .btn-label-sub {
+            display: none;
+          }
+
+          .reception-choice-grid {
+            gap: 1rem;
+          }
+
+          .manual-entry-card {
+            padding: 1.25rem 1rem;
+            min-height: 120px;
+          }
         }
 
         @keyframes spin {
