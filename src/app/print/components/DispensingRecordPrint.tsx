@@ -60,7 +60,7 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
   isFirstItemInRp
 }: DispensingRecordPrintProps) {
   return (
-    <section className="print-preview-card card dispensing-record-card">
+    <section className="print-preview-card card paper-preview-card dispensing-record-card">
       <div className="preview-header no-print">
         <div>
           <h3><FileText size={18} aria-hidden="true" /> 調剤録</h3>

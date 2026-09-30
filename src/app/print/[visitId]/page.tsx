@@ -1326,7 +1326,7 @@ export default function PrintPage() {
             <p className="text-muted">{patientData.name} 様の調剤録、薬袋、お薬手帳シール、各種ラベルを印刷します。</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="print-header-actions flex items-center gap-2">
           <button
             type="button"
             className="btn-secondary"

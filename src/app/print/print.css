@@ -51,6 +51,7 @@
         .paper-preview-card {
           align-items: center;
           overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
           background:
             linear-gradient(90deg, rgba(226, 232, 240, 0.7) 1px, transparent 1px),
             linear-gradient(rgba(226, 232, 240, 0.7) 1px, transparent 1px),
@@ -198,7 +199,7 @@
 
         .yakujo-doc {
           width: 210mm;
-          max-width: 100%;
+          min-width: 210mm;
           min-height: 297mm;
           padding: 11mm 13mm;
           font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
@@ -606,7 +607,7 @@
 
         .receipt-doc {
           width: 148mm;
-          max-width: 100%;
+          min-width: 148mm;
           min-height: 210mm;
           padding: 10mm 11mm;
           font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
@@ -2044,6 +2045,7 @@
           --bag-color: #175a48;
           --bag-soft: #f3fbf7;
           width: 148mm;
+          min-width: 148mm;
           min-height: 210mm;
           padding: 9mm 11mm;
           display: flex;
@@ -2262,7 +2264,7 @@
 
         .sticker-sheet, .label-sheet {
           width: 210mm;
-          max-width: 100%;
+          min-width: 210mm;
           min-height: 297mm;
           padding: 11mm;
           display: grid;
@@ -3206,6 +3208,10 @@
             text-align: left;
           }
 
+          .paper-preview-card {
+            align-items: flex-start;
+          }
+
           .receipt-flow-grid,
           .receipt-summary-strip,
           .claim-lifecycle-grid,
@@ -3234,6 +3240,74 @@
         }
 
         @media (max-width: 640px) {
+          .print-header-actions {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+          }
+
+          .print-header-actions button.btn-primary {
+            grid-column: 1 / -1;
+            width: 100%;
+            justify-content: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+          }
+
+          .print-header-actions button.btn-secondary {
+            width: 100%;
+            justify-content: center;
+            padding: 0.55rem 0.5rem;
+            font-size: 0.85rem;
+          }
+
+          .receipt-flow-grid {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+          }
+
+          .receipt-flow-step {
+            min-height: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.6rem 0.85rem;
+          }
+
+          .receipt-flow-step span {
+            font-size: 0.8rem;
+          }
+
+          .receipt-flow-step strong {
+            font-size: 0.85rem;
+            margin: 0;
+          }
+
+          .claim-check-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.6rem;
+          }
+
+          .claim-header-actions {
+            width: 100%;
+            justify-content: space-between;
+          }
+
+          .paper-preview-card {
+            padding: 0.75rem 0.5rem;
+          }
+
+          .claim-toggle-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .copayment-public-row {
+            grid-template-columns: 1fr;
+          }
+
           .claim-lifecycle-grid,
           .electronic-prescription-grid,
           .claim-lifecycle-history,
