@@ -90,13 +90,18 @@ import { MedicationGuidanceModal } from './components/MedicationGuidanceModal';
 import { PickingSupportModal } from './components/PickingSupportModal';
 import { TracingReportModal } from './components/TracingReportModal';
 
-const TimelineItem = ({ date, drug, detail, change, active }: { date: string; drug: string; detail: string; change?: string; active?: boolean }) => (
+export const TimelineItem = ({ date, drug, detail, change, active }: { date: string; drug: string; detail: string; change?: string; active?: boolean }) => (
   <div className={`timeline-item ${active ? 'active' : ''}`}>
-    <div className="item-date">{date}</div>
+    <div className="timeline-item-header">
+      <span className="item-date">{date}</span>
+      <span className={`timeline-badge ${active ? 'current' : 'past'}`}>
+        {active ? '今回' : '処方'}
+      </span>
+    </div>
     <div className="item-content">
       <div className="item-drug">{drug}</div>
       <div className="item-detail">{detail}</div>
-      {change && <div className="item-change">{change}</div>}
+      {change && <div className="item-change">※ {change}</div>}
     </div>
   </div>
 );
@@ -1981,25 +1986,27 @@ useEffect(() => {
         .section-tabs {
           display: flex;
           flex-wrap: wrap;
-          padding: 0.75rem 1.5rem;
+          padding: 0.65rem 1.25rem;
           border-bottom: 1px solid var(--border);
           background: #fdfdfd;
           align-items: center;
+          gap: var(--space-2);
           border-radius: var(--radius-lg) var(--radius-lg) 0 0;
         }
 
         .tab-pill {
-          padding: 0.5rem 1.25rem;
+          padding: 0.45rem 1rem;
           font-size: var(--fs-base);
           font-weight: 600;
           color: var(--text-muted);
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.4rem;
           cursor: pointer;
           background: none;
           border: none;
-          border-bottom: 2px solid transparent;
+          border-radius: var(--radius-md);
+          transition: all var(--transition-fast);
         }
 
         .tab-pill:focus-visible {
@@ -2010,21 +2017,23 @@ useEffect(() => {
 
         .tab-pill.active {
           color: var(--primary);
-          border-bottom: 2px solid var(--primary);
+          background: var(--primary-light, #eff6ff);
+          font-weight: 700;
         }
 
         .btn-do-copy {
           background: var(--primary-light);
           color: var(--primary);
           border: 1px solid rgba(37, 99, 235, 0.2);
-          padding: 0.5rem 1rem;
-          border-radius: 8px;
-          font-size: var(--fs-md);
+          padding: 0.4rem 0.85rem;
+          border-radius: var(--radius-md);
+          font-size: var(--fs-sm);
           font-weight: 600;
           cursor: pointer;
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.4rem;
+          white-space: nowrap;
           transition: all var(--transition-fast);
         }
 
@@ -2045,15 +2054,16 @@ useEffect(() => {
           position: sticky;
           bottom: 0;
           z-index: 20;
-          padding: 1rem 2rem;
+          padding: 0.85rem 1.5rem;
           border-top: 2px solid var(--border-strong);
           display: flex;
           justify-content: flex-end;
-          gap: 1rem;
-          background: rgba(255, 255, 255, 0.94);
-          backdrop-filter: blur(6px);
+          align-items: center;
+          gap: var(--space-3);
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(8px);
           border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-          box-shadow: 0 -12px 28px rgb(15 23 42 / 0.12);
+          box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
         }
 
         .emr-actions .btn-tooltip-wrapper {
@@ -2064,20 +2074,25 @@ useEffect(() => {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 0.18rem;
+          gap: 0.15rem;
+          padding: 0.55rem 1.25rem;
+          min-height: 48px;
+          justify-content: center;
         }
 
         .emr-actions .btn-label-main {
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.4rem;
+          font-size: var(--fs-base);
+          font-weight: 700;
         }
 
         .emr-actions .btn-label-sub {
           font-size: var(--fs-2xs);
-          font-weight: 700;
-          opacity: 0.82;
-          line-height: 1;
+          font-weight: 600;
+          opacity: 0.85;
+          line-height: 1.2;
         }
 
         .completion-warning-list {
@@ -2146,18 +2161,19 @@ useEffect(() => {
         .timeline-list {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: var(--space-2);
         }
 
         .timeline-empty {
           border: 1px dashed var(--border);
-          border-radius: 8px;
+          border-radius: var(--radius-md);
           background: #ffffff;
           color: var(--text-muted);
           font-size: var(--fs-md);
-          font-weight: 800;
+          font-weight: 700;
           line-height: 1.5;
           padding: 0.85rem;
+          text-align: center;
         }
 
         .ml-auto { margin-left: auto; }
@@ -2165,29 +2181,92 @@ useEffect(() => {
 
         .timeline-item {
           display: flex;
-          gap: var(--space-2-5);
-          padding: var(--space-1-5) 0;
-          border-bottom: 1px solid var(--border-subtle);
+          flex-direction: column;
+          gap: var(--space-1);
+          padding: var(--space-2-5) var(--space-3);
+          background: #ffffff;
+          border: 1px solid var(--border-subtle, #e2e8f0);
+          border-radius: var(--radius-md);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+          transition: border-color var(--transition-fast);
         }
+
+        .timeline-item:hover {
+          border-color: var(--primary);
+        }
+
+        .timeline-item.active {
+          border-left: 3px solid var(--primary);
+          background: rgba(37, 99, 235, 0.02);
+        }
+
+        .timeline-item-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: var(--space-2);
+        }
+
         .timeline-item .item-date {
-          font-size: var(--fs-sm);
-          color: var(--text-muted);
-          min-width: 70px;
+          font-size: var(--fs-xs);
+          font-weight: 700;
+          color: var(--muted-foreground, #64748b);
+          font-family: monospace;
         }
-        .timeline-item .item-content {
-          flex: 1;
-        }
-        .timeline-item .item-drug {
-          font-size: var(--fs-md);
+
+        .timeline-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.15rem 0.5rem;
+          border-radius: 999px;
+          font-size: var(--fs-2xs);
           font-weight: 700;
         }
-        .timeline-item .item-detail {
-          font-size: var(--fs-sm);
-          color: var(--text-muted);
+
+        .timeline-badge.current {
+          background: #dbeafe;
+          color: #1d4ed8;
+          border: 1px solid #93c5fd;
         }
-        .timeline-item .item-change {
+
+        .timeline-badge.past {
+          background: #f1f5f9;
+          color: #475569;
+          border: 1px solid #cbd5e1;
+        }
+
+        .timeline-item .item-content {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-0-5);
+        }
+
+        .timeline-item .item-drug {
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          color: var(--foreground, #0f172a);
+          line-height: 1.4;
+        }
+
+        .timeline-item .item-detail {
           font-size: var(--fs-xs);
-          color: var(--primary);
+          color: var(--muted-foreground, #64748b);
+          line-height: 1.4;
+        }
+
+        .timeline-item .item-change {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: var(--fs-2xs);
+          font-weight: 700;
+          color: #b45309;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: var(--radius-sm);
+          padding: 0.15rem 0.4rem;
+          margin-top: 0.2rem;
+          align-self: flex-start;
         }
 
         .soap-panel-container {
@@ -2293,14 +2372,17 @@ useEffect(() => {
 
         @media (max-width: 1380px) {
           .emr-workspace {
-            grid-template-columns: minmax(0, 1fr) 320px;
+            grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+            gap: 1.25rem;
           }
 
           .history-aside {
             grid-column: 1 / -1;
             display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
             align-items: start;
+            padding-right: 0;
           }
         }
 
@@ -2311,6 +2393,7 @@ useEffect(() => {
 
           .emr-workspace {
             grid-template-columns: minmax(0, 1fr);
+            gap: 1rem;
             overflow: visible;
           }
 
@@ -2318,10 +2401,61 @@ useEffect(() => {
           .history-aside {
             overflow: visible;
             padding-right: 0;
+            display: flex !important;
+            flex-direction: column;
+            gap: 1rem;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .emr-page {
+            gap: var(--space-3);
           }
 
-          .history-aside {
-            display: flex !important;
+          .section-tabs {
+            padding: var(--space-2) var(--space-2-5);
+            gap: var(--space-1-5);
+          }
+
+          .tab-pill {
+            padding: var(--space-1-5) var(--space-2-5);
+            font-size: var(--fs-sm);
+          }
+
+          .btn-do-copy {
+            padding: var(--space-1-5) var(--space-2);
+            font-size: var(--fs-xs);
+          }
+
+          .emr-actions {
+            padding: 0.65rem var(--space-3);
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: var(--space-2);
+            border-radius: 0;
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .emr-actions .btn-tooltip-wrapper {
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+          }
+
+          .emr-actions .btn-stacked {
+            width: 100%;
+            padding: 0.5rem 0.4rem;
+            min-height: 44px;
+          }
+
+          .emr-actions .btn-label-main {
+            font-size: var(--fs-sm);
+            gap: 0.25rem;
+          }
+
+          .emr-actions .btn-label-sub {
+            display: none;
           }
         }
       `}</style>

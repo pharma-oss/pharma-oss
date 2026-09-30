@@ -739,10 +739,14 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
         .btn-add-entry.p:hover { border-color: var(--status-purple); }
         .soap-editor-footer {
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
           justify-content: center;
-          gap: 0.5rem;
-          margin-top: 0.25rem;
+          gap: var(--space-2);
+          margin-top: 0.5rem;
+        }
+        .btn-new-problem {
+          white-space: nowrap;
         }
         .past-problem-menu-wrap {
           position: relative;
@@ -759,7 +763,20 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
           background: var(--bg-card);
           padding: 0.4rem 0.7rem;
           cursor: pointer;
+          white-space: nowrap;
           transition: all var(--transition-fast);
+        }
+        @media (max-width: 480px) {
+          .soap-editor-footer {
+            flex-direction: column;
+            width: 100%;
+          }
+          .btn-new-problem,
+          .past-problem-menu-wrap,
+          .past-problem-trigger {
+            width: 100%;
+            justify-content: center;
+          }
         }
         .past-problem-trigger:hover:not(:disabled) {
           border-color: var(--primary);
