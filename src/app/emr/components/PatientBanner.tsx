@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CreditCard, Activity, CheckCircle2, Loader2, Camera, Upload, ClipboardList, History } from 'lucide-react';
+import { CreditCard, Activity, CheckCircle2, Loader2, Camera, Upload, ClipboardList, History, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { getCurrentUser } from '@/lib/audit';
@@ -17,6 +17,16 @@ import {
   buildMynaReadInsuranceDisplay
 } from '@/lib/myna_read_display';
 import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
+import {
+  type EditablePublicInsurance,
+  toEditablePublicInsurances,
+  toPublicInsurances,
+  createEmptyEditablePublicInsurance,
+  getPublicInsuranceCategoryName,
+  buildPublicInsuranceBadgeList,
+  MAX_PUBLIC_INSURANCES
+} from '@/lib/patient_public_insurance';
+import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
 
 export interface PatientBannerProps {
   patientAlerts: Alert[];
@@ -88,6 +98,15 @@ export const PatientBanner = React.memo(function PatientBanner({
       ? 'orange'
       : 'blue';
 
+  const eligibilityIssues = useMemo(() => {
+    if (!patientData) return [];
+    return evaluateInsuranceEligibility({ patient: patientData });
+  }, [patientData]);
+
+  const publicInsuranceBadges = useMemo(() => {
+    return buildPublicInsuranceBadgeList(patientData?.publicInsurances, eligibilityIssues);
+  }, [patientData?.publicInsurances, eligibilityIssues]);
+
   // Premium Insurance Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [hasOpenedInsuranceFromQuery, setHasOpenedInsuranceFromQuery] = useState(false);
@@ -102,12 +121,33 @@ export const PatientBanner = React.memo(function PatientBanner({
   const [editValidTo, setEditValidTo] = useState('');
   const [editEligibilityCheckedAt, setEditEligibilityCheckedAt] = useState('');
   const [editEligibilityStatus, setEditEligibilityStatus] = useState<InsuranceEligibilityStatus>('unchecked');
-  const [editPub1Provider, setEditPub1Provider] = useState('');
-  const [editPub1Recipient, setEditPub1Recipient] = useState('');
-  const [editPub1Burden, setEditPub1Burden] = useState(10);
-  const [editPub1StartDate, setEditPub1StartDate] = useState('');
-  const [editPub1EndDate, setEditPub1EndDate] = useState('');
-  const [editPub1MonthlyLimitYen, setEditPub1MonthlyLimitYen] = useState('');
+  const [editPublicInsurances, setEditPublicInsurances] = useState<EditablePublicInsurance[]>([
+    createEmptyEditablePublicInsurance(0)
+  ]);
+
+  const handleUpdatePublicInsurance = useCallback((index: number, patch: Partial<EditablePublicInsurance>) => {
+    setEditPublicInsurances((current) => {
+      const next = [...current];
+      if (next[index]) {
+        next[index] = { ...next[index], ...patch };
+      }
+      return next;
+    });
+  }, []);
+
+  const handleAddPublicInsurance = useCallback(() => {
+    setEditPublicInsurances((current) => {
+      if (current.length >= MAX_PUBLIC_INSURANCES) return current;
+      return [...current, createEmptyEditablePublicInsurance(current.length)];
+    });
+  }, []);
+
+  const handleRemovePublicInsurance = useCallback((index: number) => {
+    setEditPublicInsurances((current) => {
+      const filtered = current.filter((_, i) => i !== index);
+      return filtered.length > 0 ? filtered : [createEmptyEditablePublicInsurance(0)];
+    });
+  }, []);
   const [questionnaireImageDataUrl, setQuestionnaireImageDataUrl] = useState('');
   const [questionnaireImageName, setQuestionnaireImageName] = useState('');
   const [questionnaireImageByteSize, setQuestionnaireImageByteSize] = useState(0);
@@ -237,14 +277,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       setEditValidTo(toDateInputValue(patientData.insuranceInfo?.validTo));
       setEditEligibilityCheckedAt(toDateInputValue(patientData.insuranceInfo?.eligibilityCheckedAt));
       setEditEligibilityStatus(patientData.insuranceInfo?.eligibilityStatus || 'unchecked');
-
-      const pub1 = patientData.publicInsurances?.[0];
-      setEditPub1Provider(pub1?.provider || '');
-      setEditPub1Recipient(pub1?.recipient || '');
-      setEditPub1Burden(pub1?.burdenRatio ?? 10);
-      setEditPub1StartDate(toDateInputValue(pub1?.startDate));
-      setEditPub1EndDate(toDateInputValue(pub1?.endDate));
-      setEditPub1MonthlyLimitYen(pub1?.monthlyLimitYen !== undefined ? String(pub1.monthlyLimitYen) : '');
+      setEditPublicInsurances(toEditablePublicInsurances(patientData.publicInsurances));
     }
     loadVisitQuestionnaireIntoModal().catch((error) => {
       console.error('Failed to load initial questionnaire:', error);
@@ -269,17 +302,7 @@ export const PatientBanner = React.memo(function PatientBanner({
     try {
       const patientDoc = await db.patients.findOne(patientData.patientId).exec();
       if (patientDoc) {
-        const publicInsurances: PublicInsurance[] = [];
-        if (editPub1Provider && editPub1Recipient) {
-          publicInsurances.push({
-            provider: editPub1Provider,
-            recipient: editPub1Recipient,
-            burdenRatio: Number(editPub1Burden),
-            startDate: editPub1StartDate || undefined,
-            endDate: editPub1EndDate || undefined,
-            monthlyLimitYen: editPub1MonthlyLimitYen.trim() ? Number(editPub1MonthlyLimitYen) : undefined
-          });
-        }
+        const publicInsurances = toPublicInsurances(editPublicInsurances);
 
         const nextInsuranceInfo = {
           provider: editProvider,
@@ -496,6 +519,17 @@ export const PatientBanner = React.memo(function PatientBanner({
             {mynaReadDisplay?.status === 'verified' && <CheckCircle2 size={12} className="inline-icon" aria-hidden="true" />}
             保険: {displayedInsuranceInfo}
           </span>
+          {publicInsuranceBadges.map((badge) => (
+            <span
+              key={`pub-badge-${badge.index}`}
+              className={`badge ${badge.hasError ? 'red' : badge.hasWarning ? 'orange' : 'teal'}`}
+              title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
+            >
+              公費{badge.index}: {badge.label}
+              {badge.hasError && '【要確認】'}
+              {badge.hasWarning && '【期限注意】'}
+            </span>
+          ))}
           <span
             className="btn-tooltip-wrapper"
             data-disabled={isReading || !patientData}
@@ -807,67 +841,112 @@ export const PatientBanner = React.memo(function PatientBanner({
                 </div>
               </div>
 
-              <div className="modal-section-title mt-4">公費情報 (KOレコード用)</div>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="m-pub-provider">公費負担者番号 (8桁)</label>
-                  <input 
-                    id="m-pub-provider"
-                    type="text" 
-                    maxLength={8}
-                    placeholder="例: 51136018 (難病)" 
-                    value={editPub1Provider} 
-                    onChange={(e) => setEditPub1Provider(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-recipient">公費受給者番号 (7桁)</label>
-                  <input 
-                    id="m-pub-recipient"
-                    type="text" 
-                    maxLength={7}
-                    placeholder="例: 1234567" 
-                    value={editPub1Recipient} 
-                    onChange={(e) => setEditPub1Recipient(e.target.value)} 
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label htmlFor="m-pub-burden">公費自己負担割合 (%)</label>
-                  <select id="m-pub-burden" value={editPub1Burden} onChange={(e) => setEditPub1Burden(Number(e.target.value))}>
-                    <option value={10}>10 % (1割負担)</option>
-                    <option value={0}>0 % (自己負担なし)</option>
-                    <option value={20}>20 % (2割負担)</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-start-date">公費開始日</label>
-                  <input
-                    id="m-pub-start-date"
-                    type="date"
-                    value={editPub1StartDate}
-                    onChange={(e) => setEditPub1StartDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="m-pub-end-date">公費有効期限</label>
-                  <input
-                    id="m-pub-end-date"
-                    type="date"
-                    value={editPub1EndDate}
-                    onChange={(e) => setEditPub1EndDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group full-width">
-                  <label htmlFor="m-pub-monthly-limit">月額負担上限 (円)</label>
-                  <input
-                    id="m-pub-monthly-limit"
-                    type="number"
-                    min={0}
-                    placeholder="例: 5000"
-                    value={editPub1MonthlyLimitYen}
-                    onChange={(e) => setEditPub1MonthlyLimitYen(e.target.value)}
-                  />
-                </div>
+              <div className="modal-section-header mt-4">
+                <div className="modal-section-title">公費負担医療情報 (KOレコード用・最大4件)</div>
+                {editPublicInsurances.length < MAX_PUBLIC_INSURANCES && (
+                  <button
+                    type="button"
+                    className="btn-add-public"
+                    onClick={handleAddPublicInsurance}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    <span>公費を追加 ({editPublicInsurances.length}/{MAX_PUBLIC_INSURANCES})</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="public-insurance-list">
+                {editPublicInsurances.map((pub, idx) => {
+                  const categoryName = getPublicInsuranceCategoryName(pub.provider);
+                  return (
+                    <div key={pub.id} className="public-insurance-card">
+                      <div className="public-card-header">
+                        <div className="public-card-title">
+                          <strong>第{idx + 1}公費</strong>
+                          {categoryName && <span className="public-category-tag">【{categoryName}】</span>}
+                        </div>
+                        {editPublicInsurances.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-remove-public"
+                            onClick={() => handleRemovePublicInsurance(idx)}
+                            title={`第${idx + 1}公費を削除`}
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            <span>削除</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label htmlFor={`m-pub-provider-${idx}`}>公費負担者番号 (8桁)</label>
+                          <input 
+                            id={`m-pub-provider-${idx}`}
+                            type="text" 
+                            maxLength={8}
+                            placeholder="例: 51136018 (難病)" 
+                            value={pub.provider} 
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { provider: e.target.value })} 
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor={`m-pub-recipient-${idx}`}>公費受給者番号 (7桁)</label>
+                          <input 
+                            id={`m-pub-recipient-${idx}`}
+                            type="text" 
+                            maxLength={7}
+                            placeholder="例: 1234567" 
+                            value={pub.recipient} 
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { recipient: e.target.value })} 
+                          />
+                        </div>
+                        <div className="form-group full-width">
+                          <label htmlFor={`m-pub-burden-${idx}`}>公費自己負担割合 (%)</label>
+                          <select 
+                            id={`m-pub-burden-${idx}`}
+                            value={pub.burdenRatio} 
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { burdenRatio: Number(e.target.value) })}
+                          >
+                            <option value={10}>10 % (1割負担)</option>
+                            <option value={0}>0 % (自己負担なし)</option>
+                            <option value={20}>20 % (2割負担)</option>
+                            <option value={30}>30 % (3割負担)</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor={`m-pub-start-date-${idx}`}>公費開始日</label>
+                          <input
+                            id={`m-pub-start-date-${idx}`}
+                            type="date"
+                            value={pub.startDate}
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { startDate: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor={`m-pub-end-date-${idx}`}>公費有効期限</label>
+                          <input
+                            id={`m-pub-end-date-${idx}`}
+                            type="date"
+                            value={pub.endDate}
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { endDate: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group full-width">
+                          <label htmlFor={`m-pub-monthly-limit-${idx}`}>月額負担上限 (円)</label>
+                          <input
+                            id={`m-pub-monthly-limit-${idx}`}
+                            type="number"
+                            min={0}
+                            placeholder="例: 5000 (自己負担上限額)"
+                            value={pub.monthlyLimitYen}
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { monthlyLimitYen: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1082,6 +1161,83 @@ export const PatientBanner = React.memo(function PatientBanner({
         .patient-alerts-footer {
           justify-content: flex-end;
           margin-top: var(--space-1);
+        }
+
+        .modal-section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: var(--space-2);
+        }
+
+        .btn-add-public {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-1);
+          padding: 3px 8px;
+          border-radius: var(--radius-sm, 4px);
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          color: var(--primary, #0284c7);
+          background: rgba(2, 132, 199, 0.08);
+          border: 1px solid rgba(2, 132, 199, 0.2);
+          cursor: pointer;
+        }
+
+        .btn-add-public:hover {
+          background: rgba(2, 132, 199, 0.15);
+        }
+
+        .public-insurance-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+
+        .public-insurance-card {
+          border: 1px solid var(--border, #e2e8f0);
+          border-radius: var(--radius-md, 8px);
+          background: #f8fafc;
+          padding: var(--space-3);
+        }
+
+        .public-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: var(--space-2);
+          padding-bottom: var(--space-1);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .public-card-title {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          font-size: var(--fs-sm);
+        }
+
+        .public-category-tag {
+          color: var(--primary, #0284c7);
+          font-weight: 700;
+          font-size: var(--fs-xs);
+        }
+
+        .btn-remove-public {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-1);
+          padding: 2px 6px;
+          border-radius: var(--radius-sm, 4px);
+          font-size: var(--fs-xs);
+          color: var(--danger, #ef4444);
+          background: rgba(239, 68, 68, 0.08);
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          cursor: pointer;
+        }
+
+        .btn-remove-public:hover {
+          background: rgba(239, 68, 68, 0.15);
         }
 
         .spin {
