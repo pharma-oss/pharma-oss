@@ -186,13 +186,13 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ## 1. 品質ゲート
 
-2026-09-30 にトラック D-2 の複数公費消失防止・構造化編集（最大4件）・公費バッジと期限警告表示の実装後に再実行した結果。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-09-30 にトラック D-2 の複数公費対応および `ClientLayout` / `TerminalSyncPanel` のインラインスタイル 24 箇所の CSS クラス移行完了後に再実行した結果。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 11（`react-hooks/exhaustive-deps` 等） |
-| ユニット/契約テスト | `npm test` | 1,733 pass / 0 fail / 71 suites、skip 0（exit 0、約 47 秒） |
+| ユニット/契約テスト | `npm test` | 1,738 pass / 0 fail / 72 suites、skip 0（exit 0、約 48 秒） |
 | 本番ビルド | `npm run build` | 成功（28/28 ページ、exit 0）。複数 lockfile によるルート推定と Node.js SQLite 実験機能の警告あり |
 
 `npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボードは幅1280 / 768 / 375pxの実ブラウザ表示と主要4操作を確認した。受付から請求までの全工程 E2E と印刷回帰は今回実行していない。
@@ -202,11 +202,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | 項目 | 実測 |
 |---|---|
 | `src/` の TS/TSX（テスト除く） | 308 ファイル |
-| テストファイル | 221 ファイル |
+| テストファイル | 222 ファイル |
 | 主要 6 画面の行数 | 9,714 行（ocr 3,163 / emr 2,330 / print 2,068 / inventory 866 / settings 793 / dashboard 494） |
-| `scripts/` | 55 ファイル、npm scripts 44 本 |
-| ソースを `readFileSync` するテスト | 4 ファイル（`PrintPickingFlow` 199 assert / `DrugInfoItemCard` 58 / `PrintLayoutRegression` 43 / `DrugInfoClaimTools` 16） |
-| インライン `style={{}}` | 27 箇所（`TerminalSyncPanel` 18、`ClientLayout` 6、`AuditSettingsTab` 2、印刷ページ 1）。後者 2 ファイルの計 3 箇所は動的 CSS 変数 |
+| `scripts/` | 56 ファイル、npm scripts 44 本 |
+| ソースを `readFileSync` するテスト | 5 ファイル（`PrintPickingFlow` 199 assert / `DrugInfoItemCard` 58 / `PrintLayoutRegression` 43 / `DrugInfoClaimTools` 16 / `TerminalSyncPanel` 3） |
+| インライン `style={{}}` | **3 箇所**（`AuditSettingsTab` 2、印刷ページ 1）。すべて動的 CSS 変数（`--bar-height` / `--print-*`）の正当な受け渡しのみ。`TerminalSyncPanel` 18 箇所と `ClientLayout` 6 箇所は CSS クラスへ移行完了し、予算上限 3 を `TerminalSyncPanel.test.ts` で自動防壁化 |
 | `process.env` 直接参照（`env.ts` 以外・非テスト） | 4 ファイル（`backup.ts`、`pharmacy_device_connector_simulator.ts`、`BackupSettingsTab.tsx`、印刷ページ） |
 | コード内 TODO / FIXME | 0 件 |
 
@@ -537,7 +537,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 - Vanilla CSS と CSS 変数のみ。Tailwind 等の未導入手法を使わない。
 - 文字サイズは `--fs-*`、余白は `--space-*` から選ぶ。生の rem 値を書かない（印刷ページの `print.css` は対象外）。
-- インライン `style={{}}` は動的 CSS 変数（例 `--bar-height`）の受け渡しに限る。第Ⅱ部 §2 の 27 箇所のうち `TerminalSyncPanel` と `ClientLayout` の計 24 箇所はクラスへの移設対象（状態に応じた見た目もクラスで切り替える）。
+- インライン `style={{}}` は動的 CSS 変数（例 `--bar-height`、`--print-*`）の受け渡しに限る。第Ⅱ部 §2 で名指しされていた `TerminalSyncPanel`（18箇所）と `ClientLayout`（6箇所）の計 24 箇所はクラスへの移設を完了し、全 `src/` 配下で動的 CSS 変数 3 箇所のみに整理済み。
 - `styled-jsx` は同一ファイル内の別コンポーネントに当たらない（無言で無スタイルになる）。
 - 幅 720px 以下のモバイル表示を実画面で確認する。トーストは top-center。
 - 文言は日本語。エラー文は「何が起きたか」「次に何をするか」を書く。

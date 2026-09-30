@@ -909,12 +909,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
               <section className="content-scroll">
                 {isTerminalRevoked ? (
-                  <div className="card glass auth-card" role="alert" style={{ border: '2px solid var(--danger, #ef4444)', background: 'rgba(239, 68, 68, 0.04)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--danger, #ef4444)', marginBottom: '0.75rem' }}>
+                  <div className="card glass auth-card auth-card-revoked" role="alert">
+                    <div className="auth-revoked-header">
                       <AlertOctagon size={28} aria-hidden="true" />
-                      <h2 className="auth-title" style={{ margin: 0, color: 'var(--danger, #ef4444)' }}>この端末は失効されています</h2>
+                      <h2 className="auth-title auth-revoked-title">この端末は失効されています</h2>
                     </div>
-                    <p className="text-muted auth-desc-compact" style={{ lineHeight: 1.7 }}>
+                    <p className="text-muted auth-desc-compact">
                       このサテライト端末は管理者によってアクセス権が失効（Revoke）されました。
                       患者データの保護のため、端末内の認証キャッシュおよび未送信データは安全に消去（Zeroize）されています。
                       オフライン状態であっても本端末からログインすることはできません。
@@ -951,8 +951,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 ) : isAuthenticated ? (
                   <>
                     {isOfflineAuthMode && (
-                      <div style={{ background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.4)', borderRadius: 'var(--radius-md)', padding: '0.6rem 1rem', margin: '0.75rem var(--space-4)', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem' }}>
-                        <AlertTriangle size={17} style={{ color: '#ca8a04', flexShrink: 0 }} aria-hidden="true" />
+                      <div className="offline-auth-banner">
+                        <AlertTriangle size={17} className="offline-auth-icon" aria-hidden="true" />
                         <span>
                           <strong>【オフライン認証中】</strong> メイン端末と通信できないため、端末内認証キャッシュ（有効期限: {offlineExpiresAt ? new Date(offlineExpiresAt).toLocaleTimeString() : '24時間'}）でログインしています。
                         </span>
@@ -1139,6 +1139,36 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         .auth-desc-compact {
           margin: 0;
           line-height: 1.7;
+        }
+        .auth-card-revoked {
+          border: 2px solid var(--danger, #ef4444);
+          background: rgba(239, 68, 68, 0.04);
+        }
+        .auth-revoked-header {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3);
+          color: var(--danger, #ef4444);
+          margin-bottom: var(--space-3);
+        }
+        .auth-revoked-title {
+          margin: 0;
+          color: var(--danger, #ef4444);
+        }
+        .offline-auth-banner {
+          background: rgba(234, 179, 8, 0.12);
+          border: 1px solid rgba(234, 179, 8, 0.4);
+          border-radius: var(--radius-md);
+          padding: 0.6rem 1rem;
+          margin: var(--space-3) var(--space-4);
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          font-size: var(--fs-sm, 0.85rem);
+        }
+        :global(.offline-auth-icon) {
+          color: #ca8a04;
+          flex-shrink: 0;
         }
       `}</style>
 

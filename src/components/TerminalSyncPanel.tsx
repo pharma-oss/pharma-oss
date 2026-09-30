@@ -31,7 +31,7 @@ interface ConflictRow {
   resolvedBy?: string;
 }
 
-const COLLECTION_LABELS: Record<string, string> = {
+export const COLLECTION_LABELS: Record<string, string> = {
   patients: '患者',
   visits: '受付',
   prescription_items: '処方',
@@ -48,7 +48,7 @@ const COLLECTION_LABELS: Record<string, string> = {
   audit_logs: '監査ログ'
 };
 
-function formatDateTime(value?: string | null): string {
+export function formatDateTime(value?: string | null): string {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
@@ -517,39 +517,30 @@ export default function TerminalSyncPanel() {
             （※悪意ある偽Hubへの送信を防ぐため、新規登録はオンライン時のみ可能であり、オフライン時は自機サーバーでHMAC署名が検証された承認済み候補からのみ切替可能です）
           </p>
 
-          <div style={{ background: 'rgba(255, 255, 255, 0.6)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border, #e2e8f0)', marginBottom: 'var(--space-4)' }}>
-            <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted-foreground, #64748b)', fontWeight: 600, marginBottom: '0.25rem' }}>
+          <div className="standby-hub-current-box">
+            <div className="standby-hub-current-label">
               現在の接続先 Hub エンドポイント
             </div>
-            <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, fontFamily: 'monospace' }}>
+            <div className="standby-hub-current-endpoint">
               {currentHubEndpoint || 'メイン端末 (既定)'}
             </div>
           </div>
 
           {/* 予備機リスト */}
-          <div style={{ marginBottom: 'var(--space-4)' }}>
-            <h4 style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, marginBottom: 'var(--space-2)' }}>
+          <div className="standby-hub-section">
+            <h4 className="standby-hub-subheading">
               事前承認済み 予備Hubリスト ({standbyList.length}件)
             </h4>
             {standbyList.length === 0 ? (
-              <p className="text-muted" style={{ fontSize: 'var(--fs-xs)' }}>
+              <p className="text-muted standby-hub-empty-desc">
                 登録済みの予備機はありません。メイン端末とのオンライン接続中に予備機 URL を登録してください。
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="standby-hub-list">
                 {standbyList.map((entry) => (
                   <label
                     key={entry.endpoint}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.5rem 0.75rem',
-                      borderRadius: 'var(--radius-md)',
-                      border: selectedStandby === entry.endpoint ? '2px solid #0ea5e9' : '1px solid var(--border, #e2e8f0)',
-                      background: selectedStandby === entry.endpoint ? 'rgba(14, 165, 233, 0.06)' : 'white',
-                      cursor: 'pointer'
-                    }}
+                    className={`standby-hub-item ${selectedStandby === entry.endpoint ? 'selected' : ''}`}
                   >
                     <input
                       type="radio"
@@ -558,19 +549,19 @@ export default function TerminalSyncPanel() {
                       checked={selectedStandby === entry.endpoint}
                       onChange={(e) => setSelectedStandby(e.target.value)}
                     />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', fontFamily: 'monospace' }}>{entry.endpoint}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--muted-foreground, #64748b)' }}>
+                    <div className="standby-hub-item-body">
+                      <div className="standby-hub-item-endpoint">{entry.endpoint}</div>
+                      <div className="standby-hub-item-meta">
                         登録日時: {formatDateTime(entry.issuedAt)} | HMAC署名: {entry.signature.substring(0, 12)}… (有効)
                       </div>
                     </div>
-                    <ShieldCheck size={16} style={{ color: '#16a34a' }} aria-label="署名検証済み" />
+                    <ShieldCheck size={16} className="standby-hub-verified-icon" aria-label="署名検証済み" />
                   </label>
                 ))}
               </div>
             )}
 
-            <div style={{ marginTop: 'var(--space-3)' }}>
+            <div className="standby-hub-actions">
               <button
                 type="button"
                 className="btn-primary flex items-center gap-1.5"
@@ -585,23 +576,23 @@ export default function TerminalSyncPanel() {
           </div>
 
           {/* 新規予備機の登録 (オンライン時のみ) */}
-          <div style={{ borderTop: '1px solid var(--border, #e2e8f0)', paddingTop: 'var(--space-3)' }}>
-            <h4 style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, marginBottom: 'var(--space-2)' }}>
+          <div className="standby-hub-register-section">
+            <h4 className="standby-hub-subheading">
               新規予備Hub の事前登録（オンライン専用）
             </h4>
             {!isHubReachable ? (
-              <p className="text-muted" style={{ fontSize: 'var(--fs-xs)', color: '#ca8a04' }}>
+              <p className="text-muted standby-hub-offline-warning">
                 ※現在メインHubと通信できないため、新規予備機の登録は行えません（承認済みリストからの切替のみ利用可能です）。
               </p>
             ) : (
-              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+              <div className="standby-hub-register-row">
                 <input
                   type="text"
                   placeholder="https://standby-hub.local:3000"
                   value={newStandbyEndpoint}
                   onChange={(e) => setNewStandbyEndpoint(e.target.value)}
                   disabled={busy || !isAdmin}
-                  style={{ flex: 1, padding: '0.4rem 0.6rem', border: '1px solid var(--border, #e2e8f0)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-sm)' }}
+                  className="standby-hub-input"
                 />
                 <button
                   type="button"
@@ -1114,6 +1105,93 @@ export default function TerminalSyncPanel() {
           align-items: center;
           gap: var(--space-1-5);
           padding: var(--space-2) var(--space-4);
+          font-size: var(--fs-sm);
+        }
+        .standby-hub-current-box {
+          background: rgba(255, 255, 255, 0.6);
+          padding: var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border, #e2e8f0);
+          margin-bottom: var(--space-4);
+        }
+        .standby-hub-current-label {
+          font-size: var(--fs-xs);
+          color: var(--muted-foreground, #64748b);
+          font-weight: 600;
+          margin-bottom: 0.25rem;
+        }
+        .standby-hub-current-endpoint {
+          font-size: var(--fs-md);
+          font-weight: 700;
+          font-family: monospace;
+        }
+        .standby-hub-section {
+          margin-bottom: var(--space-4);
+        }
+        .standby-hub-subheading {
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          margin-bottom: var(--space-2);
+        }
+        .standby-hub-empty-desc {
+          font-size: var(--fs-xs);
+        }
+        .standby-hub-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .standby-hub-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.5rem 0.75rem;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border, #e2e8f0);
+          background: white;
+          cursor: pointer;
+        }
+        .standby-hub-item.selected {
+          border: 2px solid #0ea5e9;
+          background: rgba(14, 165, 233, 0.06);
+        }
+        .standby-hub-item-body {
+          flex: 1;
+        }
+        .standby-hub-item-endpoint {
+          font-weight: 600;
+          font-size: var(--fs-sm);
+          font-family: monospace;
+        }
+        .standby-hub-item-meta {
+          font-size: 0.7rem;
+          color: var(--muted-foreground, #64748b);
+        }
+        :global(.standby-hub-verified-icon) {
+          color: #16a34a;
+          flex-shrink: 0;
+        }
+        .standby-hub-actions {
+          margin-top: var(--space-3);
+        }
+        .standby-hub-register-section {
+          border-top: 1px solid var(--border, #e2e8f0);
+          padding-top: var(--space-3);
+        }
+        .standby-hub-offline-warning {
+          font-size: var(--fs-xs);
+          color: #ca8a04;
+        }
+        .standby-hub-register-row {
+          display: flex;
+          gap: var(--space-2);
+          align-items: center;
+        }
+        .standby-hub-input {
+          flex: 1;
+          padding: 0.4rem 0.6rem;
+          border: 1px solid var(--border, #e2e8f0);
+          border-radius: var(--radius-md);
           font-size: var(--fs-sm);
         }
       `}</style>
