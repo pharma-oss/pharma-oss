@@ -199,24 +199,26 @@ export function useDashboardTasks() {
           processingVisitIds
         });
 
-        const drugIdsForItems = Array.from(drugIdSetForItems);
-        const drugMap = drugIdsForItems.length > 0
-          ? await db.drugs.findByIds(drugIdsForItems).exec()
-          : new Map();
+        // 院内全医薬品および全在庫ロットを取得（同一YJコード代替薬候補の網羅的探索および発注点・期限切迫評価を可能にする）
+        const allDrugDocs = await db.drugs.find().exec();
+        const drugMap = new Map<string, any>();
+        for (let i = 0; i < allDrugDocs.length; i++) {
+          const doc = allDrugDocs[i];
+          const data = typeof doc.toJSON === 'function' ? doc.toJSON() : doc;
+          const drugCode = doc.code || data.code;
+          if (drugCode) {
+            drugMap.set(drugCode, data);
+          }
+        }
 
-        const stockDrugIdsForRequirements = Array.from(new Set([
-          ...requiredByStockDrugId.keys(),
-          ...pickingShortageByStockDrugId.keys()
-        ]));
-        const stockDocs = stockDrugIdsForRequirements.length > 0
-          ? await db.drug_stocks.find({ selector: { drugCode: { $in: stockDrugIdsForRequirements } } }).exec()
-          : [];
+        const allStockDocs = await db.drug_stocks.find().exec();
         const stocksByDrugId = new Map<string, any[]>();
-        for (let i = 0; i < stockDocs.length; i++) {
-          const stock = stockDocs[i];
-          const list = stocksByDrugId.get(stock.drugCode) || [];
-          list.push(stock);
-          stocksByDrugId.set(stock.drugCode, list);
+        for (let i = 0; i < allStockDocs.length; i++) {
+          const stock = allStockDocs[i];
+          const data = typeof stock.toJSON === 'function' ? stock.toJSON() : stock;
+          const list = stocksByDrugId.get(data.drugCode) || [];
+          list.push(data);
+          stocksByDrugId.set(data.drugCode, list);
         }
 
         const {

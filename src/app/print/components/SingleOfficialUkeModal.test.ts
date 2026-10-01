@@ -179,3 +179,31 @@ test('SingleOfficialUkeModal displays blocking alert and disables download when 
   // 2. ダウンロードボタンが disabled であること
   assert.match(html, /<button[^>]*data-testid="download-official-cyo-button"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="download-official-cyo-button"/);
 });
+
+test('SingleOfficialUkeModal blocks download and displays claim error alert when hasClaimErrors is true', () => {
+  const data = createModalTestData();
+  const html = renderToStaticMarkup(
+    React.createElement(SingleOfficialUkeModal, {
+      isOpen: true,
+      onClose: () => {},
+      visitData: data.visit,
+      patientData: data.patient,
+      settingsData: data.settings,
+      prescriptionItems: data.items,
+      calculatedFees: data.calculatedFees,
+      hasClaimErrors: true,
+      claimErrorMessages: ['患者アレルギー禁忌薬が処方に含まれています (patient_allergy_match)']
+    })
+  );
+
+  // 1. 請求前チェックエラー警告が表示されること
+  assert.match(html, /data-testid="official-uke-claim-error-alert"/);
+  assert.match(html, /請求前チェックエラーによるダウンロード制限/);
+  assert.match(html, /patient_allergy_match/);
+
+  // 2. プレビュー自体は開けるが、ダウンロードボタンが disabled であること
+  assert.match(html, /RECEIPTY\.CYO/);
+  assert.match(html, /<button[^>]*data-testid="download-official-cyo-button"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="download-official-cyo-button"/);
+  assert.match(html, /title="請求前チェックのエラーを解消してください。"/);
+});
+

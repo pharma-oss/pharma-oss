@@ -219,7 +219,18 @@ export function findInStockSubstitutes(
     const lots = stockLotsByDrugCode?.get(drug.code) || [];
     let availableAmount = drug.stockQuantity ?? 0;
     if (lots.length > 0) {
-      availableAmount = lots.reduce((sum, lot) => sum + (typeof lot.quantity === 'number' ? Math.max(0, lot.quantity) : 0), 0);
+      const nowTime = Date.now();
+      availableAmount = lots.reduce((sum, lot) => {
+        const qty = typeof lot.quantity === 'number' && Number.isFinite(lot.quantity) ? Math.max(0, lot.quantity) : 0;
+        if (qty <= 0) return sum;
+        if (lot.expirationDate) {
+          const expTime = new Date(lot.expirationDate).getTime();
+          if (!Number.isNaN(expTime) && expTime < nowTime) {
+            return sum; // 期限切れロットは除外
+          }
+        }
+        return sum + qty;
+      }, 0);
     }
 
     const candidateGeneric = String(drug.genericName || '').trim().toLowerCase();

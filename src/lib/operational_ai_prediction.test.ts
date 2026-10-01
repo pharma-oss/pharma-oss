@@ -256,3 +256,179 @@ test('calculateDashboardInventoryRisks correctly populates reorder, expiry and s
   assert.ok(evidenceLabels.includes('代替薬候補'));
 });
 
+test('calculateDashboardStockShortages and risks capture reorder/expiry risk without prescription shortage (stock 80, reorder 100, required 30, expiry 30 days)', async () => {
+  const {
+    calculateDashboardStockShortages,
+    calculateDashboardInventoryRisks
+  } = await import('./dashboard_tasks.ts');
+
+  const now = new Date();
+  const expiringDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10); // 30日後
+
+  const drugMap = new Map<string, any>([
+    [
+      'drug-reorder-only',
+      {
+        code: 'drug-reorder-only',
+        name: 'エナラプリル錠5mg',
+        yjCode: '2144001F1012',
+        reorderPoint: 100, // 発注点 100
+        stockQuantity: 80, // 在庫 80（発注点割れ）
+        location: 'B-04'
+      }
+    ],
+    [
+      'drug-substitute',
+      {
+        code: 'drug-substitute',
+        name: 'エナラプリルマレイン酸塩錠5mg「サワイ」',
+        yjCode: '2144001F1020', // 同一 YJ 上7桁
+        stockQuantity: 50,
+        location: 'B-05'
+      }
+    ]
+  ]);
+
+  const stocksByDrugId = new Map<string, any[]>([
+    [
+      'drug-reorder-only',
+      [
+        { lotNumber: 'LOT-EN-1', quantity: 80, expirationDate: expiringDate } // 在庫80、30日後切迫
+      ]
+    ],
+    [
+      'drug-substitute',
+      [
+        { lotNumber: 'LOT-EN-2', quantity: 50, expirationDate: '2028-12-31' }
+      ]
+    ]
+  ]);
+
+  const requiredByStockDrugId = new Map<string, number>([
+    ['drug-reorder-only', 30] // 必要量30 <= 在庫80（処方不足なし！）
+  ]);
+  const pickingShortageByStockDrugId = new Map<string, number>();
+
+  // 1. calculateDashboardStockShortages を通す
+  const { inventoryShortageData, inventoryShortageCount } = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  // 処方不足カウントは 0 であるが、リスクデータには追加されていること
+  assert.equal(inventoryShortageCount, 0, '処方不足カウントは0');
+  assert.ok(inventoryShortageData.has('drug-reorder-only'), '発注点割れ・期限切迫により在庫データに含まれること');
+
+  // 2. calculateDashboardInventoryRisks へ流す
+  const inventoryRisks = calculateDashboardInventoryRisks({
+    inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-reorder-only', new Set(['visit-1'])]]),
+    activeVisitById: new Map([['visit-1', { visitId: 'visit-1', patientId: 'patient-1' }]]),
+    patientMap: new Map([['patient-1', { name: '山田花子' }]])
+  });
+
+  assert.equal(inventoryRisks.length, 1);
+  const risk = inventoryRisks[0];
+  assert.equal(risk.availableAmount, 80);
+  assert.equal(risk.reorderPoint, 100);
+  assert.equal(risk.isBelowReorderPoint, true);
+  assert.equal(risk.hasExpiringSoonLots, true);
+  assert.equal(risk.expiringSoonAmount, 80);
+  assert.equal(risk.substituteCandidatesCount, 1);
+  assert.equal(risk.topSubstituteName, 'エナラプリルマレイン酸塩錠5mg「サワイ」');
+
+  // 3. AI 予測エンジンへ流す
+  const predictions = buildOperationalAiPredictions({
+    claimRisks: [],
+    inventoryRisks,
+    followUpCandidates: []
+  });
+
+  assert.equal(predictions.length, 1);
+  const prediction = predictions[0];
+  const labels = prediction.evidence.map((e) => e.label);
+  assert.ok(labels.includes('発注点設定'));
+  assert.ok(labels.includes('使用期限リスク'));
+  assert.ok(labels.includes('代替薬候補'));
+});
+
+test('calculateDashboardInventoryRisks excludes expired stock (e.g. year 2020) from substitution candidates', async () => {
+  const { calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+
+  const drugMap = new Map<string, any>([
+    [
+      'target-drug',
+      {
+        code: 'target-drug',
+        name: 'ニフェジピンCR錠20mg',
+        yjCode: '2171014G2010',
+        reorderPoint: 50,
+        location: 'C-01'
+      }
+    ],
+    [
+      'expired-substitute-drug',
+      {
+        code: 'expired-substitute-drug',
+        name: 'ニフェジピンCR錠20mg「JG」',
+        yjCode: '2171014G2020', // 同一 YJ 上7桁
+        location: 'C-02'
+      }
+    ]
+  ]);
+
+  const stocksByDrugId = new Map<string, any[]>([
+    [
+      'target-drug',
+      [{ lotNumber: 'LOT-A', quantity: 10, expirationDate: '2027-10-01' }]
+    ],
+    [
+      'expired-substitute-drug',
+      [
+        // 2020年に使用期限切れとなったロットのみ
+        { lotNumber: 'LOT-OLD-2020', quantity: 100, expirationDate: '2020-03-31' }
+      ]
+    ]
+  ]);
+
+  const inventoryShortageData = new Map<string, any>([
+    [
+      'target-drug',
+      {
+        requiredAmount: 20,
+        availableAmount: 10,
+        shortageAmount: 10
+      }
+    ]
+  ]);
+
+  const inventoryRisks = calculateDashboardInventoryRisks({
+    inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['target-drug', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: '患者A' }]])
+  });
+
+  assert.equal(inventoryRisks.length, 1);
+  const risk = inventoryRisks[0];
+  // 2020年期限切れロットしかない代替薬は有効在庫なしとして除外されること
+  assert.ok(!risk.substituteCandidatesCount, '期限切れロットしかない代替薬は候補数0(falsy)であること');
+  assert.equal(risk.topSubstituteName, undefined, '候補名も未設定であること');
+
+  // AI 予測に「代替薬候補」が含まれないこと
+  const predictions = buildOperationalAiPredictions({
+    claimRisks: [],
+    inventoryRisks,
+    followUpCandidates: []
+  });
+  const labels = predictions[0].evidence.map((e) => e.label);
+  assert.ok(!labels.includes('代替薬候補'), '期限切れのみの代替薬はAIエビデンスに含まれないこと');
+});
+
+

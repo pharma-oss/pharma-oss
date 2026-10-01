@@ -498,7 +498,7 @@ test('dispensing record renders statutory intervention records block and connect
   assert.match(printSource, /<DispensingRecordPrint[\s\S]*interventions=\{interventions\}/);
 
   // 2. DispensingRecordPrint の真正な実描画テスト (renderToStaticMarkup)
-  // 薬剤師法第24条・第25条に基づく法定記載項目（照会日時、処方医、区分、内容、回答、同意、担当薬剤師）を検証
+  // 薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号に基づく法定記載項目（照会日時、処方医、区分、内容、回答、同意、担当薬剤師）を検証
   const testInterventions = [
     {
       eventId: 'ev_1',
@@ -552,7 +552,7 @@ test('dispensing record renders statutory intervention records block and connect
   );
 
   assert.ok(htmlWithInterventions.includes('data-testid="record-intervention-box"'), '法定疑義照会ボックスが存在すること');
-  assert.ok(htmlWithInterventions.includes('疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条）'), '法定タイトルが表示されること');
+  assert.ok(htmlWithInterventions.includes('疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条第1項第10号）'), '法定タイトルが表示されること');
   assert.ok(htmlWithInterventions.includes('record-intervention-table'), 'テーブル構造が存在すること');
   assert.ok(htmlWithInterventions.includes('山田 太郎 医師 (電話)'), '処方医と照会方法が表示されること');
   assert.ok(htmlWithInterventions.includes('後発医薬品変更'), '区分日本語ラベルが表示されること');

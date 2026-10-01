@@ -2119,6 +2119,8 @@ export default function PrintPage() {
           prescriptionItems={itemsForUke}
           calculatedFees={calculatedFees}
           interventions={interventions}
+          hasClaimErrors={hasClaimErrors}
+          claimErrorMessages={claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))}
           onExportSuccess={handleOfficialUkeExportSuccess}
         />
       )}

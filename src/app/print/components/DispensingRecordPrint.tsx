@@ -188,7 +188,7 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
           )}
 
           <div className="record-guidance-box record-intervention-box" data-testid="record-intervention-box">
-            <div className="record-guidance-label">疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条）</div>
+            <div className="record-guidance-label">疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条第1項第10号）</div>
             {formattedInterventions.length > 0 ? (
               <table className="record-intervention-table">
                 <thead>

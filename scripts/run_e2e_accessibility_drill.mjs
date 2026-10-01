@@ -344,13 +344,32 @@ async function run() {
     await page.screenshot({ path: join(artifactDir, modalShotName), fullPage: false });
     console.log(`  - Official UKE modal opened: visible = true, hasCyoHeader = ${modalCheck.hasCyoHeader} (Shot: ${modalShotName})`);
 
-    // Keyboard Tab focus check inside modal
+    // Keyboard Tab focus check inside modal (verifying focus moves inside modal elements)
     let modalTabCount = 0;
     for (let i = 0; i < 4; i++) {
       await page.keyboard.press('Tab');
       await wait(100);
-      focusedTag = await page.evaluate(() => document.activeElement ? document.activeElement.tagName : 'NONE');
-      if (focusedTag !== 'BODY' && focusedTag !== 'NONE') modalTabCount++;
+      const focusDiag = await page.evaluate(() => {
+        const modal = document.querySelector('[data-testid="single-official-uke-modal"]');
+        const active = document.activeElement;
+        return {
+          tag: active ? active.tagName : 'NONE',
+          className: active ? active.className : '',
+          text: active ? (active.textContent || '').slice(0, 30) : '',
+          isInsideModal: !!(modal && active && modal.contains(active))
+        };
+      });
+      console.log(`    [Modal Tab ${i+1}]`, focusDiag);
+      if (focusDiag.isInsideModal && focusDiag.tag !== 'BODY' && focusDiag.tag !== 'NONE') {
+        modalTabCount++;
+      }
+    }
+
+    if (modalTabCount === 0) {
+      console.error('[E2E Drill] ERROR: Keyboard focus did not move inside SingleOfficialUkeModal!');
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+      throw new Error('Focus failed to navigate elements inside SingleOfficialUkeModal');
     }
 
     // Close modal with Escape key
@@ -440,10 +459,21 @@ async function run() {
   }
 
   console.log('[E2E Drill] Drill finished with summary:', results.summary);
+  if (!results.summary.passed || results.summary.overflowErrors > 0 || results.summary.keyboardErrors > 0) {
+    console.error('[E2E Drill] VALIDATION FAILED: summary indicates errors occurred during drill!');
+    process.exit(1);
+  }
   return results;
 }
 
-run().catch(err => {
+run().then((results) => {
+  if (!results.summary.passed || results.summary.overflowErrors > 0 || results.summary.keyboardErrors > 0) {
+    console.error('[E2E Drill] Exiting with code 1 due to validation errors.');
+    process.exit(1);
+  }
+  console.log('[E2E Drill] All accessibility and responsive checks PASSED.');
+  process.exit(0);
+}).catch(err => {
   console.error('[E2E Drill] Fatal error:', err);
   process.exit(1);
 });

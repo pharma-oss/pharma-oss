@@ -10,7 +10,7 @@
 
 | 指標 | 開発開始時（ベースライン `df9cd1e`） | 現在地（実測値） | 変化 | 実態と検証状況 |
 |---|---|---|---|---|
-| **ユニット・契約テスト** | 1,717 件 PASS | **1,813 件 PASS** | **+96 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約80秒） |
+| **ユニット・契約テスト** | 1,717 件 PASS | **1,816 件 PASS** | **+99 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約49秒） |
 | **TypeScript 型検査** | 0 件 | **0 件** | 維持 | `npx tsc --noEmit`（exit 0）単独実行で確認 |
 | **ESLint 静的解析** | 0 件 | **0 件** | 維持 | 警告11件のみ（既存画像最適化・Hook依存） |
 | **本番ビルド** | 28/28 ページ成功 | **28/28 ページ成功** | 維持 | `npm run build`（exit 0） |
@@ -26,19 +26,22 @@
 ### [P1] I-3 画面動作・通し検証の真の実証と証跡保全
 - **当初の不備**:
   - `run_e2e_accessibility_drill.mjs` がゲストデモを起動しないまま `/print/demo-visit-1` を開いたため、「印刷対象の受付が見つかりませんでした」というエラー画面となっていた。
-  - 「公式UKE」ボタンが存在しないためモーダル検証が暗黙にスキップされ、キーボード操作失敗やモーダル開閉失敗が合否に反映されていなかった。
+  - 「公式UKE」ボタンが存在しないためモーダル検証が暗黙にスキップされ、キーボード操作失敗やモーダル開閉失敗が合否に反映されていなかった。また、検証失敗時でもスクリプトが exit 0 で終了する終了処理の不備や、モーダル内Tab検査でフォーカスがモーダル内にあるかの確認欠落があった。
   - 画像は記載の14枚ではなく13枚であり、公式UKEモーダルの画像および JSON 内の検証結果が欠落していた。
   - さらに、`SingleOfficialUkeModal.tsx` に Escape キーによる閉鎖リスナーが未実装であった。
+  - また、点検用モーダルを開けるようにボタン条件を変更した際、請求エラー（`hasClaimErrors`、アレルギー禁忌等）がある状態でも公式UKEがダウンロードできてしまう重大な出力制限の弱まりが発生していた。
 - **実施した是正措置**:
   1. `run_e2e_accessibility_drill.mjs` を抜本改修：
      - ルート画面でデモ開始をクリックし、リダイレクト先 URL から実在する `visitId`（例: `v_demo_muprb3iw`）を確実に取得して `/emr?visitId=...` および `/print/[visitId]` へ遷移。
      - `/print/[visitId]` において「印刷対象の受付が見つかりませんでした」画面が出現していないことを厳格検証。
      - 「公式UKE」ボタン（`data-testid="print-official-uke-button"`）が存在しない場合は即座に例外をスローしてテスト失敗（exit 1）とするよう厳格化。
+     - モーダル内の Tab キー検査で `document.activeElement` がモーダルコンテナ（`[data-testid="single-official-uke-modal"]`）内に存在することを厳格検証。
+     - 検証失敗（`summary.passed === false`、オーバーフロー・キーボードエラー発生）時に確実に `process.exit(1)` で終了するよう終了処理を厳格化。
   2. `SingleOfficialUkeModal.tsx` に Escape キーイベントリスナー（`useEffect`）を正式実装。
-  3. `SingleOfficialUkeModal.tsx` のダウンロードボタンを `disabled={!officialResult || !!buildError || isExporting}` で安全に保護し、厚労省コード欠落等の不適合時はダウンロードを禁止しつつ、点検・プレビューモーダル自体は開いて不適合理由を確認できるよう `page.tsx` 側のボタン disabled 条件を整合。
+  3. `SingleOfficialUkeModal.tsx` に `hasClaimErrors` および `claimErrorMessages` プロパティを接続。厚労省コード欠落だけでなく、請求前チェックエラー（`patient_allergy_match` 等）が存在する場合はダウンロードボタンを `disabled` にして安全保護し、モーダル内に請求エラー警告アラートを表示。プレビュー自体は確認できつつ、公式提出用 UKE の不正出力・誤請求を水際で阻止（Fail-First 変異テスト実証済み、4/4 PASS）。
   4. E2E ドリルを実行し、以下を実機検証（exit 0）：
      - 全4画面（`/ocr`, `/emr`, `/print/[visitId]`, `/inventory`）× 3幅（1280px, 768px, 375px）で `overflowPx = 0px`。
-     - キーボード Tab 到達（`/ocr` 6要素、`/emr` 8要素、モーダル内 4要素）。
+     - キーボード Tab 到達（`/ocr` 6要素、`/emr` 8要素、モーダル内 4要素すべてモーダル内要素へフォーカス）。
      - 公式 UKE モーダルのクリック起動（`visible = true`、`RECEIPTY.CYO` ヘッダー確認）。
      - Escape キー押下によるモーダル閉鎖（`modalClosed = true`）。
      - 正真正銘 **計 14 枚のスクリーンショット**（`e2e_drill_print_official_uke_modal.png` 含む）および更新された JSON レポート（[`artifacts/accessibility-e2e-drill/e2e_accessibility_drill_report.json`](file:///Users/takeaki/pharma-oss/artifacts/accessibility-e2e-drill/e2e_accessibility_drill_report.json)）を出力・保全。
@@ -60,13 +63,17 @@
   - 一方、トラック I-6 の EMR（`docs/emr_design_20260930.md:70`）および OCR（`docs/ocr_design_20260930.md:76`）では、テストコード側の期待値文字列に `_MUTATION` を付与しただけであり、実装の破壊検出能力を証明したものではなかった。
   - したがって「全トラックで均一に変異耐性を実証した」という記述を撤回し、プロダクションコードを変異させたトラックと、テスト期待値書き換えにとどまったトラックを明確に区別して記載する。
 
-### [P2] G-2 欠品予測エンジンへのデータパイプライン接続の実装
-- **当初の未完状態**:
+### [P2] G-2 欠品予測エンジンへのデータパイプライン接続の実装と期限切れ在庫除外
+- **当初の未完状態と不備**:
   - `src/lib/operational_ai_prediction.ts` 側には発注点・使用期限・代替薬候補を受け取る型とロジックが実装されていたが、実際の入力を作る `src/lib/dashboard_tasks.ts` の `calculateDashboardInventoryRisks`（line 384）はこれらのプロパティを渡しておらず、画面への接続が未完であった。
+  - また、代替薬候補の在庫計算において期限切れロット（例: 2020年期限切れ）を含めて数量合算していたため、期限切れ薬が代替候補として提示される不備があった。
+  - さらに、処方不足がない場合（例: 在庫80・発注点100・必要量30・期限30日後）にリスク品目として抽出されず、処方に登場しない院内の他医薬品を代替薬候補として探索できない限定的な取得状態となっていた。
 - **実施した是正措置**:
-  1. `src/lib/dashboard_tasks.ts` の `DashboardInventoryRisk` インターフェースに `reorderPoint`, `isBelowReorderPoint`, `expiringSoonAmount`, `hasExpiringSoonLots`, `substituteCandidatesCount`, `topSubstituteName` の 6 フィールドを正式追加。
-  2. `calculateDashboardInventoryRisks` において、`drug.reorderPoint` の評価、ロットの 60 日以内期限切迫量計算、同一 YJ コード上 7 桁一致かつ有効在庫ありの院内代替薬候補の算出を実装し、データを `inventoryRiskData` へ受け渡すよう接続。
-  3. `src/lib/operational_ai_prediction.test.ts` に結合テストを追加し、`calculateDashboardInventoryRisks` の出力が `buildOperationalAiPredictions` に渡って発注点設定・使用期限リスク・代替薬候補のエビデンスが生成されることを実証（Fail-First 変異テスト実証済み、5/5 PASS）。
+  1. `src/hooks/useDashboardTasks.ts` において、`db.drugs.find().exec()` および `db.drug_stocks.find().exec()` を取得し、院内全医薬品・全在庫ロットから同一 YJ コードの代替薬候補探索と発注点評価を網羅的に行えるようデータ取得を接続。
+  2. `src/lib/dashboard_tasks.ts` の `DashboardInventoryRisk` インターフェースに 6 フィールド（`reorderPoint`, `isBelowReorderPoint`, `expiringSoonAmount`, `hasExpiringSoonLots`, `substituteCandidatesCount`, `topSubstituteName`）を正式追加。
+  3. 代替薬候補の在庫合算において、現在日以前の使用期限切れロットを厳格に除外し、有効ロットのみで代替薬候補を判定（Fail-First 変異テスト実証済み）。
+  4. `calculateDashboardStockShortages` において、処方不足がない場合（在庫80・発注点100・必要量30・期限30日後）でも、発注点割れまたは60日以内期限切迫ロットを抱えている品目を在庫リスクデータに追加し、AI予測エンジンへ流すよう接続。
+  5. `src/lib/operational_ai_prediction.test.ts` に結合テストを追加し、処方不足なしでのリスク抽出および期限切れロット除外を実証（7/7 PASS、Fail-First 変異テスト実証済み）。
 
 ### [P2] F-2 レセプト要約の接続ステータスの是正
 - **当初の誇大表現**:
@@ -78,11 +85,11 @@
 
 ### [P2] 調剤録の法的根拠条文の訂正
 - **当初の誤記**:
-  - 調剤録の法的根拠を「薬剤師法第24条・第25条」と記載していた。
+  - 調剤録の法的根拠を「薬剤師法第24条・第25条」と記載していた。また前回の訂正時に施行規則を「第16条第1項第7号」と記載したが、第7号は処方箋の発行年月日であり不正確であった。
 - **実態と是正**:
-  - 薬剤師法第25条は「調剤された薬剤の表示（容器・被包の表示義務）」であり、調剤録の直接の法的根拠は**薬剤師法第28条第2項および同法施行規則第16条第1項第7号**である（第24条は「処方せん中の疑義に対する確認義務」）。
-  - `src/app/print/components/DispensingRecordPrint.tsx` の見出しを「疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条）」へ修正。
-  - `src/app/print/PrintPickingFlow.test.ts` の期待値を修正し、Fail-First 変異（旧期待値での 1 fail 検知）および復元後の 18/18 PASS を実証。ドキュメント内の表記をすべて訂正。
+  - 薬剤師法第25条は「調剤された薬剤の表示（容器・被包の表示義務）」であり、調剤録の直接の法的根拠は**薬剤師法第28条第2項、同法施行規則第16条第1項第10号（同令第15条第2号・第3号の準用）**である（第24条は「処方せん中の疑義に対する確認義務」、第15条第2号は医薬品変更内容、第3号は疑義確認内容）。
+  - `src/app/print/components/DispensingRecordPrint.tsx` の見出しを「疑義照会・処方変更の記録（薬剤師法第24条・第28条・施行規則第16条第1項第10号）」へ修正。
+  - `src/app/print/PrintPickingFlow.test.ts` の期待値を修正し、Fail-First 変異（旧期待値での 1 fail 検知）および復元後の 18/18 PASS を実証。旧報告書（`docs/intervention_structuring_20261001.md:4`）の第25条誤記も含め、ドキュメント内の表記をすべて訂正。
 
 ---
 

@@ -406,7 +406,7 @@ export function calculateDashboardInventoryRisks({
     }
     const hasExpiringSoonLots = expiringSoonAmount > 0;
 
-    // 院内代替薬候補の判定（同一YJコード上7桁で有効在庫がある他薬剤）
+    // 院内代替薬候補の判定（同一YJコード上7桁で有効在庫（期限切れ除く）がある他薬剤）
     let substituteCandidatesCount = 0;
     let topSubstituteName: string | undefined;
     const targetYj = (drug?.yjCode || '').slice(0, 7);
@@ -415,8 +415,20 @@ export function calculateDashboardInventoryRisks({
         if (candidateId === drugId) continue;
         const candidateYj = (candidateDrug?.yjCode || '').slice(0, 7);
         if (candidateYj === targetYj) {
-          const candidateStock = (stocksByDrugId.get(candidateId) || []).reduce((acc, l) => acc + (l.quantity || 0), 0);
-          if (candidateStock > 0) {
+          const candidateLots = stocksByDrugId.get(candidateId) || [];
+          const candidateValidStock = candidateLots.reduce((acc, l) => {
+            const qty = typeof l.quantity === 'number' && Number.isFinite(l.quantity) ? Math.max(0, l.quantity) : 0;
+            if (qty <= 0) return acc;
+            if (l.expirationDate) {
+              const exp = new Date(l.expirationDate);
+              if (!Number.isNaN(exp.getTime()) && exp < now) {
+                return acc; // 期限切れロットは除外
+              }
+            }
+            return acc + qty;
+          }, 0);
+
+          if (candidateValidStock > 0) {
             substituteCandidatesCount++;
             if (!topSubstituteName) {
               topSubstituteName = candidateDrug?.name || candidateId;
@@ -1222,19 +1234,39 @@ export function calculateDashboardStockShortages(params: {
     pickingShortageAmount?: number;
   }>();
 
+  const now = new Date();
+  const thresholdDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+
   for (const [drugId, requiredAmount] of params.requiredByStockDrugId.entries()) {
     const drug = params.drugMap.get(drugId);
     const stockLots = params.stocksByDrugId.get(drugId) || [];
     const availableAmount = stockLots.length > 0
       ? getTotalStock(stockLots)
       : drug?.stockQuantity || 0;
-    if (requiredAmount > availableAmount) {
+
+    const isPrescriptionShortage = requiredAmount > availableAmount;
+    const reorderPoint = typeof drug?.reorderPoint === 'number' && drug.reorderPoint > 0 ? drug.reorderPoint : 0;
+    const isBelowReorderPoint = reorderPoint > 0 && availableAmount < reorderPoint;
+    const hasExpiringSoon = stockLots.some((lot) => {
+      if (!lot.expirationDate) return false;
+      const exp = new Date(lot.expirationDate);
+      return !Number.isNaN(exp.getTime()) && exp <= thresholdDate && exp >= now;
+    });
+
+    if (isPrescriptionShortage) {
       shortageDrugIds.add(drugId);
       inventoryShortageCount++;
       inventoryShortageData.set(drugId, {
         requiredAmount,
         availableAmount,
         shortageAmount: requiredAmount - availableAmount
+      });
+    } else if (isBelowReorderPoint || hasExpiringSoon) {
+      // 処方不足はないが、発注点割れまたは期限切迫があるリスク品目
+      inventoryShortageData.set(drugId, {
+        requiredAmount,
+        availableAmount,
+        shortageAmount: isBelowReorderPoint ? (reorderPoint - availableAmount) : 0
       });
     }
   }
