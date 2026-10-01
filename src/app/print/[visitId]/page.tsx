@@ -990,7 +990,7 @@ export default function PrintPage() {
       const auditOk = await logAuditAction(
         db,
         'uke_export',
-        `レセプト（UKE）エクスポート: 患者「${patientData?.name}」の電子レセプト（点数: ${totalPoints}点）を出力しました。`,
+        `レセプト（UKE・点検用旧形式）エクスポート: 患者「${patientData?.name}」の電子レセプト（点数: ${totalPoints}点、ファイル: ${fileName}）を出力しました。`,
         visitData?.patientId,
         patientData?.name
       );
@@ -1359,7 +1359,7 @@ export default function PrintPage() {
             onClick={handleDownloadUke}
             disabled={!canExportUke || hasClaimErrors}
             data-testid="print-uke-export-button"
-            title={hasClaimErrors ? '請求前チェックのエラーを解消してください。' : undefined}
+            title={hasClaimErrors ? '請求前チェックのエラーを解消してください。' : '点検用UKE出力（旧形式・独自フォーマット: RECEIPT_{id}.uke）'}
           >
             <Download size={16} aria-hidden="true" />
             <span>UKE出力</span>
@@ -1370,7 +1370,7 @@ export default function PrintPage() {
             onClick={() => setIsOfficialUkeModalOpen(true)}
             disabled={!canExportUke || hasClaimErrors}
             data-testid="print-official-uke-button"
-            title="公式提出用UKE（RECEIPTY.CYO / GO集計 / EOF 0x1A）の点検とダウンロード"
+            title="公式提出用UKE（正本: RECEIPTY.CYO / 支払基金・国保連電算仕様 / GO集計 / EOF 0x1A）の点検とダウンロード"
           >
             <FileCheck2 size={16} aria-hidden="true" />
             <span>公式UKE</span>

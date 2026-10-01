@@ -531,7 +531,7 @@ export function ClaimWorkbenchSection({
       const exportAuditOk = await logAuditAction(
         db,
         'uke_export',
-        `月次一括UKE出力: ${ukeFileName} / 受付 ${cases.length}件 / 合計 ${bundle.totalPoints}点。`
+        `月次一括UKE（点検用旧形式）出力: ${ukeFileName} / 受付 ${cases.length}件 / 合計 ${bundle.totalPoints}点。`
       );
       if (!exportAuditOk) {
         throw new Error('月次一括UKE出力の監査ログ記録に失敗したため、出力を中止しました。');
@@ -731,6 +731,7 @@ export function ClaimWorkbenchSection({
             type="button"
             className="section-action-button"
             data-testid="monthly-claim-uke-button"
+            title="月次一括UKE出力（点検用・旧形式: RECEIPT_{month}.uke）"
             onClick={handleDownloadClaimWorkbenchUke}
             disabled={!hasExportableClaimWorkItems || isExportingUke || isExportingOfficialUke || isCheckingOfficialReadiness || isCheckingRules}
           >
@@ -741,6 +742,7 @@ export function ClaimWorkbenchSection({
             type="button"
             className="section-action-button primary"
             data-testid="monthly-claim-official-uke-button"
+            title="公式提出用UKE出力（正本: RECEIPTY.CYO / 支払基金・国保連仕様 / 突合点検付き）"
             onClick={handleDownloadClaimWorkbenchOfficialUke}
             disabled={!hasExportableClaimWorkItems || isExportingOfficialUke || isExportingUke || isCheckingOfficialReadiness || isCheckingRules}
           >
