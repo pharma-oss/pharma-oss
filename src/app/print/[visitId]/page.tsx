@@ -138,6 +138,7 @@ import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffP
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
+import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
 import {
   type DbKeyEscrowPayload,
   createDbKeyEscrow,
@@ -1211,6 +1212,7 @@ export default function PrintPage() {
 
   const pharmacyAddressLine = `${pharmacyInfo.postalCode ? `〒${pharmacyInfo.postalCode} ` : ''}${pharmacyInfo.address}`.trim();
   const insuranceAmounts = calculateInsuranceAmounts(totalPoints, patientData.insuranceInfo?.burdenRatio ?? 30);
+  const copaymentGuidance = buildVisitCopaymentGuidance(patientData, insuranceAmounts);
   const prescriptionDateStr = new Date(visitData.prescriptionDate || visitData.issueDate || Date.now()).toLocaleDateString('ja-JP');
   const dispensingDateStr = new Date(visitData.dispensingDate || visitData.issueDate || Date.now()).toLocaleDateString('ja-JP');
   const currentDateStr = new Date().toLocaleDateString('ja-JP');
@@ -1846,6 +1848,18 @@ export default function PrintPage() {
 
           <div className="copayment-block" data-testid="official-copayment-block">
             <h4>一部負担金額（窓口で徴収した額）</h4>
+            {copaymentGuidance.hasGuidance && (
+              <div
+                className={`copayment-guidance-banner alert-${copaymentGuidance.alertType}`}
+                data-testid="copayment-guidance-banner"
+              >
+                {copaymentGuidance.items.map((item, idx) => (
+                  <p key={idx} className="copayment-guidance-item">
+                    ⚠️ {item}
+                  </p>
+                ))}
+              </div>
+            )}
             <p className="copayment-help">
               公式レセプトの HO 第9項目・KO 第7/第9項目です。
               <strong>点数×負担割合からは算出しません。</strong>

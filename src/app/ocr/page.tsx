@@ -62,6 +62,7 @@ import {
   getPublicInsuranceCategoryName,
   type PublicInsuranceBadgeItem
 } from '@/lib/patient_public_insurance';
+import { buildHighCostCopaymentBadges } from '@/lib/patient_copayment_support';
 import DrugSearchModal from './components/DrugSearchModal';
 import PrescriptionQrReader from './components/PrescriptionQrReader';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
@@ -475,6 +476,10 @@ export default function OcrPage() {
     if (!selectedPatient) return [];
     return buildPublicInsuranceBadgeList(selectedPatient.publicInsurances, selectedPatientEligibilityIssues);
   }, [selectedPatient, selectedPatientEligibilityIssues]);
+  const selectedPatientCopaymentBadges = useMemo(() => {
+    if (!selectedPatient) return [];
+    return buildHighCostCopaymentBadges(selectedPatient.insuranceInfo);
+  }, [selectedPatient]);
   const selectedPatientReceptionAlerts = useMemo(() => {
     return filterReceptionEligibilityAlerts(selectedPatientEligibilityIssues);
   }, [selectedPatientEligibilityIssues]);
@@ -1950,7 +1955,7 @@ export default function OcrPage() {
                           保険者番号: {selectedPatient.insuranceInfo?.number || '未登録'}
                         </span>
                       </div>
-                      {selectedPatientPublicBadges.length > 0 && (
+                      {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
                         <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
                           {selectedPatientPublicBadges.map((badge) => (
                             <span
@@ -1961,6 +1966,16 @@ export default function OcrPage() {
                               公費{badge.index}: {badge.label}
                               {badge.hasError && '【要確認】'}
                               {badge.hasWarning && '【期限注意】'}
+                            </span>
+                          ))}
+                          {selectedPatientCopaymentBadges.map((badge, idx) => (
+                            <span
+                              key={`selected-copay-badge-${idx}`}
+                              className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
+                              title={badge.title}
+                              data-testid={`selected-patient-copay-badge-${idx}`}
+                            >
+                              {badge.label}
                             </span>
                           ))}
                         </div>

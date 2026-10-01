@@ -26,6 +26,13 @@ import {
   buildPublicInsuranceBadgeList,
   MAX_PUBLIC_INSURANCES
 } from '@/lib/patient_public_insurance';
+import {
+  type EditableCopaymentSupport,
+  createEmptyEditableCopaymentSupport,
+  toEditableCopaymentSupport,
+  fromEditableCopaymentSupport,
+  buildHighCostCopaymentBadges
+} from '@/lib/patient_copayment_support';
 import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
 
 export interface PatientBannerProps {
@@ -107,6 +114,10 @@ export const PatientBanner = React.memo(function PatientBanner({
     return buildPublicInsuranceBadgeList(patientData?.publicInsurances, eligibilityIssues);
   }, [patientData?.publicInsurances, eligibilityIssues]);
 
+  const copaymentBadges = useMemo(() => {
+    return buildHighCostCopaymentBadges(patientData?.insuranceInfo);
+  }, [patientData?.insuranceInfo]);
+
   // Premium Insurance Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [hasOpenedInsuranceFromQuery, setHasOpenedInsuranceFromQuery] = useState(false);
@@ -124,6 +135,13 @@ export const PatientBanner = React.memo(function PatientBanner({
   const [editPublicInsurances, setEditPublicInsurances] = useState<EditablePublicInsurance[]>([
     createEmptyEditablePublicInsurance(0)
   ]);
+  const [editCopaymentSupport, setEditCopaymentSupport] = useState<EditableCopaymentSupport>(
+    createEmptyEditableCopaymentSupport()
+  );
+
+  const handleUpdateCopaymentSupport = useCallback((patch: Partial<EditableCopaymentSupport>) => {
+    setEditCopaymentSupport((current) => ({ ...current, ...patch }));
+  }, []);
 
   const handleUpdatePublicInsurance = useCallback((index: number, patch: Partial<EditablePublicInsurance>) => {
     setEditPublicInsurances((current) => {
@@ -278,6 +296,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       setEditEligibilityCheckedAt(toDateInputValue(patientData.insuranceInfo?.eligibilityCheckedAt));
       setEditEligibilityStatus(patientData.insuranceInfo?.eligibilityStatus || 'unchecked');
       setEditPublicInsurances(toEditablePublicInsurances(patientData.publicInsurances));
+      setEditCopaymentSupport(toEditableCopaymentSupport(patientData.insuranceInfo));
     }
     loadVisitQuestionnaireIntoModal().catch((error) => {
       console.error('Failed to load initial questionnaire:', error);
@@ -303,6 +322,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       const patientDoc = await db.patients.findOne(patientData.patientId).exec();
       if (patientDoc) {
         const publicInsurances = toPublicInsurances(editPublicInsurances);
+        const copaymentPatch = fromEditableCopaymentSupport(editCopaymentSupport);
 
         const nextInsuranceInfo = {
           provider: editProvider,
@@ -313,7 +333,8 @@ export const PatientBanner = React.memo(function PatientBanner({
           validFrom: editValidFrom || undefined,
           validTo: editValidTo || undefined,
           eligibilityCheckedAt: editEligibilityCheckedAt || undefined,
-          eligibilityStatus: editEligibilityStatus
+          eligibilityStatus: editEligibilityStatus,
+          ...copaymentPatch
         };
         const now = new Date().toISOString();
         const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
@@ -528,6 +549,16 @@ export const PatientBanner = React.memo(function PatientBanner({
               公費{badge.index}: {badge.label}
               {badge.hasError && '【要確認】'}
               {badge.hasWarning && '【期限注意】'}
+            </span>
+          ))}
+          {copaymentBadges.map((badge, idx) => (
+            <span
+              key={`copay-badge-${idx}`}
+              className={`badge ${badge.severity === 'orange' ? 'orange' : badge.severity === 'red' ? 'red' : 'teal'}`}
+              title={badge.title}
+              data-testid={`patient-copay-badge-${idx}`}
+            >
+              {badge.label}
             </span>
           ))}
           <span
@@ -947,6 +978,114 @@ export const PatientBanner = React.memo(function PatientBanner({
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="modal-section-title mt-4">高額療養費・限度額適用認定証 (RE 第8/第40項目・別表7/別表8)</div>
+              <div className="form-grid" data-testid="emr-high-cost-editor">
+                <div className="form-group">
+                  <label htmlFor="m-high-cost-category">適用区分 (認定証)</label>
+                  <select
+                    id="m-high-cost-category"
+                    data-testid="m-high-cost-category"
+                    value={editCopaymentSupport.highCostLimitCategory}
+                    onChange={(e) => handleUpdateCopaymentSupport({ highCostLimitCategory: e.target.value as any })}
+                  >
+                    <option value="">未設定（通常）</option>
+                    <option value="ア">区ア (年収約1,160万円〜)</option>
+                    <option value="イ">区イ (年収約770万〜1,160万円)</option>
+                    <option value="ウ">区ウ (年収約370万〜770万円)</option>
+                    <option value="エ">区エ (〜年収約370万円)</option>
+                    <option value="オ">区オ (低所得・住民税非課税)</option>
+                    <option value="カ">区カ (70歳以上 一般・現役並み)</option>
+                    <option value="キ">区キ (70歳以上 低所得)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="m-copay-category-code">一部負担金区分 (別表8)</label>
+                  <select
+                    id="m-copay-category-code"
+                    data-testid="m-copay-category-code"
+                    value={editCopaymentSupport.copaymentCategoryCode}
+                    onChange={(e) => handleUpdateCopaymentSupport({ copaymentCategoryCode: e.target.value as any })}
+                  >
+                    <option value="">未設定（該当なし）</option>
+                    <option value="1">1: 低所得者II (70歳以上・区分II)</option>
+                    <option value="3">3: 低所得者I (70歳以上・区分I)</option>
+                  </select>
+                </div>
+                <div className="form-group full-width">
+                  <label className="flex align-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id="m-high-cost-multiple"
+                      data-testid="m-high-cost-multiple"
+                      checked={editCopaymentSupport.highCostMultipleOccurrence}
+                      onChange={(e) => handleUpdateCopaymentSupport({ highCostMultipleOccurrence: e.target.checked })}
+                      disabled={!editCopaymentSupport.highCostLimitCategory}
+                    />
+                    <span>多数回該当（直近12か月に3回以上高額療養費該当）</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="modal-section-title mt-4">一部負担金減免 (HO 第11〜13項目・別表10)</div>
+              <div className="form-grid" data-testid="emr-reduction-editor">
+                <div className="form-group">
+                  <label htmlFor="m-reduction-code">減免区分 (別表10)</label>
+                  <select
+                    id="m-reduction-code"
+                    data-testid="m-reduction-code"
+                    value={editCopaymentSupport.reductionCode}
+                    onChange={(e) => handleUpdateCopaymentSupport({ reductionCode: e.target.value as any })}
+                  >
+                    <option value="">未設定（減免なし）</option>
+                    <option value="1">1: 減額</option>
+                    <option value="2">2: 免除</option>
+                    <option value="3">3: 支払猶予</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="m-reduction-cert">証明書番号 (3桁)</label>
+                  <input
+                    id="m-reduction-cert"
+                    data-testid="m-reduction-cert"
+                    type="text"
+                    maxLength={3}
+                    placeholder="例: 042"
+                    value={editCopaymentSupport.reductionCertificateNumber}
+                    onChange={(e) => handleUpdateCopaymentSupport({ reductionCertificateNumber: e.target.value })}
+                    disabled={!editCopaymentSupport.reductionCode}
+                  />
+                </div>
+                {editCopaymentSupport.reductionCode === '1' && (
+                  <>
+                    <div className="form-group">
+                      <label htmlFor="m-reduction-ratio">減額割合 (%)</label>
+                      <input
+                        id="m-reduction-ratio"
+                        data-testid="m-reduction-ratio"
+                        type="number"
+                        min={1}
+                        max={100}
+                        placeholder="例: 50"
+                        value={editCopaymentSupport.reductionRatioPercent}
+                        onChange={(e) => handleUpdateCopaymentSupport({ reductionRatioPercent: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="m-reduction-yen">減額金額 (円)</label>
+                      <input
+                        id="m-reduction-yen"
+                        data-testid="m-reduction-yen"
+                        type="number"
+                        min={0}
+                        placeholder="例: 1000"
+                        value={editCopaymentSupport.reductionReducedYen}
+                        onChange={(e) => handleUpdateCopaymentSupport({ reductionReducedYen: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

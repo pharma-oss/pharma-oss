@@ -23,6 +23,7 @@ import {
   buildHighCostSpecialNoteCode,
   type HighCostSpecialNoteResult
 } from '@/lib/receipt/dispensing_uke_code_tables';
+import { validateCopaymentSupportReadiness } from '@/lib/patient_copayment_support';
 import {
   buildOfficialCopaymentRecords,
   buildOfficialDailyFields,
@@ -152,7 +153,13 @@ export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_dispensing_date_missing'
   | 'official_uke_multiple_prescription_group_unconfirmed'
   | 'official_uke_high_cost_special_note_unrecordable'
-  | 'official_uke_public_expense_copayment_count_mismatch';
+  | 'official_uke_public_expense_copayment_count_mismatch'
+  | 'official_uke_copayment_invalid_high_cost_category'
+  | 'official_uke_copayment_invalid_category_code'
+  | 'official_uke_copayment_invalid_reduction_code'
+  | 'official_uke_copayment_reduction_amount_missing'
+  | 'official_uke_copayment_reduction_ratio_invalid'
+  | 'official_uke_copayment_reduction_cert_number_invalid';
 
 export interface MonthlyClaimUkeOfficialReadinessIssue {
   severity: MonthlyClaimUkeBatchCheckSeverity;
@@ -1594,6 +1601,19 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
         code: 'official_uke_high_cost_special_note_unrecordable',
         title: '高額療養費の適用区分をレセプト特記事項にできません',
         message: `${patientName} の適用区分「区${claim.patient.insuranceInfo?.highCostLimitCategory}」を記録できません。${specialNote.reason}`,
+        visitId,
+        patientName
+      });
+    }
+
+    const copaymentIssues = validateCopaymentSupportReadiness(claim.patient, dispensingDateSource);
+    for (const cIssue of copaymentIssues) {
+      if (cIssue.code === 'copayment_high_cost_special_note_error') continue;
+      addOfficialReadinessIssue(issues, {
+        severity: cIssue.severity,
+        code: `official_uke_${cIssue.code}` as MonthlyClaimUkeOfficialReadinessIssueCode,
+        title: cIssue.title,
+        message: `${patientName} の${cIssue.title}: ${cIssue.message}`,
         visitId,
         patientName
       });
