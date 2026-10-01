@@ -53,7 +53,16 @@ test('print page surfaces prescription audit before printing and UKE export', ()
   assert.match(printSource, /data-testid="receipt-statement-doc"/);
 });
 
-test('print page offers parallel official UKE preview/download alongside regular UKE', () => {
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { DispensingRecordPrint } from './components/DispensingRecordPrint';
+import { ElectronicPrescriptionPrintPanel } from './components/ElectronicPrescriptionPrintPanel';
+import { SingleOfficialUkeModal } from './components/SingleOfficialUkeModal';
+import { ReceiptStatementPrint } from './components/ReceiptStatementPrint';
+import type { FacilitySettings, Patient, Visit } from '@/db/types';
+import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
+
+test('print page offers parallel official UKE preview/download alongside regular UKE and renders modal component', () => {
   // 1. 通常 UKE と公式 UKE ボタンの両方が併設されていること（通常出力を独断で塞がない契約）
   assert.match(printSource, /data-testid="print-uke-export-button"/);
   assert.match(printSource, /data-testid="print-official-uke-button"/);
@@ -64,6 +73,100 @@ test('print page offers parallel official UKE preview/download alongside regular
   assert.match(printSource, /<SingleOfficialUkeModal/);
   assert.match(printSource, /download-official-cyo-button/);
   assert.match(printSource, /RECEIPTY\.CYO/);
+
+  // 3. SingleOfficialUkeModal の実描画テスト（renderToStaticMarkup による真正な DOM / data-testid 検証）
+  const mockPatient: Patient = {
+    patientId: 'pat_test',
+    name: '公式 花子',
+    kana: 'コウシキ ハナコ',
+    birthDate: '1980-01-01',
+    gender: 'female',
+    insuranceInfo: { provider: '06130012', number: '123456', burdenRatio: 30, relationship: '本人' }
+  };
+  const mockVisit: Visit = {
+    visitId: 'visit_test',
+    patientId: 'pat_test',
+    prescriptionDate: '2026-06-10',
+    dispensingDate: '2026-06-10',
+    issueDate: '2026-06-10T10:00:00.000Z',
+    status: 'completed',
+    institutionId: '1312345',
+    doctorId: 'doc_1',
+    claimLifecycle: {
+      status: 'rebilling',
+      rebillingReason: '通常月次請求準備'
+    }
+  };
+  const mockSettings: FacilitySettings = {
+    id: 'default',
+    pharmacyName: 'テスト調剤薬局',
+    pharmacyCode: '1312345',
+    pharmacyPostalCode: '100-0001',
+    pharmacyAddress: '東京都千代田区',
+    pharmacyPhone: '03-1234-5678',
+    registrationNumber: 'T1234567890123',
+    baseFeeCategory: '1',
+    regionalSupportAddition: 'none',
+    medicalDxAddition: false
+  };
+  const mockItems: DispensingUkeItem[] = [
+    {
+      itemId: 'item_1',
+      visitId: 'visit_test',
+      drugId: '620000001',
+      dispensedDrugCode: '620000001',
+      drugName: 'アムロジピンOD錠5mg',
+      amount: 1,
+      days: 14,
+      usage: '１日１回朝食後',
+      rpNumber: 1,
+      dosageCategory: 'internal',
+      drugPrice: 10.1,
+      claimDrugFee: true
+    }
+  ];
+  const mockCalculatedFees: any[] = [
+    {
+      code: 'base_fee',
+      receiptFeeCode: '410004110',
+      name: '調剤基本料1',
+      points: 45,
+      rationale: '調剤基本料1 (45点)'
+    },
+    {
+      code: 'drug_preparation',
+      receiptFeeCode: '420001810',
+      name: '薬剤調製料 (内服薬)',
+      points: 24,
+      rationale: '薬剤調製料 内服薬 (14日分: 24点)'
+    },
+    {
+      code: 'drug_fee',
+      name: '薬剤料',
+      points: 14,
+      rationale: '薬剤料 (14点)'
+    }
+  ];
+
+  const modalHtml = renderToStaticMarkup(
+    React.createElement(SingleOfficialUkeModal, {
+      isOpen: true,
+      onClose: () => {},
+      visitData: mockVisit,
+      patientData: mockPatient,
+      settingsData: mockSettings,
+      prescriptionItems: mockItems,
+      calculatedFees: mockCalculatedFees
+    })
+  );
+
+  assert.ok(modalHtml.includes('data-testid="single-official-uke-modal"'), 'モーダルルート要素が存在すること');
+  assert.ok(modalHtml.includes('data-testid="download-official-cyo-button"'), '公式 CYO ダウンロードボタンが存在すること');
+  assert.ok(modalHtml.includes('RECEIPTY.CYO'), '公式提出用ファイル名が表示されること');
+  assert.ok(modalHtml.includes('公式提出仕様 適合確認済み'), '公式仕様適合サマリーバッジが表示されること');
+  assert.ok(modalHtml.includes('YK'), 'YKレコードチップが表示されること');
+  assert.ok(modalHtml.includes('RE'), 'REレコードチップが表示されること');
+  assert.ok(modalHtml.includes('GO'), 'GOレコードチップが表示されること');
 });
 
 // 以下 3 件は「監査ログが残らなければ操作を確定させない」契約。
@@ -301,6 +404,58 @@ test('print page manages electronic prescription dispensing-result lifecycle ope
   assert.match(printSource, /data-testid="electronic-prescription-supplementary-print"/);
   assert.match(printSource, /electronicUnitConversion/);
   assert.match(printSource, /electronicUsageSupplementText/);
+
+  // ElectronicPrescriptionPrintPanel の実描画検証（renderToStaticMarkup による真正な DOM / data-testid 検証）
+  const panelHtml = renderToStaticMarkup(
+    React.createElement(ElectronicPrescriptionPrintPanel, {
+      electronicPrescription: {
+        prescriptionId: 'EP-2026-001',
+        documentKind: 'electronic_prescription',
+        sourceMode: 'connector',
+        receivedAt: '2026-06-10T10:00:00Z',
+        appliedAt: '2026-06-10T10:00:00Z',
+        validUntil: '2026-06-14',
+        integrityHash: 'sha256-abc',
+        receptionStatus: 'accepted',
+        dispensingResultStatus: 'registered',
+        dispensingResultEverRegistered: true,
+        signatureStatus: 'valid',
+        duplicateCheckStatus: 'passed'
+      },
+      electronicPrescriptionIds: ['EP-2026-001'],
+      electronicPrescriptionDispensingResultStatus: 'registered',
+      electronicPrescriptionReceptionStatus: 'accepted',
+      electronicPrescriptionSignatureStatus: 'valid',
+      electronicPrescriptionDuplicateCheckStatus: 'passed',
+      electronicPrescriptionRegistered: true,
+      electronicPrescriptionOperationBusy: false,
+      electronicPrescriptionOperationInFlight: null,
+      canRunElectronicPrescriptionDuplicateCheck: true,
+      canRegisterElectronicPrescriptionDispensingResult: true,
+      canSearchElectronicPrescriptionDispensingResult: true,
+      canChangeElectronicPrescriptionDispensingResult: true,
+      canCancelElectronicPrescriptionDispensingResult: true,
+      canCancelElectronicPrescriptionReception: true,
+      electronicPrescriptionDispensingInformationSignatureText: '電子署名済 (HPKI検証成功)',
+      electronicPrescriptionDispensingInformationHpkiText: '医師/薬剤師 HPKI 認証済',
+      electronicPrescriptionDispensingInformationHashText: 'sha256-abcdef123456',
+      electronicPrescriptionComments: ['疑義照会確認済み'],
+      electronicPrescriptionLaboratoryResults: [],
+      prescriptionAuditErrorCount: 0,
+      electronicPrescriptionLifecycleDecision: () => ({ allowed: true }),
+      handleElectronicPrescriptionOperation: () => {}
+    })
+  );
+
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-lifecycle-panel"'), '電子処方箋ライフサイクルパネルが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-duplicate-check-button"'), '重複投薬確認ボタンが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-register-dispensing-result-button"'), '調剤結果登録ボタンが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-search-dispensing-result-button"'), '調剤結果検索ボタンが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-change-dispensing-result-button"'), '調剤結果変更ボタンが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-cancel-dispensing-result-button"'), '調剤結果取消ボタンが存在すること');
+  assert.ok(panelHtml.includes('data-testid="electronic-prescription-cancel-reception-button"'), '受付取消ボタンが存在すること');
+  assert.ok(panelHtml.includes('電子署名済 (HPKI検証成功)'), 'HPKI署名テキストが表示されること');
+  assert.ok(panelHtml.includes('sha256-abcdef123456'), 'ハッシュ値が表示されること');
 });
 
 test('emr page opens picking support from query parameter and targets the requested visit', () => {
@@ -339,10 +494,106 @@ test('print helper pure functions execute deterministically', async () => {
 });
 
 test('dispensing record renders statutory intervention records block and connects with page data', () => {
-  const dispensingRecordSource = readFileSync(new URL('./components/DispensingRecordPrint.tsx', import.meta.url), 'utf8');
-  assert.match(dispensingRecordSource, /data-testid="record-intervention-box"/);
-  assert.match(dispensingRecordSource, /疑義照会・処方変更の記録（薬剤師法第24条・第25条）/);
-  assert.match(dispensingRecordSource, /record-intervention-table/);
+  // 1. ページ側が <DispensingRecordPrint ... interventions={interventions} /> へ接続している契約
   assert.match(printSource, /<DispensingRecordPrint[\s\S]*interventions=\{interventions\}/);
+
+  // 2. DispensingRecordPrint の真正な実描画テスト (renderToStaticMarkup)
+  // 薬剤師法第24条・第25条に基づく法定記載項目（照会日時、処方医、区分、内容、回答、同意、担当薬剤師）を検証
+  const testInterventions = [
+    {
+      eventId: 'ev_1',
+      category: 'generic_change' as const,
+      reason: '患者希望による後発医薬品への銘柄変更の確認',
+      inquiryDoctor: '山田 太郎',
+      inquiryResult: '変更了承。処方通りの用量で調剤のこと。',
+      patientConsented: true,
+      contactedAt: '2026-06-10T10:30:00.000Z',
+      handledBy: '鈴木 花子',
+      inquiryStatus: 'completed' as const,
+      inquiryMethod: 'phone' as const
+    }
+  ];
+
+  const htmlWithInterventions = renderToStaticMarkup(
+    React.createElement(DispensingRecordPrint, {
+      patientData: { name: '患者 テスト', birthDate: '1980-01-01', patientId: 'p_1' },
+      visitData: {
+        prescriptionDate: '2026-06-10',
+        dispensingDate: '2026-06-10',
+        interventionEvents: testInterventions
+      },
+      prescriptionItems: [],
+      pharmacyInfo: {
+        name: 'テスト薬局',
+        code: '1312345',
+        postalCode: '100-0001',
+        address: '千代田区',
+        phone: '03-1234-5678',
+        registrationNumber: 'T1234567890123',
+        pharmacistName: '鈴木 花子'
+      },
+      pharmacyAddressLine: '東京都千代田区',
+      receiptRunId: 'REC-001',
+      currentDateStr: '2026-06-10',
+      patientBirthDateStr: '1980年1月1日',
+      dispensingDateStr: '2026年6月10日',
+      prescriptionDateStr: '2026年6月10日',
+      patientAge: 46,
+      electronicPrescriptionIds: [],
+      electronicPrescriptionDispensingResultStatus: 'pending',
+      electronicPrescriptionDispensingInformationSignatureText: '',
+      electronicPrescriptionDispensingInformationHpkiText: '',
+      electronicPrescriptionDispensingInformationHashText: '',
+      electronicPrescriptionComments: [],
+      electronicPrescriptionLaboratoryResults: [],
+      renderIdentityMark: () => null,
+      isFirstItemInRp: () => true
+    })
+  );
+
+  assert.ok(htmlWithInterventions.includes('data-testid="record-intervention-box"'), '法定疑義照会ボックスが存在すること');
+  assert.ok(htmlWithInterventions.includes('疑義照会・処方変更の記録（薬剤師法第24条・第25条）'), '法定タイトルが表示されること');
+  assert.ok(htmlWithInterventions.includes('record-intervention-table'), 'テーブル構造が存在すること');
+  assert.ok(htmlWithInterventions.includes('山田 太郎 医師 (電話)'), '処方医と照会方法が表示されること');
+  assert.ok(htmlWithInterventions.includes('後発医薬品変更'), '区分日本語ラベルが表示されること');
+  assert.ok(htmlWithInterventions.includes('患者希望による後発医薬品への銘柄変更の確認'), '疑義内容が表示されること');
+  assert.ok(htmlWithInterventions.includes('変更了承。処方通りの用量で調剤のこと。'), '回答結果が表示されること');
+  assert.ok(htmlWithInterventions.includes('鈴木 花子'), '担当薬剤師が表示されること');
+
+  // 3. 疑義照会なし（0件）の場合の実描画検証
+  const htmlWithoutInterventions = renderToStaticMarkup(
+    React.createElement(DispensingRecordPrint, {
+      patientData: { name: '患者 テスト' },
+      visitData: {},
+      prescriptionItems: [],
+      pharmacyInfo: {
+        name: 'テスト薬局',
+        code: '1312345',
+        postalCode: '100-0001',
+        address: '千代田区',
+        phone: '03-1234-5678',
+        registrationNumber: 'T1234567890123',
+        pharmacistName: '鈴木 花子'
+      },
+      pharmacyAddressLine: '東京都千代田区',
+      receiptRunId: 'REC-001',
+      currentDateStr: '2026-06-10',
+      patientBirthDateStr: '1980年1月1日',
+      dispensingDateStr: '2026年6月10日',
+      prescriptionDateStr: '2026年6月10日',
+      electronicPrescriptionIds: [],
+      electronicPrescriptionDispensingResultStatus: 'pending',
+      electronicPrescriptionDispensingInformationSignatureText: '',
+      electronicPrescriptionDispensingInformationHpkiText: '',
+      electronicPrescriptionDispensingInformationHashText: '',
+      electronicPrescriptionComments: [],
+      electronicPrescriptionLaboratoryResults: [],
+      renderIdentityMark: () => null,
+      isFirstItemInRp: () => true,
+      interventions: []
+    })
+  );
+  assert.ok(htmlWithoutInterventions.includes('data-testid="record-intervention-box"'), '0件時も法定疑義照会ボックスが存在すること');
+  assert.ok(htmlWithoutInterventions.includes('疑義照会・処方変更なし'), '疑義照会なしメッセージが表示されること');
 });
 

@@ -123,6 +123,7 @@ export function SingleOfficialUkeModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="official-uke-modal-title"
+      data-testid="single-official-uke-modal"
     >
       <div
         className="official-uke-modal-content"
