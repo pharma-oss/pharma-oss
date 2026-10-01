@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   FileCheck2,
   Download,
@@ -46,6 +46,18 @@ export function SingleOfficialUkeModal({
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // 1件公式 UKE の生成試行
   const { officialResult, buildError } = useMemo(() => {
@@ -277,7 +289,7 @@ export function SingleOfficialUkeModal({
             type="button"
             className="btn-primary official-download-btn"
             onClick={handleDownload}
-            disabled={!officialResult || isExporting}
+            disabled={!officialResult || !!buildError || isExporting}
             data-testid="download-official-cyo-button"
           >
             <Download size={16} aria-hidden="true" />

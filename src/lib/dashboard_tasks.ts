@@ -64,6 +64,12 @@ export interface DashboardInventoryRisk {
   priority: 'high' | 'medium';
   actionLabel: string;
   pickingShortageAmount?: number;
+  reorderPoint?: number;
+  isBelowReorderPoint?: boolean;
+  expiringSoonAmount?: number;
+  hasExpiringSoonLots?: boolean;
+  substituteCandidatesCount?: number;
+  topSubstituteName?: string;
 }
 
 export interface DashboardClaimRisk {
@@ -381,6 +387,45 @@ export function calculateDashboardInventoryRisks({
       pickingShortageAmount: shortage.pickingShortageAmount
     });
 
+    const reorderPoint = typeof drug?.reorderPoint === 'number' ? drug.reorderPoint : undefined;
+    const isBelowReorderPoint = typeof reorderPoint === 'number' && reorderPoint > 0
+      ? shortage.availableAmount < reorderPoint
+      : undefined;
+
+    // ロットの使用期限切迫（60日以内）判定
+    const now = new Date();
+    const thresholdDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    let expiringSoonAmount = 0;
+    for (const lot of stockLots) {
+      if (lot.expirationDate) {
+        const exp = new Date(lot.expirationDate);
+        if (!Number.isNaN(exp.getTime()) && exp <= thresholdDate && exp >= now) {
+          expiringSoonAmount += lot.quantity || 0;
+        }
+      }
+    }
+    const hasExpiringSoonLots = expiringSoonAmount > 0;
+
+    // 院内代替薬候補の判定（同一YJコード上7桁で有効在庫がある他薬剤）
+    let substituteCandidatesCount = 0;
+    let topSubstituteName: string | undefined;
+    const targetYj = (drug?.yjCode || '').slice(0, 7);
+    if (targetYj.length >= 7) {
+      for (const [candidateId, candidateDrug] of drugMap.entries()) {
+        if (candidateId === drugId) continue;
+        const candidateYj = (candidateDrug?.yjCode || '').slice(0, 7);
+        if (candidateYj === targetYj) {
+          const candidateStock = (stocksByDrugId.get(candidateId) || []).reduce((acc, l) => acc + (l.quantity || 0), 0);
+          if (candidateStock > 0) {
+            substituteCandidatesCount++;
+            if (!topSubstituteName) {
+              topSubstituteName = candidateDrug?.name || candidateId;
+            }
+          }
+        }
+      }
+    }
+
     inventoryRiskData.push({
       drugId,
       drugName: drug?.name || drugId,
@@ -394,7 +439,13 @@ export function calculateDashboardInventoryRisks({
       affectedPatientNames,
       priority,
       actionLabel,
-      pickingShortageAmount: shortage.pickingShortageAmount
+      pickingShortageAmount: shortage.pickingShortageAmount,
+      reorderPoint,
+      isBelowReorderPoint,
+      expiringSoonAmount: hasExpiringSoonLots ? expiringSoonAmount : undefined,
+      hasExpiringSoonLots,
+      substituteCandidatesCount: substituteCandidatesCount > 0 ? substituteCandidatesCount : undefined,
+      topSubstituteName
     });
   }
 

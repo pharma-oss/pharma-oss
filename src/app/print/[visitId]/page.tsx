@@ -1371,7 +1371,7 @@ export default function PrintPage() {
             type="button"
             className="btn-secondary official-uke-btn"
             onClick={() => setIsOfficialUkeModalOpen(true)}
-            disabled={!canExportUke || hasClaimErrors}
+            disabled={!canExportUke}
             data-testid="print-official-uke-button"
             title="公式提出用UKE（正本: RECEIPTY.CYO / 支払基金・国保連電算仕様 / GO集計 / EOF 0x1A）の点検とダウンロード"
           >

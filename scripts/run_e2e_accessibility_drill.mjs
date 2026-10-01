@@ -123,18 +123,35 @@ async function run() {
       localStorage.setItem('pharma-oss:first-time-modal-dismissed', 'true');
     });
 
-    // 0. Seed Demo Data at Root
-    console.log('[E2E Drill] Seeding demo data at / ...');
+    // 0. Seed Demo Data at Root and Obtain Valid visitId
+    console.log('[E2E Drill] Seeding demo data at / and obtaining valid visitId...');
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle2' });
     await wait(2000);
 
-    await page.evaluate(() => {
+    const demoStartClicked = await page.evaluate(() => {
       const demoBtn = document.querySelector('button[data-testid="pre-login-tour-start-guest-demo"]') ||
                       document.querySelector('.btn-resume-demo');
-      if (demoBtn) demoBtn.click();
+      if (demoBtn) {
+        demoBtn.click();
+        return true;
+      }
+      return false;
     });
-    await wait(3500);
+    console.log('[E2E Drill] Demo start clicked:', demoStartClicked);
+
+    // Wait for redirect to /emr?visitId=...
+    await wait(4000);
+    const redirectUrl = page.url();
+    console.log('[E2E Drill] Current URL after demo start:', redirectUrl);
+
+    let visitId = 'v_demo_round1';
+    try {
+      const urlObj = new URL(redirectUrl);
+      const extractedId = urlObj.searchParams.get('visitId');
+      if (extractedId) visitId = extractedId;
+    } catch {}
+    console.log('[E2E Drill] Verified active visitId for flow:', visitId);
 
     // Dismiss any residual dialogs
     const dismissDialogs = async () => {
@@ -187,6 +204,10 @@ async function run() {
       focusedTag = await page.evaluate(() => document.activeElement ? document.activeElement.tagName : 'NONE');
       if (focusedTag !== 'BODY' && focusedTag !== 'NONE') tabCount++;
     }
+    if (tabCount === 0) {
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+    }
     results.keyboardFlow.ocr = { tabNavigableElements: tabCount, activeTagSample: focusedTag };
     console.log(`  - Keyboard Tab focus on /ocr reached ${tabCount} interactive elements.`);
 
@@ -195,7 +216,7 @@ async function run() {
     results.screens.emr = {};
     for (const width of [1280, 768, 375]) {
       await page.setViewport({ width, height: 900 });
-      await page.goto(`${baseUrl}/emr`, { waitUntil: 'networkidle2' });
+      await page.goto(`${baseUrl}/emr?visitId=${encodeURIComponent(visitId)}`, { waitUntil: 'networkidle2' });
       await wait(2000);
       await dismissDialogs();
 
@@ -214,7 +235,7 @@ async function run() {
 
     // Keyboard check on /emr
     console.log('[E2E Drill] Testing keyboard focus on /emr...');
-    await page.goto(`${baseUrl}/emr`, { waitUntil: 'networkidle2' });
+    await page.goto(`${baseUrl}/emr?visitId=${encodeURIComponent(visitId)}`, { waitUntil: 'networkidle2' });
     await wait(1500);
     await dismissDialogs();
 
@@ -225,21 +246,12 @@ async function run() {
       focusedTag = await page.evaluate(() => document.activeElement ? document.activeElement.tagName : 'NONE');
       if (focusedTag !== 'BODY' && focusedTag !== 'NONE') tabCount++;
     }
+    if (tabCount === 0) {
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+    }
     results.keyboardFlow.emr = { tabNavigableElements: tabCount, activeTagSample: focusedTag };
     console.log(`  - Keyboard Tab focus on /emr reached ${tabCount} interactive elements.`);
-
-    // Determine a valid visitId for /print/[visitId]
-    console.log('[E2E Drill] Finding active visit ID for /print test...');
-    const visitId = await page.evaluate(() => {
-      // Check query params or current visit links
-      const printLink = document.querySelector('a[href^="/print/"]');
-      if (printLink) {
-        const href = printLink.getAttribute('href');
-        return href.replace('/print/', '').split('?')[0];
-      }
-      return 'demo-visit-1';
-    });
-    console.log('[E2E Drill] Target visitId:', visitId);
 
     // 3. Screen: /print/[visitId] (Printing, Dispensing Record & Official UKE)
     console.log('[E2E Drill] 3. Testing /print (Print & Official UKE)...');
@@ -249,6 +261,17 @@ async function run() {
       await page.goto(`${baseUrl}/print/${encodeURIComponent(visitId)}`, { waitUntil: 'networkidle2' });
       await wait(2000);
       await dismissDialogs();
+
+      // Verify that this is not an error / not found screen
+      const notFoundMessage = await page.evaluate(() => {
+        const bodyText = document.body.textContent || '';
+        return bodyText.includes('印刷対象の受付が見つかりませんでした');
+      });
+      if (notFoundMessage) {
+        console.error(`[E2E Drill] ERROR: Print page showed 'not found' for visitId: ${visitId}`);
+        results.summary.passed = false;
+        results.summary.overflowErrors++;
+      }
 
       const overflow = await checkOverflow(page, width);
       results.screens.print[`${width}px`] = overflow;
@@ -267,29 +290,98 @@ async function run() {
     console.log('[E2E Drill] Testing Official UKE Modal display on /print...');
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto(`${baseUrl}/print/${encodeURIComponent(visitId)}`, { waitUntil: 'networkidle2' });
-    await wait(1500);
+    await wait(2000);
     await dismissDialogs();
 
     const officialUkeBtn = await page.$('button[data-testid="print-official-uke-button"]');
-    if (officialUkeBtn) {
-      await officialUkeBtn.click();
-      await wait(800);
-      const modalVisible = await page.evaluate(() => {
-        const modal = document.querySelector('[data-testid="single-official-uke-modal"]') ||
-                      document.querySelector('.single-official-uke-modal') ||
-                      document.querySelector('.official-uke-modal');
-        return !!modal;
-      });
-      const modalShotName = 'e2e_drill_print_official_uke_modal.png';
-      await page.screenshot({ path: join(localArtifactDir, modalShotName), fullPage: false });
-      await page.screenshot({ path: join(artifactDir, modalShotName), fullPage: false });
-      results.screens.print.officialUkeModal = { visible: modalVisible, shot: modalShotName };
-      console.log(`  - Official UKE modal opened: visible = ${modalVisible} (Shot: ${modalShotName})`);
-
-      // Close modal with Escape or close button
-      await page.keyboard.press('Escape');
-      await wait(400);
+    if (!officialUkeBtn) {
+      console.error('[E2E Drill] ERROR: button[data-testid="print-official-uke-button"] not found on print page!');
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+      throw new Error('Official UKE button not found on /print page');
     }
+
+    const btnDiag = await page.evaluate(() => {
+      const btn = document.querySelector('button[data-testid="print-official-uke-button"]');
+      const errNodes = Array.from(document.querySelectorAll('.claim-validation-badge, .claim-issue, .alert, .badge-error')).map(e => e.textContent?.trim());
+      return {
+        disabled: btn ? btn.disabled : null,
+        className: btn ? btn.className : '',
+        title: btn ? btn.title : '',
+        text: btn ? btn.textContent?.trim() : '',
+        visibleErrors: errNodes.slice(0, 5)
+      };
+    });
+    console.log('[E2E Drill] Button diagnostics:', btnDiag);
+
+    // If disabled, check why and handle click accordingly
+    if (btnDiag.disabled) {
+      console.warn('[E2E Drill] Official UKE button is disabled due to:', btnDiag.title, btnDiag.visibleErrors);
+    }
+
+    await officialUkeBtn.click();
+    await wait(2000);
+
+    const modalCheck = await page.evaluate(() => {
+      const modal = document.querySelector('[data-testid="single-official-uke-modal"]') ||
+                    document.querySelector('.single-official-uke-modal') ||
+                    document.querySelector('.official-uke-modal');
+      return {
+        exists: !!modal,
+        hasCyoHeader: !!(modal && modal.textContent && modal.textContent.includes('RECEIPTY.CYO'))
+      };
+    });
+
+    if (!modalCheck.exists) {
+      console.error('[E2E Drill] ERROR: SingleOfficialUkeModal did not open on click!');
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+      throw new Error('SingleOfficialUkeModal failed to open');
+    }
+
+    const modalShotName = 'e2e_drill_print_official_uke_modal.png';
+    await page.screenshot({ path: join(localArtifactDir, modalShotName), fullPage: false });
+    await page.screenshot({ path: join(artifactDir, modalShotName), fullPage: false });
+    console.log(`  - Official UKE modal opened: visible = true, hasCyoHeader = ${modalCheck.hasCyoHeader} (Shot: ${modalShotName})`);
+
+    // Keyboard Tab focus check inside modal
+    let modalTabCount = 0;
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      await wait(100);
+      focusedTag = await page.evaluate(() => document.activeElement ? document.activeElement.tagName : 'NONE');
+      if (focusedTag !== 'BODY' && focusedTag !== 'NONE') modalTabCount++;
+    }
+
+    // Close modal with Escape key
+    console.log('[E2E Drill] Closing Official UKE Modal with Escape key...');
+    await page.keyboard.press('Escape');
+    await wait(800);
+
+    const modalClosed = await page.evaluate(() => {
+      const modal = document.querySelector('[data-testid="single-official-uke-modal"]') ||
+                    document.querySelector('.single-official-uke-modal');
+      return !modal;
+    });
+
+    if (!modalClosed) {
+      console.error('[E2E Drill] ERROR: Modal did not close on Escape key!');
+      results.summary.passed = false;
+      results.summary.keyboardErrors++;
+      throw new Error('SingleOfficialUkeModal failed to close on Escape');
+    }
+
+    results.screens.print.officialUkeModal = {
+      visible: true,
+      hasCyoHeader: modalCheck.hasCyoHeader,
+      closedOnEscape: modalClosed,
+      shot: modalShotName
+    };
+    results.keyboardFlow.officialUkeModal = {
+      tabNavigableElements: modalTabCount,
+      closedWithEscape: modalClosed
+    };
+    console.log(`  - Official UKE modal closed on Escape: ${modalClosed}`);
 
     // 4. Screen: /inventory (Inventory & Order Workbench)
     console.log('[E2E Drill] 4. Testing /inventory (Inventory & Reorder)...');

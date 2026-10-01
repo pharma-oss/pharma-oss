@@ -166,3 +166,93 @@ test('builds inventory prediction with reorder point, expiry, and substitute evi
   assert.match(substituteEvidence?.detail || '', /アムロジピンOD錠5mg「日医工」/);
 });
 
+test('calculateDashboardInventoryRisks correctly populates reorder, expiry and substitute metrics into operational AI predictions', async () => {
+  const { calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+
+  const drugMap = new Map<string, any>([
+    [
+      'drug-1',
+      {
+        id: 'drug-1',
+        name: 'アムロジピン錠5mg「トーワ」',
+        yjCode: '2171022F1020',
+        reorderPoint: 100,
+        location: 'A-12'
+      }
+    ],
+    [
+      'drug-2',
+      {
+        id: 'drug-2',
+        name: 'アムロジピン錠5mg「サワイ」',
+        yjCode: '2171022F1021', // 上7桁 2171022 が一致
+        reorderPoint: 50,
+        location: 'A-13'
+      }
+    ]
+  ]);
+
+  const now = new Date();
+  const expiringDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10); // 30日後（切迫）
+
+  const stocksByDrugId = new Map<string, any[]>([
+    [
+      'drug-1',
+      [
+        { lotNumber: 'L1', quantity: 20, expirationDate: expiringDate }
+      ]
+    ],
+    [
+      'drug-2',
+      [
+        { lotNumber: 'L2', quantity: 50, expirationDate: '2028-12-31' }
+      ]
+    ]
+  ]);
+
+  const inventoryShortageData = new Map<string, any>([
+    [
+      'drug-1',
+      {
+        requiredAmount: 30,
+        availableAmount: 20,
+        shortageAmount: 10
+      }
+    ]
+  ]);
+
+  const inventoryRisks = calculateDashboardInventoryRisks({
+    inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-1', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(inventoryRisks.length, 1);
+  const risk = inventoryRisks[0];
+  assert.equal(risk.reorderPoint, 100);
+  assert.equal(risk.isBelowReorderPoint, true);
+  assert.equal(risk.hasExpiringSoonLots, true);
+  assert.equal(risk.expiringSoonAmount, 20);
+  assert.equal(risk.substituteCandidatesCount, 1);
+  assert.equal(risk.topSubstituteName, 'アムロジピン錠5mg「サワイ」');
+
+  // Operational AI Predictions へ接続
+  const predictions = buildOperationalAiPredictions({
+    claimRisks: [],
+    inventoryRisks,
+    followUpCandidates: []
+  });
+
+  assert.equal(predictions.length, 1);
+  const prediction = predictions[0];
+  assert.equal(prediction.domain, 'inventory_shortage');
+
+  const evidenceLabels = prediction.evidence.map((e) => e.label);
+  assert.ok(evidenceLabels.includes('発注点設定'));
+  assert.ok(evidenceLabels.includes('使用期限リスク'));
+  assert.ok(evidenceLabels.includes('代替薬候補'));
+});
+
