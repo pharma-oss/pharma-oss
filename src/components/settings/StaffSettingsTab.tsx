@@ -542,8 +542,18 @@ export default function StaffSettingsTab({
             .staff-header {
               display: flex;
               justify-content: space-between;
-              align-items: center;
+              align-items: flex-start;
+              gap: 1rem;
+              flex-wrap: wrap;
               margin-bottom: 1.5rem;
+            }
+            .staff-header > div:first-child {
+              flex: 1 1 260px;
+              min-width: 0;
+            }
+            .staff-header h2 {
+              margin: 0 0 0.5rem;
+              word-break: break-word;
             }
             .staff-header-desc {
               margin-bottom: 0;
@@ -554,6 +564,7 @@ export default function StaffSettingsTab({
             .btn-add-staff {
               padding: 0.6rem 1.2rem;
               font-size: var(--fs-md);
+              flex-shrink: 0;
             }
             .onboarding-banner {
               border: 1px solid #bfdbfe;
@@ -856,10 +867,12 @@ export default function StaffSettingsTab({
               background: white;
               border-radius: var(--radius-md);
               border: 1px solid var(--border);
-              overflow: hidden;
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
             }
             .staff-table {
               width: 100%;
+              min-width: 580px;
               border-collapse: collapse;
               text-align: left;
             }
@@ -977,6 +990,66 @@ export default function StaffSettingsTab({
             .btn-trash-staff {
               padding: 0.4rem;
               color: #ef4444;
+            }
+            @media (max-width: 640px) {
+              .staff-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+              }
+              .btn-add-staff {
+                width: 100%;
+                justify-content: center;
+                min-height: 40px;
+              }
+              .onboarding-banner {
+                flex-direction: column;
+                align-items: stretch;
+              }
+              .btn-onboarding-action {
+                width: 100%;
+                justify-content: center;
+              }
+              .role-policy-head {
+                flex-direction: column;
+                align-items: stretch;
+              }
+              .role-policy-actions {
+                width: 100%;
+                display: flex;
+                gap: 0.5rem;
+              }
+              .role-policy-actions button {
+                flex: 1;
+                justify-content: center;
+              }
+              .role-policy-grid {
+                grid-template-columns: 1fr;
+              }
+              .recovery-head {
+                flex-direction: column;
+                align-items: stretch;
+              }
+              .recovery-head-actions {
+                width: 100%;
+                justify-content: stretch;
+              }
+              .recovery-head-actions button {
+                width: 100%;
+                justify-content: center;
+              }
+              .recovery-step-row {
+                grid-template-columns: 1fr;
+                gap: 0.4rem;
+              }
+              .recovery-actions-bar {
+                flex-direction: column;
+                align-items: stretch;
+              }
+              .recovery-actions-bar button {
+                width: 100%;
+                justify-content: center;
+              }
             }
           `}</style>
         </div>

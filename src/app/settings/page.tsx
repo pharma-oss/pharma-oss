@@ -564,19 +564,19 @@ export default function SettingsPage() {
           margin: 0 auto;
         }
         .page-header {
-          margin-bottom: 2rem;
+          margin-bottom: 1.75rem;
         }
         .page-header h1 {
           font-size: 1.75rem;
           margin-bottom: 0.5rem;
         }
         .initial-setup-panel {
-          border: 1px solid rgba(148, 163, 184, 0.45);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.86);
-          padding: 1rem;
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          background: var(--bg-card);
+          padding: 1.25rem;
           margin-bottom: 1.5rem;
-          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+          box-shadow: var(--shadow-sm);
         }
         .initial-setup-head {
           display: flex;
@@ -584,7 +584,7 @@ export default function SettingsPage() {
           justify-content: space-between;
           align-items: flex-start;
           gap: 1rem;
-          margin-bottom: 0.9rem;
+          margin-bottom: 1rem;
         }
         .initial-setup-head > div:first-child {
           flex: 1 1 240px;
@@ -607,7 +607,7 @@ export default function SettingsPage() {
         .initial-setup-actions button,
         .initial-setup-step button {
           min-height: auto;
-          padding: 0.45rem 0.7rem;
+          padding: 0.45rem 0.75rem;
           font-size: var(--fs-sm);
           white-space: nowrap;
         }
@@ -616,7 +616,7 @@ export default function SettingsPage() {
           align-items: center;
           border: 1px solid rgba(148, 163, 184, 0.35);
           border-radius: 999px;
-          padding: 0.18rem 0.7rem;
+          padding: 0.2rem 0.75rem;
           font-size: var(--fs-sm);
           font-weight: 850;
           white-space: nowrap;
@@ -625,14 +625,15 @@ export default function SettingsPage() {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           border: 1px solid var(--border);
-          border-radius: 8px;
+          border-radius: var(--radius-md);
           overflow: hidden;
-          margin-bottom: 0.8rem;
+          margin-bottom: 0.9rem;
+          background: var(--bg-card);
         }
         .initial-setup-metrics div {
-          padding: 0.7rem 0.8rem;
+          padding: 0.75rem 0.85rem;
           border-right: 1px solid var(--border);
-          background: rgba(248, 250, 252, 0.78);
+          background: var(--bg-subtle);
         }
         .initial-setup-metrics div:last-child {
           border-right: none;
@@ -647,9 +648,9 @@ export default function SettingsPage() {
         .initial-setup-metrics strong {
           display: block;
           color: var(--text-main);
-          font-size: 1.06rem;
+          font-size: 1.1rem;
           font-weight: 850;
-          margin-top: 0.12rem;
+          margin-top: 0.15rem;
         }
         .initial-setup-steps {
           display: grid;
@@ -659,8 +660,8 @@ export default function SettingsPage() {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          gap: 0.7rem;
-          padding: 0.55rem 0;
+          gap: 0.75rem;
+          padding: 0.65rem 0;
           border-top: 1px solid rgba(148, 163, 184, 0.22);
         }
         .initial-setup-step-main {
@@ -741,12 +742,12 @@ export default function SettingsPage() {
           min-height: 44px;
           display: inline-flex;
           align-items: center;
-          gap: 0.4rem;
-          padding: 0.55rem 0.9rem;
-          background: white;
+          gap: 0.45rem;
+          padding: 0.55rem 0.95rem;
+          background: var(--bg-card);
           color: var(--text-main);
           border: 1px solid var(--border);
-          border-radius: 8px;
+          border-radius: var(--radius-md);
           font-weight: 600;
           font-size: var(--fs-md);
           white-space: nowrap;
@@ -754,37 +755,97 @@ export default function SettingsPage() {
           transition: all var(--transition-fast);
           outline: none;
         }
+        .tab-pill:hover:not(:disabled) {
+          border-color: var(--primary);
+          background: var(--bg-hover);
+        }
         .tab-pill.active {
           background: var(--primary);
           color: white;
           border-color: var(--primary);
+          box-shadow: var(--shadow-sm);
         }
         .tab-pill:disabled {
           opacity: 0.55;
           cursor: not-allowed !important;
         }
+        @media (max-width: 768px) {
+          .settings-container {
+            padding: 0 0.5rem;
+          }
+          .section-tabs {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 0.75rem;
+            margin-bottom: 1.25rem;
+            scrollbar-width: thin;
+          }
+          .section-tabs::-webkit-scrollbar {
+            height: 4px;
+          }
+          .section-tabs::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 4px;
+          }
+          .tab-pill {
+            scroll-snap-align: start;
+            padding: 0.5rem 0.8rem;
+            font-size: var(--fs-sm);
+          }
+        }
         @media (max-width: 700px) {
-          .initial-setup-head,
-          .initial-setup-step {
-            grid-template-columns: 1fr;
+          .initial-setup-panel {
+            padding: 1rem 0.85rem;
+          }
+          .initial-setup-head {
             flex-direction: column;
             align-items: stretch;
+            gap: 0.75rem;
           }
           .initial-setup-actions {
-            justify-content: flex-start;
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem;
+            justify-content: stretch;
             min-width: 0;
+          }
+          .initial-setup-status {
+            grid-column: 1 / -1;
+            justify-content: center;
+            text-align: center;
+          }
+          .initial-setup-actions button {
+            width: 100%;
+            justify-content: center;
+            min-height: 40px;
           }
           .initial-setup-metrics {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
+          .initial-setup-metrics div {
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+          }
           .initial-setup-metrics div:nth-child(2n) {
             border-right: none;
           }
-          .initial-setup-metrics div:nth-child(-n + 2) {
-            border-bottom: 1px solid var(--border);
+          .initial-setup-metrics div:nth-child(n + 3) {
+            border-bottom: none;
+          }
+          .initial-setup-step {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.6rem;
+            padding: 0.65rem 0;
           }
           .initial-setup-step button {
-            justify-self: flex-start;
+            width: 100%;
+            justify-content: center;
+            min-height: 40px;
           }
         }
       `}</style>

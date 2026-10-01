@@ -4143,6 +4143,13 @@ input[type="search"]::-webkit-search-cancel-button {
   background: var(--bg-card);
 }
 
+@media (max-width: 640px) {
+  .settings-section {
+    padding: 1.25rem 0.85rem;
+    border-radius: var(--radius-md);
+  }
+}
+
 .section-desc {
   color: var(--text-muted);
   margin-bottom: 1.5rem;
@@ -4256,6 +4263,12 @@ td.text-right {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+@media (max-width: 640px) {
+  .form-control {
+    max-width: 100%;
+  }
+}
+
 .form-control:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
@@ -4265,6 +4278,13 @@ td.text-right {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 1rem;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
 }
 
 .form-grid-wide {

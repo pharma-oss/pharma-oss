@@ -413,6 +413,26 @@ export default function FacilitySettingsTab({
           font-weight: 700;
           color: var(--text-main);
         }
+        @media (max-width: 640px) {
+          .actions {
+            width: 100%;
+          }
+          .btn-tooltip-wrapper,
+          .actions button {
+            width: 100%;
+            justify-content: center;
+            min-height: 44px;
+          }
+          .fee-code-actions {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .fee-code-actions button,
+          .fee-code-actions label {
+            width: 100%;
+            justify-content: center;
+          }
+        }
       `}</style>
     </div>
   );
