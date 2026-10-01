@@ -57,6 +57,12 @@ export interface OperationalAiPredictionInventoryRisk {
   affectedVisitCount: number;
   priority: 'high' | 'medium';
   actionLabel: string;
+  reorderPoint?: number;
+  isBelowReorderPoint?: boolean;
+  expiringSoonAmount?: number;
+  hasExpiringSoonLots?: boolean;
+  substituteCandidatesCount?: number;
+  topSubstituteName?: string;
 }
 
 export interface OperationalAiPredictionFollowUpCandidate {
@@ -154,6 +160,48 @@ function buildInventoryPrediction(risk: OperationalAiPredictionInventoryRisk): O
   const score = clampScore(60 + shortageRatio * 0.4 + risk.affectedVisitCount * 8 + (risk.priority === 'high' ? 20 : 0));
   const confidence = clampScore(70 + risk.affectedVisitCount * 4 + (risk.priority === 'high' ? 8 : 0) + (risk.shortageAmount > 0 ? 4 : 0));
 
+  const evidence: OperationalAiPredictionEvidence[] = [
+    {
+      label: '不足見込み',
+      detail: `必要 ${formatAmount(risk.requiredAmount)} / 在庫 ${formatAmount(risk.availableAmount)} / 不足 ${formatAmount(risk.shortageAmount)}`,
+      source: '在庫予定計算'
+    },
+    {
+      label: '影響受付',
+      detail: `${risk.affectedVisitCount}件`,
+      source: '受付中処方'
+    },
+    {
+      label: '仕入先候補',
+      detail: `${risk.supplierName} / ${risk.location}`,
+      source: '在庫マスター'
+    }
+  ];
+
+  if (typeof risk.reorderPoint === 'number' && risk.reorderPoint > 0) {
+    evidence.push({
+      label: '発注点設定',
+      detail: `安全在庫点: ${formatAmount(risk.reorderPoint)} ${risk.isBelowReorderPoint ? '(現在庫が発注点割れ)' : ''}`.trim(),
+      source: '安全在庫基準'
+    });
+  }
+
+  if (risk.hasExpiringSoonLots && typeof risk.expiringSoonAmount === 'number' && risk.expiringSoonAmount > 0) {
+    evidence.push({
+      label: '使用期限リスク',
+      detail: `期限切迫ロット: ${formatAmount(risk.expiringSoonAmount)}`,
+      source: 'ロット使用期限管理'
+    });
+  }
+
+  if (typeof risk.substituteCandidatesCount === 'number' && risk.substituteCandidatesCount > 0) {
+    evidence.push({
+      label: '代替薬候補',
+      detail: `院内代替候補 ${risk.substituteCandidatesCount}件${risk.topSubstituteName ? ` (例: ${risk.topSubstituteName})` : ''}`,
+      source: '同効薬・後発品マスター'
+    });
+  }
+
   return {
     predictionId: sanitizePredictionId(`operational-inventory-${risk.drugId}`),
     domain: 'inventory_shortage',
@@ -163,23 +211,7 @@ function buildInventoryPrediction(risk: OperationalAiPredictionInventoryRisk): O
     score,
     confidence,
     suggestedAction: risk.actionLabel,
-    evidence: [
-      {
-        label: '不足見込み',
-        detail: `必要 ${formatAmount(risk.requiredAmount)} / 在庫 ${formatAmount(risk.availableAmount)} / 不足 ${formatAmount(risk.shortageAmount)}`,
-        source: '在庫予定計算'
-      },
-      {
-        label: '影響受付',
-        detail: `${risk.affectedVisitCount}件`,
-        source: '受付中処方'
-      },
-      {
-        label: '仕入先候補',
-        detail: `${risk.supplierName} / ${risk.location}`,
-        source: '在庫マスター'
-      }
-    ],
+    evidence,
     requiresHumanReview: true,
     guardrail: AI_SUGGESTION_GUARDRAIL,
     targetId: risk.drugId

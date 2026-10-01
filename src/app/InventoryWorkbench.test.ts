@@ -62,4 +62,51 @@ describe('InventoryWorkbench components and pure order helpers', () => {
     const memo = buildInventoryOrderMemo(candidates);
     assert.ok(memo.includes('ロキソニン錠60mg'));
   });
+
+  it('handles enhanced order risk candidates with reorder points, expiry risk, and substitutes', () => {
+    const enhancedCandidate = {
+      drugId: 'd2',
+      drugName: 'アムロジピン錠5mg「サワイ」',
+      location: 'B-02',
+      supplierName: 'アルフレッサ',
+      requiredAmount: 0,
+      availableAmount: 30,
+      effectiveAvailableAmount: 30,
+      reorderPoint: 50,
+      leadTimeDays: 1,
+      shortageAmount: 0,
+      reorderPointShortage: 20,
+      recommendedOrderAmount: 20,
+      affectedVisitCount: 0,
+      priority: 'medium' as const,
+      riskReason: 'below_reorder_point' as const,
+      actionLabel: '発注点割れ(残30/点50)・計画発注',
+      expiryRisk: {
+        nearestExpirationDate: '2027-03-31',
+        expiredQuantity: 0,
+        urgentExpiringQuantity: 0,
+        attentionExpiringQuantity: 30,
+        hasExpired: false,
+        hasUrgentExpiring: false,
+        hasAttentionExpiring: true,
+        daysToNearestExpiry: 180
+      },
+      substitutes: [
+        {
+          drugCode: 'd3',
+          drugName: 'アムロジピンOD錠5mg「日医工」',
+          yjCode: '2149005F2047',
+          isGeneric: true,
+          availableAmount: 100,
+          isSameGenericName: true
+        }
+      ]
+    };
+
+    assert.equal(enhancedCandidate.riskReason, 'below_reorder_point');
+    assert.equal(enhancedCandidate.substitutes.length, 1);
+    assert.equal(enhancedCandidate.substitutes[0].availableAmount, 100);
+    assert.equal(enhancedCandidate.expiryRisk.hasAttentionExpiring, true);
+  });
 });
+

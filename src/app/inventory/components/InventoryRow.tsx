@@ -89,6 +89,9 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
                 {availableStock}
             </td>
             <td className="text-right">{pendingStock > 0 ? pendingStock : '-'}</td>
+            <td className="text-right">
+                <ReorderPointEditor drug={drug} db={db} />
+            </td>
             <td>
                 <LocationEditor
                     drug={drug}
@@ -199,3 +202,65 @@ const LocationEditor = React.memo(function LocationEditor({ drug, db, locations 
         </div>
     );
 });
+
+const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: { drug: DrugWithSearchCache, db: any }) {
+    const initialValue = typeof drug.doc?.reorderPoint === 'number' ? String(drug.doc.reorderPoint) : '';
+    const [value, setValue] = useState(initialValue);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        const val = typeof drug.doc?.reorderPoint === 'number' ? String(drug.doc.reorderPoint) : '';
+        setValue(val);
+    }, [drug.doc?.reorderPoint]);
+
+    const handleBlur = async () => {
+        const trimmed = value.trim();
+        const numeric = trimmed ? Number(trimmed) : undefined;
+        if (numeric !== undefined && (!Number.isFinite(numeric) || numeric < 0)) {
+            setValue(initialValue);
+            return;
+        }
+
+        if (numeric === drug.doc?.reorderPoint) return;
+        if (!drug.doc || !db) return;
+
+        setIsSaving(true);
+        try {
+            await drug.doc.patch({ reorderPoint: numeric });
+            await logAuditAction(
+                db,
+                'stock_update',
+                `発注点更新: ${drug.name} の発注点を ${numeric !== undefined ? numeric : '未設定'} に設定しました。`
+            );
+        } catch (error) {
+            console.error('Failed to update reorderPoint:', error);
+            setValue(initialValue);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            (e.target as HTMLInputElement).blur();
+        }
+    };
+
+    return (
+        <input
+            type="number"
+            min="0"
+            step="1"
+            className="reorder-point-input"
+            value={value}
+            placeholder="-"
+            onChange={e => setValue(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            disabled={isSaving}
+            aria-label={`${drug.name}の発注点`}
+            title="発注点（安全在庫数）"
+        />
+    );
+});
+

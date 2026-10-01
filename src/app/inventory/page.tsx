@@ -38,6 +38,12 @@ import {
   type InventoryOrderRisk
 } from '@/lib/inventory_order';
 import {
+  buildEnhancedInventoryOrderRisk,
+  buildEnhancedInventoryOrderCsv,
+  buildEnhancedInventoryOrderMemo,
+  type EnhancedInventoryOrderRisk
+} from '@/lib/inventory_reorder_support';
+import {
   type DrugWithSearchCache,
   type TransferPrefill,
   type ReceivingDraft,
@@ -351,47 +357,42 @@ export default function InventoryPage() {
       return map;
   }, [stockLots]);
 
-  const orderCandidates = useMemo<InventoryOrderRisk[]>(() => {
-      const candidates: InventoryOrderRisk[] = [];
+  const orderCandidates = useMemo<EnhancedInventoryOrderRisk[]>(() => {
+      const candidates: EnhancedInventoryOrderRisk[] = [];
       for (let i = 0; i < drugs.length; i++) {
           const drug = drugs[i];
           const requiredAmount = pendingStockMap.get(drug.code) || 0;
-          if (requiredAmount <= 0) continue;
-
+          const affectedVisitCount = pendingVisitCountMap.get(drug.code) || 0;
           const lots = stockLotsByDrugCode.get(drug.code) || [];
-          const availableAmount = lots.length > 0 ? getTotalStock(lots) : drug.stockQuantity || 0;
-          if (requiredAmount <= availableAmount) continue;
 
-          const shortageAmount = requiredAmount - availableAmount;
-          const affectedVisitCount = pendingVisitCountMap.get(drug.code) || 1;
-          const isHighRiskMedication = !!(
-              drug.isHighRisk ||
-              drug.isNarcotic ||
-              drug.isPsychotropic ||
-              drug.isPoisonous
-          );
-          const priority = getInventoryOrderPriority({
-              availableAmount,
-              isHighRiskMedication,
-              affectedVisitCount
-          });
-
-          candidates.push({
-              drugId: drug.code,
-              drugName: drug.name,
-              location: drug.location || '棚位置未設定',
-              supplierName: choosePrimarySupplier(lots),
+          const risk = buildEnhancedInventoryOrderRisk({
+              drug: {
+                  code: drug.code,
+                  name: drug.name,
+                  yjCode: drug.yjCode,
+                  genericName: drug.genericName,
+                  price: drug.price,
+                  isGeneric: drug.isGeneric,
+                  location: drug.location,
+                  stockQuantity: drug.stockQuantity,
+                  reorderPoint: drug.doc?.reorderPoint ?? drug.reorderPoint,
+                  leadTimeDays: drug.doc?.leadTimeDays ?? drug.leadTimeDays,
+                  targetStock: drug.doc?.targetStock ?? drug.targetStock,
+                  isHighRisk: drug.isHighRisk,
+                  isNarcotic: drug.isNarcotic,
+                  isPsychotropic: drug.isPsychotropic,
+                  isPoisonous: drug.isPoisonous
+              },
+              lots,
               requiredAmount,
-              availableAmount,
-              shortageAmount,
-              recommendedOrderAmount: shortageAmount,
               affectedVisitCount,
-              priority,
-              actionLabel: getInventoryOrderActionLabel({
-                  availableAmount,
-                  isHighRiskMedication
-              })
+              allDrugs: drugs,
+              stockLotsByDrugCode
           });
+
+          if (risk) {
+              candidates.push(risk);
+          }
       }
 
       candidates.sort((a, b) => {
@@ -399,7 +400,7 @@ export default function InventoryPage() {
           if (orderedDrugIds.has(a.drugId) !== orderedDrugIds.has(b.drugId)) {
               return orderedDrugIds.has(a.drugId) ? 1 : -1;
           }
-          return b.shortageAmount - a.shortageAmount;
+          return b.recommendedOrderAmount - a.recommendedOrderAmount;
       });
       return candidates;
   }, [drugs, orderedDrugIds, pendingStockMap, pendingVisitCountMap, stockLotsByDrugCode]);
@@ -418,7 +419,7 @@ export default function InventoryPage() {
           return;
       }
 
-      const csv = buildInventoryOrderCsv(openOrderCandidates);
+      const csv = buildEnhancedInventoryOrderCsv(openOrderCandidates);
       const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -437,7 +438,7 @@ export default function InventoryPage() {
       }
 
       try {
-          await navigator.clipboard.writeText(buildInventoryOrderMemo(openOrderCandidates));
+          await navigator.clipboard.writeText(buildEnhancedInventoryOrderMemo(openOrderCandidates));
           alert('未対応の発注・融通メモをコピーしました。');
       } catch (error) {
           console.error('Failed to copy order memo:', error);
@@ -806,6 +807,7 @@ export default function InventoryPage() {
                                     <th>現在庫 (実在庫)</th>
                                     <th>利用可能在庫</th>
                                     <th>引き渡し予定</th>
+                                    <th>発注点</th>
                                     <th>棚番地 (MAP)</th>
                                     <th>YJコード</th>
                                 </tr>

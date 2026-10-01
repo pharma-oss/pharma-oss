@@ -71,6 +71,12 @@ export interface Drug {
   unitText?: string;
   /** 単位コード（厚労省3桁コード。例: '001'） */
   unitCode?: string;
+  /** 発注点（安全在庫水準）。これ以下の在庫量で見舞われた場合に発注を推奨 */
+  reorderPoint?: number;
+  /** 発注リードタイム（日数目安）。納品までにかかる日数 */
+  leadTimeDays?: number;
+  /** 目標適正在庫量。発注時に目指す在庫数量 */
+  targetStock?: number;
 }
 
 export interface PublicInsurance {

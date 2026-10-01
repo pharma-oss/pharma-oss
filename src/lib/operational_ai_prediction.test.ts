@@ -120,3 +120,49 @@ test('summarizes an empty operational AI prediction list', () => {
     averageConfidence: 0
   });
 });
+
+test('builds inventory prediction with reorder point, expiry, and substitute evidences', () => {
+  const predictions = buildOperationalAiPredictions({
+    inventoryRisks: [
+      {
+        drugId: 'drug-test-1',
+        drugName: 'アムロジピン錠5mg「サワイ」',
+        location: 'A-01',
+        supplierName: 'スズケン',
+        requiredAmount: 20,
+        availableAmount: 30,
+        shortageAmount: 0,
+        affectedVisitCount: 1,
+        priority: 'medium',
+        actionLabel: '発注点割れ・計画発注',
+        reorderPoint: 50,
+        isBelowReorderPoint: true,
+        expiringSoonAmount: 15,
+        hasExpiringSoonLots: true,
+        substituteCandidatesCount: 2,
+        topSubstituteName: 'アムロジピンOD錠5mg「日医工」'
+      }
+    ]
+  });
+
+  assert.equal(predictions.length, 1);
+  const prediction = predictions[0];
+  assert.equal(prediction.domain, 'inventory_shortage');
+
+  const evidenceLabels = prediction.evidence.map((e) => e.label);
+  assert.ok(evidenceLabels.includes('発注点設定'));
+  assert.ok(evidenceLabels.includes('使用期限リスク'));
+  assert.ok(evidenceLabels.includes('代替薬候補'));
+
+  const reorderEvidence = prediction.evidence.find((e) => e.label === '発注点設定');
+  assert.match(reorderEvidence?.detail || '', /安全在庫点: 50/);
+  assert.match(reorderEvidence?.detail || '', /発注点割れ/);
+
+  const expiryEvidence = prediction.evidence.find((e) => e.label === '使用期限リスク');
+  assert.match(expiryEvidence?.detail || '', /期限切迫ロット: 15/);
+
+  const substituteEvidence = prediction.evidence.find((e) => e.label === '代替薬候補');
+  assert.match(substituteEvidence?.detail || '', /院内代替候補 2件/);
+  assert.match(substituteEvidence?.detail || '', /アムロジピンOD錠5mg「日医工」/);
+});
+

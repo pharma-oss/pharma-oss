@@ -514,7 +514,9 @@ const create = async () => {
                 // 既存の版はすべて日付を持っているのでそのまま持ち上げる。
                 7: keepDocument,
                 // v8 -> v9: unitText / unitCode (調剤単位・単位コード) を追加。任意項目なのでそのまま持ち上げる。
-                8: keepDocument
+                8: keepDocument,
+                // v9 -> v10: reorderPoint / leadTimeDays / targetStock (発注点・リードタイム・目標在庫) を追加。任意項目なのでそのまま持ち上げる。
+                9: keepDocument
             })
         },
         drug_stocks: {

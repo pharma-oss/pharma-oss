@@ -961,7 +961,24 @@ describe('Schema Validation', () => {
       };
 
       assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithHistory), null);
-      assert.strictEqual(DRUG_SCHEMA.version, 9);
+      assert.strictEqual(DRUG_SCHEMA.version, 10);
+    });
+
+    test('should validate a drug carrying reorderPoint, leadTimeDays, and targetStock (drug schema v10)', () => {
+      const drugWithReorder = {
+        code: '620000004',
+        name: 'アムロジピン錠5mg',
+        isGeneric: true,
+        price: 15.0,
+        reorderPoint: 50,
+        leadTimeDays: 1,
+        targetStock: 100
+      };
+
+      assert.strictEqual(getErrors(DRUG_SCHEMA, drugWithReorder), null);
+      assert.strictEqual(DRUG_SCHEMA.properties.reorderPoint?.type, 'number');
+      assert.strictEqual(DRUG_SCHEMA.properties.leadTimeDays?.type, 'number');
+      assert.strictEqual(DRUG_SCHEMA.properties.targetStock?.type, 'number');
     });
 
     test('should validate a drug carrying unitText and unitCode (drug schema v9)', () => {

@@ -971,7 +971,7 @@ export const INTERVENTION_SCHEMA: RxJsonSchema<Intervention> = {
 
 export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
   title: 'drug schema',
-  version: 9,
+  version: 10,
   description: 'Drug master data',
   primaryKey: 'code',
   type: 'object',
@@ -1004,7 +1004,10 @@ export const DRUG_SCHEMA: RxJsonSchema<Drug> = {
     isHighRisk: { type: 'boolean' },
     documentUrl: { type: 'string', maxLength: 1000 },
     unitText: { type: 'string', maxLength: 50 },
-    unitCode: { type: 'string', maxLength: 10 }
+    unitCode: { type: 'string', maxLength: 10 },
+    reorderPoint: { type: 'number', minimum: 0 },
+    leadTimeDays: { type: 'number', minimum: 0 },
+    targetStock: { type: 'number', minimum: 0 }
   },
   required: ['code', 'name', 'isGeneric']
 };
