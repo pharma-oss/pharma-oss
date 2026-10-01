@@ -386,7 +386,10 @@ const create = async () => {
                 20: keepDocument,
                 // v21 -> v22: claimOptions に一部負担金額 (HO第9・KO第7/第9) を追加。
                 // 任意項目で、記録が無い受付はこれまでどおり項目ごと出力しない。
-                21: keepDocument
+                21: keepDocument,
+                // v22 -> v23: interventionEvents (疑義照会・処方変更構造化イベント配列) を追加。
+                // 任意項目で、記録が無い受付は空のまま保持される。
+                22: keepDocument
             })
         },
 

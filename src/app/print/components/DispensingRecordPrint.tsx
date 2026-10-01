@@ -9,6 +9,11 @@ import {
   getAmountText,
   getRecordNotes
 } from '../helpers';
+import {
+  normalizeVisitInterventionEvents,
+  formatDispensingRecordInterventions,
+  type VisitInterventionEvent
+} from '@/lib/prescription_intervention_support';
 
 export interface DispensingRecordPrintProps {
   patientData: any;
@@ -33,6 +38,7 @@ export interface DispensingRecordPrintProps {
   electronicPrescriptionNarcoticAdministration?: any;
   renderIdentityMark: (variant?: 'paper' | 'compact' | 'tiny') => React.ReactNode;
   isFirstItemInRp: (item: any, index: number) => boolean;
+  interventions?: any[];
 }
 
 export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
@@ -57,8 +63,11 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
   electronicPrescriptionLaboratoryResults,
   electronicPrescriptionNarcoticAdministration,
   renderIdentityMark,
-  isFirstItemInRp
+  isFirstItemInRp,
+  interventions
 }: DispensingRecordPrintProps) {
+  const interventionEvents: VisitInterventionEvent[] = normalizeVisitInterventionEvents(visitData, interventions);
+  const formattedInterventions = formatDispensingRecordInterventions(interventionEvents);
   return (
     <section className="print-preview-card card paper-preview-card dispensing-record-card">
       <div className="preview-header no-print">
@@ -177,6 +186,40 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
               )}
             </div>
           )}
+
+          <div className="record-guidance-box record-intervention-box" data-testid="record-intervention-box">
+            <div className="record-guidance-label">疑義照会・処方変更の記録（薬剤師法第24条・第25条）</div>
+            {formattedInterventions.length > 0 ? (
+              <table className="record-intervention-table">
+                <thead>
+                  <tr>
+                    <th className="col-int-date">照会日時</th>
+                    <th className="col-int-doctor">照会先（処方医）</th>
+                    <th className="col-int-cat">区分</th>
+                    <th>疑義照会の内容</th>
+                    <th>医師の回答・変更内容</th>
+                    <th className="col-int-consent">同意</th>
+                    <th className="col-int-staff">担当者</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formattedInterventions.map((row) => (
+                    <tr key={row.eventId}>
+                      <td className="text-sm">{row.contactedAtStr}</td>
+                      <td>{row.targetDoctor}</td>
+                      <td><span className="intervention-cat-badge">{row.categoryLabel}</span></td>
+                      <td>{row.inquiryContent}</td>
+                      <td>{row.resultContent}</td>
+                      <td className="text-center">{row.consentText}</td>
+                      <td className="text-center">{row.pharmacist}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="no-intervention-note">疑義照会・処方変更なし</p>
+            )}
+          </div>
 
           <div className="record-guidance-box">
             <div className="record-guidance-label">情報提供・指導の要点</div>
@@ -383,6 +426,51 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
 
         .electronic-prescription-supplementary-print p {
           margin: 1mm 0;
+        }
+
+        .record-intervention-box {
+          min-height: 22mm;
+          margin-top: 4mm;
+        }
+
+        .record-intervention-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.76rem;
+          table-layout: fixed;
+          margin-top: 2mm;
+        }
+
+        .record-intervention-table th,
+        .record-intervention-table td {
+          border: 1px solid #333;
+          padding: 1.5mm;
+          vertical-align: top;
+        }
+
+        .record-intervention-table th {
+          background: #f7f7f7;
+          font-weight: bold;
+          text-align: left;
+        }
+
+        .record-intervention-table .col-int-date { width: 85px; }
+        .record-intervention-table .col-int-doctor { width: 110px; }
+        .record-intervention-table .col-int-cat { width: 100px; }
+        .record-intervention-table .col-int-consent { width: 45px; text-align: center; }
+        .record-intervention-table .col-int-staff { width: 65px; text-align: center; }
+
+        .intervention-cat-badge {
+          display: inline-block;
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: #111;
+        }
+
+        .no-intervention-note {
+          font-size: 0.78rem;
+          color: #555;
+          margin: 1mm 0 0 1mm;
         }
 
         .dispensing-record-doc .doc-footer {

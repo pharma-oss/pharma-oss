@@ -211,6 +211,7 @@ export default function PrintPage() {
     approvedMedicationInfoTemplates,
     remarks,
     claimOptions,
+    interventions,
     setVisitData,
     setPrescriptionItems,
     setRemarks,
@@ -1989,6 +1990,7 @@ export default function PrintPage() {
           electronicPrescriptionNarcoticAdministration={electronicPrescriptionNarcoticAdministration}
           renderIdentityMark={renderIdentityMark}
           isFirstItemInRp={isFirstItemInRp}
+          interventions={interventions}
         />
 
         {/* 2. 調剤明細書 (receipt-statement) */}
@@ -2116,6 +2118,7 @@ export default function PrintPage() {
           settingsData={settingsData}
           prescriptionItems={itemsForUke}
           calculatedFees={calculatedFees}
+          interventions={interventions}
           onExportSuccess={handleOfficialUkeExportSuccess}
         />
       )}

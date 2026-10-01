@@ -25,6 +25,10 @@ import {
 } from '@/lib/receipt/dispensing_uke_code_tables';
 import { validateCopaymentSupportReadiness } from '@/lib/patient_copayment_support';
 import {
+  normalizeVisitInterventionEvents,
+  validateInterventionReadiness
+} from '@/lib/prescription_intervention_support';
+import {
   buildOfficialCopaymentRecords,
   buildOfficialDailyFields,
   buildOfficialDispensingDateRecords,
@@ -159,7 +163,9 @@ export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_copayment_invalid_reduction_code'
   | 'official_uke_copayment_reduction_amount_missing'
   | 'official_uke_copayment_reduction_ratio_invalid'
-  | 'official_uke_copayment_reduction_cert_number_invalid';
+  | 'official_uke_copayment_reduction_cert_number_invalid'
+  | 'official_uke_intervention_inquiry_pending'
+  | 'official_uke_intervention_reason_missing';
 
 export interface MonthlyClaimUkeOfficialReadinessIssue {
   severity: MonthlyClaimUkeBatchCheckSeverity;
@@ -1617,6 +1623,21 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
         visitId,
         patientName
       });
+    }
+
+    const normInterventions = normalizeVisitInterventionEvents(claim.visit, claim.interventions);
+    const intIssues = validateInterventionReadiness(normInterventions);
+    for (const iIssue of intIssues) {
+      if (iIssue.code === 'intervention_inquiry_pending' || iIssue.code === 'intervention_reason_missing') {
+        addOfficialReadinessIssue(issues, {
+          severity: iIssue.severity,
+          code: `official_uke_${iIssue.code}` as MonthlyClaimUkeOfficialReadinessIssueCode,
+          title: iIssue.title,
+          message: `${patientName} の${iIssue.title}: ${iIssue.message}`,
+          visitId,
+          patientName
+        });
+      }
     }
   }
 

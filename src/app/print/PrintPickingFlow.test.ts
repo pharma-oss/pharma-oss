@@ -338,3 +338,11 @@ test('print helper pure functions execute deterministically', async () => {
   assert.ok(formatPrescriptionAuditIssues([{ title: 't', message: 'm' } as any]).includes('・t: m'));
 });
 
+test('dispensing record renders statutory intervention records block and connects with page data', () => {
+  const dispensingRecordSource = readFileSync(new URL('./components/DispensingRecordPrint.tsx', import.meta.url), 'utf8');
+  assert.match(dispensingRecordSource, /data-testid="record-intervention-box"/);
+  assert.match(dispensingRecordSource, /疑義照会・処方変更の記録（薬剤師法第24条・第25条）/);
+  assert.match(dispensingRecordSource, /record-intervention-table/);
+  assert.match(printSource, /<DispensingRecordPrint[\s\S]*interventions=\{interventions\}/);
+});
+

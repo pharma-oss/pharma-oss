@@ -16,6 +16,7 @@ export interface UsePrintVisitDataReturn {
   approvedMedicationInfoTemplates: Record<string, PatientMedicationInfoTemplate>;
   remarks: Record<string, string>;
   claimOptions: FeeCalculationOptions;
+  interventions: any[];
   setVisitData: React.Dispatch<React.SetStateAction<any>>;
   setPrescriptionItems: React.Dispatch<React.SetStateAction<PrintPrescriptionItem[]>>;
   setRemarks: React.Dispatch<React.SetStateAction<Record<string, string>>>;
@@ -33,6 +34,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
   const [approvedMedicationInfoTemplates, setApprovedMedicationInfoTemplates] = useState<Record<string, PatientMedicationInfoTemplate>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [claimOptions, setClaimOptions] = useState<FeeCalculationOptions>({ drugFeeOnly: false, disabledFeeCodes: [] });
+  const [interventions, setInterventions] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
     if (!db || !visitId) return;
@@ -76,17 +78,23 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
           }).exec()
         : Promise.resolve([]);
 
-      const [patient, drugsMap, settingsDoc, alerts, medicationInfoTemplateDocs] = await Promise.all([
+      const interventionsPromise = db.interventions
+        ? db.interventions.find({ selector: { visitId } }).exec()
+        : Promise.resolve([]);
+
+      const [patient, drugsMap, settingsDoc, alerts, medicationInfoTemplateDocs, interventionDocs] = await Promise.all([
         patientPromise,
         drugsPromise,
         settingsPromise,
         alertsPromise,
-        medicationInfoTemplatesPromise
+        medicationInfoTemplatesPromise,
+        interventionsPromise
       ]);
 
       if (patient) setPatientData(patient.toJSON());
       setPatientAlerts(alerts.map((alert: any) => alert.toJSON()).filter((alert: any) => alert.status !== 'resolved'));
       if (settingsDoc) setSettingsData(settingsDoc.toJSON());
+      setInterventions(interventionDocs.map((doc: any) => doc.toJSON()));
 
       const templateCandidatesByDrugCode: Record<string, PatientMedicationInfoTemplate[]> = {};
       for (const templateDoc of medicationInfoTemplateDocs) {
@@ -157,6 +165,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
     approvedMedicationInfoTemplates,
     remarks,
     claimOptions,
+    interventions,
     setVisitData,
     setPrescriptionItems,
     setRemarks,

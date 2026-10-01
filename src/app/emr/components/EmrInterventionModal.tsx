@@ -1,9 +1,16 @@
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
+import {
+  INTERVENTION_CATEGORY_LABELS,
+  suggestInterventionCategory,
+  type InterventionCategory
+} from '@/lib/prescription_intervention_support';
 
 export interface EmrInterventionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  intCategory?: InterventionCategory;
+  setIntCategory?: (val: InterventionCategory) => void;
   intDoctor: string;
   setIntDoctor: (val: string) => void;
   intReason: string;
@@ -25,6 +32,7 @@ export interface EmrInterventionModalProps {
   intConsented: boolean;
   setIntConsented: (val: boolean) => void;
   onSave: (input: {
+    category?: InterventionCategory;
     reason: string;
     beforeSnapshot: string;
     afterSnapshot: string;
@@ -42,6 +50,8 @@ export interface EmrInterventionModalProps {
 export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
   isOpen,
   onClose,
+  intCategory = 'other',
+  setIntCategory,
   intDoctor,
   setIntDoctor,
   intReason,
@@ -104,22 +114,44 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               </select>
             </div>
           </div>
-          <div className="form-group">
-            <label>照会先医師名</label>
-            <input
-              type="text"
-              placeholder="例: 山田"
-              value={intDoctor}
-              onChange={(e) => setIntDoctor(e.target.value)}
-              className="intervention-input"
-            />
+          <div className="form-row intervention-row">
+            <div className="form-group flex-1">
+              <label>照会区分</label>
+              <select
+                value={intCategory}
+                onChange={(e) => setIntCategory?.(e.target.value as InterventionCategory)}
+                className="intervention-select"
+                data-testid="intervention-category-select"
+              >
+                {Object.entries(INTERVENTION_CATEGORY_LABELS).map(([catKey, label]) => (
+                  <option key={catKey} value={catKey}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group flex-1">
+              <label>照会先医師名</label>
+              <input
+                type="text"
+                placeholder="例: 山田"
+                value={intDoctor}
+                onChange={(e) => setIntDoctor(e.target.value)}
+                className="intervention-input"
+              />
+            </div>
           </div>
           <div className="form-group">
             <label>疑義照会・変更の理由</label>
             <textarea
               placeholder="例: 重複投薬防止のため / 後発品への変更"
               value={intReason}
-              onChange={(e) => setIntReason(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setIntReason(val);
+                if (intCategory === 'other' && setIntCategory) {
+                  const suggested = suggestInterventionCategory(val, intBefore, intAfter);
+                  if (suggested !== 'other') setIntCategory(suggested);
+                }
+              }}
               className="intervention-textarea"
             />
           </div>
@@ -195,6 +227,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 return;
               }
               await onSave({
+                category: intCategory,
                 reason: intReason,
                 beforeSnapshot: intBefore,
                 afterSnapshot: intAfter,

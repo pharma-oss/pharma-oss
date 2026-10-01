@@ -291,6 +291,31 @@ export interface Patient {
   publicInsurances?: PublicInsurance[];
 }
 
+export type InterventionCategory =
+  | 'generic_change'
+  | 'leftover_adjustment'
+  | 'dosage_change'
+  | 'interaction_inquiry'
+  | 'discontinuation'
+  | 'other';
+
+export interface VisitInterventionEvent {
+  eventId: string;
+  category: InterventionCategory;
+  reason: string;
+  beforeDrugName?: string;
+  afterDrugName?: string;
+  inquiryStatus: 'pending' | 'completed' | 'cancelled';
+  inquiryMethod: 'phone' | 'fax' | 'in_person' | 'other';
+  inquiryDoctor?: string;
+  inquiryResult?: string;
+  patientConsented: boolean;
+  contactedAt: string;
+  respondedAt?: string;
+  handledBy: string;
+  note?: string;
+}
+
 export interface Visit {
   visitId: string;
   patientId: string;
@@ -308,6 +333,7 @@ export interface Visit {
   pharmacyDeviceHandoff?: VisitPharmacyDeviceHandoff;
   initialQuestionnaire?: VisitInitialQuestionnaire;
   careCommunication?: VisitCareCommunication;
+  interventionEvents?: VisitInterventionEvent[];
   claimOptions?: {
     drugFeeOnly?: boolean;
     disabledFeeCodes?: string[];

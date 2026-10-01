@@ -61,6 +61,10 @@ import {
   tracingStatusLabel,
   type ReversiblePatch
 } from '@/lib/emr_helpers';
+import {
+  INTERVENTION_CATEGORY_LABELS,
+  suggestInterventionCategory
+} from '@/lib/prescription_intervention_support';
 import DrugHistoryModal from './components/DrugHistoryModal';
 import PatientBanner from './components/PatientBanner';
 import SoapEditor from './components/SoapEditor';
@@ -357,6 +361,8 @@ export default function EmrPage() {
     setInterventions,
     isInterventionModalOpen,
     setIsInterventionModalOpen,
+    intCategory,
+    setIntCategory,
     intDoctor,
     setIntDoctor,
     intReason,
@@ -1762,9 +1768,14 @@ useEffect(() => {
                 interventions.map((inv) => (
                   <div key={inv.interventionId} className="glass intervention-item-card">
                     <div className="intervention-item-header">
-                      <span className="intervention-doctor">
-                        {inv.inquiryDoctor || '未指定'}医師
-                      </span>
+                      <div className="intervention-header-left">
+                        <span className="intervention-doctor">
+                          {inv.inquiryDoctor || '未指定'}医師
+                        </span>
+                        <span className="intervention-category-chip">
+                          {INTERVENTION_CATEGORY_LABELS[inv.category as keyof typeof INTERVENTION_CATEGORY_LABELS] || INTERVENTION_CATEGORY_LABELS[suggestInterventionCategory(inv.reason || '', inv.beforeSnapshot, inv.afterSnapshot)]}
+                        </span>
+                      </div>
                       <span className={`status-chip compact ${inv.inquiryStatus === 'pending' ? 'warning' : 'confirmed'}`}>
                         {inquiryStatusLabel[inv.inquiryStatus as keyof typeof inquiryStatusLabel] || '記録'}
                       </span>
@@ -1900,6 +1911,8 @@ useEffect(() => {
       <EmrInterventionModal
         isOpen={isInterventionModalOpen}
         onClose={() => setIsInterventionModalOpen(false)}
+        intCategory={intCategory}
+        setIntCategory={setIntCategory}
         intStatus={intStatus}
         setIntStatus={setIntStatus}
         intMethod={intMethod}
@@ -2348,6 +2361,22 @@ useEffect(() => {
         .intervention-doctor {
           font-weight: 700;
           color: var(--primary);
+        }
+        .intervention-header-left {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          flex-wrap: wrap;
+        }
+        .intervention-category-chip {
+          display: inline-block;
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          padding: 1px 6px;
+          border-radius: var(--radius-sm);
+          background: rgba(37, 99, 235, 0.1);
+          color: var(--primary);
+          border: 1px solid rgba(37, 99, 235, 0.2);
         }
         .intervention-reason-row {
           margin-bottom: var(--space-0-5);

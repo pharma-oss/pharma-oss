@@ -4,6 +4,12 @@ import { toast } from 'sonner';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isClaimEditBlocked, getClaimEditBlockedMessage } from '@/lib/claim_edit_guard';
 import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
+import {
+  INTERVENTION_CATEGORY_LABELS,
+  suggestInterventionCategory,
+  type InterventionCategory,
+  type VisitInterventionEvent
+} from '@/lib/prescription_intervention_support';
 
 export interface UseEmrInterventionParams {
   db: any;
@@ -13,6 +19,7 @@ export interface UseEmrInterventionParams {
 export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionParams) {
   const [interventions, setInterventions] = useState<any[]>([]);
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
+  const [intCategory, setIntCategory] = useState<InterventionCategory>('other');
   const [intDoctor, setIntDoctor] = useState('');
   const [intReason, setIntReason] = useState('');
   const [intBefore, setIntBefore] = useState('');
@@ -25,6 +32,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
   const [intConsented, setIntConsented] = useState(true);
 
   const resetInterventionForm = useCallback(() => {
+    setIntCategory('other');
     setIntDoctor('');
     setIntReason('');
     setIntBefore('');
@@ -38,6 +46,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
   }, []);
 
   const handleAddIntervention = useCallback(async (input: {
+    category?: InterventionCategory;
     reason: string;
     beforeSnapshot: string;
     afterSnapshot: string;
@@ -58,8 +67,11 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         return;
       }
 
+      const category = input.category || suggestInterventionCategory(input.reason, input.beforeSnapshot, input.afterSnapshot);
       const newId = `int_${uuidv4()}`;
       const now = new Date().toISOString();
+      const currentUser = getCurrentUser();
+
       const newRecord = {
         interventionId: newId,
         visitId: visit.visitId,
@@ -73,7 +85,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         responseDueDate: input.responseDueDate || undefined,
         contactedAt: now,
         respondedAt: input.inquiryStatus === 'completed' ? now : undefined,
-        handledBy: getCurrentUser().name,
+        handledBy: currentUser.name,
         note: input.note,
         patientConsented: input.patientConsented,
         createdAt: now,
@@ -82,13 +94,37 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
 
       const insertedDoc = await db.interventions.insert(newRecord);
 
+      // visit.interventionEvents への同期保存（コレクションを増やさず visit の入れ子プロパティとして構造化）
+      const event: VisitInterventionEvent = {
+        eventId: newId,
+        category,
+        reason: input.reason,
+        beforeDrugName: input.beforeSnapshot || undefined,
+        afterDrugName: input.afterSnapshot || undefined,
+        inquiryStatus: input.inquiryStatus,
+        inquiryMethod: input.inquiryMethod,
+        inquiryDoctor: input.inquiryDoctor || undefined,
+        inquiryResult: input.inquiryResult || undefined,
+        patientConsented: input.patientConsented,
+        contactedAt: now,
+        respondedAt: input.inquiryStatus === 'completed' ? now : undefined,
+        handledBy: currentUser.name,
+        note: input.note || undefined
+      };
+
+      if (typeof visit.patch === 'function') {
+        const existingEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : [];
+        await visit.patch({ interventionEvents: [...existingEvents, event] });
+      }
+
       // 監査ログの記録
       const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
       const patientName = patients[0]?.name || '不明';
+      const categoryLabel = INTERVENTION_CATEGORY_LABELS[category] || category;
       const auditOk = await logAuditAction(
         db,
         'prescription_edit',
-        `疑義照会登録: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`,
+        `疑義照会登録 [${categoryLabel}]: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`,
         visit.patientId,
         patientName
       );
@@ -119,6 +155,14 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
       const doc = await db.interventions.findOne({ selector: { interventionId } }).exec();
       if (doc) {
         await doc.remove();
+
+        // visit.interventionEvents からも削除
+        if (typeof visit.patch === 'function' && Array.isArray(visit.interventionEvents)) {
+          await visit.patch({
+            interventionEvents: visit.interventionEvents.filter((ev: any) => ev.eventId !== interventionId)
+          });
+        }
+
         const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
         const patientName = patients[0]?.name || '不明';
         await logAuditAction(
@@ -142,6 +186,8 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
     setInterventions,
     isInterventionModalOpen,
     setIsInterventionModalOpen,
+    intCategory,
+    setIntCategory,
     intDoctor,
     setIntDoctor,
     intReason,

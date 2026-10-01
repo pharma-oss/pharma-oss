@@ -166,7 +166,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 22,
+  version: 23,
   primaryKey: 'visitId',
   type: 'object',
   properties: {
@@ -670,11 +670,39 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
         completedNote: { type: 'string', maxLength: 2000 },
         updatedAt: { type: 'string', format: 'date-time', maxLength: 50 }
       }
+    },
+    interventionEvents: {
+      type: 'array',
+      maxItems: 50,
+      items: {
+        type: 'object',
+        properties: {
+          eventId: { type: 'string', maxLength: 100 },
+          category: {
+            type: 'string',
+            enum: ['generic_change', 'leftover_adjustment', 'dosage_change', 'interaction_inquiry', 'discontinuation', 'other'],
+            maxLength: 50
+          },
+          reason: { type: 'string', maxLength: 2000 },
+          beforeDrugName: { type: 'string', maxLength: 200 },
+          afterDrugName: { type: 'string', maxLength: 200 },
+          inquiryStatus: { type: 'string', enum: ['pending', 'completed', 'cancelled'], maxLength: 50 },
+          inquiryMethod: { type: 'string', enum: ['phone', 'fax', 'in_person', 'other'], maxLength: 50 },
+          inquiryDoctor: { type: 'string', maxLength: 100 },
+          inquiryResult: { type: 'string', maxLength: 2000 },
+          patientConsented: { type: 'boolean' },
+          contactedAt: { type: 'string', format: 'date-time', maxLength: 50 },
+          respondedAt: { type: 'string', format: 'date-time', maxLength: 50 },
+          handledBy: { type: 'string', maxLength: 100 },
+          note: { type: 'string', maxLength: 2000 }
+        },
+        required: ['eventId', 'category', 'reason', 'inquiryStatus', 'inquiryMethod', 'patientConsented', 'contactedAt', 'handledBy']
+      }
     }
   },
   required: ['visitId', 'patientId', 'issueDate', 'status'],
   indexes: ['patientId', 'status'],
-  encrypted: ['electronicPrescription', 'pharmacyDeviceHandoff', 'initialQuestionnaire', 'careCommunication', 'claimLifecycle', 'followUp']
+  encrypted: ['electronicPrescription', 'pharmacyDeviceHandoff', 'initialQuestionnaire', 'careCommunication', 'claimLifecycle', 'followUp', 'interventionEvents']
 };
 
 export const PRESCRIPTION_ITEM_SCHEMA: RxJsonSchema<PrescriptionItem> = {

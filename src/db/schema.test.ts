@@ -226,7 +226,38 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithSpecialPublicExpense);
       assert.strictEqual(errors, null);
-      assert.strictEqual(VISIT_SCHEMA.version, 22);
+      assert.strictEqual(VISIT_SCHEMA.version, 23);
+    });
+
+    test('should validate a visit carrying structured intervention events', () => {
+      const visitWithInterventions = {
+        visitId: 'v_int_test',
+        patientId: 'p_int_test',
+        issueDate: '2026-10-01T10:00:00Z',
+        status: 'completed',
+        interventionEvents: [
+          {
+            eventId: 'vie_1',
+            category: 'leftover_adjustment',
+            reason: '残薬7日分調整',
+            beforeDrugName: '薬品A 14日分',
+            afterDrugName: '薬品A 7日分',
+            inquiryStatus: 'completed',
+            inquiryMethod: 'phone',
+            inquiryDoctor: '山田',
+            inquiryResult: '了承',
+            patientConsented: true,
+            contactedAt: '2026-10-01T10:00:00Z',
+            respondedAt: '2026-10-01T10:05:00Z',
+            handledBy: '鈴木',
+            note: '次回も残薬確認'
+          }
+        ]
+      };
+
+      const errors = getErrors(VISIT_SCHEMA, visitWithInterventions);
+      assert.strictEqual(errors, null);
+      assert.ok(VISIT_SCHEMA.encrypted?.includes('interventionEvents'));
     });
 
     test('should validate a returned claim carrying a return reason code', () => {
