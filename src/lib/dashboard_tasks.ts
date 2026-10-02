@@ -19,6 +19,7 @@ import { calculateRequiredStockAmount, getStockDrugId, getTotalStock } from './s
 import { isDemoVisit } from './demo_data';
 import { getPublicInsuranceCategoryName } from './patient_public_insurance';
 import { evaluateInsuranceEligibility } from './insurance_eligibility';
+import { calculateReorderAmounts } from './inventory_reorder_support';
 
 export interface DashboardTask {
   visitId: string;
@@ -388,9 +389,14 @@ export function calculateDashboardInventoryRisks({
     });
 
     const reorderPoint = typeof drug?.reorderPoint === 'number' ? drug.reorderPoint : undefined;
-    const isBelowReorderPoint = typeof reorderPoint === 'number' && reorderPoint > 0
-      ? shortage.availableAmount < reorderPoint
-      : undefined;
+    const safeReorderPoint = typeof reorderPoint === 'number' && reorderPoint > 0 ? reorderPoint : 0;
+    const projectedRemaining = shortage.availableAmount - shortage.requiredAmount;
+    const isBelowReorderPoint = safeReorderPoint > 0 && projectedRemaining <= safeReorderPoint;
+    const reorderCalc = calculateReorderAmounts({
+      effectiveAvailableAmount: shortage.availableAmount,
+      requiredAmount: shortage.requiredAmount,
+      reorderPoint: safeReorderPoint
+    });
 
     // ロットの使用期限切迫（60日以内）判定
     const now = new Date();
@@ -416,17 +422,11 @@ export function calculateDashboardInventoryRisks({
         const candidateYj = (candidateDrug?.yjCode || '').slice(0, 7);
         if (candidateYj === targetYj) {
           const candidateLots = stocksByDrugId.get(candidateId) || [];
-          const candidateValidStock = candidateLots.reduce((acc, l) => {
-            const qty = typeof l.quantity === 'number' && Number.isFinite(l.quantity) ? Math.max(0, l.quantity) : 0;
-            if (qty <= 0) return acc;
-            if (l.expirationDate) {
-              const exp = new Date(l.expirationDate);
-              if (!Number.isNaN(exp.getTime()) && exp < now) {
-                return acc; // 期限切れロットは除外
-              }
-            }
-            return acc + qty;
-          }, 0);
+          const candidateValidStock = getEffectiveAvailableStock(
+            candidateLots,
+            candidateDrug?.stockQuantity,
+            now
+          ).effectiveAvailable;
 
           if (candidateValidStock > 0) {
             substituteCandidatesCount++;
@@ -446,11 +446,7 @@ export function calculateDashboardInventoryRisks({
       requiredAmount: shortage.requiredAmount,
       availableAmount: shortage.availableAmount,
       shortageAmount: shortage.shortageAmount,
-      recommendedOrderAmount: shortage.shortageAmount > 0
-        ? shortage.shortageAmount
-        : (isBelowReorderPoint && typeof reorderPoint === 'number')
-          ? Math.max(0, reorderPoint - shortage.availableAmount)
-          : 0,
+      recommendedOrderAmount: Math.max(shortage.shortageAmount, reorderCalc.recommendedOrderAmount),
       affectedVisitCount: visitIds.length,
       affectedPatientNames,
       priority,
@@ -1253,9 +1249,9 @@ export function getEffectiveAvailableStock(
       const expDateStr = match ? match[1] : null;
       if (expDateStr) {
         const expTime = new Date(`${expDateStr}T00:00:00Z`).getTime();
-        if (!Number.isNaN(expTime) && expTime < nowTime) {
+        if (!Number.isNaN(expTime) && expTime <= nowTime) {
           expiredQuantity += qty;
-          continue; // 期限切れロットは除外
+          continue; // 期限切れロット（当日期限含む）は除外
         }
       }
     }
@@ -1299,7 +1295,8 @@ export function calculateDashboardStockShortages(params: {
 
     const isPrescriptionShortage = requiredAmount > effectiveAvailable;
     const reorderPoint = typeof drug?.reorderPoint === 'number' && drug.reorderPoint > 0 ? drug.reorderPoint : 0;
-    const isBelowReorderPoint = reorderPoint > 0 && effectiveAvailable < reorderPoint;
+    const projectedRemaining = effectiveAvailable - requiredAmount;
+    const isBelowReorderPoint = reorderPoint > 0 && projectedRemaining <= reorderPoint;
     const hasExpiringSoon = stockLots.some((lot) => {
       if (!lot.expirationDate) return false;
       const exp = new Date(lot.expirationDate);
@@ -1326,10 +1323,15 @@ export function calculateDashboardStockShortages(params: {
   }
 
   for (const [drugId, pickingShortageAmount] of params.pickingShortageByStockDrugId.entries()) {
+    if (pickingShortageAmount <= 0) continue;
     const existing = inventoryShortageData.get(drugId);
     if (existing) {
       existing.pickingShortageAmount = pickingShortageAmount;
       existing.shortageAmount = Math.max(existing.shortageAmount, pickingShortageAmount);
+      if (!shortageDrugIds.has(drugId)) {
+        shortageDrugIds.add(drugId);
+        inventoryShortageCount++;
+      }
       continue;
     }
     const drug = params.drugMap.get(drugId);

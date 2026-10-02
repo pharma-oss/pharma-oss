@@ -219,14 +219,19 @@ export function findInStockSubstitutes(
     const lots = stockLotsByDrugCode?.get(drug.code) || [];
     let availableAmount = drug.stockQuantity ?? 0;
     if (lots.length > 0) {
-      const nowTime = Date.now();
+      const nowDateStr = new Date().toISOString().slice(0, 10);
+      const nowTime = new Date(`${nowDateStr}T00:00:00Z`).getTime();
       availableAmount = lots.reduce((sum, lot) => {
         const qty = typeof lot.quantity === 'number' && Number.isFinite(lot.quantity) ? Math.max(0, lot.quantity) : 0;
         if (qty <= 0) return sum;
         if (lot.expirationDate) {
-          const expTime = new Date(lot.expirationDate).getTime();
-          if (!Number.isNaN(expTime) && expTime < nowTime) {
-            return sum; // 期限切れロットは除外
+          const match = String(lot.expirationDate).match(/^(\d{4}-\d{2}-\d{2})/);
+          const expDateStr = match ? match[1] : null;
+          if (expDateStr) {
+            const expTime = new Date(`${expDateStr}T00:00:00Z`).getTime();
+            if (!Number.isNaN(expTime) && expTime <= nowTime) {
+              return sum; // 期限切れロットは除外
+            }
           }
         }
         return sum + qty;

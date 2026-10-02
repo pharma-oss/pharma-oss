@@ -342,7 +342,7 @@ test('calculateDashboardStockShortages and risks capture reorder/expiry risk wit
   assert.equal(risk.reorderPoint, 100);
   assert.equal(risk.isBelowReorderPoint, true);
   assert.equal(risk.shortageAmount, 0, '処方不足量は 0');
-  assert.equal(risk.recommendedOrderAmount, 20, '発注点補充量は 20 (100 - 80)');
+  assert.equal(risk.recommendedOrderAmount, 50, '処方分を差し引いた残在庫50に基づく発注点補充量は 50 (100 - (80 - 30))');
   assert.equal(risk.priority, 'medium', '処方不足なし・在庫ありなので priority は medium');
   assert.equal(risk.hasExpiringSoonLots, true);
   assert.equal(risk.expiringSoonAmount, 80);
@@ -602,6 +602,223 @@ test('calculateDashboardStockShortages comprehensively evaluates inventory risks
   const labels = predictions[0].evidence.map((e) => e.label);
   assert.ok(labels.includes('発注点設定'));
   assert.ok(labels.includes('使用期限リスク'));
+});
+
+test('issue 1: same-day expiry evaluates as expired in both dashboard and workbench (expiry 2026-10-02, now 2026-10-02, required 30, stock 100)', async () => {
+  const { getEffectiveAvailableStock, calculateDashboardStockShortages } = await import('./dashboard_tasks.ts');
+  const { evaluateStockLotExpiry, calculateReorderAmounts } = await import('./inventory_reorder_support.ts');
+
+  const basisDate = new Date('2026-10-02T10:00:00Z');
+  const lots = [{ lotNumber: 'SAME-DAY-LOT', quantity: 100, expirationDate: '2026-10-02' }];
+
+  // 1. getEffectiveAvailableStock: 当日期限ロットは期限切れとして除外されること
+  const { effectiveAvailable, expiredQuantity } = getEffectiveAvailableStock(lots, undefined, basisDate);
+  assert.equal(effectiveAvailable, 0, '当日期限ロットは有効在庫から除外される (0)');
+  assert.equal(expiredQuantity, 100, '当日期限ロットは期限切れとしてカウントされる (100)');
+
+  // 2. ワークベンチ側の evaluateStockLotExpiry と完全一致すること
+  const workbenchExpiry = evaluateStockLotExpiry(lots, basisDate);
+  assert.equal(workbenchExpiry.expiredQuantity, 100, 'ワークベンチ側も期限切れ100と判定');
+  assert.equal(workbenchExpiry.hasExpired, true);
+
+  // 3. calculateDashboardStockShortages: 必要30、有効在庫0で処方不足30、件数1
+  const drugMap = new Map([
+    ['drug-same-day', { code: 'drug-same-day', name: '当日期限薬', stockQuantity: 100 }]
+  ]);
+  const stocksByDrugId = new Map([['drug-same-day', lots]]);
+  const requiredByStockDrugId = new Map([['drug-same-day', 30]]);
+  const pickingShortageByStockDrugId = new Map();
+
+  const shortages = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId,
+    now: basisDate
+  });
+
+  assert.equal(shortages.inventoryShortageCount, 1, 'ダッシュボードの不足件数は 1');
+  assert.ok(shortages.shortageDrugIds.has('drug-same-day'), '不足IDセットに含まれる');
+  const data = shortages.inventoryShortageData.get('drug-same-day');
+  assert.equal(data?.availableAmount, 0, 'ダッシュボードの有効在庫は 0');
+  assert.equal(data?.shortageAmount, 30, 'ダッシュボードの処方不足は 30');
+
+  // 4. ワークベンチ側の calculateReorderAmounts との比較
+  const workbenchReorder = calculateReorderAmounts({
+    effectiveAvailableAmount: effectiveAvailable,
+    requiredAmount: 30
+  });
+  assert.equal(workbenchReorder.shortageAmount, 30, 'ワークベンチ側も不足30と判定');
+  assert.equal(workbenchReorder.isShortage, true);
+});
+
+test('issue 2: recommended order amount matches workbench using projected remaining stock (required 30, stock 80, reorder 100 -> recommended 50)', async () => {
+  const { calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+  const { calculateReorderAmounts } = await import('./inventory_reorder_support.ts');
+
+  const requiredAmount = 30;
+  const availableAmount = 80;
+  const reorderPoint = 100;
+
+  // 1. 发注ワークベンチ側の基準値計算
+  const workbenchReorder = calculateReorderAmounts({
+    effectiveAvailableAmount: availableAmount,
+    requiredAmount,
+    reorderPoint
+  });
+  assert.equal(workbenchReorder.shortageAmount, 0, '処方不足量は 0 (80 >= 30)');
+  assert.equal(workbenchReorder.reorderPointShortage, 50, '残在庫50に対する補充量は 50 (100 - (80 - 30))');
+  assert.equal(workbenchReorder.recommendedOrderAmount, 50, 'ワークベンチの推奨発注量は 50');
+
+  // 2. ダッシュボード側の calculateDashboardInventoryRisks
+  const inventoryShortageData = new Map([
+    ['drug-reorder-sync', {
+      requiredAmount,
+      availableAmount,
+      shortageAmount: 0
+    }]
+  ]);
+  const drugMap = new Map([
+    ['drug-reorder-sync', {
+      id: 'drug-reorder-sync',
+      name: '残在庫判定薬',
+      reorderPoint
+    }]
+  ]);
+  const stocksByDrugId = new Map([
+    ['drug-reorder-sync', [{ quantity: 80, expirationDate: '2028-12-31' }]]
+  ]);
+
+  const risks = calculateDashboardInventoryRisks({
+    inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-reorder-sync', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(risks.length, 1);
+  const risk = risks[0];
+  assert.equal(risk.shortageAmount, 0, '処方不足量は 0');
+  assert.equal(risk.recommendedOrderAmount, 50, 'ダッシュボードの推奨発注量もワークベンチと一致して 50');
+  assert.equal(risk.isBelowReorderPoint, true);
+});
+
+test('issue 2 extension: warning retained and reorder 10 calculated when stock exceeds reorder point but projected stock is below (stock 120, required 30, reorder 100 -> recommended 10)', async () => {
+  const { calculateDashboardStockShortages, calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+  const { calculateReorderAmounts } = await import('./inventory_reorder_support.ts');
+
+  const requiredAmount = 30;
+  const availableAmount = 120;
+  const reorderPoint = 100;
+
+  // 1. ワークベンチ側
+  const workbenchReorder = calculateReorderAmounts({
+    effectiveAvailableAmount: availableAmount,
+    requiredAmount,
+    reorderPoint
+  });
+  assert.equal(workbenchReorder.isBelowReorderPoint, true, '残在庫90は発注点100以下');
+  assert.equal(workbenchReorder.reorderPointShortage, 10, '発注点補充量は 10 (100 - (120 - 30))');
+  assert.equal(workbenchReorder.recommendedOrderAmount, 10, '推奨発注量は 10');
+
+  // 2. ダッシュボードの calculateDashboardStockShortages: 警告が消えずにリスク品目として抽出されること
+  const drugMap = new Map([
+    ['drug-stock-120', {
+      id: 'drug-stock-120',
+      code: 'drug-stock-120',
+      name: '在庫120薬',
+      reorderPoint,
+      stockQuantity: 120
+    }]
+  ]);
+  const stocksByDrugId = new Map([
+    ['drug-stock-120', [{ quantity: 120, expirationDate: '2028-12-31' }]]
+  ]);
+  const requiredByStockDrugId = new Map([['drug-stock-120', requiredAmount]]);
+  const pickingShortageByStockDrugId = new Map();
+
+  const shortages = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  assert.ok(
+    shortages.inventoryShortageData.has('drug-stock-120'),
+    '現在庫120が発注点100を超えていても、処方後残在庫90が発注点を下回るため警告として保持されること'
+  );
+  assert.equal(shortages.inventoryShortageCount, 0, '処方不足ではないので処方不足件数は 0');
+
+  // 3. calculateDashboardInventoryRisks: 推奨発注量 10 と判定されること
+  const risks = calculateDashboardInventoryRisks({
+    inventoryShortageData: shortages.inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-stock-120', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(risks.length, 1);
+  const risk = risks[0];
+  assert.equal(risk.isBelowReorderPoint, true, '発注点割れフラグが true');
+  assert.equal(risk.shortageAmount, 0, '処方不足量は 0');
+  assert.equal(risk.recommendedOrderAmount, 10, 'ダッシュボードの推奨発注量もワークベンチと一致して 10');
+});
+
+test('issue 3: picking shortage updates inventoryShortageCount and shortageDrugIds when added to existing risk (required 30, stock 80, reorder 100, picking shortage 5)', async () => {
+  const { calculateDashboardStockShortages, calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+
+  const drugMap = new Map([
+    ['drug-picking-sync', {
+      id: 'drug-picking-sync',
+      code: 'drug-picking-sync',
+      name: '棚不足同期薬',
+      reorderPoint: 100,
+      stockQuantity: 80
+    }]
+  ]);
+  const stocksByDrugId = new Map([
+    ['drug-picking-sync', [{ quantity: 80, expirationDate: '2028-12-31' }]]
+  ]);
+  const requiredByStockDrugId = new Map([['drug-picking-sync', 30]]);
+  const pickingShortageByStockDrugId = new Map([['drug-picking-sync', 5]]);
+
+  const shortages = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  // 棚不足があるため、既存リスクへの追記後も不足件数・IDが確実に反映されること
+  assert.equal(shortages.inventoryShortageCount, 1, '棚不足により inventoryShortageCount が 1 となること');
+  assert.ok(shortages.shortageDrugIds.has('drug-picking-sync'), 'shortageDrugIds に含まれること');
+
+  const data = shortages.inventoryShortageData.get('drug-picking-sync');
+  assert.equal(data?.pickingShortageAmount, 5, '棚不足量が 5');
+  assert.equal(data?.shortageAmount, 5, '不足量が 5');
+
+  // リスク計算での検証
+  const risks = calculateDashboardInventoryRisks({
+    inventoryShortageData: shortages.inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-picking-sync', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(risks.length, 1);
+  const risk = risks[0];
+  assert.equal(risk.shortageAmount, 5, 'リスク行の不足量は 5');
+  assert.equal(risk.pickingShortageAmount, 5, '棚不足量は 5');
+  assert.equal(risk.priority, 'high', '棚不足があるため priority は high (至急)');
+  assert.equal(risk.actionLabel, '棚不足の報告あり・現物確認と至急手配');
+  assert.equal(risk.recommendedOrderAmount, 50, '推奨発注量は棚不足5と残在庫補充量50を満たす 50');
 });
 
 

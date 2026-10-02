@@ -10,7 +10,7 @@
 
 | 指標 | 開発開始時（ベースライン `df9cd1e`） | 現在地（実測値） | 変化 | 実態と検証状況 |
 |---|---|---|---|---|
-| **ユニット・契約テスト** | 1,717 件 PASS | **1,818 件 PASS** | **+101 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約93秒） |
+| **ユニット・契約テスト** | 1,717 件 PASS | **1,822 件 PASS** | **+105 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約86秒） |
 | **TypeScript 型検査** | 0 件 | **0 件** | 維持 | `npx tsc --noEmit`（exit 0）単独実行で確認 |
 | **ESLint 静的解析** | 0 件 | **0 件** | 維持 | 警告11件のみ（既存画像最適化・Hook依存） |
 | **本番ビルド** | 28/28 ページ成功 | **28/28 ページ成功** | 維持 | `npm run build`（exit 0） |
@@ -157,6 +157,22 @@
   - `src/` 全体のインライン `style={{}}` を動的 CSS 変数受け渡し 3 箇所のみに整理。
   - `src/components/TerminalSyncPanel.test.ts` に予算上限 3 の自動防壁テストを配備。
 
+### 追加検証指摘（4点）への是正と実機検証（2026-10-02 追加実施）
+1. **[P2] 当日期限の在庫判定一致**:
+   - **事象**: 判定日 2026-10-02・期限 2026-10-02・必要 30・在庫 100 で、ダッシュボードは有効在庫 100／不足 0、発注ワークベンチは有効在庫 0／不足 30 で食い違い。
+   - **是正**: `dashboard_tasks.ts` の `getEffectiveAvailableStock` で `expTime <= nowTime` に統一（当日期限ロットは期限切れとして除外）。代替薬探索も含め `<=` で統一。
+   - **Fail-First 実証**: `<=` を `<` に戻した変異テストで `issue 1: same-day expiry evaluates as expired` が FAIL（actual: 100, expected: 0）することを実証。
+2. **[P2] 発注推奨量の見込み残在庫ベース統一**:
+   - **事象**: 必要 30・在庫 80・発注点 100 でダッシュボードが 20、ワークベンチが 50。また、在庫 120 ではダッシュボードの警告が消失。
+   - **是正**: ダッシュボード側の発注点判定および推奨量計算をワークベンチ（`inventory_reorder_support.ts` の `calculateReorderAmounts`）と完全統一。処方分を差し引いた見込み残在庫 `projectedRemaining = effectiveAvailable - requiredAmount` に基づき、残在庫が発注点を下回る場合に発注点割れ（`isBelowReorderPoint = true`）および補充量を算出。在庫 80 で推奨量 50、在庫 120 で警告を保持し補充量 10 と判定。
+   - **Fail-First 実証**: 発注点判定を現在庫直接比較に戻した変異テストで `issue 2 extension: warning retained and reorder 10 calculated` が FAIL（actual: false, expected: true）することを実証。
+3. **[P2] 棚不足統合時の不足件数・ID更新漏れの解消**:
+   - **事象**: 必要 30・在庫 80・発注点 100・棚不足 5 で、リスク行は「不足5／至急」なのに `inventoryShortageCount` が 0、`shortageDrugIds` が空。
+   - **是正**: `dashboard_tasks.ts` の棚不足統合ループにおいて、既存リスク品目への追記時にも `if (!shortageDrugIds.has(drugId)) { shortageDrugIds.add(drugId); inventoryShortageCount++; }` を実行するよう修正。
+   - **Fail-First 実証**: 既存リスク追記時のカウント更新をスキップした変異テストで `issue 3: picking shortage updates inventoryShortageCount` が FAIL（actual: 0, expected: 1）することを実証。
+4. **[P3] ロードマップ品質ゲート表の実測同期**:
+   - `docs/golden_rules_and_roadmap.md:195` のユニットテスト実測値を最新の 1,822 件 PASS に同期。
+
 ---
 
 ## 4. 品質ゲート実測結果（改訂後・再取得）
@@ -166,7 +182,7 @@
 | **TypeScript 型検査** | `npx tsc --noEmit` | **エラー 0 件**（exit 0） | **合格** |
 | **ESLint 静的解析** | `npm run lint` | **エラー 0 件** / 警告 11 件（exit 0） | **合格** |
 | **インライン style 予算** | `npx tsx --test src/components/TerminalSyncPanel.test.ts` | **5/5 PASS**（src 全体で上限 3 箇所厳守） | **合格** |
-| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,818 件 PASS** / 0 fail / 78 suites（約93秒） | **合格** |
+| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,822 件 PASS** / 0 fail / 78 suites（約86秒） | **合格** |
 | **本番ビルド検証** | `npm run build` | **全 28/28 ページ成功**（exit 0） | **合格** |
 | **実画面通し E2E ドリル** | `node scripts/run_e2e_accessibility_drill.mjs` | **全画面・全幅で overflowPx = 0px**、Tab/Esc 閉鎖、全14枚保存（exit 0） | **合格** |
 
