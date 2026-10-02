@@ -821,4 +821,121 @@ test('issue 3: picking shortage updates inventoryShortageCount and shortageDrugI
   assert.equal(risk.recommendedOrderAmount, 50, '推奨発注量は棚不足5と残在庫補充量50を満たす 50');
 });
 
+test('issue targetStock 1: recommended order amount reflects targetStock in dashboard matching workbench (required 30, stock 80, reorder 100, targetStock 200 -> recommended 150)', async () => {
+  const { calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+  const { calculateReorderAmounts } = await import('./inventory_reorder_support.ts');
+
+  const requiredAmount = 30;
+  const availableAmount = 80;
+  const reorderPoint = 100;
+  const targetStock = 200;
+
+  // 1. ワークベンチ側の計算
+  const workbenchReorder = calculateReorderAmounts({
+    effectiveAvailableAmount: availableAmount,
+    requiredAmount,
+    reorderPoint,
+    targetStock
+  });
+  // projectedRemaining = 80 - 30 = 50. targetStock = 200 => 200 - 50 = 150.
+  assert.equal(workbenchReorder.recommendedOrderAmount, 150, 'ワークベンチの推奨量は 150');
+
+  // 2. ダッシュボード側の calculateDashboardInventoryRisks
+  const inventoryShortageData = new Map([
+    ['drug-target-1', {
+      requiredAmount,
+      availableAmount,
+      shortageAmount: 0
+    }]
+  ]);
+  const drugMap = new Map([
+    ['drug-target-1', {
+      id: 'drug-target-1',
+      name: '目標在庫判定薬1',
+      reorderPoint,
+      targetStock
+    }]
+  ]);
+  const stocksByDrugId = new Map([
+    ['drug-target-1', [{ quantity: 80, expirationDate: '2028-12-31' }]]
+  ]);
+
+  const risks = calculateDashboardInventoryRisks({
+    inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-target-1', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(risks.length, 1);
+  const risk = risks[0];
+  assert.equal(risk.targetStock, 200);
+  assert.equal(risk.recommendedOrderAmount, 150, 'ダッシュボードの推奨量も targetStock 200 が反映され 150');
+});
+
+test('issue targetStock 2: risk extracted and recommended order amount 110 calculated when reorderPoint is unset but targetStock is set (required 30, stock 120, reorder unset, targetStock 200 -> recommended 110)', async () => {
+  const { calculateDashboardStockShortages, calculateDashboardInventoryRisks } = await import('./dashboard_tasks.ts');
+  const { calculateReorderAmounts } = await import('./inventory_reorder_support.ts');
+
+  const requiredAmount = 30;
+  const availableAmount = 120;
+  const targetStock = 200;
+
+  // 1. ワークベンチ側
+  const workbenchReorder = calculateReorderAmounts({
+    effectiveAvailableAmount: availableAmount,
+    requiredAmount,
+    targetStock
+  });
+  // projectedRemaining = 120 - 30 = 90. targetStock = 200 => 200 - 90 = 110.
+  assert.equal(workbenchReorder.recommendedOrderAmount, 110, 'ワークベンチの推奨量は 110');
+
+  // 2. ダッシュボードの calculateDashboardStockShortages: 発注点未設定でも targetStock 割れによりリスク抽出されること
+  const drugMap = new Map([
+    ['drug-target-2', {
+      id: 'drug-target-2',
+      code: 'drug-target-2',
+      name: '目標在庫判定薬2',
+      stockQuantity: 120,
+      targetStock // 発注点 reorderPoint は未設定
+    }]
+  ]);
+  const stocksByDrugId = new Map([
+    ['drug-target-2', [{ quantity: 120, expirationDate: '2028-12-31' }]]
+  ]);
+  const requiredByStockDrugId = new Map([['drug-target-2', requiredAmount]]);
+  const pickingShortageByStockDrugId = new Map();
+
+  const shortages = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  assert.ok(
+    shortages.inventoryShortageData.has('drug-target-2'),
+    '発注点未設定でも残在庫90が目標在庫200を下回るためリスク品目として抽出されること'
+  );
+  assert.equal(shortages.inventoryShortageCount, 0, '処方不足ではないので処方不足件数は 0');
+
+  // 3. calculateDashboardInventoryRisks: 推奨発注量 110 と判定されること
+  const risks = calculateDashboardInventoryRisks({
+    inventoryShortageData: shortages.inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map([['drug-target-2', new Set(['v-1'])]]),
+    activeVisitById: new Map([['v-1', { visitId: 'v-1', patientId: 'p-1' }]]),
+    patientMap: new Map([['p-1', { name: 'テスト患者' }]])
+  });
+
+  assert.equal(risks.length, 1);
+  const risk = risks[0];
+  assert.equal(risk.targetStock, 200);
+  assert.equal(risk.shortageAmount, 0, '処方不足量は 0');
+  assert.equal(risk.recommendedOrderAmount, 110, 'ダッシュボードの推奨発注量もワークベンチと一致して 110');
+});
+
 

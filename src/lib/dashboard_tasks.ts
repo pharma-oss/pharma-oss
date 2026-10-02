@@ -66,6 +66,7 @@ export interface DashboardInventoryRisk {
   actionLabel: string;
   pickingShortageAmount?: number;
   reorderPoint?: number;
+  targetStock?: number;
   isBelowReorderPoint?: boolean;
   expiringSoonAmount?: number;
   hasExpiringSoonLots?: boolean;
@@ -390,12 +391,14 @@ export function calculateDashboardInventoryRisks({
 
     const reorderPoint = typeof drug?.reorderPoint === 'number' ? drug.reorderPoint : undefined;
     const safeReorderPoint = typeof reorderPoint === 'number' && reorderPoint > 0 ? reorderPoint : 0;
+    const targetStock = typeof drug?.targetStock === 'number' && drug.targetStock > 0 ? drug.targetStock : undefined;
     const projectedRemaining = shortage.availableAmount - shortage.requiredAmount;
     const isBelowReorderPoint = safeReorderPoint > 0 && projectedRemaining <= safeReorderPoint;
     const reorderCalc = calculateReorderAmounts({
       effectiveAvailableAmount: shortage.availableAmount,
       requiredAmount: shortage.requiredAmount,
-      reorderPoint: safeReorderPoint
+      reorderPoint: safeReorderPoint,
+      targetStock
     });
 
     // ロットの使用期限切迫（60日以内）判定
@@ -453,6 +456,7 @@ export function calculateDashboardInventoryRisks({
       actionLabel,
       pickingShortageAmount: shortage.pickingShortageAmount,
       reorderPoint,
+      targetStock,
       isBelowReorderPoint,
       expiringSoonAmount: hasExpiringSoonLots ? expiringSoonAmount : undefined,
       hasExpiringSoonLots,
@@ -1295,8 +1299,10 @@ export function calculateDashboardStockShortages(params: {
 
     const isPrescriptionShortage = requiredAmount > effectiveAvailable;
     const reorderPoint = typeof drug?.reorderPoint === 'number' && drug.reorderPoint > 0 ? drug.reorderPoint : 0;
+    const targetStock = typeof drug?.targetStock === 'number' && drug.targetStock > 0 ? drug.targetStock : undefined;
     const projectedRemaining = effectiveAvailable - requiredAmount;
     const isBelowReorderPoint = reorderPoint > 0 && projectedRemaining <= reorderPoint;
+    const isBelowTargetStock = typeof targetStock === 'number' && projectedRemaining < targetStock;
     const hasExpiringSoon = stockLots.some((lot) => {
       if (!lot.expirationDate) return false;
       const exp = new Date(lot.expirationDate);
@@ -1311,8 +1317,8 @@ export function calculateDashboardStockShortages(params: {
         availableAmount: effectiveAvailable,
         shortageAmount: requiredAmount - effectiveAvailable
       });
-    } else if (isBelowReorderPoint || hasExpiringSoon || expiredQuantity > 0) {
-      // 処方不足はないが、発注点割れ、期限切迫、または期限切れ在庫があるリスク品目
+    } else if (isBelowReorderPoint || isBelowTargetStock || hasExpiringSoon || expiredQuantity > 0) {
+      // 処方不足はないが、発注点割れ、目標在庫割れ、期限切迫、または期限切れ在庫があるリスク品目
       // 処方不足量 shortageAmount は 0（発注点までの補充量とは明確に分離）
       inventoryShortageData.set(drugId, {
         requiredAmount,

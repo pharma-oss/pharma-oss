@@ -58,6 +58,7 @@ export interface OperationalAiPredictionInventoryRisk {
   priority: 'high' | 'medium';
   actionLabel: string;
   reorderPoint?: number;
+  targetStock?: number;
   isBelowReorderPoint?: boolean;
   expiringSoonAmount?: number;
   hasExpiringSoonLots?: boolean;
@@ -183,6 +184,14 @@ function buildInventoryPrediction(risk: OperationalAiPredictionInventoryRisk): O
       label: '発注点設定',
       detail: `安全在庫点: ${formatAmount(risk.reorderPoint)} ${risk.isBelowReorderPoint ? '(現在庫が発注点割れ)' : ''}`.trim(),
       source: '安全在庫基準'
+    });
+  }
+
+  if (typeof risk.targetStock === 'number' && risk.targetStock > 0) {
+    evidence.push({
+      label: '目標在庫設定',
+      detail: `目標在庫量: ${formatAmount(risk.targetStock)}`,
+      source: '目標在庫基準'
     });
   }
 

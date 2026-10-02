@@ -10,7 +10,7 @@
 
 | 指標 | 開発開始時（ベースライン `df9cd1e`） | 現在地（実測値） | 変化 | 実態と検証状況 |
 |---|---|---|---|---|
-| **ユニット・契約テスト** | 1,717 件 PASS | **1,822 件 PASS** | **+105 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約86秒） |
+| **ユニット・契約テスト** | 1,717 件 PASS | **1,824 件 PASS** | **+107 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約77秒） |
 | **TypeScript 型検査** | 0 件 | **0 件** | 維持 | `npx tsc --noEmit`（exit 0）単独実行で確認 |
 | **ESLint 静的解析** | 0 件 | **0 件** | 維持 | 警告11件のみ（既存画像最適化・Hook依存） |
 | **本番ビルド** | 28/28 ページ成功 | **28/28 ページ成功** | 維持 | `npm run build`（exit 0） |
@@ -171,7 +171,11 @@
    - **是正**: `dashboard_tasks.ts` の棚不足統合ループにおいて、既存リスク品目への追記時にも `if (!shortageDrugIds.has(drugId)) { shortageDrugIds.add(drugId); inventoryShortageCount++; }` を実行するよう修正。
    - **Fail-First 実証**: 既存リスク追記時のカウント更新をスキップした変異テストで `issue 3: picking shortage updates inventoryShortageCount` が FAIL（actual: 0, expected: 1）することを実証。
 4. **[P3] ロードマップ品質ゲート表の実測同期**:
-   - `docs/golden_rules_and_roadmap.md:195` のユニットテスト実測値を最新の 1,822 件 PASS に同期。
+   - `docs/golden_rules_and_roadmap.md:195` のユニットテスト実測値を最新の 1,824 件 PASS に同期。
+5. **[P2] 目標在庫量 `targetStock` の推奨発注量計算・リスク抽出条件への統合**:
+   - **事象**: 必要 30・目標在庫 200 のとき、在庫 80・発注点 100 でダッシュボードが 50、ワークベンチが 150。在庫 120・発注点未設定でダッシュボードが対象外、ワークベンチが補充 110 で食い違い。
+   - **是正**: `dashboard_tasks.ts` の `calculateDashboardInventoryRisks` において `calculateReorderAmounts` に `targetStock` を渡し、`calculateDashboardStockShortages` のリスク抽出条件に `isBelowTargetStock`（`projectedRemaining < targetStock`）を追加。`DashboardInventoryRisk` および `OperationalAiPredictionInventoryRisk` に `targetStock` を表面化。在庫 80 で推奨 150、在庫 120 でリスク抽出・推奨 110 と判定され、ワークベンチと完全一致。
+   - **Fail-First 実証**: `targetStock` を渡さない変異テストで `issue targetStock 1` が FAIL（actual: 50, expected: 150）、`isBelowTargetStock` を外した変異テストで `issue targetStock 2` が FAIL（actual: false, expected: true）することを実証。
 
 ---
 
@@ -182,7 +186,7 @@
 | **TypeScript 型検査** | `npx tsc --noEmit` | **エラー 0 件**（exit 0） | **合格** |
 | **ESLint 静的解析** | `npm run lint` | **エラー 0 件** / 警告 11 件（exit 0） | **合格** |
 | **インライン style 予算** | `npx tsx --test src/components/TerminalSyncPanel.test.ts` | **5/5 PASS**（src 全体で上限 3 箇所厳守） | **合格** |
-| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,822 件 PASS** / 0 fail / 78 suites（約86秒） | **合格** |
+| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,824 件 PASS** / 0 fail / 78 suites（約77秒） | **合格** |
 | **本番ビルド検証** | `npm run build` | **全 28/28 ページ成功**（exit 0） | **合格** |
 | **実画面通し E2E ドリル** | `node scripts/run_e2e_accessibility_drill.mjs` | **全画面・全幅で overflowPx = 0px**、Tab/Esc 閉鎖、全14枚保存（exit 0） | **合格** |
 
