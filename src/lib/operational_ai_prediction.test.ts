@@ -320,6 +320,11 @@ test('calculateDashboardStockShortages and risks capture reorder/expiry risk wit
   // 処方不足カウントは 0 であるが、リスクデータには追加されていること
   assert.equal(inventoryShortageCount, 0, '処方不足カウントは0');
   assert.ok(inventoryShortageData.has('drug-reorder-only'), '発注点割れ・期限切迫により在庫データに含まれること');
+  assert.equal(
+    inventoryShortageData.get('drug-reorder-only')?.shortageAmount,
+    0,
+    '処方不足量 shortageAmount は 0（発注点補充量20と混同しない）'
+  );
 
   // 2. calculateDashboardInventoryRisks へ流す
   const inventoryRisks = calculateDashboardInventoryRisks({
@@ -336,6 +341,9 @@ test('calculateDashboardStockShortages and risks capture reorder/expiry risk wit
   assert.equal(risk.availableAmount, 80);
   assert.equal(risk.reorderPoint, 100);
   assert.equal(risk.isBelowReorderPoint, true);
+  assert.equal(risk.shortageAmount, 0, '処方不足量は 0');
+  assert.equal(risk.recommendedOrderAmount, 20, '発注点補充量は 20 (100 - 80)');
+  assert.equal(risk.priority, 'medium', '処方不足なし・在庫ありなので priority は medium');
   assert.equal(risk.hasExpiringSoonLots, true);
   assert.equal(risk.expiringSoonAmount, 80);
   assert.equal(risk.substituteCandidatesCount, 1);
@@ -350,6 +358,16 @@ test('calculateDashboardStockShortages and risks capture reorder/expiry risk wit
 
   assert.equal(predictions.length, 1);
   const prediction = predictions[0];
+  assert.equal(prediction.severity, 'warning', '処方不足がない発注点割れは warning 判定（critical ではない）');
+  assert.ok(prediction.score < 85, `スコアは 85 未満 (実測: ${prediction.score})`);
+
+  const shortageEvidence = prediction.evidence.find((e) => e.label === '不足見込み');
+  assert.ok(shortageEvidence, '不足見込みエビデンスが存在すること');
+  assert.ok(
+    shortageEvidence.detail.includes('不足 0'),
+    `不足見込み詳細は「不足 0」と正確に表示されること (実測: ${shortageEvidence.detail})`
+  );
+
   const labels = prediction.evidence.map((e) => e.label);
   assert.ok(labels.includes('発注点設定'));
   assert.ok(labels.includes('使用期限リスク'));
@@ -429,6 +447,161 @@ test('calculateDashboardInventoryRisks excludes expired stock (e.g. year 2020) f
   });
   const labels = predictions[0].evidence.map((e) => e.label);
   assert.ok(!labels.includes('代替薬候補'), '期限切れのみの代替薬はAIエビデンスに含まれないこと');
+});
+
+test('calculateDashboardStockShortages treats expired stock as unavailable and detects prescription shortage (required 30, stock 100 all expired in 2020)', async () => {
+  const { calculateDashboardStockShortages } = await import('./dashboard_tasks.ts');
+  const { buildEnhancedInventoryOrderRisk } = await import('./inventory_reorder_support.ts');
+
+  const drugCode = 'drug-expired-target';
+  const drugMap = new Map<string, any>([
+    [
+      drugCode,
+      {
+        code: drugCode,
+        name: 'アムロジピン錠5mg',
+        yjCode: '2171022F2010',
+        reorderPoint: 50,
+        stockQuantity: 100, // 帳簿上は 100
+        location: 'A-01'
+      }
+    ]
+  ]);
+
+  const stockLots = [
+    // 全量が2020年に期限切れとなったロット
+    { lotNumber: 'LOT-2020-OLD', quantity: 100, expirationDate: '2020-05-01' }
+  ];
+  const stocksByDrugId = new Map<string, any[]>([
+    [drugCode, stockLots]
+  ]);
+
+  const requiredByStockDrugId = new Map<string, number>([
+    [drugCode, 30] // 必要量 30
+  ]);
+  const pickingShortageByStockDrugId = new Map<string, number>();
+
+  // 1. ダッシュボード側の在庫計算
+  const result = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  // 全量期限切れのため有効在庫は 0、処方不足 30 として検知されること
+  assert.equal(result.inventoryShortageCount, 1, '全量期限切れ時は処方不足件数としてカウントされること');
+  assert.ok(result.shortageDrugIds.has(drugCode), 'shortageDrugIds に含まれること');
+
+  const shortageInfo = result.inventoryShortageData.get(drugCode);
+  assert.ok(shortageInfo, 'inventoryShortageData に含まれること');
+  assert.equal(shortageInfo?.availableAmount, 0, '有効在庫は 0 であること（2020年期限切れ除外）');
+  assert.equal(shortageInfo?.shortageAmount, 30, '不足数量は 30 であること');
+
+  // 2. 発注ワークベンチ側の計算との完全整合を確認
+  const orderRisk = buildEnhancedInventoryOrderRisk({
+    drug: {
+      code: drugCode,
+      name: 'アムロジピン錠5mg',
+      yjCode: '2171022F2010',
+      stockQuantity: 100,
+      reorderPoint: 50
+    },
+    lots: stockLots,
+    requiredAmount: 30
+  });
+
+  assert.ok(orderRisk, '発注ワークベンチ側でもリスクとして検出されること');
+  assert.equal(orderRisk?.effectiveAvailableAmount, 0, '発注ワークベンチの有効在庫も 0 であること');
+  assert.equal(orderRisk?.shortageAmount, 30, '発注ワークベンチの処方不足も 30 であること');
+  assert.equal(orderRisk?.riskReason, 'combined', '処方不足かつ発注点割れとして判定されること');
+});
+
+test('calculateDashboardStockShortages comprehensively evaluates inventory risks for drugs not in active prescriptions', async () => {
+  const {
+    calculateDashboardStockShortages,
+    calculateDashboardInventoryRisks
+  } = await import('./dashboard_tasks.ts');
+
+  const now = new Date();
+  const expiringDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10); // 30日後
+
+  const nonPrescribedDrugCode = 'drug-unprescribed-reorder';
+  const drugMap = new Map<string, any>([
+    [
+      nonPrescribedDrugCode,
+      {
+        code: nonPrescribedDrugCode,
+        name: 'ロスバスタチン錠2.5mg',
+        yjCode: '2189015F1010',
+        reorderPoint: 100, // 発注点 100
+        stockQuantity: 80, // 在庫 80（発注点割れ）
+        location: 'D-12'
+      }
+    ]
+  ]);
+
+  const stocksByDrugId = new Map<string, any[]>([
+    [
+      nonPrescribedDrugCode,
+      [{ lotNumber: 'LOT-ROSU-1', quantity: 80, expirationDate: expiringDate }]
+    ]
+  ]);
+
+  // 処方必要量は完全に空（処方に一切登場しない！）
+  const requiredByStockDrugId = new Map<string, number>();
+  const pickingShortageByStockDrugId = new Map<string, number>();
+
+  const result = calculateDashboardStockShortages({
+    requiredByStockDrugId,
+    pickingShortageByStockDrugId,
+    drugMap,
+    stocksByDrugId
+  });
+
+  // 処方不足件数は 0（処方されていないため）
+  assert.equal(result.inventoryShortageCount, 0, '処方不足件数は 0');
+  // しかし在庫リスクデータには抽出されること
+  assert.ok(
+    result.inventoryShortageData.has(nonPrescribedDrugCode),
+    '処方に登場しない薬剤でも発注点割れ・期限切迫があれば在庫データに抽出されること'
+  );
+
+  const data = result.inventoryShortageData.get(nonPrescribedDrugCode);
+  assert.equal(data?.requiredAmount, 0, '必要量は 0');
+  assert.equal(data?.availableAmount, 80, '有効在庫は 80');
+  assert.equal(data?.shortageAmount, 0, '処方不足量は 0');
+
+  // リスク計算と AI 予測への流し込み
+  const inventoryRisks = calculateDashboardInventoryRisks({
+    inventoryShortageData: result.inventoryShortageData,
+    drugMap,
+    stocksByDrugId,
+    requiredVisitIdsByStockDrugId: new Map(),
+    activeVisitById: new Map(),
+    patientMap: new Map()
+  });
+
+  assert.equal(inventoryRisks.length, 1);
+  const risk = inventoryRisks[0];
+  assert.equal(risk.drugName, 'ロスバスタチン錠2.5mg');
+  assert.equal(risk.shortageAmount, 0, '処方不足は 0');
+  assert.equal(risk.recommendedOrderAmount, 20, '発注点補充量は 20 (100 - 80)');
+  assert.equal(risk.isBelowReorderPoint, true);
+  assert.equal(risk.hasExpiringSoonLots, true);
+
+  const predictions = buildOperationalAiPredictions({
+    claimRisks: [],
+    inventoryRisks,
+    followUpCandidates: []
+  });
+
+  assert.equal(predictions.length, 1);
+  assert.equal(predictions[0].domain, 'inventory_shortage');
+  assert.equal(predictions[0].severity, 'warning', '処方にない発注点割れは warning 判定');
+  const labels = predictions[0].evidence.map((e) => e.label);
+  assert.ok(labels.includes('発注点設定'));
+  assert.ok(labels.includes('使用期限リスク'));
 });
 
 

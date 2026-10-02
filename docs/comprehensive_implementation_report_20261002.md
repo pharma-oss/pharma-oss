@@ -10,7 +10,7 @@
 
 | 指標 | 開発開始時（ベースライン `df9cd1e`） | 現在地（実測値） | 変化 | 実態と検証状況 |
 |---|---|---|---|---|
-| **ユニット・契約テスト** | 1,717 件 PASS | **1,816 件 PASS** | **+99 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約49秒） |
+| **ユニット・契約テスト** | 1,717 件 PASS | **1,818 件 PASS** | **+101 件純増** | 0 fail, 0 cancelled, 0 skipped（全78スイート、約93秒） |
 | **TypeScript 型検査** | 0 件 | **0 件** | 維持 | `npx tsc --noEmit`（exit 0）単独実行で確認 |
 | **ESLint 静的解析** | 0 件 | **0 件** | 維持 | 警告11件のみ（既存画像最適化・Hook依存） |
 | **本番ビルド** | 28/28 ページ成功 | **28/28 ページ成功** | 維持 | `npm run build`（exit 0） |
@@ -63,17 +63,19 @@
   - 一方、トラック I-6 の EMR（`docs/emr_design_20260930.md:70`）および OCR（`docs/ocr_design_20260930.md:76`）では、テストコード側の期待値文字列に `_MUTATION` を付与しただけであり、実装の破壊検出能力を証明したものではなかった。
   - したがって「全トラックで均一に変異耐性を実証した」という記述を撤回し、プロダクションコードを変異させたトラックと、テスト期待値書き換えにとどまったトラックを明確に区別して記載する。
 
-### [P2] G-2 欠品予測エンジンへのデータパイプライン接続の実装と期限切れ在庫除外
+### [P2] G-2 欠品予測エンジンへのデータパイプライン接続・有効在庫判定・網羅的走査の実装
 - **当初の未完状態と不備**:
-  - `src/lib/operational_ai_prediction.ts` 側には発注点・使用期限・代替薬候補を受け取る型とロジックが実装されていたが、実際の入力を作る `src/lib/dashboard_tasks.ts` の `calculateDashboardInventoryRisks`（line 384）はこれらのプロパティを渡しておらず、画面への接続が未完であった。
-  - また、代替薬候補の在庫計算において期限切れロット（例: 2020年期限切れ）を含めて数量合算していたため、期限切れ薬が代替候補として提示される不備があった。
-  - さらに、処方不足がない場合（例: 在庫80・発注点100・必要量30・期限30日後）にリスク品目として抽出されず、処方に登場しない院内の他医薬品を代替薬候補として探索できない限定的な取得状態となっていた。
+  - `src/lib/operational_ai_prediction.ts` 側には発注点・使用期限・代替薬候補を受け取る型とロジックが実装されていたが、実際の入力を作る `src/lib/dashboard_tasks.ts` の `calculateDashboardInventoryRisks` はこれらのプロパティを渡しておらず、画面への接続が未完であった。
+  - 対象薬の在庫計算において期限判定を行わず `getTotalStock` でロット数量のみを合算していたため、必要量30・在庫100（全量2020年期限切れ）で不足・リスクが0件と判定され、発注ワークベンチ（有効在庫0・処方不足30）と結果が食い違っていた。
+  - 代替薬候補の在庫合算でも期限切れロット（例: 2020年期限切れ）を含めて数量合算していたため、期限切れ薬が代替候補として提示されていた。
+  - 評価ループが処方の必要量マップ（`requiredByStockDrugId`）のみを走査していたため、処方に登場しない院内医薬品（在庫80・発注点100・期限30日後）がリスク評価から漏れていた。
+  - 処方不足がない場合（必要30・在庫80・発注点100）、発注点までの補充量（20）を処方不足量（`shortageAmount`）として設定していたため、AI予測で「不足20」「critical / 95点」と過大判定されていた。
 - **実施した是正措置**:
-  1. `src/hooks/useDashboardTasks.ts` において、`db.drugs.find().exec()` および `db.drug_stocks.find().exec()` を取得し、院内全医薬品・全在庫ロットから同一 YJ コードの代替薬候補探索と発注点評価を網羅的に行えるようデータ取得を接続。
-  2. `src/lib/dashboard_tasks.ts` の `DashboardInventoryRisk` インターフェースに 6 フィールド（`reorderPoint`, `isBelowReorderPoint`, `expiringSoonAmount`, `hasExpiringSoonLots`, `substituteCandidatesCount`, `topSubstituteName`）を正式追加。
-  3. 代替薬候補の在庫合算において、現在日以前の使用期限切れロットを厳格に除外し、有効ロットのみで代替薬候補を判定（Fail-First 変異テスト実証済み）。
-  4. `calculateDashboardStockShortages` において、処方不足がない場合（在庫80・発注点100・必要量30・期限30日後）でも、発注点割れまたは60日以内期限切迫ロットを抱えている品目を在庫リスクデータに追加し、AI予測エンジンへ流すよう接続。
-  5. `src/lib/operational_ai_prediction.test.ts` に結合テストを追加し、処方不足なしでのリスク抽出および期限切れロット除外を実証（7/7 PASS、Fail-First 変異テスト実証済み）。
+  1. `getEffectiveAvailableStock` を新設し、当日以前の使用期限切れロットを厳格に除外した有効在庫数量（`effectiveAvailable`）を算出。必要量30・在庫100（全量2020年期限切れ）で有効在庫0・処方不足30として検知し、発注ワークベンチと完全に整合（Fail-First 変異テスト実証済み）。
+  2. `calculateDashboardStockShortages` において、処方必要量のある薬剤だけでなく、院内全医薬品（`drugMap`）および在庫ロットのある薬剤を網羅的に走査。処方に登場しない薬剤であっても発注点割れ・期限切迫があれば在庫データに抽出されるよう接続（Fail-First 変異テスト実証済み）。
+  3. 処方不足量（`shortageAmount`）は純粋に処方不足（`Math.max(0, requiredAmount - effectiveAvailable)`）とし、処方不足がない場合は `shortageAmount = 0` と設定。発注点までの補充量とは明確に分離し、AI予測エビデンス（`必要 30 / 在庫 80 / 不足 0`）およびスコア（warning / 68点）が適正に算出されるよう是正（Fail-First 変異テスト実証済み）。
+  4. `src/hooks/useDashboardTasks.ts` において、`db.drugs.find().exec()` および `db.drug_stocks.find().exec()` を取得し、院内全医薬品・全在庫ロットから同一 YJ コードの代替薬候補探索と発注点評価を網羅的に行えるよう接続。
+  5. `src/lib/operational_ai_prediction.test.ts` に結合テストを追加し、期限切れ対象薬の処方不足検知、処方にない薬剤の網羅的走査、および処方不足なし時の補充量分離を実証（9/9 PASS、3つの Fail-First 変異テスト実証済み）。
 
 ### [P2] F-2 レセプト要約の接続ステータスの是正
 - **当初の誇大表現**:
@@ -164,7 +166,7 @@
 | **TypeScript 型検査** | `npx tsc --noEmit` | **エラー 0 件**（exit 0） | **合格** |
 | **ESLint 静的解析** | `npm run lint` | **エラー 0 件** / 警告 11 件（exit 0） | **合格** |
 | **インライン style 予算** | `npx tsx --test src/components/TerminalSyncPanel.test.ts` | **5/5 PASS**（src 全体で上限 3 箇所厳守） | **合格** |
-| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,813 件 PASS** / 0 fail / 78 suites（約80秒） | **合格** |
+| **ユニット・契約テスト** | `npm test`（BypassSandbox: true） | **全 1,818 件 PASS** / 0 fail / 78 suites（約93秒） | **合格** |
 | **本番ビルド検証** | `npm run build` | **全 28/28 ページ成功**（exit 0） | **合格** |
 | **実画面通し E2E ドリル** | `node scripts/run_e2e_accessibility_drill.mjs` | **全画面・全幅で overflowPx = 0px**、Tab/Esc 閉鎖、全14枚保存（exit 0） | **合格** |
 

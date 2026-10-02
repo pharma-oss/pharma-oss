@@ -446,7 +446,11 @@ export function calculateDashboardInventoryRisks({
       requiredAmount: shortage.requiredAmount,
       availableAmount: shortage.availableAmount,
       shortageAmount: shortage.shortageAmount,
-      recommendedOrderAmount: shortage.shortageAmount,
+      recommendedOrderAmount: shortage.shortageAmount > 0
+        ? shortage.shortageAmount
+        : (isBelowReorderPoint && typeof reorderPoint === 'number')
+          ? Math.max(0, reorderPoint - shortage.availableAmount)
+          : 0,
       affectedVisitCount: visitIds.length,
       affectedPatientNames,
       priority,
@@ -463,7 +467,8 @@ export function calculateDashboardInventoryRisks({
 
   inventoryRiskData.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority === 'high' ? -1 : 1;
-    return b.shortageAmount - a.shortageAmount;
+    if (a.shortageAmount !== b.shortageAmount) return b.shortageAmount - a.shortageAmount;
+    return b.recommendedOrderAmount - a.recommendedOrderAmount;
   });
 
   return inventoryRiskData;
@@ -1219,11 +1224,53 @@ export function aggregatePrescriptionItemRequirements(params: {
   };
 }
 
+/**
+ * ロット一覧から現在日時点で有効な在庫数量を集計する。
+ * 期限切れ（当日以前）ロットは医療安全原則に基づき有効在庫から除外する。
+ */
+export function getEffectiveAvailableStock(
+  lots: { quantity?: number; expirationDate?: string }[],
+  fallbackQuantity?: number,
+  now: Date = new Date()
+): { effectiveAvailable: number; expiredQuantity: number } {
+  if (!lots || lots.length === 0) {
+    const qty = typeof fallbackQuantity === 'number' && Number.isFinite(fallbackQuantity) ? Math.max(0, fallbackQuantity) : 0;
+    return { effectiveAvailable: qty, expiredQuantity: 0 };
+  }
+
+  const nowDateStr = now.toISOString().slice(0, 10);
+  const nowTime = new Date(`${nowDateStr}T00:00:00Z`).getTime();
+
+  let effectiveAvailable = 0;
+  let expiredQuantity = 0;
+
+  for (const lot of lots) {
+    const qty = typeof lot.quantity === 'number' && Number.isFinite(lot.quantity) ? Math.max(0, lot.quantity) : 0;
+    if (qty <= 0) continue;
+
+    if (lot.expirationDate) {
+      const match = String(lot.expirationDate).match(/^(\d{4}-\d{2}-\d{2})/);
+      const expDateStr = match ? match[1] : null;
+      if (expDateStr) {
+        const expTime = new Date(`${expDateStr}T00:00:00Z`).getTime();
+        if (!Number.isNaN(expTime) && expTime < nowTime) {
+          expiredQuantity += qty;
+          continue; // 期限切れロットは除外
+        }
+      }
+    }
+    effectiveAvailable += qty;
+  }
+
+  return { effectiveAvailable, expiredQuantity };
+}
+
 export function calculateDashboardStockShortages(params: {
   requiredByStockDrugId: Map<string, number>;
   pickingShortageByStockDrugId: Map<string, number>;
   drugMap: Map<string, any>;
   stocksByDrugId: Map<string, any[]>;
+  now?: Date;
 }) {
   let inventoryShortageCount = 0;
   const shortageDrugIds = new Set<string>();
@@ -1234,19 +1281,25 @@ export function calculateDashboardStockShortages(params: {
     pickingShortageAmount?: number;
   }>();
 
-  const now = new Date();
+  const now = params.now || new Date();
   const thresholdDate = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
 
-  for (const [drugId, requiredAmount] of params.requiredByStockDrugId.entries()) {
+  // 処方必要量のある薬剤だけでなく、院内全医薬品（drugMap）および在庫ロットのある薬剤を網羅的に走査
+  const allTargetDrugIds = new Set<string>([
+    ...params.drugMap.keys(),
+    ...params.requiredByStockDrugId.keys(),
+    ...params.stocksByDrugId.keys()
+  ]);
+
+  for (const drugId of allTargetDrugIds) {
+    const requiredAmount = params.requiredByStockDrugId.get(drugId) || 0;
     const drug = params.drugMap.get(drugId);
     const stockLots = params.stocksByDrugId.get(drugId) || [];
-    const availableAmount = stockLots.length > 0
-      ? getTotalStock(stockLots)
-      : drug?.stockQuantity || 0;
+    const { effectiveAvailable, expiredQuantity } = getEffectiveAvailableStock(stockLots, drug?.stockQuantity, now);
 
-    const isPrescriptionShortage = requiredAmount > availableAmount;
+    const isPrescriptionShortage = requiredAmount > effectiveAvailable;
     const reorderPoint = typeof drug?.reorderPoint === 'number' && drug.reorderPoint > 0 ? drug.reorderPoint : 0;
-    const isBelowReorderPoint = reorderPoint > 0 && availableAmount < reorderPoint;
+    const isBelowReorderPoint = reorderPoint > 0 && effectiveAvailable < reorderPoint;
     const hasExpiringSoon = stockLots.some((lot) => {
       if (!lot.expirationDate) return false;
       const exp = new Date(lot.expirationDate);
@@ -1258,15 +1311,16 @@ export function calculateDashboardStockShortages(params: {
       inventoryShortageCount++;
       inventoryShortageData.set(drugId, {
         requiredAmount,
-        availableAmount,
-        shortageAmount: requiredAmount - availableAmount
+        availableAmount: effectiveAvailable,
+        shortageAmount: requiredAmount - effectiveAvailable
       });
-    } else if (isBelowReorderPoint || hasExpiringSoon) {
-      // 処方不足はないが、発注点割れまたは期限切迫があるリスク品目
+    } else if (isBelowReorderPoint || hasExpiringSoon || expiredQuantity > 0) {
+      // 処方不足はないが、発注点割れ、期限切迫、または期限切れ在庫があるリスク品目
+      // 処方不足量 shortageAmount は 0（発注点までの補充量とは明確に分離）
       inventoryShortageData.set(drugId, {
         requiredAmount,
-        availableAmount,
-        shortageAmount: isBelowReorderPoint ? (reorderPoint - availableAmount) : 0
+        availableAmount: effectiveAvailable,
+        shortageAmount: 0
       });
     }
   }
@@ -1280,14 +1334,12 @@ export function calculateDashboardStockShortages(params: {
     }
     const drug = params.drugMap.get(drugId);
     const stockLots = params.stocksByDrugId.get(drugId) || [];
-    const availableAmount = stockLots.length > 0
-      ? getTotalStock(stockLots)
-      : drug?.stockQuantity || 0;
+    const { effectiveAvailable } = getEffectiveAvailableStock(stockLots, drug?.stockQuantity, now);
     shortageDrugIds.add(drugId);
     inventoryShortageCount++;
     inventoryShortageData.set(drugId, {
       requiredAmount: params.requiredByStockDrugId.get(drugId) || 0,
-      availableAmount,
+      availableAmount: effectiveAvailable,
       shortageAmount: pickingShortageAmount,
       pickingShortageAmount
     });

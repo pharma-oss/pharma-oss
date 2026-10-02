@@ -44,7 +44,7 @@
 - **方針**:
   1. **原則**: assert 数を減らさない。テスト対象の防御壁を絶対に下げない。
   2. **分割と昇格**:
-     - **表示・レイアウト・要素配線**: `react-dom/server` の `renderToStaticMarkup` を用いて、各コンポーネント（`DispensingRecordPrint`, `ReceiptStatementPrint`, `SingleOfficialUkeModal`, `DrugInfoClaimTools`, パネル群）を本物の React コンポーネントとして描画し、生成された HTML 内に `data-testid`、法定記載項目（例: 薬剤師法第24条・第25条の疑義照会欄、公式UKE構成レコード、患者識別マーク、保険公費情報等）が正しく含まれていることを検証する。
+     - **表示・レイアウト・要素配線**: `react-dom/server` の `renderToStaticMarkup` を用いて、各コンポーネント（`DispensingRecordPrint`, `ReceiptStatementPrint`, `SingleOfficialUkeModal`, `DrugInfoClaimTools`, パネル群）を本物の React コンポーネントとして描画し、生成された HTML 内に `data-testid`、法定記載項目（例: 薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号の疑義照会欄、公式UKE構成レコード、患者識別マーク、保険公費情報等）が正しく含まれていることを検証する。
      - **算定オプション・監査ログ・ロールバック契約**: `claim_actions.ts` で既にモック DB を用いた契約テスト（`claim_actions.test.ts` 19 テスト / 98 assert）が存在する。画面層（page.tsx / usePrintActions）の委譲確認について、React 実描画またはフック契約テストとして安全に検証する。
      - **電子処方箋ライフサイクル**: `VisitElectronicPrescription` ペイロード構築純粋関数およびライフサイクル判定関数の直接テストを拡充し、実コンポーネント描画と結合する。
   3. `PrintPickingFlow.test.ts` を段階的に実描画テスト（`renderToStaticMarkup`）へ移行し、`readFileSync` の依存を削減する。

@@ -56,7 +56,7 @@
 1. **調剤録の法定記載ブロック ([DispensingRecordPrint.tsx](file:///Users/takeaki/pharma-oss/src/app/print/components/DispensingRecordPrint.tsx))**:
    - `readFileSync(new URL('./components/DispensingRecordPrint.tsx', ...))` を撤廃。
    - `renderToStaticMarkup` により本物の React コンポーネントを描画。
-   - 薬剤師法第24条・第25条に基づく法定記載項目（照会日時、処方医と照会方法 `山田 太郎 医師 (電話)`、区分 `後発医薬品変更`、疑義内容、回答結果、担当薬剤師 `鈴木 花子`、患者同意）が HTML テーブル内に正しくレンダリングされることを実地検証。
+   - 薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号に基づく法定記載項目（照会日時、処方医と照会方法 `山田 太郎 医師 (電話)`、区分 `後発医薬品変更`、疑義内容、回答結果、担当薬剤師 `鈴木 花子`、患者同意）が HTML テーブル内に正しくレンダリングされることを実地検証。
    - 疑義照会なし（0件）の場合のメッセージ `疑義照会・処方変更なし` の実描画も同時に検証。
 2. **公式 UKE 点検・プレビューモーダル ([SingleOfficialUkeModal.tsx](file:///Users/takeaki/pharma-oss/src/app/print/components/SingleOfficialUkeModal.tsx))**:
    - `renderToStaticMarkup` による実描画テストを配備。
