@@ -126,3 +126,132 @@ test('DrugInfoItemCard static contract and style relocation', () => {
   assert.doesNotMatch(itemCardSource, /medicationInfo\.storageText/);
   assert.doesNotMatch(itemCardSource, /drug-info-message-box/);
 });
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { PrintPrescriptionItem } from './types';
+import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
+
+test('DrugInfoItemCard true HTML rendering with approved template and brand/generic change', () => {
+  const mockItemWithSubstitution: PrintPrescriptionItem = {
+    itemId: 'item-sub-1',
+    visitId: 'visit-1',
+    drugId: '620000001',
+    dispensedDrugCode: '620000001',
+    drugName: 'アムロジピンOD錠5mg',
+    dispensedDrug: 'アムロジピンOD錠5mg「トーワ」',
+    amount: 1,
+    days: 14,
+    usage: '1日1回朝食後',
+    rpNumber: 1,
+    dosageCategory: 'internal',
+    drugPrice: 10.1,
+    claimDrugFee: true
+  } as unknown as PrintPrescriptionItem;
+
+  const mockApprovedMedicationInfo: MedicationInfoPrintContent = {
+    drugName: 'アムロジピンOD錠5mg「トーワ」',
+    source: 'approved_template',
+    sourceRevisionDate: '2026-04-01',
+    sideEffectText: 'めまい、ふらつき、ほてり等があらわれることがあります。',
+    usageCautionText: 'グレープフルーツジュースとの併用は避けてください。',
+    officialSearchUrl: 'https://www.pmda.go.jp/PmdaSearch/iyakuSearch/'
+  };
+
+  const noopAsync = async () => {};
+
+  const html = renderToStaticMarkup(
+    React.createElement(DrugInfoItemCard, {
+      item: mockItemWithSubstitution,
+      idx: 0,
+      medicationInfo: mockApprovedMedicationInfo,
+      canEditBilling: true,
+      remarks: {},
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleDrugPriceOverrideChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+
+  // 1. 基本枠組みと調剤薬品名の実描画
+  assert.ok(html.includes('drug-info-row drug-info-card'), 'カードルートクラスが存在すること');
+  assert.ok(html.includes('アムロジピンOD錠5mg「トーワ」'), '調剤薬名が描画されていること');
+  assert.ok(html.includes('処方: アムロジピンOD錠5mg'), '変更前処方薬名が処方注記として描画されていること');
+
+  // 2. 用法・日数・数量・外観の実描画
+  assert.ok(html.includes('1日1回朝食後'), '用法テキストが描画されていること');
+  assert.ok(html.includes('14日分'), '日数テキストが描画されていること');
+  assert.ok(html.includes('drug-shape tablet'), '錠剤の外観シェイプクラスが適用されていること');
+  assert.ok(html.includes('朝食後'), '服用タイミングバッジが描画されていること');
+
+  // 3. 承認済み薬情テンプレートの内容と参照版日・PMDAリンクの実描画
+  assert.ok(html.includes('めまい、ふらつき'), '副作用相談目安が描画されていること');
+  assert.ok(html.includes('グレープフルーツジュース'), '使用上の注意が描画されていること');
+  assert.ok(html.includes('薬局確認済み情報（参照版日 2026-04-01）'), '承認済み版日ラインが描画されていること');
+  assert.ok(html.includes('https://www.pmda.go.jp/PmdaSearch/iyakuSearch/'), 'PMDA公式情報検索リンクが描画されていること');
+  assert.ok(html.includes('PMDAで公式情報を確認'), 'PMDAリンクテキストが描画されていること');
+});
+
+test('DrugInfoItemCard true HTML rendering with fallback template and drug price warning', () => {
+  const mockItemBasic: PrintPrescriptionItem = {
+    itemId: 'item-basic-2',
+    visitId: 'visit-1',
+    drugId: '620000002',
+    dispensedDrugCode: '620000002',
+    drugName: 'ロキソニン錠60mg',
+    amount: 3,
+    days: 5,
+    usage: '1日3回毎食後',
+    rpNumber: 2,
+    dosageCategory: 'internal',
+    drugPrice: 15.2,
+    claimDrugFee: true
+  } as unknown as PrintPrescriptionItem;
+
+  const mockFallbackMedicationInfo: MedicationInfoPrintContent = {
+    drugName: 'ロキソニン錠60mg',
+    source: 'safe_fallback',
+    sourceRevisionDate: '',
+    sideEffectText: '',
+    usageCautionText: '',
+    officialSearchUrl: ''
+  };
+
+  const noopAsync = async () => {};
+
+  const html = renderToStaticMarkup(
+    React.createElement(DrugInfoItemCard, {
+      item: mockItemBasic,
+      idx: 1,
+      medicationInfo: mockFallbackMedicationInfo,
+      canEditBilling: true,
+      remarks: {},
+      drugPriceWarning: '過去の薬価版が選択されています',
+      drugPriceChoices: [
+        { value: '2026-04-01', effectiveFrom: '2026-04-01', price: 15.2, isAutoSelected: true },
+        { value: '2024-04-01', effectiveFrom: '2024-04-01', price: 16.0, isAutoSelected: false }
+      ],
+      dispensingDateForPrice: '2026-06-01',
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleDrugPriceOverrideChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+
+  // 1. フォールバック案内の実描画
+  assert.ok(html.includes('詳しい薬剤情報は薬剤師へ確認してください'), 'フォールバック案内文が描画されていること');
+  assert.ok(!html.includes('参照版日'), 'フォールバック時は参照版日が表示されないこと');
+
+  // 2. 薬価警告と選択肢の実描画
+  assert.ok(html.includes('過去の薬価版が選択されています'), '薬価警告が表示されていること');
+  assert.ok(html.includes('drug-price-revision-select'), '薬価選択セレクトボックスが表示されていること');
+});

@@ -1,6 +1,11 @@
 import type { Alert } from '@/db/types';
 import type { DosageCategory } from './dosage_category';
-import { DOSAGE_CATEGORY_LABELS, resolveEffectiveDosageCategory } from './dosage_category';
+import {
+  DOSAGE_CATEGORY_LABELS,
+  resolveEffectiveDosageCategory,
+  resolveCalculationDosageFlags
+} from './dosage_category';
+import { getCalculationDosageCategory } from './dosage_category_conflict';
 import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from './master-data/usage_master';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
 
@@ -375,6 +380,30 @@ export function buildPrescriptionInputAudit(
           code: 'dosage_days_mismatch',
           title: `Rp${rpNum} は調剤区分「${categoryLabel}」ですが日数が入っています`,
           message: '外用・屯服・内滴・注射の数量は総量です。日数を空欄にするか、調剤区分を確認してください。このままでも保存できます。',
+          itemIds: group.map((item) => item.id).filter(Boolean) as string[],
+          rpId
+        });
+      }
+    }
+
+    // 手動指定（dosageCategorySource === 'manual'）がある明細において、
+    // 算定側の判定（resolveCalculationDosageFlags 'legacy'）と帳票側の実効剤形（resolveEffectiveDosageCategory）が
+    // 食い違っている場合、点数計算・レセプトと帳票で剤形解釈の齟齬が生じるため警告を提示する（第八条・第四条・トラック A-3）
+    const manualItem = group.find((item) => item.dosageCategorySource === 'manual' && item.dosageCategory);
+    if (manualItem) {
+      const effectiveCategory = resolveEffectiveDosageCategory(manualItem);
+      const calcFlags = resolveCalculationDosageFlags(manualItem, 'legacy');
+      const calcCategory = getCalculationDosageCategory(calcFlags);
+
+      if (effectiveCategory !== calcCategory) {
+        const effectiveLabel = DOSAGE_CATEGORY_LABELS[effectiveCategory] || effectiveCategory;
+        const calcLabel = DOSAGE_CATEGORY_LABELS[calcCategory] || calcCategory;
+        const rpNum = group[0]?.rpNumber ?? rpLoopIndex;
+        addIssue(issues, {
+          severity: 'warning',
+          code: 'dosage_category_calculation_conflict',
+          title: `Rp${rpNum} の調剤区分（${effectiveLabel}）と算定判定（${calcLabel}）が食い違っています`,
+          message: `手動指定は「${effectiveLabel}」ですが、算定では「${calcLabel}」として計算されます。用法の記載または調剤区分をご確認ください。`,
           itemIds: group.map((item) => item.id).filter(Boolean) as string[],
           rpId
         });

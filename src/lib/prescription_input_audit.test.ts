@@ -374,4 +374,84 @@ test('buildPrescriptionInputAudit warns on dosage_days_mismatch for non-daily do
   assert.equal(zeroDaysIssues.length, 0, '外用で days: 0 のときは dosage_days_mismatch が出ないこと');
 });
 
+test('buildPrescriptionInputAudit flags conflict between manual dosage category and legacy calculation category (Track A-3)', () => {
+  // 1. 手動指定は内服（internal）だが用法に「点眼」（EXTERNAL_USAGE_PATTERN）があり算定側が外用になる場合 → 警告が 1 件出る
+  const auditInternalWithOphthalmic = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      rpNumber: 1,
+      drugCode: 'd1',
+      drugName: 'ヒアレイン点眼液0.1%',
+      amount: '1',
+      usage: '1日4回両眼点眼',
+      days: 0,
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }
+  ]);
+  const conflict1 = auditInternalWithOphthalmic.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
+  assert.equal(conflict1.length, 1, '手動指定: 内服、算定: 外用のとき dosage_category_calculation_conflict が 1 件出ること');
+  assert.equal(conflict1[0].severity, 'warning', 'severity は warning であること');
+  assert.match(conflict1[0].title, /調剤区分（内服）と算定判定（外用）が食い違っています/);
+  assert.match(conflict1[0].message, /手動指定は「内服」ですが、算定では「外用」として計算されます/);
+
+  // 2. 手動指定は内服（internal）だが用法に「頓服」が含まれ算定側が屯服（as_needed）になる場合 → 警告が 1 件出る
+  const auditInternalWithTonpuku = buildPrescriptionInputAudit([
+    {
+      id: 'i2',
+      rpId: 'rp2',
+      rpNumber: 2,
+      drugCode: 'd2',
+      drugName: 'カロナール錠200',
+      amount: '1',
+      usage: '頭痛時 頓服',
+      days: 0,
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }
+  ]);
+  const conflict2 = auditInternalWithTonpuku.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
+  assert.equal(conflict2.length, 1, '手動指定: 内服、算定: 屯服のとき dosage_category_calculation_conflict が 1 件出ること');
+  assert.equal(conflict2[0].severity, 'warning', 'severity は warning であること');
+  assert.match(conflict2[0].title, /調剤区分（内服）と算定判定（屯服）が食い違っています/);
+  assert.match(conflict2[0].message, /手動指定は「内服」ですが、算定では「屯服」として計算されます/);
+
+  // 3. 手動指定と算定側判定が一致している場合（内服 ＋ 朝食後） → 警告は出ない
+  const auditInternalMatched = buildPrescriptionInputAudit([
+    {
+      id: 'i3',
+      rpId: 'rp3',
+      rpNumber: 3,
+      drugCode: 'd3',
+      drugName: 'アムロジピン錠5mg',
+      amount: '1',
+      usage: '1日1回朝食後',
+      days: 14,
+      dosageCategory: 'internal',
+      dosageCategorySource: 'manual'
+    }
+  ]);
+  const conflict3 = auditInternalMatched.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
+  assert.equal(conflict3.length, 0, '手動指定と算定が一致しているときは警告が出ないこと');
+
+  // 4. 自動判定（dosageCategorySource: 'auto' または未指定）の場合 → 警告は出ない
+  const auditAuto = buildPrescriptionInputAudit([
+    {
+      id: 'i4',
+      rpId: 'rp4',
+      rpNumber: 4,
+      drugCode: 'd4',
+      drugName: 'ヒアレイン点眼液0.1%',
+      amount: '1',
+      usage: '1日4回両眼点眼',
+      days: 0,
+      dosageCategory: 'external',
+      dosageCategorySource: 'auto'
+    }
+  ]);
+  const conflict4 = auditAuto.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
+  assert.equal(conflict4.length, 0, '自動判定時は警告が出ないこと');
+});
+
 

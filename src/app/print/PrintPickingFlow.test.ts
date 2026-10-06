@@ -59,6 +59,7 @@ import { DispensingRecordPrint } from './components/DispensingRecordPrint';
 import { ElectronicPrescriptionPrintPanel } from './components/ElectronicPrescriptionPrintPanel';
 import { SingleOfficialUkeModal } from './components/SingleOfficialUkeModal';
 import { ReceiptStatementPrint } from './components/ReceiptStatementPrint';
+import { DrugInfoPrint } from './components/DrugInfoPrint';
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 
@@ -167,6 +168,93 @@ test('print page offers parallel official UKE preview/download alongside regular
   assert.ok(modalHtml.includes('YK'), 'YKレコードチップが表示されること');
   assert.ok(modalHtml.includes('RE'), 'REレコードチップが表示されること');
   assert.ok(modalHtml.includes('GO'), 'GOレコードチップが表示されること');
+});
+
+test('print page renders DrugInfoPrint component with true DOM structure', () => {
+  const mockPatient: Patient = {
+    patientId: 'pat_test',
+    name: '印刷 花子',
+    kana: 'インサツ ハナコ',
+    birthDate: '1985-04-12',
+    gender: 'female'
+  };
+  const mockVisit: Visit = {
+    visitId: 'visit_di',
+    patientId: 'pat_test',
+    issueDate: '2026-10-06T09:00:00.000Z',
+    status: 'completed',
+    institutionName: 'テストクリニック',
+    prescriptionDate: '2026-10-06',
+    dispensingDate: '2026-10-06'
+  };
+  const mockPharmacyInfo = {
+    name: 'テスト調剤薬局',
+    pharmacistName: '担当 薬剤師',
+    address: '東京都千代田区',
+    postalCode: '100-0001',
+    phone: '03-1234-5678'
+  };
+  const mockItems: DispensingUkeItem[] = [
+    {
+      itemId: 'item_di_1',
+      visitId: 'visit_di',
+      drugId: '620000001',
+      dispensedDrugCode: '620000001',
+      drugName: 'アムロジピンOD錠5mg',
+      amount: 1,
+      days: 14,
+      usage: '1日1回朝食後',
+      rpNumber: 1,
+      dosageCategory: 'internal',
+      drugPrice: 10.1,
+      claimDrugFee: true
+    }
+  ];
+  const noopAsync = async () => {};
+
+  const html = renderToStaticMarkup(
+    React.createElement(DrugInfoPrint, {
+      patientData: mockPatient,
+      visitData: mockVisit,
+      prescriptionItems: mockItems as any,
+      pharmacyInfo: mockPharmacyInfo as any,
+      pharmacyAddressLine: mockPharmacyInfo.address,
+      receiptRunId: 'REC-TEST-001',
+      patientBirthDateStr: '1985-04-12 (41歳)',
+      dispensingDateStr: '2026-10-06',
+      prescriptionDateStr: '2026-10-06',
+      medicationInfoFallbackCount: 0,
+      getMedicationInfoContent: () => ({
+        drugName: 'アムロジピンOD錠5mg',
+        source: 'approved_template' as const,
+        sourceRevisionDate: '2026-04-01',
+        sideEffectText: 'めまい等',
+        usageCautionText: '定期的に服用',
+        officialSearchUrl: 'https://www.pmda.go.jp'
+      }),
+      canEditBilling: true,
+      remarks: {},
+      renderIdentityMark: () => null,
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      dispensingDateForPrice: '2026-10-06',
+      drugPriceChoicesByItemId: {},
+      drugPriceWarningByItemId: {},
+      handleDrugPriceOverrideChange: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+
+  assert.ok(html.includes('data-testid="drug-info-doc"'), '薬情ドキュメントルート要素が存在すること');
+  assert.ok(html.includes('薬剤情報提供文書'), '薬情タイトルが表示されること');
+  assert.ok(html.includes('印刷 花子 様'), '患者名が描画されること');
+  assert.ok(html.includes('アムロジピンOD錠5mg'), '薬品名が描画されること');
+  assert.ok(html.includes('薬局確認済み情報（参照版日 2026-04-01）'), '承認版日が表示されること');
+  assert.ok(html.includes('drug-info-claim-tools'), '算定調整ツールバーが含まれること');
 });
 
 // 以下 3 件は「監査ログが残らなければ操作を確定させない」契約。

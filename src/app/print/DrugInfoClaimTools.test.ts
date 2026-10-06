@@ -37,3 +37,96 @@ test('DrugInfoClaimTools contracts and style encapsulation', () => {
   // 5. 印刷時非表示（@media print）が含まれていること
   assert.match(claimToolsSource, /@media\s+print\s*\{[^}]*\.no-print\s*\{[^}]*display:\s*none\s*!important/);
 });
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { PrintPrescriptionItem } from './types';
+
+test('DrugInfoClaimTools true HTML rendering and input controls', () => {
+  const mockItems: PrintPrescriptionItem[] = [
+    {
+      itemId: 'claim-tool-item-1',
+      visitId: 'visit-1',
+      drugId: '620000001',
+      dispensedDrugCode: '620000001',
+      drugName: 'ワーファリン錠1mg',
+      amount: 1,
+      days: 28,
+      usage: '1日1回夕食後',
+      rpNumber: 1,
+      dosageCategory: 'internal',
+      isHighRisk: true,
+      tokkanType: '1',
+      isIppoka: true,
+      isCrushed: false,
+      claimPreparation: true,
+      claimManagement: true,
+      isDiagnosticTest: false,
+      receiptRemark: '抗凝固療法モニタリング中'
+    },
+    {
+      itemId: 'claim-tool-item-2',
+      visitId: 'visit-1',
+      drugId: '620000002',
+      dispensedDrugCode: '620000002',
+      drugName: 'ロキソニンテープ50mg',
+      amount: 7,
+      days: 0,
+      usage: '1日1回貼付',
+      rpNumber: 2,
+      dosageCategory: 'external',
+      isHighRisk: false,
+      isIppoka: false,
+      isCrushed: false,
+      claimPreparation: true,
+      claimManagement: true,
+      isDiagnosticTest: false
+    }
+  ] as unknown as PrintPrescriptionItem[];
+
+  const noopAsync = async () => {};
+
+  // 1. canEditBilling: true 時の実描画
+  const htmlEditable = renderToStaticMarkup(
+    React.createElement(DrugInfoClaimTools, {
+      prescriptionItems: mockItems,
+      canEditBilling: true,
+      remarks: { 'claim-tool-item-1': '手動入力レセ適' },
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync,
+      handleReceiptRemarkChange: () => {}
+    })
+  );
+
+  assert.ok(htmlEditable.includes('drug-info-claim-tools no-print'), 'ツールバーのルートクラスが存在すること');
+  assert.ok(htmlEditable.includes('ワーファリン錠1mg'), '第1薬品名が描画されていること');
+  assert.ok(htmlEditable.includes('ロキソニンテープ50mg'), '第2薬品名が描画されていること');
+  assert.ok(htmlEditable.includes('一包化'), '一包化ラベルが存在すること');
+  assert.ok(htmlEditable.includes('粉砕'), '粉砕ラベルが存在すること');
+  assert.ok(htmlEditable.includes('調製'), '調製ラベルが存在すること');
+  assert.ok(htmlEditable.includes('薬管'), '薬管ラベルが存在すること');
+  assert.ok(htmlEditable.includes('検査薬'), '検査薬ラベルが存在すること');
+  assert.ok(htmlEditable.includes('加算1 (10点)'), 'ハイリスク薬の特定薬剤加算選択肢が描画されていること');
+  assert.ok(htmlEditable.includes('手動入力レセ適'), 'remarksの特記事項値が入力欄に描画されていること');
+
+  // 2. canEditBilling: false 時の disabled 保護実描画
+  const htmlDisabled = renderToStaticMarkup(
+    React.createElement(DrugInfoClaimTools, {
+      prescriptionItems: mockItems,
+      canEditBilling: false,
+      remarks: {},
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync,
+      handleReceiptRemarkChange: () => {}
+    })
+  );
+
+  assert.ok(htmlDisabled.includes('disabled=""'), 'canEditBilling: false 時に disabled 属性が付与されること');
+});
