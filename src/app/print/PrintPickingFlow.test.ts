@@ -60,6 +60,9 @@ import { ElectronicPrescriptionPrintPanel } from './components/ElectronicPrescri
 import { SingleOfficialUkeModal } from './components/SingleOfficialUkeModal';
 import { ReceiptStatementPrint } from './components/ReceiptStatementPrint';
 import { DrugInfoPrint } from './components/DrugInfoPrint';
+import { MedicineBagPrint } from './components/MedicineBagPrint';
+import { ReceiptPrint } from './components/ReceiptPrint';
+import { MedicineNotebookStickerPrint } from './components/MedicineNotebookStickerPrint';
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 
@@ -683,5 +686,181 @@ test('dispensing record renders statutory intervention records block and connect
   );
   assert.ok(htmlWithoutInterventions.includes('data-testid="record-intervention-box"'), '0件時も法定疑義照会ボックスが存在すること');
   assert.ok(htmlWithoutInterventions.includes('疑義照会・処方変更なし'), '疑義照会なしメッセージが表示されること');
+});
+
+test('print page renders MedicineBagPrint component with true DOM structure', () => {
+  const patientData = { name: '薬袋 花子', patientId: 'pat_bag' };
+  const mockPharmacyInfo = {
+    name: 'テスト調剤薬局',
+    code: '1312345',
+    postalCode: '100-0001',
+    address: '東京都千代田区',
+    phone: '03-1234-5678',
+    registrationNumber: 'T1234567890123',
+    pharmacistName: 'テスト 薬剤師'
+  };
+  const groupedForBags = {
+    '1日1回朝食後': [
+      {
+        itemId: 'item_bag_1',
+        drugName: 'アムロジピン錠5mg',
+        dispensedDrug: 'アムロジピンOD錠5mg「トーワ」',
+        amount: 1,
+        days: 14,
+        usage: '1日1回朝食後',
+        usageSupplementText: '血圧測定後に服用',
+        dosageCategory: 'internal',
+        unit: '錠'
+      }
+    ]
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(MedicineBagPrint, {
+      patientData,
+      groupedForBags,
+      pharmacyInfo: mockPharmacyInfo,
+      pharmacyAddressLine: '東京都千代田区',
+      receiptRunId: 'RUN-BAG-001',
+      dispensingDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(html.includes('data-testid="medicine-bag-doc"'), '薬袋ドキュメント要素が存在すること');
+  assert.ok(html.includes('yakutai-doc internal-bag'), '内服薬袋クラスが付与されていること');
+  assert.ok(html.includes('内服薬'), '内服薬ラベルが表示されること');
+  assert.ok(html.includes('薬袋 花子 様'), '患者名が表示されること');
+  assert.ok(html.includes('アムロジピンOD錠5mg「トーワ」'), '調剤薬品名が表示されること');
+  assert.ok(html.includes('1日1回朝食後'), '用法が表示されること');
+  assert.ok(html.includes('（血圧測定後に服用）'), '用法補足が表示されること');
+  assert.ok(html.includes('14日分'), '日数が表示されること');
+  assert.ok(html.includes('朝食後'), '朝食後バッジが表示されること');
+});
+
+test('print page renders ReceiptStatementPrint and ReceiptPrint components with true DOM structure', () => {
+  const patientData = {
+    name: '明細 太郎',
+    patientId: 'pat_stmt',
+    insuranceInfo: { provider: '06130012', number: '123456', burdenRatio: 30 }
+  };
+  const visitData = {
+    institutionName: 'テスト医院',
+    departmentName: '内科',
+    doctorName: '医師 太郎'
+  };
+  const mockPharmacyInfo = {
+    name: 'テスト調剤薬局',
+    code: '1312345',
+    postalCode: '100-0001',
+    address: '東京都千代田区',
+    phone: '03-1234-5678',
+    registrationNumber: 'T1234567890123',
+    pharmacistName: 'テスト 薬剤師'
+  };
+  const calculatedFees = [
+    { code: 'base_fee', name: '調剤基本料1', rationale: '基本料1 (45点)', points: 45, receiptFeeCode: '410004110' },
+    { code: 'drug_fee', name: '薬剤料', rationale: '薬剤料 (14点)', points: 14, receiptFeeCode: '620000001' }
+  ];
+  const insuranceAmounts = {
+    burdenRatio: 30,
+    totalCostYen: 590,
+    insurerBurdenYen: 410,
+    patientCopayYen: 180
+  };
+
+  // 1. ReceiptStatementPrint 実描画
+  const stmtHtml = renderToStaticMarkup(
+    React.createElement(ReceiptStatementPrint, {
+      patientData,
+      visitData,
+      calculatedFees,
+      totalPoints: 59,
+      insuranceAmounts,
+      pharmacyInfo: mockPharmacyInfo,
+      pharmacyAddressLine: '東京都千代田区',
+      receiptRunId: 'RUN-STMT-001',
+      currentDateStr: '2026年10月6日',
+      patientBirthDateStr: '1980年1月1日',
+      dispensingDateStr: '2026年10月6日',
+      prescriptionDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(stmtHtml.includes('data-testid="receipt-statement-doc"'), '調剤明細書ドキュメント要素が存在すること');
+  assert.ok(stmtHtml.includes('調剤明細書'), '明細書タイトルが表示されること');
+  assert.ok(stmtHtml.includes('明細 太郎 様'), '患者名が表示されること');
+  assert.ok(stmtHtml.includes('59 点'), '合計点数が表示されること');
+  assert.ok(stmtHtml.includes('¥180'), '患者負担金額が表示されること');
+  assert.ok(stmtHtml.includes('調剤基本料1'), '算定項目名が表示されること');
+
+  // 2. ReceiptPrint 実描画
+  const rcptHtml = renderToStaticMarkup(
+    React.createElement(ReceiptPrint, {
+      patientData,
+      totalPoints: 59,
+      insuranceAmounts,
+      receiptBreakdownRows: [
+        { label: '調剤基本料', points: 45, note: '45点' },
+        { label: '薬剤料', points: 14, note: '14点' }
+      ],
+      pharmacyInfo: mockPharmacyInfo,
+      pharmacyAddressLine: '東京都千代田区',
+      receiptRunId: 'RUN-RCPT-001',
+      currentDateStr: '2026年10月6日',
+      dispensingDateStr: '2026年10月6日',
+      prescriptionDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(rcptHtml.includes('data-testid="receipt-doc"'), '領収証ドキュメント要素が存在すること');
+  assert.ok(rcptHtml.includes('領収証'), '領収証タイトルが表示されること');
+  assert.ok(rcptHtml.includes('患者様控'), '患者様控が表示されること');
+  assert.ok(rcptHtml.includes('¥180'), '領収金額が表示されること');
+  assert.ok(rcptHtml.includes('調剤基本料'), '費用区分が表示されること');
+});
+
+test('print page renders MedicineNotebookStickerPrint component with true DOM structure', () => {
+  const patientData = { name: '手帳 太郎', patientId: 'pat_stk' };
+  const mockPharmacyInfo = {
+    name: 'テスト調剤薬局',
+    code: '1312345',
+    postalCode: '100-0001',
+    address: '東京都千代田区',
+    phone: '03-1234-5678',
+    registrationNumber: 'T1234567890123',
+    pharmacistName: 'テスト 薬剤師'
+  };
+  const prescriptionItems = [
+    {
+      itemId: 'stk_1',
+      drugName: 'アムロジピン錠5mg',
+      dispensedDrug: 'アムロジピンOD錠5mg「トーワ」',
+      amount: 1,
+      days: 14,
+      usage: '1日1回朝食後',
+      rpNumber: 1,
+      unit: '錠'
+    }
+  ];
+
+  const html = renderToStaticMarkup(
+    React.createElement(MedicineNotebookStickerPrint, {
+      patientData,
+      prescriptionItems,
+      pharmacyInfo: mockPharmacyInfo,
+      dispensingDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(html.includes('data-testid="medicine-notebook-sticker-doc"'), 'お薬手帳シールドキュメント要素が存在すること');
+  assert.ok(html.includes('handbook-sticker'), '手帳ステッカークラスが存在すること');
+  assert.ok(html.includes('手帳 太郎 様'), '患者名が表示されること');
+  assert.ok(html.includes('アムロジピンOD錠5mg「トーワ」'), '調剤薬名が表示されること');
+  assert.ok(html.includes('14日分'), '日数が表示されること');
+  assert.ok(html.includes('1日1回朝食後'), '用法が表示されること');
 });
 
