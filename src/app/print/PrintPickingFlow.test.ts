@@ -63,6 +63,10 @@ import { DrugInfoPrint } from './components/DrugInfoPrint';
 import { MedicineBagPrint } from './components/MedicineBagPrint';
 import { ReceiptPrint } from './components/ReceiptPrint';
 import { MedicineNotebookStickerPrint } from './components/MedicineNotebookStickerPrint';
+import { LiquidLabelSheetPrint } from './components/LiquidLabelSheetPrint';
+import { OintmentLabelSheetPrint } from './components/OintmentLabelSheetPrint';
+import { EmergencyRecoveryKeySheetPrint } from './components/EmergencyRecoveryKeySheetPrint';
+import { PharmacyDeviceHandoffPanel } from './components/PharmacyDeviceHandoffPanel';
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 
@@ -862,5 +866,118 @@ test('print page renders MedicineNotebookStickerPrint component with true DOM st
   assert.ok(html.includes('アムロジピンOD錠5mg「トーワ」'), '調剤薬名が表示されること');
   assert.ok(html.includes('14日分'), '日数が表示されること');
   assert.ok(html.includes('1日1回朝食後'), '用法が表示されること');
+});
+
+test('print page renders LiquidLabelSheetPrint and OintmentLabelSheetPrint components with true DOM structure', () => {
+  const patientData = { name: '外用 太郎', patientId: 'pat_ext' };
+  const mockPharmacyInfo = {
+    name: 'テスト調剤薬局',
+    code: '1312345',
+    postalCode: '100-0001',
+    address: '東京都千代田区',
+    phone: '03-1234-5678',
+    registrationNumber: 'T1234567890123',
+    pharmacistName: 'テスト 薬剤師'
+  };
+
+  // 1. 水剤ラベル実描画
+  const liquidHtml = renderToStaticMarkup(
+    React.createElement(LiquidLabelSheetPrint, {
+      patientData,
+      liquidItems: [
+        {
+          itemId: 'liq_1',
+          drugName: 'テストシロップ',
+          amount: 10,
+          days: 5,
+          totalAmount: 50,
+          usage: '1日3回毎食後',
+          dosageCategory: 'internal',
+          unit: 'mL'
+        }
+      ],
+      pharmacyInfo: mockPharmacyInfo,
+      pharmacyAddressLine: '東京都千代田区',
+      currentDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(liquidHtml.includes('data-testid="liquid-label-sheet-doc"'), '水剤ラベルシート要素が存在すること');
+  assert.ok(liquidHtml.includes('水剤'), '水剤タイトルが表示されること');
+  assert.ok(liquidHtml.includes('外用 太郎 様'), '患者名が表示されること');
+  assert.ok(liquidHtml.includes('テストシロップ'), 'シロップ薬品名が表示されること');
+
+  // 2. 軟膏ラベル実描画
+  const ointmentHtml = renderToStaticMarkup(
+    React.createElement(OintmentLabelSheetPrint, {
+      patientData,
+      ointmentItems: [
+        {
+          itemId: 'oint_1',
+          drugName: 'テスト軟膏',
+          amount: 20,
+          days: 0,
+          totalAmount: 20,
+          usage: '1日2回患部に塗布',
+          dosageCategory: 'external',
+          unit: 'g'
+        }
+      ],
+      pharmacyInfo: mockPharmacyInfo,
+      pharmacyAddressLine: '東京都千代田区',
+      currentDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(ointmentHtml.includes('data-testid="ointment-label-sheet-doc"'), '軟膏ラベルシート要素が存在すること');
+  assert.ok(ointmentHtml.includes('外用'), '外用タイトルが表示されること');
+  assert.ok(ointmentHtml.includes('テスト軟膏'), '軟膏薬品名が表示されること');
+});
+
+test('print page renders EmergencyRecoveryKeySheetPrint and PharmacyDeviceHandoffPanel components with true DOM structure', () => {
+  // 1. 非常時復旧鍵シート実描画（未発行状態）
+  const escrowHtml = renderToStaticMarkup(
+    React.createElement(EmergencyRecoveryKeySheetPrint, {
+      escrow: null,
+      facilityName: 'テスト薬局',
+      facilityAddress: '東京都千代田区',
+      facilityPhone: '03-1234-5678',
+      renderIdentityMark: () => null
+    })
+  );
+
+  assert.ok(escrowHtml.includes('data-testid="emergency-recovery-key-sheet-doc"'), '復旧鍵シート要素が存在すること');
+  assert.ok(escrowHtml.includes('【未発行・認証前】緊急復旧用 暗号鍵エスクローシート'), '未発行警告が表示されること');
+
+  // 2. 外部調剤機器連携パネル実描画
+  const deviceHtml = renderToStaticMarkup(
+    React.createElement(PharmacyDeviceHandoffPanel, {
+      pharmacyDeviceFlowStatus: 'ready',
+      pharmacyDeviceReadiness: {
+        status: 'ready',
+        statusLabel: '準備完了',
+        requiredActions: [],
+        pharmacyDevice: {
+          connectorKind: 'nsips_gateway',
+          interfaceVersion: 'NSIPS-v2.1'
+        }
+      } as any,
+      isLoadingPharmacyDeviceReadiness: false,
+      pharmacyDeviceConnectorReady: true,
+      pharmacyDeviceOperationBusy: false,
+      pharmacyDeviceOperationInFlight: null,
+      canSubmitPharmacyDevice: true,
+      canReplacePharmacyDevice: false,
+      canCancelPharmacyDevice: false,
+      handlePharmacyDeviceOperation: () => {}
+    })
+  );
+
+  assert.ok(deviceHtml.includes('data-testid="pharmacy-device-handoff-panel"'), '機器連携パネル要素が存在すること');
+  assert.ok(deviceHtml.includes('外部調剤機器連携'), '機器連携タイトルが表示されること');
+  assert.ok(deviceHtml.includes('送信可能'), '送信可能ステータスが表示されること');
+  assert.ok(deviceHtml.includes('data-testid="pharmacy-device-submit-button"'), '送信ボタンが存在すること');
 });
 
