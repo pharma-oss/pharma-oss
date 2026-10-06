@@ -3,18 +3,43 @@ import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 
-export const MedicationGuidanceModal = ({
+export interface MedicationGuidanceEntry {
+  id?: string;
+  type: string;
+  text: string;
+}
+
+export interface MedicationGuidanceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  drug: {
+    code?: string;
+    name?: string;
+    [key: string]: any;
+  } | null | undefined;
+  db?: any;
+  initialEntries?: MedicationGuidanceEntry[];
+}
+
+export function normalizeGuidanceEntries(
+  entries: Array<{ type: string; text: string; [key: string]: unknown }>
+): Array<{ type: string; text: string }> {
+  return entries.map((e) => ({
+    type: typeof e.type === 'string' ? e.type.toUpperCase().trim() : 'S',
+    text: typeof e.text === 'string' ? e.text.trim() : ''
+  }));
+}
+
+export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = ({
   isOpen,
   onClose,
   drug,
-  db
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  drug: any;
-  db: any;
+  db,
+  initialEntries = []
 }) => {
-  const [entries, setEntries] = useState<{ id: string; type: string; text: string }[]>([]);
+  const [entries, setEntries] = useState<{ id: string; type: string; text: string }[]>(
+    () => initialEntries.map((e) => ({ ...e, id: e.id || uuidv4() }))
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [docId, setDocId] = useState<string | null>(null);
@@ -71,7 +96,7 @@ export const MedicationGuidanceModal = ({
     if (!db || !drug) return;
     setIsSaving(true);
     try {
-      const cleanEntries = entries.map((e) => ({ type: e.type, text: e.text }));
+      const cleanEntries = normalizeGuidanceEntries(entries);
       if (docId) {
         const doc = await db.medication_guidances.findOne({ selector: { id: docId } }).exec();
         if (doc) {

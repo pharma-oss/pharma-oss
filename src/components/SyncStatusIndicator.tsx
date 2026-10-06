@@ -11,7 +11,99 @@ import { useDatabase } from '@/db/DatabaseContext';
 // サテライトで未同期データがある(またはメイン端末未接続の)状態でタブを閉じようと
 // すると、メモリ上のデータ消失を防ぐための確認ダイアログを出す。
 
-type SyncIndicatorState = 'synced' | 'syncing' | 'disconnected' | 'warning-limit' | 'danger-expired' | 'danger-limit';
+export type SyncIndicatorState = 'synced' | 'syncing' | 'disconnected' | 'warning-limit' | 'danger-expired' | 'danger-limit';
+
+export interface SyncIndicatorPresentation {
+  label: string;
+  className: string;
+}
+
+export function resolveSyncIndicatorState({
+  role,
+  hubReachable,
+  activeCollectionCount,
+  queueHealth
+}: {
+  role: ClientSyncRole;
+  hubReachable: boolean;
+  activeCollectionCount: number;
+  queueHealth: SatelliteQueueHealth | null;
+}): SyncIndicatorState {
+  if (role === 'satellite' && queueHealth) {
+    if (queueHealth.isLimitExceeded) {
+      return 'danger-limit';
+    }
+    if (queueHealth.hasExpired) {
+      return 'danger-expired';
+    }
+    if (queueHealth.isNearLimit) {
+      return 'warning-limit';
+    }
+    if (!hubReachable) {
+      return 'disconnected';
+    }
+    if (activeCollectionCount > 0 || queueHealth.total > 0) {
+      return 'syncing';
+    }
+    return 'synced';
+  }
+
+  return !hubReachable
+    ? 'disconnected'
+    : activeCollectionCount > 0
+      ? 'syncing'
+      : 'synced';
+}
+
+export function getSyncIndicatorPresentation({
+  indicator,
+  role,
+  queueHealth
+}: {
+  indicator: SyncIndicatorState;
+  role: ClientSyncRole;
+  queueHealth: SatelliteQueueHealth | null;
+}): SyncIndicatorPresentation {
+  switch (indicator) {
+    case 'danger-limit':
+      return {
+        label: `未送信 ${queueHealth?.total ?? 0}件 (上限超過・要同期)`,
+        className: 'is-danger'
+      };
+    case 'danger-expired':
+      return {
+        label: `未送信 ${queueHealth?.total ?? 0}件 (前日未送信 ${queueHealth?.expiredCount ?? 0}件)`,
+        className: 'is-danger'
+      };
+    case 'warning-limit':
+      return {
+        label: `未送信 ${queueHealth?.total ?? 0}件 (上限接近)`,
+        className: 'is-warning'
+      };
+    case 'disconnected':
+      return {
+        label: role === 'satellite'
+          ? queueHealth && queueHealth.total > 0
+            ? `未同期 ${queueHealth.total}件 (Hub未接続)`
+            : 'メイン端末未接続'
+          : '同期エラー',
+        className: 'is-disconnected'
+      };
+    case 'syncing':
+      return {
+        label: role === 'satellite' && queueHealth && queueHealth.total > 0
+          ? `同期中… (未送信 ${queueHealth.total}件)`
+          : '同期中…',
+        className: 'is-syncing'
+      };
+    case 'synced':
+    default:
+      return {
+        label: '同期済み',
+        className: 'is-synced'
+      };
+  }
+}
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -92,28 +184,12 @@ export function SyncStatusIndicator() {
     return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
   }, [role, db]);
 
-  let indicator: SyncIndicatorState = 'synced';
-  if (role === 'satellite' && queueHealth) {
-    if (queueHealth.isLimitExceeded) {
-      indicator = 'danger-limit';
-    } else if (queueHealth.hasExpired) {
-      indicator = 'danger-expired';
-    } else if (queueHealth.isNearLimit) {
-      indicator = 'warning-limit';
-    } else if (!hubReachable) {
-      indicator = 'disconnected';
-    } else if (activeCollectionCount > 0 || queueHealth.total > 0) {
-      indicator = 'syncing';
-    } else {
-      indicator = 'synced';
-    }
-  } else {
-    indicator = !hubReachable
-      ? 'disconnected'
-      : activeCollectionCount > 0
-        ? 'syncing'
-        : 'synced';
-  }
+  const indicator = resolveSyncIndicatorState({
+    role,
+    hubReachable,
+    activeCollectionCount,
+    queueHealth
+  });
   indicatorRef.current = indicator;
 
   useEffect(() => {
@@ -143,69 +219,52 @@ export function SyncStatusIndicator() {
     };
   }, [role]);
 
+  return <SyncStatusIndicatorView role={role} indicator={indicator} queueHealth={queueHealth} />;
+}
+
+export interface SyncStatusIndicatorViewProps {
+  role: ClientSyncRole;
+  indicator: SyncIndicatorState;
+  queueHealth?: SatelliteQueueHealth | null;
+}
+
+export function SyncStatusIndicatorView({
+  role,
+  indicator,
+  queueHealth = null
+}: SyncStatusIndicatorViewProps) {
   if (role === 'standalone') return null;
 
   const roleLabel = role === 'hub' ? 'メイン端末' : 'サテライト';
-  const getIndicatorConfig = () => {
+  const presentation = getSyncIndicatorPresentation({ indicator, role, queueHealth });
+
+  const renderIcon = () => {
     switch (indicator) {
       case 'danger-limit':
-        return {
-          icon: <AlertOctagon size={14} aria-hidden="true" />,
-          label: `未送信 ${queueHealth?.total ?? 0}件 (上限超過・要同期)`,
-          className: 'is-danger'
-        };
+        return <AlertOctagon size={14} aria-hidden="true" />;
       case 'danger-expired':
-        return {
-          icon: <AlertTriangle size={14} aria-hidden="true" />,
-          label: `未送信 ${queueHealth?.total ?? 0}件 (前日未送信 ${queueHealth?.expiredCount ?? 0}件)`,
-          className: 'is-danger'
-        };
       case 'warning-limit':
-        return {
-          icon: <AlertTriangle size={14} aria-hidden="true" />,
-          label: `未送信 ${queueHealth?.total ?? 0}件 (上限接近)`,
-          className: 'is-warning'
-        };
+        return <AlertTriangle size={14} aria-hidden="true" />;
       case 'disconnected':
-        return {
-          icon: <CloudOff size={14} aria-hidden="true" />,
-          label: role === 'satellite'
-            ? queueHealth && queueHealth.total > 0
-              ? `未同期 ${queueHealth.total}件 (Hub未接続)`
-              : 'メイン端末未接続'
-            : '同期エラー',
-          className: 'is-disconnected'
-        };
+        return <CloudOff size={14} aria-hidden="true" />;
       case 'syncing':
-        return {
-          icon: <RefreshCw size={14} className="animate-spin" aria-hidden="true" />,
-          label: role === 'satellite' && queueHealth && queueHealth.total > 0
-            ? `同期中… (未送信 ${queueHealth.total}件)`
-            : '同期中…',
-          className: 'is-syncing'
-        };
+        return <RefreshCw size={14} className="animate-spin" aria-hidden="true" />;
       case 'synced':
       default:
-        return {
-          icon: <Cloud size={14} aria-hidden="true" />,
-          label: '同期済み',
-          className: 'is-synced'
-        };
+        return <Cloud size={14} aria-hidden="true" />;
     }
   };
-
-  const config = getIndicatorConfig();
 
   return (
     <div
       role="status"
       aria-live="polite"
-      title={`${roleLabel}: ${config.label}`}
-      className={`sync-status-indicator ${config.className}`}
+      title={`${roleLabel}: ${presentation.label}`}
+      className={`sync-status-indicator ${presentation.className}`}
       data-testid="sync-status-indicator"
     >
-      {config.icon}
-      <span>{roleLabel}: {config.label}</span>
+      {renderIcon()}
+      <span>{roleLabel}: {presentation.label}</span>
       <style jsx>{`
         .sync-status-indicator {
           display: flex;
