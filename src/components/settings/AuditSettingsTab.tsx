@@ -651,35 +651,37 @@ export default function AuditSettingsTab({
                 </div>
               )}
             </div>
-            <div
-              aria-label="日次締め前月比較"
-              className="comparison-grid-wrapper"
-            >
-              <div className="comparison-main-box">
-                <div className="comparison-main-label">前月比較</div>
-                <div className={`comparison-status-badge status-${dailyClosingComparison.status}`}>
-                  {dailyClosingComparison.statusLabel}
+            {dailyClosingComparison && (
+              <div
+                aria-label="日次締め前月比較"
+                className="comparison-grid-wrapper"
+              >
+                <div className="comparison-main-box">
+                  <div className="comparison-main-label">前月比較</div>
+                  <div className={`comparison-status-badge status-${dailyClosingComparison.status}`}>
+                    {dailyClosingComparison.statusLabel}
+                  </div>
+                  <div className="comparison-month-label">
+                    {dailyClosingComparison.previousMonth.monthLabel}比
+                  </div>
                 </div>
-                <div className="comparison-month-label">
-                  {dailyClosingComparison.previousMonth.monthLabel}比
-                </div>
+                {[
+                  ['承認日数', dailyClosingComparison.approvedDayDeltaLabel],
+                  ['平均完了率', dailyClosingComparison.averageCompletionRateDeltaLabel],
+                  ['残タスク日', dailyClosingComparison.daysWithBlockersDeltaLabel],
+                  ['残タスク合計', dailyClosingComparison.totalClosingBlockersDeltaLabel],
+                  ['在庫不足', dailyClosingComparison.inventoryShortageDeltaLabel],
+                  ['入庫登録', dailyClosingComparison.inventoryReceivingDeltaLabel],
+                  ['服薬フォロー', dailyClosingComparison.followUpDueDeltaLabel],
+                  ['問い合わせ負荷', dailyClosingComparison.supportCaseDeltaLabel]
+                ].map(([label, value]) => (
+                  <div key={label} className="comparison-metric-item">
+                    <div className="comparison-metric-label">{label}</div>
+                    <div className={`comparison-metric-val status-${dailyClosingComparison.status}`}>{value}</div>
+                  </div>
+                ))}
               </div>
-              {[
-                ['承認日数', dailyClosingComparison.approvedDayDeltaLabel],
-                ['平均完了率', dailyClosingComparison.averageCompletionRateDeltaLabel],
-                ['残タスク日', dailyClosingComparison.daysWithBlockersDeltaLabel],
-                ['残タスク合計', dailyClosingComparison.totalClosingBlockersDeltaLabel],
-                ['在庫不足', dailyClosingComparison.inventoryShortageDeltaLabel],
-                ['入庫登録', dailyClosingComparison.inventoryReceivingDeltaLabel],
-                ['服薬フォロー', dailyClosingComparison.followUpDueDeltaLabel],
-                ['問い合わせ負荷', dailyClosingComparison.supportCaseDeltaLabel]
-              ].map(([label, value]) => (
-                <div key={label} className="comparison-metric-item">
-                  <div className="comparison-metric-label">{label}</div>
-                  <div className={`comparison-metric-val status-${dailyClosingComparison.status}`}>{value}</div>
-                </div>
-              ))}
-            </div>
+            )}
             <div className="multimonth-section">
               <div className="multimonth-header">
                 <div className="multimonth-title">複数月KPI比較</div>
