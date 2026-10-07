@@ -12,6 +12,10 @@ import {
   buildOfficialFeeCodeMasterProposalFromCsv,
   buildOfficialFeeCodeMasterProposalReviewCsv,
   buildOfficialFeeCodeOverrideTemplateCsv,
+  countConfiguredOfficialFeeCodes,
+  makeOfficialFeeCodeMasterProposalReviewCsvFileName,
+  makeOfficialFeeCodeOverrideCsvFileName,
+  normalizeOfficialFeeCodeInput,
   parseOfficialFeeCodeOverrideCsv,
   type OfficialFeeCodeMasterProposal
 } from '@/lib/official_fee_code_overrides';
@@ -23,14 +27,6 @@ import {
   buildAiSuggestionFeedbackMonthlyReview
 } from '@/lib/ai_suggestion_feedback';
 import { downloadTextFile } from '@/lib/blob_download';
-
-export function makeOfficialFeeCodeOverrideCsvFileName(): string {
-  return `official_fee_code_overrides_${new Date().toISOString().slice(0, 10)}.csv`;
-}
-
-export function makeOfficialFeeCodeMasterProposalReviewCsvFileName(): string {
-  return `official_fee_code_master_proposal_review_${new Date().toISOString().slice(0, 10)}.csv`;
-}
 
 interface UseFacilitySettingsProps {
   db: PharmacyDatabase | null;
@@ -118,7 +114,7 @@ export function useFacilitySettings({
   };
 
   const handleOfficialFeeCodeChange = (key: OfficialFeeCodeOverrideKey, value: string) => {
-    const normalized = value.replace(/\D/g, '').slice(0, 9);
+    const normalized = normalizeOfficialFeeCodeInput(value);
     setSettings(prev => ({
       ...prev,
       officialFeeCodeOverrides: {
@@ -133,9 +129,7 @@ export function useFacilitySettings({
     const fileName = makeOfficialFeeCodeOverrideCsvFileName();
     const csv = buildOfficialFeeCodeOverrideTemplateCsv(settings.officialFeeCodeOverrides || {});
     downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
-    const configuredCount = Object.values(settings.officialFeeCodeOverrides || {})
-      .filter((value) => /^\d{9}$/.test(String(value || '').trim()))
-      .length;
+    const configuredCount = countConfiguredOfficialFeeCodes(settings.officialFeeCodeOverrides);
     if (db) {
       await logAuditAction(
         db,
@@ -283,9 +277,7 @@ export function useFacilitySettings({
       } else {
         await db.facility_settings.insert(settings);
       }
-      const officialFeeCodeOverrideCount = Object.values(settings.officialFeeCodeOverrides || {})
-        .filter((value) => /^\d{9}$/.test(String(value ?? '').trim()))
-        .length;
+      const officialFeeCodeOverrideCount = countConfiguredOfficialFeeCodes(settings.officialFeeCodeOverrides);
       
       await logAuditAction(
         db,

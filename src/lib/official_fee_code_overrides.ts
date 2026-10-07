@@ -152,6 +152,18 @@ function getGroupLabel(group: string): string {
   return GROUP_LABELS[group] || group;
 }
 
+// 入力欄の値を公式算定コード(9桁の数字)として整える。数字以外は捨て、10桁目以降は切り落とす。
+export function normalizeOfficialFeeCodeInput(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 9);
+}
+
+// 9桁の数字として設定済みの公式算定コードの件数(空欄や桁不足は数えない)
+export function countConfiguredOfficialFeeCodes(overrides: Record<string, unknown> | undefined): number {
+  return Object.values(overrides || {})
+    .filter((value) => /^\d{9}$/.test(String(value ?? '').trim()))
+    .length;
+}
+
 export function makeOfficialFeeCodeOverrideCsvFileName(date = new Date()): string {
   return `yakureki_official_fee_codes_${formatDateTimeStamp(date)}.csv`;
 }

@@ -4,8 +4,10 @@ import {
   buildOfficialFeeCodeMasterProposalFromCsv,
   buildOfficialFeeCodeMasterProposalReviewCsv,
   buildOfficialFeeCodeOverrideTemplateCsv,
+  countConfiguredOfficialFeeCodes,
   makeOfficialFeeCodeMasterProposalReviewCsvFileName,
   makeOfficialFeeCodeOverrideCsvFileName,
+  normalizeOfficialFeeCodeInput,
   parseOfficialFeeCodeOverrideCsv
 } from './official_fee_code_overrides.ts';
 import { DISPENSING_OFFICIAL_FEE_CODE_OVERRIDE_ITEMS } from './calculator.ts';
@@ -142,4 +144,36 @@ test('buildOfficialFeeCodeMasterProposalReviewCsv exports candidates, unresolved
   assert.match(csv, /"重複","'=official\.csv","base_fee_1","調剤基本料1","基本料","","","","複数候補あり"/);
   assert.match(csv, /"確認事項","'=official\.csv","","","","","","2","確認","調剤基本料1 に複数の候補があるため自動反映しません。"/);
   assert.doesNotMatch(csv, /","=薬剤調製料"/);
+});
+
+test('normalizeOfficialFeeCodeInput keeps only digits, at most nine, and leading zeros', () => {
+  assert.strictEqual(normalizeOfficialFeeCodeInput('123456789'), '123456789');
+  assert.strictEqual(normalizeOfficialFeeCodeInput('1234-567 89'), '123456789', 'hyphens and spaces are dropped');
+  assert.strictEqual(normalizeOfficialFeeCodeInput('abc12x3'), '123', 'letters are dropped');
+  assert.strictEqual(normalizeOfficialFeeCodeInput('1234567890123'), '123456789', 'extra digits are cut at nine');
+  assert.strictEqual(normalizeOfficialFeeCodeInput('012345678'), '012345678', 'leading zero is part of the code');
+  assert.strictEqual(normalizeOfficialFeeCodeInput(''), '');
+  assert.strictEqual(normalizeOfficialFeeCodeInput('---'), '');
+});
+
+test('countConfiguredOfficialFeeCodes counts only complete nine-digit codes', () => {
+  assert.strictEqual(countConfiguredOfficialFeeCodes(undefined), 0);
+  assert.strictEqual(countConfiguredOfficialFeeCodes({}), 0);
+  assert.strictEqual(
+    countConfiguredOfficialFeeCodes({
+      complete: '123456789',
+      leadingZero: '012345678',
+      padded: '  987654321  ',
+      numeric: 123456789,
+      short: '12345678',
+      long: '1234567890',
+      blank: '',
+      spaces: '   ',
+      nonDigit: '12345678a',
+      missing: undefined,
+      nothing: null
+    }),
+    4,
+    'complete, leadingZero, padded and numeric'
+  );
 });
