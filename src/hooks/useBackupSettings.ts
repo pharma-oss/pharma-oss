@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Patient, AuditLog } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import {
@@ -40,16 +39,6 @@ import {
   writeBackupSchedulePolicy
 } from '@/lib/backup_schedule_storage';
 import {
-  buildPatientCsvMigrationPreview,
-  buildVisitCsvMigrationPreview,
-  buildDrugStockCsvMigrationPreview,
-  buildSoapCsvMigrationPreview,
-  type DrugStockCsvMigrationPreview,
-  type PatientCsvMigrationPreview,
-  type SoapCsvMigrationPreview,
-  type VisitCsvMigrationPreview
-} from '@/lib/migration_csv';
-import {
   findDuplicatePatientGroups,
   buildPatientDuplicateScanAuditDetail,
   type PatientDuplicateGroup,
@@ -69,7 +58,13 @@ import {
 } from '@/lib/patient_merge_execution';
 import {
   buildBackupScheduleReviewState,
-  getBackupGenerationReviewDisplay
+  buildMigrationCsvPreview,
+  decodeMigrationCsvBytes,
+  describeMigrationPreviewResult,
+  getBackupGenerationReviewDisplay,
+  getMigrationCsvLabel,
+  type MigrationCsvKind,
+  type MigrationCsvPreview
 } from '@/lib/backup_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
 import type { AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
@@ -115,9 +110,9 @@ export function useBackupSettings({
   storeFeedbackColor
 }: UseBackupSettingsOptions) {
   const [backupFile, setBackupFile] = useState<File | null>(null);
-  const [migrationCsvKind, setMigrationCsvKind] = useState<'patients' | 'visits' | 'drug_stocks' | 'soap_records'>('patients');
+  const [migrationCsvKind, setMigrationCsvKind] = useState<MigrationCsvKind>('patients');
   const [migrationCsvFile, setMigrationCsvFile] = useState<File | null>(null);
-  const [migrationCsvPreview, setMigrationCsvPreview] = useState<PatientCsvMigrationPreview | VisitCsvMigrationPreview | DrugStockCsvMigrationPreview | SoapCsvMigrationPreview | null>(null);
+  const [migrationCsvPreview, setMigrationCsvPreview] = useState<MigrationCsvPreview | null>(null);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isExportingBackupGenerationReview, setIsExportingBackupGenerationReview] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
@@ -714,7 +709,7 @@ export function useBackupSettings({
     toast.info('復旧処理を取り消しました。');
   };
 
-  const handleMigrationCsvKindChange = (kind: 'patients' | 'visits' | 'drug_stocks' | 'soap_records') => {
+  const handleMigrationCsvKindChange = (kind: MigrationCsvKind) => {
     setMigrationCsvKind(kind);
   };
 
@@ -736,29 +731,9 @@ export function useBackupSettings({
 
     setIsAnalyzingMigrationCsv(true);
     try {
-      const buffer = await migrationCsvFile.arrayBuffer();
-      const uint8Array = new Uint8Array(buffer);
-      const detectedEncoding = encoding.detect(uint8Array);
-      const unicodeArray = encoding.convert(uint8Array, {
-        to: 'UNICODE',
-        from: typeof detectedEncoding === 'string' ? detectedEncoding : 'SJIS'
-      });
-      const csvText = encoding.codeToString(unicodeArray as number[]);
-      const generatedAt = new Date();
-      const preview = migrationCsvKind === 'patients'
-        ? buildPatientCsvMigrationPreview(csvText, { generatedAt })
-        : migrationCsvKind === 'visits'
-          ? buildVisitCsvMigrationPreview(csvText, { generatedAt })
-          : migrationCsvKind === 'drug_stocks'
-            ? buildDrugStockCsvMigrationPreview(csvText, { generatedAt })
-            : buildSoapCsvMigrationPreview(csvText, { generatedAt });
-      const migrationLabel = migrationCsvKind === 'patients'
-        ? '患者CSV'
-        : migrationCsvKind === 'visits'
-          ? '受付CSV'
-          : migrationCsvKind === 'drug_stocks'
-            ? '在庫CSV'
-            : '薬歴CSV';
+      const csvText = decodeMigrationCsvBytes(new Uint8Array(await migrationCsvFile.arrayBuffer()));
+      const preview = buildMigrationCsvPreview(migrationCsvKind, csvText, new Date());
+      const migrationLabel = getMigrationCsvLabel(migrationCsvKind);
       setMigrationCsvPreview(preview);
       setBackupFile(null);
       setBackupRestoreSourceName(migrationCsvFile.name);
@@ -768,13 +743,8 @@ export function useBackupSettings({
       setImportPassword('');
       await analyzeBackupPayload(preview.backup, { migrationRequiredCollections: [] });
 
-      if (preview.status === 'blocked') {
-        toast.error(`${migrationLabel}の移行プレビューを作成しました（${preview.statusLabel}）。指摘を修正してください。`);
-      } else if (preview.status === 'attention') {
-        toast.warning(`${migrationLabel}の移行プレビューを作成しました（${preview.statusLabel}）。`);
-      } else {
-        toast.success(`${migrationLabel}の移行プレビューを作成しました（${preview.rows.length}件）。`);
-      }
+      const notice = describeMigrationPreviewResult(migrationLabel, preview);
+      toast[notice.level](notice.message);
     } catch (error: any) {
       console.error('Failed to analyze migration CSV:', error);
       toast.error(`CSVの移行プレビューに失敗しました: ${error.message || error}`);

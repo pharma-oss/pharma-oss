@@ -1,3 +1,4 @@
+import encoding from 'encoding-japanese';
 import {
   buildBackupScheduleReview,
   type BackupGenerationReview,
@@ -5,6 +6,16 @@ import {
   type BackupScheduleReview,
   type BackupRestoreDrillReport
 } from './backup.ts';
+import {
+  buildDrugStockCsvMigrationPreview,
+  buildPatientCsvMigrationPreview,
+  buildSoapCsvMigrationPreview,
+  buildVisitCsvMigrationPreview,
+  type DrugStockCsvMigrationPreview,
+  type PatientCsvMigrationPreview,
+  type SoapCsvMigrationPreview,
+  type VisitCsvMigrationPreview
+} from './migration_csv.ts';
 import type { AuditLog } from '../db/types.ts';
 
 export function getBackupGenerationReviewDisplay(review: BackupGenerationReview) {
@@ -82,5 +93,70 @@ export function getBackupDrillStatusStyle(status: BackupRestoreDrillReport['stat
     color: styles.color,
     background: styles.background,
     whiteSpace: 'nowrap' as const
+  };
+}
+
+export type MigrationCsvKind = 'patients' | 'visits' | 'drug_stocks' | 'soap_records';
+export type MigrationCsvPreview =
+  | PatientCsvMigrationPreview
+  | VisitCsvMigrationPreview
+  | DrugStockCsvMigrationPreview
+  | SoapCsvMigrationPreview;
+
+// 移行CSVのバイト列を文字コード自動判定で文字列へ戻す(他社レセコンの出力は Shift_JIS が多い)。
+// 判定できなければ Shift_JIS とみなす。
+export function decodeMigrationCsvBytes(bytes: Uint8Array): string {
+  const detectedEncoding = encoding.detect(bytes);
+  const unicodeArray = encoding.convert(bytes, {
+    to: 'UNICODE',
+    from: typeof detectedEncoding === 'string' ? detectedEncoding : 'SJIS'
+  });
+  return encoding.codeToString(unicodeArray as number[]);
+}
+
+export function getMigrationCsvLabel(kind: MigrationCsvKind): string {
+  return kind === 'patients'
+    ? '患者CSV'
+    : kind === 'visits'
+      ? '受付CSV'
+      : kind === 'drug_stocks'
+        ? '在庫CSV'
+        : '薬歴CSV';
+}
+
+export function buildMigrationCsvPreview(
+  kind: MigrationCsvKind,
+  csvText: string,
+  generatedAt: Date
+): MigrationCsvPreview {
+  return kind === 'patients'
+    ? buildPatientCsvMigrationPreview(csvText, { generatedAt })
+    : kind === 'visits'
+      ? buildVisitCsvMigrationPreview(csvText, { generatedAt })
+      : kind === 'drug_stocks'
+        ? buildDrugStockCsvMigrationPreview(csvText, { generatedAt })
+        : buildSoapCsvMigrationPreview(csvText, { generatedAt });
+}
+
+// プレビュー作成後に出すトーストの種類と文言(blocked は修正を促すエラー、attention は警告)
+export function describeMigrationPreviewResult(
+  label: string,
+  preview: MigrationCsvPreview
+): { level: 'error' | 'warning' | 'success'; message: string } {
+  if (preview.status === 'blocked') {
+    return {
+      level: 'error',
+      message: `${label}の移行プレビューを作成しました（${preview.statusLabel}）。指摘を修正してください。`
+    };
+  }
+  if (preview.status === 'attention') {
+    return {
+      level: 'warning',
+      message: `${label}の移行プレビューを作成しました（${preview.statusLabel}）。`
+    };
+  }
+  return {
+    level: 'success',
+    message: `${label}の移行プレビューを作成しました（${preview.rows.length}件）。`
   };
 }

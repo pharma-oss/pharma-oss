@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import encoding from 'encoding-japanese';
 import {
   buildBackupScheduleReviewState,
+  buildMigrationCsvPreview,
+  decodeMigrationCsvBytes,
+  describeMigrationPreviewResult,
+  getMigrationCsvLabel,
+  type MigrationCsvPreview,
   getBackupGenerationReviewDisplay,
   getBackupScheduleReviewDisplay,
   getBackupDrillStatusStyle
@@ -200,4 +206,121 @@ test('buildBackupScheduleReviewState ignores backups from other days', () => {
 
   assert.equal(state.review.latestBackup, undefined);
   assert.equal(state.review.status, 'blocked');
+});
+
+// ---- 移行CSV: 文字コード判定・種別ごとのプレビュー・結果トースト ----
+
+const csvBytes = (text: string, to: 'SJIS' | 'UTF8'): Uint8Array =>
+  Uint8Array.from(encoding.convert(encoding.stringToCode(text), { to, from: 'UNICODE' }) as number[]);
+
+const PATIENT_CSV = [
+  '患者番号,氏名,フリガナ,生年月日,性別,保険者番号,記号番号,負担割合',
+  'P001,山田 太郎,ヤマダ タロウ,1980/4/3,男,12345678,記号-123,3割'
+].join('\r\n');
+const VISIT_CSV = [
+  '受付番号,患者番号,来局日,状態,処方日,医療機関名,診療科,医師名',
+  'V001,P001,2026/6/18,受付中,2026/6/17,青空クリニック,内科,佐藤 一郎'
+].join('\n');
+const STOCK_CSV = [
+  '在庫ID,薬品コード,JANコード,ロット番号,使用期限,在庫数,入庫日,仕入先',
+  'S001,620001234,4987123456789,LOT-1,2027/3/31,"1,200",2026/6/1,東京卸'
+].join('\n');
+const SOAP_CSV = [
+  '薬歴ID,受付ID,記録者ID,記録日時,問題名,S,O,A,P',
+  'SOAP001,V001,user_1,202606181030,高血圧,眠気なし,血圧130/80,継続可,次回も確認'
+].join('\n');
+
+const DECODE_SAMPLES: Record<string, string> = {
+  'header only': '患者番号,氏名',
+  'typical patient csv': PATIENT_CSV,
+  'rare kanji in names': '患者番号,氏名\nP001,髙橋 﨑山',
+  'half-width kana': '患者番号,氏名\nP001,ﾔﾏﾀﾞ ﾀﾛｳ',
+  'full-width drug names': '薬品コード,薬品名\n620001234,アムロジピン錠５ｍｇ「サワイ」',
+  'very short': '氏名\n田中'
+};
+
+test('decodeMigrationCsvBytes restores Shift_JIS and UTF-8 text without mojibake', () => {
+  for (const [name, text] of Object.entries(DECODE_SAMPLES)) {
+    assert.strictEqual(decodeMigrationCsvBytes(csvBytes(text, 'SJIS')), text, `${name} (Shift_JIS)`);
+    assert.strictEqual(decodeMigrationCsvBytes(csvBytes(text, 'UTF8')), text, `${name} (UTF-8)`);
+  }
+});
+
+test('decodeMigrationCsvBytes handles ASCII-only, empty and BOM-prefixed input', () => {
+  const ascii = 'id,name\n1,abc';
+  assert.strictEqual(decodeMigrationCsvBytes(Uint8Array.from(Buffer.from(ascii, 'utf8'))), ascii);
+  assert.strictEqual(decodeMigrationCsvBytes(new Uint8Array(0)), '');
+
+  const withBom = Uint8Array.from([0xef, 0xbb, 0xbf, ...csvBytes(PATIENT_CSV, 'UTF8')]);
+  // BOM は残る。取り除くのは各 build*CsvMigrationPreview の責務(先頭の \ufeff を除去する)
+  assert.strictEqual(decodeMigrationCsvBytes(withBom).replace(/^\ufeff/, ''), PATIENT_CSV);
+});
+
+test('a Shift_JIS patient CSV survives decode and preview with the patient name intact', () => {
+  const text = decodeMigrationCsvBytes(csvBytes(PATIENT_CSV, 'SJIS'));
+  const preview = buildMigrationCsvPreview('patients', text, new Date('2026-06-18T10:00:00.000Z'));
+
+  assert.strictEqual(preview.status, 'pass');
+  const patients = preview.backup.collections.patients as Array<{ patientId: string; name: string; kana?: string }>;
+  assert.strictEqual(patients[0].patientId, 'P001');
+  assert.strictEqual(patients[0].name, '山田 太郎');
+  assert.strictEqual(patients[0].kana, 'ヤマダ タロウ');
+});
+
+test('getMigrationCsvLabel names each CSV kind', () => {
+  assert.strictEqual(getMigrationCsvLabel('patients'), '患者CSV');
+  assert.strictEqual(getMigrationCsvLabel('visits'), '受付CSV');
+  assert.strictEqual(getMigrationCsvLabel('drug_stocks'), '在庫CSV');
+  assert.strictEqual(getMigrationCsvLabel('soap_records'), '薬歴CSV');
+});
+
+test('buildMigrationCsvPreview routes each kind to its own builder and stamps the generation time', () => {
+  const generatedAt = new Date('2026-06-18T10:00:00.000Z');
+  const cases = [
+    ['patients', PATIENT_CSV, 'patients'],
+    ['visits', VISIT_CSV, 'visits'],
+    ['drug_stocks', STOCK_CSV, 'drug_stocks'],
+    ['soap_records', SOAP_CSV, 'soap_records']
+  ] as const;
+
+  for (const [kind, csv, collection] of cases) {
+    const preview = buildMigrationCsvPreview(kind, csv, generatedAt);
+    assert.strictEqual(preview.status, 'pass', kind);
+    assert.strictEqual(preview.rows.length, 1, kind);
+    assert.strictEqual(preview.backup.createdAt, generatedAt.toISOString(), kind);
+    assert.strictEqual(preview.backup.collections[collection]?.length, 1, `${kind} fills ${collection}`);
+    for (const other of cases.filter(([, , c]) => c !== collection)) {
+      assert.ok(!preview.backup.collections[other[2]]?.length, `${kind} must not fill ${other[2]}`);
+    }
+  }
+});
+
+test('choosing the wrong CSV kind is blocked instead of importing the file as something else', () => {
+  const asVisits = buildMigrationCsvPreview('visits', PATIENT_CSV, new Date('2026-06-18T10:00:00.000Z'));
+  assert.strictEqual(asVisits.status, 'blocked');
+  assert.strictEqual(asVisits.rows.length, 0);
+  assert.ok(!asVisits.backup.collections.visits?.length);
+});
+
+test('describeMigrationPreviewResult turns the preview status into a toast level and message', () => {
+  const generatedAt = new Date('2026-06-18T10:00:00.000Z');
+
+  const ok = buildMigrationCsvPreview('patients', PATIENT_CSV, generatedAt);
+  assert.deepStrictEqual(describeMigrationPreviewResult('患者CSV', ok), {
+    level: 'success',
+    message: '患者CSVの移行プレビューを作成しました（1件）。'
+  });
+
+  const blocked = buildMigrationCsvPreview('patients', '品名,数量\n薬品A,10', generatedAt);
+  assert.deepStrictEqual(describeMigrationPreviewResult('患者CSV', blocked), {
+    level: 'error',
+    message: '患者CSVの移行プレビューを作成しました（CSV修正必要）。指摘を修正してください。'
+  });
+
+  // 「要確認」を実際の CSV で再現するのは難しいため、メッセージ対応だけをスタンドインで確認する
+  const attention = { status: 'attention', statusLabel: 'CSV要確認', rows: [] } as unknown as MigrationCsvPreview;
+  assert.deepStrictEqual(describeMigrationPreviewResult('在庫CSV', attention), {
+    level: 'warning',
+    message: '在庫CSVの移行プレビューを作成しました（CSV要確認）。'
+  });
 });
