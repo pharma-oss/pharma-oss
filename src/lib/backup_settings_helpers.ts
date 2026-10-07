@@ -1,8 +1,11 @@
-import type {
-  BackupGenerationReview,
-  BackupScheduleReview,
-  BackupRestoreDrillReport
+import {
+  buildBackupScheduleReview,
+  type BackupGenerationReview,
+  type BackupSchedulePolicy,
+  type BackupScheduleReview,
+  type BackupRestoreDrillReport
 } from './backup.ts';
+import type { AuditLog } from '../db/types.ts';
 
 export function getBackupGenerationReviewDisplay(review: BackupGenerationReview) {
   const color = review.status === 'pass'
@@ -48,6 +51,17 @@ export function getBackupScheduleReviewDisplay(review: BackupScheduleReview) {
       : '#fef2f2';
 
   return { color, background };
+}
+
+// 設定 > バックアップ「閉店時バックアップ予定」の点検。編集中のポリシーから導く
+// (世代管理の点検 buildBackupGenerationReview とは別の形で、scheduledTime / detail などを持つ)。
+export function buildBackupScheduleReviewState(
+  auditLogs: AuditLog[],
+  policy: BackupSchedulePolicy,
+  generatedAt: Date = new Date()
+) {
+  const review = buildBackupScheduleReview(auditLogs, policy, generatedAt);
+  return { review, ...getBackupScheduleReviewDisplay(review) };
 }
 
 export function getBackupDrillStatusStyle(status: BackupRestoreDrillReport['status']) {

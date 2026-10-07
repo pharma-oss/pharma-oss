@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
 import type { PharmacyDatabase, User, Patient, AuditLog } from '@/db/types';
@@ -68,8 +68,8 @@ import {
   PatientMergeExecutionError
 } from '@/lib/patient_merge_execution';
 import {
-  getBackupGenerationReviewDisplay,
-  getBackupScheduleReviewDisplay
+  buildBackupScheduleReviewState,
+  getBackupGenerationReviewDisplay
 } from '@/lib/backup_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
 import type { AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
@@ -151,6 +151,12 @@ export function useBackupSettings({
   const [isRecordingExternalBackupReceipt, setIsRecordingExternalBackupReceipt] = useState(false);
   const [backupSchedulePolicy, setBackupSchedulePolicy] = useState<BackupSchedulePolicy>(DEFAULT_BACKUP_SCHEDULE_POLICY);
 
+  // 保存済みの閉店時バックアップ予定を読み込む(未読込だと常に既定値が表示され、
+  // 無関係な項目を保存しただけで既定値が上書きされてしまう)
+  useEffect(() => {
+    setBackupSchedulePolicy(readBackupSchedulePolicy());
+  }, []);
+
   // 患者重複点検(名寄せ)
   const [patientDuplicateReport, setPatientDuplicateReport] = useState<PatientDuplicateScanReport | null>(null);
   const [isScanningPatientDuplicates, setIsScanningPatientDuplicates] = useState(false);
@@ -170,11 +176,11 @@ export function useBackupSettings({
     latestBackupExternalStorageLabel
   } = getBackupGenerationReviewDisplay(backupGenerationReview);
 
-  const backupScheduleReview = buildBackupGenerationReview(auditLogs) as any;
   const {
+    review: backupScheduleReview,
     color: backupScheduleReviewColor,
     background: backupScheduleReviewBackground
-  } = getBackupScheduleReviewDisplay(backupScheduleReview);
+  } = buildBackupScheduleReviewState(auditLogs, backupSchedulePolicy);
 
   const handleBackupSchedulePolicyChange = (patch: Partial<BackupSchedulePolicy>) => {
     setBackupSchedulePolicy((current) => ({
