@@ -121,6 +121,12 @@ export function getAuditIntegrityStatus(report: AuditIntegrityReport | null, isC
   return { status, color, latestHashPreview };
 }
 
+// 設定画面が監査ログを読み込んでよいか。バックアップの点検(今日の書き出し・世代数・外部保存の確認)は
+// 監査ログから計算するため、閲覧権限が無くても「バックアップ管理」権限があれば読み込む。
+export function canLoadAuditLogs(permissions: { canViewAuditLogs: boolean; canManageBackups: boolean }): boolean {
+  return permissions.canViewAuditLogs || permissions.canManageBackups;
+}
+
 export function getAuditRetentionColors(review: AuditLogRetentionMonthlyReview) {
   const reviewColor = review.status === 'complete'
     ? '#15803d'

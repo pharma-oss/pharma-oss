@@ -156,7 +156,6 @@ export default function SettingsPage() {
     db: db ?? null,
     currentUser,
     canManageFacility,
-    auditLogs: [],
     ensurePermission
   });
 
@@ -164,6 +163,8 @@ export default function SettingsPage() {
     db: db ?? null,
     currentUser,
     canViewAuditLogs,
+    canManageBackups,
+    onAiAssistModeApplied: (mode) => facilitySettings.handleSettingsChange('aiAssistMode', mode),
     canManageFacility,
     canApproveDailyClosing,
     settings: facilitySettings.settings,

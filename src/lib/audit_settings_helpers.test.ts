@@ -5,6 +5,7 @@ import {
   auditActionLabel,
   getAuditIntegrityStatus,
   getAuditRetentionColors,
+  canLoadAuditLogs,
   makeAuditLogExportFileName,
   makeDispensingUkeOfficialAllFieldsGateCsvFileName,
   makeDispensingUkeSpecImplementationPackFileName,
@@ -219,4 +220,11 @@ test('official UKE spec export file names follow the yakureki_ + date-time stamp
   const later = new Date(2026, 5, 21, 9, 8, 8);
   assert.notStrictEqual(makeDispensingUkeSpecReviewCsvFileName(later), makeDispensingUkeSpecReviewCsvFileName(fixedDate));
   assert.match(makeDispensingUkeSpecReviewCsvFileName(), /^yakureki_uke_spec_all_fields_\d{8}_\d{6}\.csv$/);
+});
+
+test('canLoadAuditLogs lets backup managers read the logs that the backup reviews are computed from', () => {
+  assert.strictEqual(canLoadAuditLogs({ canViewAuditLogs: true, canManageBackups: true }), true);
+  assert.strictEqual(canLoadAuditLogs({ canViewAuditLogs: true, canManageBackups: false }), true);
+  assert.strictEqual(canLoadAuditLogs({ canViewAuditLogs: false, canManageBackups: true }), true, 'a custom role with only manage_backups');
+  assert.strictEqual(canLoadAuditLogs({ canViewAuditLogs: false, canManageBackups: false }), false);
 });

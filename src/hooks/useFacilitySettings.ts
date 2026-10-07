@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import encoding from 'encoding-japanese';
-import type { FacilitySettings, PharmacyDatabase, User, AuditLog } from '@/db/types';
+import type { FacilitySettings, PharmacyDatabase, User } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import {
   type OfficialFeeCodeOverrideKey
@@ -23,16 +23,12 @@ import {
   AI_ASSIST_MODE_LABELS,
   normalizeAiAssistMode
 } from '@/lib/ai_assist_policy';
-import {
-  buildAiSuggestionFeedbackMonthlyReview
-} from '@/lib/ai_suggestion_feedback';
 import { downloadTextFile } from '@/lib/blob_download';
 
 interface UseFacilitySettingsProps {
   db: PharmacyDatabase | null;
   currentUser: User;
   canManageFacility: boolean;
-  auditLogs: AuditLog[];
   ensurePermission: (permission: PermissionAction) => boolean;
   refreshAuditEvidence?: () => Promise<void>;
 }
@@ -41,7 +37,6 @@ export function useFacilitySettings({
   db,
   currentUser,
   canManageFacility,
-  auditLogs,
   ensurePermission,
   refreshAuditEvidence
 }: UseFacilitySettingsProps) {
@@ -67,7 +62,6 @@ export function useFacilitySettings({
     officialFeeCodeOverrides: {}
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [isApplyingAiQualityMode, setIsApplyingAiQualityMode] = useState(false);
   const [isImportingOfficialFeeCodeCsv, setIsImportingOfficialFeeCodeCsv] = useState(false);
   const [isReviewingOfficialFeeCodeMasterCsv, setIsReviewingOfficialFeeCodeMasterCsv] = useState(false);
   const [officialFeeCodeMasterProposal, setOfficialFeeCodeMasterProposal] = useState<OfficialFeeCodeMasterProposal | null>(null);
@@ -298,55 +292,6 @@ export function useFacilitySettings({
     }
   };
 
-  const handleApplyAiQualityRecommendation = async () => {
-    if (!ensurePermission('manage_facility_settings')) return;
-    if (!db) {
-      toast.error('データベースの初期化が完了していません。');
-      return;
-    }
-
-    const review = buildAiSuggestionFeedbackMonthlyReview(auditLogs, new Date(), {
-      currentStoreName: settings.pharmacyName || '自店',
-      currentStoreCode: settings.pharmacyCode || undefined,
-      currentAiAssistMode: normalizeAiAssistMode(settings.aiAssistMode)
-    });
-    const previousMode = normalizeAiAssistMode(settings.aiAssistMode);
-    const recommendedMode = review.qualityGate.recommendedMode;
-    if (review.qualityGate.modeAlignment !== 'change_required') {
-      toast.info('現在のAI補助モードは品質ゲートの推奨以上に安全です。');
-      return;
-    }
-
-    setIsApplyingAiQualityMode(true);
-    try {
-      const doc = await db.facility_settings.findOne('default').exec();
-      if (!doc) {
-        throw new Error('施設設定が見つかりません。');
-      }
-      await doc.patch({ aiAssistMode: recommendedMode });
-      const auditOk = await logAuditAction(
-        db,
-        'facility_settings_update',
-        `AI補助品質ゲート反映: 「${AI_ASSIST_MODE_LABELS[previousMode]}」から「${AI_ASSIST_MODE_LABELS[recommendedMode]}」へ変更 / 判定 ${review.qualityGate.statusLabel} / 高信頼度却下 ${review.qualityGate.highConfidenceRejectedCount}件 / 却下率 ${review.qualityGate.rejectionRate}%`
-      );
-      if (!auditOk) {
-        await doc.patch({ aiAssistMode: previousMode });
-        throw new Error('監査ログ記録に失敗したため、AI補助モードを元に戻しました。');
-      }
-
-      setSettings((previous) => ({ ...previous, aiAssistMode: recommendedMode }));
-      if (refreshAuditEvidence) {
-        await refreshAuditEvidence();
-      }
-      toast.success(`AI補助を「${AI_ASSIST_MODE_LABELS[recommendedMode]}」へ変更しました。`);
-    } catch (error: any) {
-      console.error('Failed to apply AI quality gate recommendation:', error);
-      toast.error(`AI補助モードを変更できませんでした: ${error.message || error}`);
-    } finally {
-      setIsApplyingAiQualityMode(false);
-    }
-  };
-
   return {
     settings,
     currentUser,
@@ -362,8 +307,6 @@ export function useFacilitySettings({
     handleApplyOfficialFeeCodeMasterProposal,
     handleExportOfficialFeeCodeMasterProposalReviewCsv,
     handleOfficialFeeCodeChange,
-    handleSaveSettings,
-    handleApplyAiQualityRecommendation,
-    isApplyingAiQualityMode
+    handleSaveSettings
   };
 }

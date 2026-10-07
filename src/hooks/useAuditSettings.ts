@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { AuditLog, PharmacyDatabase, User, FacilitySettings } from '@/db/types';
+import { AuditLog, PharmacyDatabase, User, FacilitySettings, type AiAssistMode } from '@/db/types';
 import { logAuditAction } from '@/lib/audit';
 import {
   buildAuditLogExportJson,
@@ -30,9 +30,13 @@ import {
   type AiSuggestionFeedbackMonthlyReview
 } from '@/lib/ai_suggestion_feedback';
 import {
+  AI_ASSIST_MODE_LABELS,
+  applyAiAssistModeWithAudit,
+  buildAiQualityGateApplyAuditDetail,
   normalizeAiAssistMode
 } from '@/lib/ai_assist_policy';
 import {
+  canLoadAuditLogs,
   getAuditIntegrityStatus,
   getAuditRetentionColors,
   makeAuditLogExportFileName,
@@ -61,6 +65,8 @@ export interface UseAuditSettingsOptions {
   db: PharmacyDatabase | null;
   currentUser: User;
   canViewAuditLogs: boolean;
+  canManageBackups: boolean;
+  onAiAssistModeApplied: (mode: AiAssistMode) => void;
   canManageFacility: boolean;
   canApproveDailyClosing: boolean;
   settings: FacilitySettings;
@@ -77,6 +83,8 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
     db,
     currentUser,
     canViewAuditLogs,
+    canManageBackups,
+    onAiAssistModeApplied,
     settings,
     staffList = [],
     officialAuditSummary,
@@ -107,7 +115,7 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
   const [filterAction, setFilterAction] = useState('all');
 
   const fetchAuditLogs = useCallback(async () => {
-    if (!db || !canViewAuditLogs) return;
+    if (!db || !canLoadAuditLogs({ canViewAuditLogs, canManageBackups })) return;
     try {
       const logs = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const rows = logs.map(d => d.toJSON());
@@ -120,7 +128,7 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
     } finally {
       setIsCheckingAuditIntegrity(false);
     }
-  }, [db, canViewAuditLogs]);
+  }, [db, canViewAuditLogs, canManageBackups]);
 
   useEffect(() => {
     fetchAuditLogs();
@@ -782,34 +790,34 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       toast.error('データベースの初期化が完了していません。');
       return;
     }
-    const recommendedMode = aiSuggestionFeedbackReview.qualityGate.recommendedMode;
-    if (!recommendedMode || recommendedMode === settings.aiAssistMode) {
-      toast.info('推奨モードへの変更は不要です。');
+    const qualityGate = aiSuggestionFeedbackReview.qualityGate;
+    if (qualityGate.modeAlignment !== 'change_required') {
+      toast.info('現在のAI補助モードは品質ゲートの推奨以上に安全です。');
       return;
     }
+    const previousMode = normalizeAiAssistMode(settings.aiAssistMode);
+    const recommendedMode = qualityGate.recommendedMode;
 
     setIsApplyingAiQualityMode(true);
     try {
-      const doc = await db.facility_settings.findOne().exec();
-      if (doc) {
-        await doc.patch({
-          aiAssistMode: recommendedMode
-        });
-      }
-      await logAuditAction(
+      await applyAiAssistModeWithAudit({
         db,
-        'facility_settings_update',
-        `AI補助モードを品質推奨に基づき ${settings.aiAssistMode} から ${recommendedMode} へ変更しました。`
-      );
+        previousMode,
+        recommendedMode,
+        auditDetail: buildAiQualityGateApplyAuditDetail(previousMode, recommendedMode, qualityGate),
+        logAudit: (detail) => logAuditAction(db, 'facility_settings_update', detail)
+      });
+      // 施設設定の画面状態も更新する。しないと、この後の施設設定の保存で古いモードが書き戻される。
+      onAiAssistModeApplied(recommendedMode);
 
       const refreshed = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const refreshedRows = refreshed.map(d => d.toJSON());
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
-      toast.success(`AI補助モードを ${recommendedMode} に更新しました。`);
+      toast.success(`AI補助を「${AI_ASSIST_MODE_LABELS[recommendedMode]}」へ変更しました。`);
     } catch (error: any) {
-      console.error('Failed to apply AI quality recommendation:', error);
-      toast.error(`AI補助モードの更新に失敗しました: ${error.message || error}`);
+      console.error('Failed to apply AI quality gate recommendation:', error);
+      toast.error(`AI補助モードを変更できませんでした: ${error.message || error}`);
     } finally {
       setIsApplyingAiQualityMode(false);
     }
