@@ -60,3 +60,125 @@ describe('SettingsMedicationInfoTemplate contracts and pure helpers', () => {
     assert.equal(sorted[1].templateId, 'pmit_1');
   });
 });
+
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { PatientMedicationInfoTemplate } from '@/db/types';
+
+function createMockMedicationInfoTemplateProps(overrides: Record<string, unknown> = {}) {
+  const emptyForm = createEmptyMedicationInfoTemplateForm();
+  return {
+    invalidApprovedMedicationInfoTemplates: [],
+    medicationInfoTemplateStatusFilter: 'all',
+    setMedicationInfoTemplateStatusFilter: () => {},
+    medicationInfoTemplates: [],
+    medicationInfoTemplateStatusCounts: { draft: 0, needs_review: 0, approved: 0, retired: 0 },
+    medicationInfoTemplateReadinessFilter: 'all',
+    setMedicationInfoTemplateReadinessFilter: () => {},
+    medicationInfoTemplateReadinessCounts: { all: 0, ready: 0, missing: 0 },
+    medicationInfoTemplateSearch: '',
+    setMedicationInfoTemplateSearch: () => {},
+    filteredMedicationInfoTemplates: [],
+    isLoadingMedicationInfoTemplates: false,
+    selectedMedicationInfoTemplateId: '',
+    handleSelectMedicationInfoTemplate: () => {},
+    getMedicationInfoTemplateReadinessIssues: () => [],
+    handleNewMedicationInfoTemplate: () => {},
+    isSavingMedicationInfoTemplate: false,
+    isImportingMedicationInfoCsv: false,
+    handleExportMedicationInfoCsv: async () => {},
+    canManageFacility: true,
+    handleImportMedicationInfoCsv: async () => {},
+    handleUsePmdaMedicationInfoSearchUrl: () => {},
+    isBuildingMedicationInfoSafetyDraft: false,
+    handleApplyMedicationInfoSafetyDraft: async () => {},
+    handleExportMedicationInfoSafetyDraftCsv: async () => {},
+    isExportingMedicationInfoSafetyDraftCsv: false,
+    medicationInfoCsvImportSummary: null,
+    selectedMedicationInfoTemplate: undefined,
+    isEditingImmutableMedicationInfoRevision: false,
+    medicationInfoTemplateForm: emptyForm,
+    handleMedicationInfoTemplateFormChange: () => {},
+    currentMedicationInfoApprovalIssues: [],
+    handleSaveMedicationInfoTemplate: async () => {},
+    ...overrides
+  };
+}
+
+describe('MedicationInfoTemplateSettingsTab renderToStaticMarkup contracts', () => {
+  it('renders header, filter buttons, and empty state when template list is empty', () => {
+    const props = createMockMedicationInfoTemplateProps();
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+
+    assert.ok(html.includes('<h2>薬情テンプレ承認</h2>'), 'Should render tab h2 title');
+    assert.ok(html.includes('data-testid="medication-info-template-section"'), 'Should render section testid');
+    assert.ok(html.includes('data-testid="medication-info-template-status-filter-all"'), 'Should render all status filter button');
+    assert.ok(html.includes('data-testid="medication-info-template-readiness-filter-all"'), 'Should render readiness filter button');
+    assert.ok(html.includes('テンプレはまだありません。'), 'Should render empty state message');
+    assert.ok(html.includes('data-testid="medication-info-template-csv-export"'), 'Should render CSV export button');
+  });
+
+  it('renders template item in sidebar with drug info, badges, and readiness tags', () => {
+    const mockTemplate: PatientMedicationInfoTemplate = {
+      templateId: 'pmit_DRUG-100_v1',
+      drugCode: '620000100',
+      drugName: 'カロナール錠300 300mg',
+      genericName: 'アセトアミノフェン',
+      effectText: '熱を下げ、痛みを和らげます',
+      counselingText: '指示された服用回数を守ってください',
+      sideEffectText: '発疹、かゆみなどが現れることがあります',
+      sourceType: 'pmda_insert',
+      status: 'approved',
+      createdAt: '2026-10-01T10:00:00Z',
+      updatedAt: '2026-10-01T10:00:00Z',
+      approvedAt: '2026-10-01T10:00:00Z',
+      reviewerId: 'user-admin-1'
+    };
+
+    const props = createMockMedicationInfoTemplateProps({
+      medicationInfoTemplates: [mockTemplate],
+      filteredMedicationInfoTemplates: [mockTemplate],
+      selectedMedicationInfoTemplateId: 'pmit_DRUG-100_v1',
+      selectedMedicationInfoTemplate: mockTemplate
+    });
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+
+    assert.ok(html.includes('カロナール錠300 300mg'), 'Should render drug name');
+    assert.ok(html.includes('620000100'), 'Should render drug code');
+    assert.ok(html.includes('アセトアミノフェン'), 'Should render generic name');
+    assert.ok(html.includes('承認済み'), 'Should render approved status badge');
+    assert.ok(html.includes('承認準備OK'), 'Should render ready badge');
+  });
+
+  it('renders alert box when invalidApprovedMedicationInfoTemplates exists', () => {
+    const invalidTemplate: PatientMedicationInfoTemplate = {
+      templateId: 'pmit_INVALID_v1',
+      drugCode: '620000200',
+      drugName: '不備薬品錠',
+      sourceType: 'pharmacy_authored',
+      status: 'approved',
+      createdAt: '2026-10-01T10:00:00Z',
+      updatedAt: '2026-10-01T10:00:00Z'
+      // missing approvedAt and reviewerId -> invalid approved
+    };
+
+    const props = createMockMedicationInfoTemplateProps({
+      invalidApprovedMedicationInfoTemplates: [invalidTemplate]
+    });
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+
+    assert.ok(html.includes('data-testid="medication-info-invalid-approved-alert"'), 'Should render alert container');
+    assert.ok(html.includes('承認条件を満たさず印刷に使われないテンプレが1件あります。'), 'Should render warning message with count');
+  });
+
+  it('disables CSV buttons when canManageFacility is false', () => {
+    const props = createMockMedicationInfoTemplateProps({
+      canManageFacility: false
+    });
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+
+    assert.ok(/<button(?=[^>]*data-testid="medication-info-template-csv-export")(?=[^>]*disabled)[^>]*>/.test(html), 'CSV export button should be disabled');
+    assert.ok(/<input(?=[^>]*data-testid="medication-info-template-csv-input")(?=[^>]*disabled)[^>]*>/.test(html), 'CSV file input should be disabled');
+  });
+});
+

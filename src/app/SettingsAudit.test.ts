@@ -171,3 +171,114 @@ describe('AuditSettingsTab renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('事務 次郎（事務）には「監査ログ閲覧」の権限がありません'), 'Permission denied notice should be rendered');
   });
 });
+
+import { buildClaimPointsDriftReview } from '@/lib/claim_points_drift';
+import { buildDosageCategoryConflictReview } from '@/lib/dosage_category_conflict';
+
+function createMockOfficialAuditSettingsProps(overrides: Record<string, unknown> = {}) {
+  return {
+    canViewOfficialAudit: true,
+    claimPointsDrift: null,
+    isReviewingClaimPointsDrift: false,
+    handleReviewClaimPointsDrift: async () => {},
+    handleExportClaimPointsDriftCsv: () => {},
+    dosageCategoryConflict: null,
+    isReviewingDosageCategoryConflict: false,
+    handleReviewDosageCategoryConflict: async () => {},
+    handleExportDosageCategoryConflictCsv: () => {},
+    dispensingUkeSpecPdfText: '',
+    setDispensingUkeSpecPdfText: () => {},
+    setDispensingUkeSpecCompletionGate: () => {},
+    setDispensingUkeSpecCompletionLabel: () => {},
+    dispensingUkeSpecConfirmationText: '',
+    setDispensingUkeSpecConfirmationText: () => {},
+    isFetchingDispensingUkeSpecPdf: false,
+    handleFetchDispensingUkeSpecPdf: async () => {},
+    handleReviewDispensingUkeSpecPdfText: async () => {},
+    dispensingUkeSpecCompletionGate: null,
+    isExportingDispensingUkeSpecReview: false,
+    handleExportDispensingUkeSpecReviewCsv: async () => {},
+    isExportingDispensingUkeSpecImplementationPack: false,
+    handleExportDispensingUkeSpecImplementationPack: async () => {},
+    dispensingUkeSpecCompletionLabel: '未点検',
+    isExportingDispensingUkeOfficialAllFieldsGate: false,
+    handleExportDispensingUkeOfficialAllFieldsGateCsv: async () => {},
+    ...overrides
+  };
+}
+
+describe('OfficialAuditSettingsTab renderToStaticMarkup contracts', () => {
+  it('renders official audit score, UKE completion gate, and self-audit items', () => {
+    const props = createMockOfficialAuditSettingsProps();
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    assert.ok(html.includes('<h2>公式仕様点検</h2>'), 'Should render tab main h2 title');
+    assert.ok(html.includes('公式提出UKE allFields完了ゲート'), 'Should render UKE gate section title');
+    assert.ok(html.includes('data-testid="dispensing-uke-official-all-fields-gate"'), 'Should render allFields gate container');
+    assert.ok(html.includes('完了ゲートCSV'), 'Should render gate CSV export button');
+    assert.ok(html.includes('請求点数の変動点検'), 'Should render drift check section');
+    assert.ok(html.includes('剤形判定の食い違い点検'), 'Should render dosage category conflict section');
+  });
+
+  it('renders claim points drift review results when claimPointsDrift is populated', () => {
+    const driftReview = buildClaimPointsDriftReview([
+      {
+        visitId: 'visit-drift-01',
+        patientName: '患者 点検太郎',
+        dispensingDate: '2026-10-01',
+        claimStatus: 'exported',
+        exportedAt: '2026-10-01T10:00:00Z',
+        exportedFileName: 'RECEIPTC.UKE',
+        exportedPoints: 450,
+        currentPoints: 475
+      }
+    ]);
+
+    const props = createMockOfficialAuditSettingsProps({
+      claimPointsDrift: driftReview
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    assert.ok(html.includes('data-testid="claim-points-drift-summary"'), 'Should render drift summary container');
+    assert.ok(html.includes('data-testid="claim-points-drift-table"'), 'Should render drift table');
+    assert.ok(html.includes('患者 点検太郎'), 'Should render patient name in drift table');
+    assert.ok(html.includes('450点'), 'Should render exported points');
+    assert.ok(html.includes('475点'), 'Should render current recalculated points');
+    assert.ok(html.includes('+25点'), 'Should render points diff delta');
+  });
+
+  it('renders dosage category conflict review results when conflict is detected', () => {
+    const conflictReview = buildDosageCategoryConflictReview([
+      {
+        visitId: 'visit-conflict-01',
+        rpNumber: 1,
+        itemId: 'item-01',
+        drugName: 'ロキソプロフェンナトリウム錠60mg',
+        dosageCategory: 'internal',
+        dosageCategorySource: 'manual',
+        usage: '1日1回 患部に塗布'
+      }
+    ]);
+
+    const props = createMockOfficialAuditSettingsProps({
+      dosageCategoryConflict: conflictReview
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    assert.ok(html.includes('data-testid="dosage-category-conflict-summary"'), 'Should render conflict summary container');
+    assert.ok(html.includes('data-testid="dosage-category-conflict-table"'), 'Should render conflict table');
+    assert.ok(html.includes('visit-conflict-01'), 'Should render affected visit ID');
+    assert.ok(html.includes('外用'), 'Should render calculation category label');
+    assert.ok(html.includes('内服'), 'Should render print category label');
+  });
+
+  it('disables trigger buttons when canViewOfficialAudit is false', () => {
+    const props = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: false
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    assert.ok(html.includes('disabled=""'), 'Action buttons should be disabled when canViewOfficialAudit is false');
+  });
+});
+

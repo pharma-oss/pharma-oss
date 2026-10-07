@@ -11,7 +11,7 @@ import { useDatabase } from '@/db/DatabaseContext';
 // 設定 > 端末同期 タブの本体。役割表示・登録端末一覧・トークン発行/再発行/失効・
 // 競合レビューを提供する。端末登録系の操作はメイン端末(hub)でのみ有効。
 
-interface TerminalRow {
+export interface TerminalRow {
   terminalId: string;
   label: string;
   registeredAt: string;
@@ -20,7 +20,7 @@ interface TerminalRow {
   revokedAt?: string;
 }
 
-interface ConflictRow {
+export interface ConflictRow {
   id: string;
   collection: string;
   docId: string;
@@ -370,48 +370,143 @@ export default function TerminalSyncPanel() {
     }
   };
 
-  if (role === null) {
-    return <p className="terminal-sync-loading">端末同期の設定を読み込んでいます…</p>;
-  }
+  return (
+    <TerminalSyncPanelView
+      role={role}
+      terminals={terminals}
+      conflicts={conflicts}
+      newTerminalId={newTerminalId}
+      setNewTerminalId={setNewTerminalId}
+      newTerminalLabel={newTerminalLabel}
+      setNewTerminalLabel={setNewTerminalLabel}
+      issuedToken={issuedToken}
+      satelliteHealth={satelliteHealth}
+      busy={busy}
+      standbyList={standbyList}
+      selectedStandby={selectedStandby}
+      setSelectedStandby={setSelectedStandby}
+      newStandbyEndpoint={newStandbyEndpoint}
+      setNewStandbyEndpoint={setNewStandbyEndpoint}
+      isHubReachable={isHubReachable}
+      currentHubEndpoint={currentHubEndpoint}
+      switchingHub={switchingHub}
+      isAdmin={isAdmin}
+      handleRegisterStandbyEndpoint={handleRegisterStandbyEndpoint}
+      handleSwitchStandbyHub={handleSwitchStandbyHub}
+      registerTerminal={registerTerminal}
+      rotateToken={rotateToken}
+      revokeTerminal={revokeTerminal}
+      resolveConflict={resolveConflict}
+      copyToken={copyToken}
+      wipeLegacyLocalData={wipeLegacyLocalData}
+      flushSatelliteQueue={flushSatelliteQueue}
+    />
+  );
+}
 
-  if (role === 'standalone') {
-    return (
-      <section className="card glass sync-card">
-        <h3 className="sync-card-title">
-          <Laptop size={18} aria-hidden="true" /> 端末同期は無効です
-        </h3>
-        <p className="sync-card-desc">
-          この端末は単独動作(standalone)です。店舗内で複数端末を使う場合は、メイン端末に
-          <code> PHARMACY_SYNC_ROLE=hub </code>、サテライト端末に
-          <code> PHARMACY_SYNC_ROLE=satellite </code> を設定してください。
-          手順は docs/satellite_terminal_sync_plan.md を参照してください。
-        </p>
-      </section>
-    );
-  }
+export interface TerminalSyncPanelViewProps {
+  role: ClientSyncRole | null;
+  terminals: TerminalRow[];
+  conflicts: ConflictRow[];
+  newTerminalId: string;
+  setNewTerminalId: (v: string) => void;
+  newTerminalLabel: string;
+  setNewTerminalLabel: (v: string) => void;
+  issuedToken: { terminalId: string; token: string } | null;
+  satelliteHealth: SatelliteQueueHealth | null;
+  busy: boolean;
+  standbyList: StandbyHubEntry[];
+  selectedStandby: string;
+  setSelectedStandby: (v: string) => void;
+  newStandbyEndpoint: string;
+  setNewStandbyEndpoint: (v: string) => void;
+  isHubReachable: boolean;
+  currentHubEndpoint: string;
+  switchingHub: boolean;
+  isAdmin: boolean;
+  handleRegisterStandbyEndpoint: () => void | Promise<void>;
+  handleSwitchStandbyHub: () => void | Promise<void>;
+  registerTerminal: () => void | Promise<void>;
+  rotateToken: (terminalId: string) => void | Promise<void>;
+  revokeTerminal: (terminalId: string) => void | Promise<void>;
+  resolveConflict: (conflict: ConflictRow) => void | Promise<void>;
+  copyToken: () => void | Promise<void>;
+  wipeLegacyLocalData: () => void | Promise<void>;
+  flushSatelliteQueue: () => void | Promise<void>;
+}
 
-  if (role === 'satellite') {
-    const health = satelliteHealth || {
-      total: 0,
-      byCollection: {},
-      expiredCount: 0,
-      hasExpired: false,
-      isNearLimit: false,
-      isLimitExceeded: false,
-      oldestEnqueuedAt: null,
-      newestEnqueuedAt: null,
-    };
+export function TerminalSyncPanelView({
+    role,
+    terminals,
+    conflicts,
+    newTerminalId,
+    setNewTerminalId,
+    newTerminalLabel,
+    setNewTerminalLabel,
+    issuedToken,
+    satelliteHealth,
+    busy,
+    standbyList,
+    selectedStandby,
+    setSelectedStandby,
+    newStandbyEndpoint,
+    setNewStandbyEndpoint,
+    isHubReachable,
+    currentHubEndpoint,
+    switchingHub,
+    isAdmin,
+    handleRegisterStandbyEndpoint,
+    handleSwitchStandbyHub,
+    registerTerminal,
+    rotateToken,
+    revokeTerminal,
+    resolveConflict,
+    copyToken,
+    wipeLegacyLocalData,
+    flushSatelliteQueue
+  }: TerminalSyncPanelViewProps) {
+    if (role === null) {
+      return <p className="terminal-sync-loading">端末同期の設定を読み込んでいます…</p>;
+    }
 
-    const auditCount = health.byCollection['audit_logs'] || 0;
-    const clinicalCount = Math.max(0, health.total - auditCount);
-    const estimatedReceptions = Math.round(health.total / 14);
-
-    return (
-      <div className="terminal-sync-container" data-testid="satellite-terminal-sync-panel">
+    if (role === 'standalone') {
+      return (
         <section className="card glass sync-card">
           <h3 className="sync-card-title">
-            <Laptop size={18} aria-hidden="true" /> この端末はサテライト端末です
+            <Laptop size={18} aria-hidden="true" /> 端末同期は無効です
           </h3>
+          <p className="sync-card-desc">
+            この端末は単独動作(standalone)です。店舗内で複数端末を使う場合は、メイン端末に
+            <code> PHARMACY_SYNC_ROLE=hub </code>、サテライト端末に
+            <code> PHARMACY_SYNC_ROLE=satellite </code> を設定してください。
+            手順は docs/satellite_terminal_sync_plan.md を参照してください。
+          </p>
+        </section>
+      );
+    }
+
+    if (role === 'satellite') {
+      const health = satelliteHealth || {
+        total: 0,
+        byCollection: {},
+        expiredCount: 0,
+        hasExpired: false,
+        isNearLimit: false,
+        isLimitExceeded: false,
+        oldestEnqueuedAt: null,
+        newestEnqueuedAt: null,
+      };
+
+      const auditCount = health.byCollection['audit_logs'] || 0;
+      const clinicalCount = Math.max(0, health.total - auditCount);
+      const estimatedReceptions = Math.round(health.total / 14);
+
+      return (
+        <div className="terminal-sync-container" data-testid="satellite-terminal-sync-panel">
+          <section className="card glass sync-card">
+            <h3 className="sync-card-title">
+              <Laptop size={18} aria-hidden="true" /> この端末はサテライト端末です
+            </h3>
           <p className="sync-card-desc">
             患者データはこの端末に保存されず、メイン端末に集約されます。
             端末の登録・失効・競合レビューはメイン端末の設定画面から行ってください。

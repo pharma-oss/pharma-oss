@@ -87,3 +87,162 @@ describe('TerminalSyncPanel contracts and styling regressions', () => {
     );
   });
 });
+
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import TerminalSyncPanel, {
+  TerminalSyncPanelView,
+  type TerminalSyncPanelViewProps,
+  type TerminalRow,
+  type ConflictRow
+} from './TerminalSyncPanel';
+
+function createMockSyncPanelViewProps(overrides: Partial<TerminalSyncPanelViewProps> = {}): TerminalSyncPanelViewProps {
+  return {
+    role: 'standalone',
+    terminals: [],
+    conflicts: [],
+    newTerminalId: '',
+    setNewTerminalId: () => {},
+    newTerminalLabel: '',
+    setNewTerminalLabel: () => {},
+    issuedToken: null,
+    satelliteHealth: null,
+    busy: false,
+    standbyList: [],
+    selectedStandby: '',
+    setSelectedStandby: () => {},
+    newStandbyEndpoint: '',
+    setNewStandbyEndpoint: () => {},
+    isHubReachable: true,
+    currentHubEndpoint: '',
+    switchingHub: false,
+    isAdmin: true,
+    handleRegisterStandbyEndpoint: () => {},
+    handleSwitchStandbyHub: () => {},
+    registerTerminal: () => {},
+    rotateToken: () => {},
+    revokeTerminal: () => {},
+    resolveConflict: () => {},
+    copyToken: () => {},
+    wipeLegacyLocalData: () => {},
+    flushSatelliteQueue: () => {},
+    ...overrides
+  };
+}
+
+describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
+  it('exports TerminalSyncPanel and TerminalSyncPanelView as callable React component functions', () => {
+    assert.equal(typeof TerminalSyncPanel, 'function');
+    assert.equal(typeof TerminalSyncPanelView, 'function');
+  });
+
+  it('renders loading notice when role is null', () => {
+    const props = createMockSyncPanelViewProps({ role: null });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    assert.ok(html.includes('terminal-sync-loading'), 'Should render loading class');
+    assert.ok(html.includes('端末同期の設定を読み込んでいます…'), 'Should display loading message');
+  });
+
+  it('renders standalone explanation when role is standalone', () => {
+    const props = createMockSyncPanelViewProps({ role: 'standalone' });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    assert.ok(html.includes('端末同期は無効です'), 'Should render standalone title');
+    assert.ok(html.includes('PHARMACY_SYNC_ROLE=hub'), 'Should mention hub role env variable');
+    assert.ok(html.includes('PHARMACY_SYNC_ROLE=satellite'), 'Should mention satellite role env variable');
+    assert.ok(html.includes('docs/satellite_terminal_sync_plan.md'), 'Should link documentation path');
+  });
+
+  it('renders satellite metrics, standby hubs, and wipe button when role is satellite', () => {
+    const props = createMockSyncPanelViewProps({
+      role: 'satellite',
+      satelliteHealth: {
+        total: 14,
+        byCollection: { patients: 2, soap_records: 12 },
+        expiredCount: 3,
+        hasExpired: true,
+        isNearLimit: false,
+        isLimitExceeded: false,
+        oldestEnqueuedAt: '2026-10-06T08:00:00Z',
+        newestEnqueuedAt: '2026-10-07T08:00:00Z'
+      },
+      standbyList: [
+        {
+          endpoint: 'https://standby-1.local:3000',
+          issuedAt: '2026-10-01T09:00:00Z',
+          signature: 'sig-abc123456789'
+        }
+      ],
+      isHubReachable: true,
+      currentHubEndpoint: 'https://hub.local:3000'
+    });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    assert.ok(html.includes('この端末はサテライト端末です'), 'Should render satellite header');
+    assert.ok(html.includes('未送信ローカルキュー（暗号化バックログ）'), 'Should render queue card title');
+    assert.ok(html.includes('前日未送信あり (3件)'), 'Should display expired warning badge');
+    assert.ok(html.includes('患者: 2件'), 'Should display breakdown for patients');
+    assert.ok(html.includes('薬歴: 12件'), 'Should display breakdown for soap_records');
+    assert.ok(html.includes('未送信データを今すぐ送信 (Flush)'), 'Should render flush queue button');
+    assert.ok(html.includes('予備機切替（Standby Hub設定）'), 'Should render standby hub title');
+    assert.ok(html.includes('https://standby-1.local:3000'), 'Should render standby endpoint in list');
+    assert.ok(html.includes('メインHub接続中 (オンライン)'), 'Should render online status');
+    assert.ok(html.includes('旧ローカルデータを完全に削除'), 'Should render wipe legacy local data button');
+  });
+
+  it('renders hub terminal management table, register form, and conflict review when role is hub', () => {
+    const mockTerminals: TerminalRow[] = [
+      {
+        terminalId: 'term-sat-01',
+        label: '受付サテライト1',
+        registeredAt: '2026-09-01T00:00:00Z',
+        lastSeenAt: '2026-10-06T15:30:00Z'
+      },
+      {
+        terminalId: 'term-sat-02',
+        label: '調剤室サテライト2',
+        registeredAt: '2026-09-02T00:00:00Z',
+        revokedAt: '2026-10-01T12:00:00Z'
+      }
+    ];
+
+    const mockConflicts: ConflictRow[] = [
+      {
+        id: 'conf-1',
+        collection: 'patients',
+        docId: 'pt-100',
+        terminalId: 'term-sat-01',
+        occurredAt: '2026-10-06T12:00:00Z',
+        losingDocumentState: { name: '患者 競合太郎', notes: '電話番号変更' }
+      }
+    ];
+
+    const props = createMockSyncPanelViewProps({
+      role: 'hub',
+      terminals: mockTerminals,
+      conflicts: mockConflicts,
+      issuedToken: {
+        terminalId: 'term-sat-03',
+        token: 'token-secret-xyz-987'
+      }
+    });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    assert.ok(html.includes('この端末はメイン端末(集約ハブ)です'), 'Should render hub header');
+    assert.ok(html.includes('サテライト端末の登録'), 'Should render registration title');
+    assert.ok(html.includes('登録してトークン発行'), 'Should render register button');
+    assert.ok(html.includes('端末 term-sat-03 のトークン'), 'Should render issued token section');
+    assert.ok(html.includes('token-secret-xyz-987'), 'Should display issued token string');
+    assert.ok(html.includes('term-sat-01'), 'Should display active terminal in table');
+    assert.ok(html.includes('受付サテライト1'), 'Should display terminal label');
+    assert.ok(html.includes('有効'), 'Should display active badge');
+    assert.ok(html.includes('失効済み'), 'Should display revoked badge for term-sat-02');
+    assert.ok(html.includes('トークン再発行'), 'Should render rotate button');
+    assert.ok(html.includes('同期競合レビュー'), 'Should render conflict section');
+    assert.ok(html.includes('患者 / ID pt-100'), 'Should translate collection name to Japanese');
+    assert.ok(html.includes('確認済みにする'), 'Should render resolve button');
+  });
+});
+
