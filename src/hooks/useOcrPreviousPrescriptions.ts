@@ -13,6 +13,120 @@ import type { Prescription } from '@/app/ocr/types';
 
 export type { PreviousDoSourceItem, PreviousDoSnapshot };
 
+// RxDB のドキュメントのうち、前回処方の組み立てに使う項目だけを持つ形
+export interface PreviousPrescriptionDrugDoc {
+  name?: string;
+  yjCode?: string;
+  genericName?: string;
+  isHighRisk?: boolean;
+  isAbolished?: boolean;
+  stockQuantity?: number;
+}
+
+export interface PreviousPrescriptionDrugLookup {
+  get(drugId: string): PreviousPrescriptionDrugDoc | undefined;
+}
+
+// 新しい順に並べた直近 limit 件(日付が読めない受付は 0 = 最古として扱う)
+export function selectRecentVisits(visits: Visit[], limit = 2): Visit[] {
+  return [...visits]
+    .sort((a, b) => getVisitSortTime(b) - getVisitSortTime(a))
+    .slice(0, limit);
+}
+
+// 「前回Do」の元にする、最新の完了済み受付(完了していないものは対象外)
+export function selectLatestCompletedVisit(visits: Visit[]): Visit | undefined {
+  return visits
+    .filter((visit) => visit.status === 'completed')
+    .sort((a, b) => getVisitSortTime(b) - getVisitSortTime(a))[0];
+}
+
+// 処方薬・調剤薬(後発品変更後)の両方を、重複なく・空を除いて返す
+export function collectReferencedDrugIds(
+  items: ReadonlyArray<Pick<PrescriptionItem, 'drugId' | 'dispensedDrugCode'>>
+): string[] {
+  return Array.from(new Set(
+    items
+      .flatMap((item) => [item.drugId, item.dispensedDrugCode])
+      .filter((drugId): drugId is string => !!drugId)
+  ));
+}
+
+// 過去処方タイムライン比較用のスナップショット。
+// 比較に使う YJ コード・一般名は、調剤薬(後発品変更後)があればそれを優先し、無ければ処方薬から取る。
+export function buildPrescriptionHistorySnapshot(
+  visit: Visit,
+  items: PrescriptionItem[],
+  drugs: PreviousPrescriptionDrugLookup
+): PrescriptionHistorySnapshot {
+  return {
+    visitId: visit.visitId,
+    dateLabel: formatVisitDateLabel(visit),
+    institutionName: visit.institutionName,
+    items: items.map((item, index): PrescriptionHistoryItem => {
+      const prescribedDrugDoc = drugs.get(item.drugId);
+      const dispensedDrugDoc = item.dispensedDrugCode ? drugs.get(item.dispensedDrugCode) : undefined;
+      const comparisonDrugDoc = dispensedDrugDoc || prescribedDrugDoc;
+      const prescribedName = prescribedDrugDoc?.name ? formatDrugDisplayName(prescribedDrugDoc.name) : item.drugId;
+      const dispensedName = item.dispensedDrug || (dispensedDrugDoc?.name ? formatDrugDisplayName(dispensedDrugDoc.name) : '');
+
+      return {
+        id: item.itemId || `${visit.visitId}-${index}`,
+        drugCode: item.drugId,
+        drugName: prescribedName,
+        dispensedDrug: dispensedName,
+        amount: item.amount,
+        usage: item.usage,
+        days: item.days,
+        yjCode: comparisonDrugDoc?.yjCode || prescribedDrugDoc?.yjCode || '',
+        genericName: comparisonDrugDoc?.genericName || prescribedDrugDoc?.genericName || ''
+      };
+    })
+  };
+}
+
+// 「前回Do」で処方入力へ複写する元データ。数量が読めない・0 の行は 1 として扱う。
+export function buildPreviousDoSourceItems(
+  items: PrescriptionItem[],
+  drugs: PreviousPrescriptionDrugLookup
+): PreviousDoSourceItem[] {
+  return items.map((item) => {
+    const prescribedDrugDoc = drugs.get(item.drugId);
+    const dispensedDrugDoc = item.dispensedDrugCode ? drugs.get(item.dispensedDrugCode) : undefined;
+
+    return {
+      itemId: item.itemId,
+      rpNumber: item.rpNumber,
+      drugId: item.drugId,
+      dispensedDrug: item.dispensedDrug,
+      dispensedDrugCode: item.dispensedDrugCode,
+      changeReason: item.changeReason,
+      amount: Number(item.amount) || 1,
+      usage: item.usage,
+      days: item.days,
+      rpComment: item.rpComment,
+      isIppoka: item.isIppoka,
+      isCrushed: item.isCrushed,
+      tokkanType: item.tokkanType,
+      receiptRemark: item.receiptRemark,
+      billingAgentGroupKey: item.billingAgentGroupKey,
+      billingAgentGroupReason: item.billingAgentGroupReason,
+      prescribedDrugName: prescribedDrugDoc?.name ? formatDrugDisplayName(prescribedDrugDoc.name) : undefined,
+      prescribedYjCode: prescribedDrugDoc?.yjCode || '',
+      prescribedGenericName: prescribedDrugDoc?.genericName || '',
+      prescribedIsHighRisk: !!prescribedDrugDoc?.isHighRisk,
+      prescribedIsAbolished: !!prescribedDrugDoc?.isAbolished,
+      prescribedStockQuantity: prescribedDrugDoc?.stockQuantity,
+      dispensedDrugName: dispensedDrugDoc?.name ? formatDrugDisplayName(dispensedDrugDoc.name) : undefined,
+      dispensedYjCode: dispensedDrugDoc?.yjCode || '',
+      dispensedGenericName: dispensedDrugDoc?.genericName || '',
+      dispensedIsHighRisk: !!dispensedDrugDoc?.isHighRisk,
+      dispensedIsAbolished: !!dispensedDrugDoc?.isAbolished,
+      dispensedStockQuantity: dispensedDrugDoc?.stockQuantity
+    };
+  });
+}
+
 interface UseOcrPreviousPrescriptionsOptions {
   db: any;
   selectedPatientId: string | null;
@@ -42,10 +156,10 @@ export function useOcrPreviousPrescriptions({
       setIsLoadingPreviousPrescription(true);
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
-        const visits = visitDocs
-          .map((visitDoc: any) => visitDoc.toJSON() as Visit)
-          .sort((a: Visit, b: Visit) => getVisitSortTime(b) - getVisitSortTime(a));
-        const historyVisits = visits.slice(0, 2);
+        const historyVisits = selectRecentVisits(
+          visitDocs.map((visitDoc: any) => visitDoc.toJSON() as Visit),
+          2
+        );
 
         if (historyVisits.length === 0) {
           if (isMounted) setPreviousPrescriptions([]);
@@ -56,42 +170,16 @@ export function useOcrPreviousPrescriptions({
           const itemDocs = await db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec();
           return {
             visit,
-            items: itemDocs.map((itemDoc: any) => itemDoc.toJSON())
+            items: itemDocs.map((itemDoc: any) => itemDoc.toJSON() as PrescriptionItem)
           };
         }));
-        const drugIds = Array.from(new Set(
-          historyItemGroups
-            .flatMap((group: any) => group.items)
-            .flatMap((item: any) => [item.drugId, item.dispensedDrugCode])
-            .filter((drugId: any): drugId is string => !!drugId)
-        ));
+        const drugIds = collectReferencedDrugIds(historyItemGroups.flatMap((group) => group.items));
         const drugsMap = drugIds.length > 0
           ? await db.drugs.findByIds(drugIds).exec()
           : new Map();
-        const snapshots: PrescriptionHistorySnapshot[] = historyItemGroups.map(({ visit, items }: any) => ({
-          visitId: visit.visitId,
-          dateLabel: formatVisitDateLabel(visit),
-          institutionName: visit.institutionName,
-          items: items.map((item: any, index: number): PrescriptionHistoryItem => {
-            const prescribedDrugDoc = drugsMap.get(item.drugId);
-            const dispensedDrugDoc = item.dispensedDrugCode ? drugsMap.get(item.dispensedDrugCode) : undefined;
-            const comparisonDrugDoc = dispensedDrugDoc || prescribedDrugDoc;
-            const prescribedName = prescribedDrugDoc?.name ? formatDrugDisplayName(prescribedDrugDoc.name) : item.drugId;
-            const dispensedName = item.dispensedDrug || (dispensedDrugDoc?.name ? formatDrugDisplayName(dispensedDrugDoc.name) : '');
-
-            return {
-              id: item.itemId || `${visit.visitId}-${index}`,
-              drugCode: item.drugId,
-              drugName: prescribedName,
-              dispensedDrug: dispensedName,
-              amount: item.amount,
-              usage: item.usage,
-              days: item.days,
-              yjCode: comparisonDrugDoc?.yjCode || prescribedDrugDoc?.yjCode || '',
-              genericName: comparisonDrugDoc?.genericName || prescribedDrugDoc?.genericName || ''
-            };
-          })
-        }));
+        const snapshots = historyItemGroups.map(({ visit, items }) => (
+          buildPrescriptionHistorySnapshot(visit, items, drugsMap)
+        ));
 
         if (isMounted) {
           setPreviousPrescriptions(snapshots);
@@ -121,10 +209,9 @@ export function useOcrPreviousPrescriptions({
       setIsLoadingPreviousDo(true);
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
-        const latestCompletedVisit = visitDocs
-          .map((visitDoc: any) => visitDoc.toJSON() as Visit)
-          .filter((visit: Visit) => visit.status === 'completed')
-          .sort((a: Visit, b: Visit) => getVisitSortTime(b) - getVisitSortTime(a))[0];
+        const latestCompletedVisit = selectLatestCompletedVisit(
+          visitDocs.map((visitDoc: any) => visitDoc.toJSON() as Visit)
+        );
 
         if (!latestCompletedVisit) {
           if (isMounted) setPreviousDoSnapshot(null);
@@ -141,50 +228,12 @@ export function useOcrPreviousPrescriptions({
           return;
         }
 
-        const drugIds = Array.from(new Set(
-          items
-            .flatMap((item: any) => [item.drugId, item.dispensedDrugCode])
-            .filter((drugId: any): drugId is string => !!drugId)
-        ));
+        const drugIds = collectReferencedDrugIds(items);
         const drugsMap = drugIds.length > 0
           ? await db.drugs.findByIds(drugIds).exec()
           : new Map();
 
-        const doItems: PreviousDoSourceItem[] = items.map((item: any) => {
-          const prescribedDrugDoc = drugsMap.get(item.drugId);
-          const dispensedDrugDoc = item.dispensedDrugCode ? drugsMap.get(item.dispensedDrugCode) : undefined;
-
-          return {
-            itemId: item.itemId,
-            rpNumber: item.rpNumber,
-            drugId: item.drugId,
-            dispensedDrug: item.dispensedDrug,
-            dispensedDrugCode: item.dispensedDrugCode,
-            changeReason: item.changeReason,
-            amount: Number(item.amount) || 1,
-            usage: item.usage,
-            days: item.days,
-            rpComment: item.rpComment,
-            isIppoka: item.isIppoka,
-            isCrushed: item.isCrushed,
-            tokkanType: item.tokkanType,
-            receiptRemark: item.receiptRemark,
-            billingAgentGroupKey: item.billingAgentGroupKey,
-            billingAgentGroupReason: item.billingAgentGroupReason,
-            prescribedDrugName: prescribedDrugDoc?.name ? formatDrugDisplayName(prescribedDrugDoc.name) : undefined,
-            prescribedYjCode: prescribedDrugDoc?.yjCode || '',
-            prescribedGenericName: prescribedDrugDoc?.genericName || '',
-            prescribedIsHighRisk: !!prescribedDrugDoc?.isHighRisk,
-            prescribedIsAbolished: !!prescribedDrugDoc?.isAbolished,
-            prescribedStockQuantity: prescribedDrugDoc?.stockQuantity,
-            dispensedDrugName: dispensedDrugDoc?.name ? formatDrugDisplayName(dispensedDrugDoc.name) : undefined,
-            dispensedYjCode: dispensedDrugDoc?.yjCode || '',
-            dispensedGenericName: dispensedDrugDoc?.genericName || '',
-            dispensedIsHighRisk: !!dispensedDrugDoc?.isHighRisk,
-            dispensedIsAbolished: !!dispensedDrugDoc?.isAbolished,
-            dispensedStockQuantity: dispensedDrugDoc?.stockQuantity
-          };
-        });
+        const doItems = buildPreviousDoSourceItems(items, drugsMap);
 
         if (isMounted) {
           setPreviousDoSnapshot({
