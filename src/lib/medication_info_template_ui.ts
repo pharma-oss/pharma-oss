@@ -1,4 +1,4 @@
-import type { PatientMedicationInfoTemplate, PatientMedicationInfoTemplateStatus } from '../db/types.ts';
+import type { PatientMedicationInfoTemplate, PatientMedicationInfoTemplateStatus, PharmacyDatabase } from '../db/types.ts';
 
 export type MedicationInfoSourceType = NonNullable<PatientMedicationInfoTemplate['sourceType']>;
 export type MedicationInfoTemplateStatusFilter = 'all' | PatientMedicationInfoTemplateStatus;
@@ -99,3 +99,10 @@ export const sortMedicationInfoTemplates = (templates: PatientMedicationInfoTemp
   })
 );
 
+// 薬情テンプレ一覧の読み込み。画面には常に 新しい順→薬剤コード順 で渡す。
+export async function loadSortedMedicationInfoTemplates(
+  db: Pick<PharmacyDatabase, 'patient_medication_info_templates'>
+): Promise<PatientMedicationInfoTemplate[]> {
+  const docs = await db.patient_medication_info_templates.find().exec();
+  return sortMedicationInfoTemplates(docs.map((doc) => doc.toJSON() as PatientMedicationInfoTemplate));
+}

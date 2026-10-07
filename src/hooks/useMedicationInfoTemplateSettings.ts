@@ -29,6 +29,7 @@ import {
   medicationInfoTemplateToForm,
   makeMedicationInfoTemplateId,
   trimOrUndefined,
+  loadSortedMedicationInfoTemplates,
   sortMedicationInfoTemplates,
   MEDICATION_INFO_SOURCE_TYPE_LABELS,
   MEDICATION_INFO_TEMPLATE_STATUS_LABELS,
@@ -75,12 +76,12 @@ export function useMedicationInfoTemplateSettings({
     if (!db) return [];
     setIsLoadingMedicationInfoTemplates(true);
     try {
-      const docs = await db.patient_medication_info_templates.find().exec();
-      const rows = docs.map((doc) => doc.toJSON() as PatientMedicationInfoTemplate);
+      const rows = await loadSortedMedicationInfoTemplates(db);
       setMedicationInfoTemplates(rows);
       return rows;
     } catch (error) {
       console.error('Failed to load patient medication info templates:', error);
+      toast.error('薬情テンプレを読み込めませんでした。');
       return [];
     } finally {
       setIsLoadingMedicationInfoTemplates(false);

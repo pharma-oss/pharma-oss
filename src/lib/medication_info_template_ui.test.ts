@@ -4,6 +4,7 @@ import {
   createEmptyMedicationInfoTemplateForm,
   trimOrUndefined,
   makeMedicationInfoTemplateId,
+  loadSortedMedicationInfoTemplates,
   medicationInfoTemplateToForm,
   sortMedicationInfoTemplates
 } from './medication_info_template_ui.ts';
@@ -74,4 +75,39 @@ test('sortMedicationInfoTemplates sorts by timestamp descending then drugCode as
   assert.strictEqual(sorted[0].templateId, '2'); // 2026-02-01, drugCode 'A'
   assert.strictEqual(sorted[1].templateId, '3'); // 2026-02-01, drugCode 'C'
   assert.strictEqual(sorted[2].templateId, '1'); // 2026-01-01, drugCode 'B'
+});
+
+function fakeTemplateDb(rows: PatientMedicationInfoTemplate[] | Error) {
+  return {
+    patient_medication_info_templates: {
+      find: () => ({
+        exec: async () => {
+          if (rows instanceof Error) throw rows;
+          return rows.map((row) => ({ toJSON: () => row }));
+        }
+      })
+    }
+  } as unknown as Parameters<typeof loadSortedMedicationInfoTemplates>[0];
+}
+
+test('loadSortedMedicationInfoTemplates hands the list to the screen newest first, then by drug code', async () => {
+  const template = (templateId: string, drugCode: string, updatedAt?: string): PatientMedicationInfoTemplate => ({
+    templateId, drugCode, drugName: `Drug ${drugCode}`, status: 'draft', updatedAt
+  });
+  const stored = [
+    template('old', 'B', '2026-01-01T00:00:00.000Z'),
+    template('new-c', 'C', '2026-03-01T00:00:00.000Z'),
+    template('new-a', 'A', '2026-03-01T00:00:00.000Z'),
+    template('mid', 'D', '2026-02-01T00:00:00.000Z')
+  ];
+
+  const loaded = await loadSortedMedicationInfoTemplates(fakeTemplateDb(stored));
+
+  assert.deepStrictEqual(loaded.map((t) => t.templateId), ['new-a', 'new-c', 'mid', 'old']);
+  assert.deepStrictEqual(stored.map((t) => t.templateId), ['old', 'new-c', 'new-a', 'mid'], 'the stored order is untouched');
+});
+
+test('loadSortedMedicationInfoTemplates returns an empty list for an empty collection and lets read errors reach the caller', async () => {
+  assert.deepStrictEqual(await loadSortedMedicationInfoTemplates(fakeTemplateDb([])), []);
+  await assert.rejects(() => loadSortedMedicationInfoTemplates(fakeTemplateDb(new Error('IDB closed'))), /IDB closed/);
 });
