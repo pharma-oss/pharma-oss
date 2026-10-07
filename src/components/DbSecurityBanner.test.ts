@@ -21,6 +21,13 @@ describe('DbSecurityBanner component contracts and render tests', () => {
     assert.ok(html.includes('詳細を確認'), 'Should render action link text');
   });
 
+  it('writes CSS properties in kebab-case inside <style jsx> so the font-size declaration is not silently dropped', () => {
+    const html = renderToStaticMarkup(React.createElement(DbSecurityBannerView, { showBanner: true }));
+
+    assert.ok(html.includes('font-size: var(--fs-xs);'), 'Should declare font-size via the type-scale token');
+    assert.ok(!/\bfontSize\s*:/.test(html), 'Should not contain camelCase property names, which browsers ignore in CSS text');
+  });
+
   it('renders nothing when showBanner is false', () => {
     const html = renderToStaticMarkup(React.createElement(DbSecurityBannerView, { showBanner: false }));
     assert.equal(html, '', 'Should render empty string when showBanner is false');
