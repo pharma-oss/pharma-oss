@@ -317,10 +317,11 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
         initialSetupChecklist: buildInitialSetupChecklist({
           settings,
           staff: staffForDiagnostic,
-          auditLogs
+          auditLogs,
+          generatedAt
         }),
-        backupGenerationReview: buildBackupGenerationReview(auditLogs),
-        backupScheduleReview: buildBackupScheduleReview(auditLogs, backupSchedulePolicy),
+        backupGenerationReview: buildBackupGenerationReview(auditLogs, generatedAt),
+        backupScheduleReview: buildBackupScheduleReview(auditLogs, backupSchedulePolicy, generatedAt),
         officialAuditSummary,
         officialAuditBlockerCount: officialAuditBlockers.length,
         dailyClosingReview: buildOperationalClosingMonthlyReview(auditLogs, generatedAt, {

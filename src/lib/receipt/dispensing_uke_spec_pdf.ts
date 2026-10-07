@@ -154,6 +154,47 @@ export interface DispensingUkeSpecificationPdfFieldDefinitionImplementationConfi
   note?: string;
 }
 
+const DISPENSING_UKE_SPEC_CONFIRMATION_STATUS_BY_LABEL: Record<string, DispensingUkeSpecificationPdfFieldDefinitionImplementationConfirmation['status']> = {
+  checking: 'checking',
+  '確認中': 'checking',
+  ready_to_define: 'ready_to_define',
+  '定義追加準備': 'ready_to_define',
+  implemented: 'implemented',
+  '実装済み': 'implemented',
+  blocked: 'blocked',
+  '保留': 'blocked'
+};
+
+// 設定画面「実装確認メモ」の入力(1行1件: タスクID, 状態, 根拠[, 担当, 確認日, 備考...])を確認記録へ変換する。
+// 空行と # で始まる行は読み飛ばし、形式が違う行があれば行番号つきで Error を投げる。
+export function parseDispensingUkeSpecConfirmationText(
+  value: string,
+  fallbackReviewedAt = new Date()
+): DispensingUkeSpecificationPdfFieldDefinitionImplementationConfirmation[] {
+  const fallbackDateText = fallbackReviewedAt.toISOString().slice(0, 10);
+  return value
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
+    .filter(({ line }) => line && !line.startsWith('#'))
+    .map(({ line, lineNumber }) => {
+      const parts = line.split(/[,\t|]/).map((part) => part.trim());
+      const [taskId, statusLabel, evidenceLabel, owner, reviewedAt, ...noteParts] = parts;
+      const status = DISPENSING_UKE_SPEC_CONFIRMATION_STATUS_BY_LABEL[statusLabel || ''];
+      if (!taskId || !status || !evidenceLabel) {
+        throw new Error(`${lineNumber}行目の確認メモは「タスクID, 状態, 根拠」の形で入力してください。`);
+      }
+
+      return {
+        taskId,
+        status,
+        evidenceLabel,
+        owner: owner || undefined,
+        reviewedAt: reviewedAt || fallbackDateText,
+        note: noteParts.filter(Boolean).join(' / ') || undefined
+      };
+    });
+}
+
 export interface DispensingUkeSpecificationPdfFieldDefinitionImplementationProgressItem {
   id: string;
   recordType: string;

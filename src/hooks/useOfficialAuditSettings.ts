@@ -11,12 +11,18 @@ import {
   formatDispensingUkeOfficialAllFieldDefinitionGate
 } from '@/lib/receipt/dispensing_uke_validation';
 import {
+  makeDispensingUkeOfficialAllFieldsGateCsvFileName,
+  makeDispensingUkeSpecImplementationPackFileName,
+  makeDispensingUkeSpecReviewCsvFileName
+} from '@/lib/audit_settings_helpers';
+import {
   buildDispensingUkeSpecificationPdfAllFieldCompletionGate,
   buildDispensingUkeSpecificationPdfAllFieldCompletionGateCsv,
   buildDispensingUkeSpecificationPdfAllFieldImplementationPack,
   buildDispensingUkeSpecificationPdfAllFieldImplementationPackText,
   buildDispensingUkeSpecificationPdfFieldDefinitionReview,
   formatDispensingUkeSpecificationPdfAllFieldCompletionGate,
+  parseDispensingUkeSpecConfirmationText,
   parseDispensingUkeSpecificationPdfText,
   type DispensingUkeSpecificationPdfAllFieldCompletionGate
 } from '@/lib/receipt/dispensing_uke_spec_pdf';
@@ -42,18 +48,6 @@ import {
 import { calculateDispensingFees, getTotalPoints } from '@/lib/calculator';
 import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
-
-export function makeDispensingUkeSpecReviewCsvFileName(): string {
-  return `dispensing_uke_spec_review_${new Date().toISOString().slice(0, 10)}.csv`;
-}
-
-export function makeDispensingUkeOfficialAllFieldsGateCsvFileName(): string {
-  return `dispensing_uke_official_all_fields_gate_${new Date().toISOString().slice(0, 10)}.csv`;
-}
-
-export function makeDispensingUkeSpecImplementationPackFileName(): string {
-  return `dispensing_uke_spec_implementation_pack_${new Date().toISOString().slice(0, 10)}.txt`;
-}
 
 interface UseOfficialAuditSettingsProps {
   db: PharmacyDatabase | null;
@@ -219,7 +213,11 @@ export function useOfficialAuditSettings({
 
     setIsExportingDispensingUkeSpecImplementationPack(true);
     try {
-      const pack = buildDispensingUkeSpecificationPdfAllFieldImplementationPack(trimmedText);
+      const confirmations = parseDispensingUkeSpecConfirmationText(dispensingUkeSpecConfirmationText);
+      const pack = buildDispensingUkeSpecificationPdfAllFieldImplementationPack(trimmedText, confirmations);
+      setDispensingUkeSpecCompletionGate(pack.completionGate);
+      setDispensingUkeSpecCompletionLabel(formatDispensingUkeSpecificationPdfAllFieldCompletionGate(pack.completionGate));
+
       const fileName = makeDispensingUkeSpecImplementationPackFileName();
       downloadTextFile(
         fileName,

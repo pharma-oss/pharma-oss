@@ -62,6 +62,18 @@ export function makeAuditLogExportFileName(date = new Date()): string {
   return `yakureki_audit_logs_${formatDateTimeStamp(date)}.json`;
 }
 
+export function makeDispensingUkeSpecReviewCsvFileName(date = new Date()): string {
+  return `yakureki_uke_spec_all_fields_${formatDateTimeStamp(date)}.csv`;
+}
+
+export function makeDispensingUkeOfficialAllFieldsGateCsvFileName(date = new Date()): string {
+  return `yakureki_official_uke_all_fields_gate_${formatDateTimeStamp(date)}.csv`;
+}
+
+export function makeDispensingUkeSpecImplementationPackFileName(date = new Date()): string {
+  return `yakureki_uke_spec_implementation_pack_${formatDateTimeStamp(date)}.txt`;
+}
+
 export function makeAuditLogRetentionLedgerCsvFileName(date = new Date()): string {
   return `yakureki_audit_retention_ledger_${formatDateTimeStamp(date)}.csv`;
 }

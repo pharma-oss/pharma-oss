@@ -1075,6 +1075,6 @@ export function buildStaffAccessRecoveryCheckRequestChecklist(request: StaffAcce
 }
 
 export function makeStaffAccessRecoveryMonthlyReviewCsvFileName(monthKey: string): string {
-  return `staff_access_recovery_monthly_review_${monthKey}.csv`;
+  return `yakureki_staff_access_recovery_monthly_review_${monthKey.replace('-', '')}.csv`;
 }
 

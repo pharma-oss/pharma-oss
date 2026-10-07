@@ -38,6 +38,7 @@ import {
   formatDispensingUkeSpecificationPdfFieldDefinitionImplementationProgressReview,
   formatDispensingUkeSpecificationPdfFieldDefinitionReview,
   formatDispensingUkeSpecificationPdfFieldReview,
+  parseDispensingUkeSpecConfirmationText,
   parseDispensingUkeSpecificationPdfText
 } from './dispensing_uke_spec_pdf.ts';
 
@@ -440,4 +441,78 @@ test('buildDispensingUkeSpecificationPdfFieldReview reports length, required, an
   assert.ok(review.keyFieldIssues.some((issue) => issue.recordType === 'YK' && issue.itemNumber === 2 && issue.field === 'required'));
   assert.ok(review.keyFieldIssues.some((issue) => issue.recordType === 'SN' && issue.itemNumber === 2 && issue.field === 'missing'));
   assert.match(formatDispensingUkeSpecificationPdfFieldReview(review), /項目差分/);
+});
+
+// ---- 設定画面「実装確認メモ」(1行1件)の解析 ----
+
+const MEMO_FALLBACK_DATE = new Date('2026-10-08T12:00:00.000Z');
+
+test('parseDispensingUkeSpecConfirmationText reads task, status and evidence, defaulting the review date', () => {
+  assert.deepStrictEqual(
+    parseDispensingUkeSpecConfirmationText('YK-pdf-field-definition-implementation, 確認中, 仕様PDF YK 第3項目', MEMO_FALLBACK_DATE),
+    [{
+      taskId: 'YK-pdf-field-definition-implementation',
+      status: 'checking',
+      evidenceLabel: '仕様PDF YK 第3項目',
+      owner: undefined,
+      reviewedAt: '2026-10-08',
+      note: undefined
+    }]
+  );
+});
+
+test('parseDispensingUkeSpecConfirmationText accepts comma, tab and pipe separators with owner, date and notes', () => {
+  const [full, piped] = parseDispensingUkeSpecConfirmationText(
+    ['T1\t実装済み\t根拠A\t請求担当\t2026-06-19\t備考1\t備考2', 'T2|保留|根拠B'].join('\n'),
+    MEMO_FALLBACK_DATE
+  );
+  assert.deepStrictEqual(full, {
+    taskId: 'T1', status: 'implemented', evidenceLabel: '根拠A', owner: '請求担当', reviewedAt: '2026-06-19', note: '備考1 / 備考2'
+  });
+  assert.strictEqual(piped.status, 'blocked');
+  assert.strictEqual(piped.reviewedAt, '2026-10-08');
+});
+
+test('parseDispensingUkeSpecConfirmationText accepts both Japanese and identifier status labels', () => {
+  const statuses = parseDispensingUkeSpecConfirmationText(
+    ['a,確認中,e', 'b,定義追加準備,e', 'c,実装済み,e', 'd,保留,e', 'e,checking,e', 'f,ready_to_define,e', 'g,implemented,e', 'h,blocked,e'].join('\n')
+  ).map((c) => c.status);
+  assert.deepStrictEqual(statuses, ['checking', 'ready_to_define', 'implemented', 'blocked', 'checking', 'ready_to_define', 'implemented', 'blocked']);
+});
+
+test('parseDispensingUkeSpecConfirmationText skips blank lines and # comments and handles CRLF', () => {
+  const rows = parseDispensingUkeSpecConfirmationText('# 凡例\r\n\r\nA, 確認中, 根拠\r\n  # 保留メモ\r\nB, 保留, 根拠2\r\n');
+  assert.deepStrictEqual(rows.map((r) => r.taskId), ['A', 'B']);
+  assert.deepStrictEqual(parseDispensingUkeSpecConfirmationText(''), []);
+  assert.deepStrictEqual(parseDispensingUkeSpecConfirmationText('   \n# only a comment'), []);
+});
+
+test('parseDispensingUkeSpecConfirmationText rejects malformed lines with the real line number', () => {
+  const message = '「タスクID, 状態, 根拠」の形で入力してください。';
+  assert.throws(() => parseDispensingUkeSpecConfirmationText('A, 未知の状態, 根拠'), new Error(`1行目の確認メモは${message}`));
+  assert.throws(() => parseDispensingUkeSpecConfirmationText('A, 確認中'), new Error(`1行目の確認メモは${message}`), 'evidence is required');
+  assert.throws(() => parseDispensingUkeSpecConfirmationText(', 確認中, 根拠'), new Error(`1行目の確認メモは${message}`), 'task id is required');
+  assert.throws(
+    () => parseDispensingUkeSpecConfirmationText(['# 見出し', '', 'A, 確認中, 根拠', 'broken'].join('\n')),
+    new Error(`4行目の確認メモは${message}`),
+    'comment and blank lines still count toward the line number'
+  );
+});
+
+test('a pasted confirmation memo reaches the implementation pack and changes its progress review', () => {
+  const gapPdfText = UKE_PDF_TEXT_EXCERPT.replace(
+    '2 薬局名 漢字 40 80 必須',
+    ['2 薬局名 漢字 40 80 必須', '3 =危険 英数 1 1 任意'].join('\n')
+  );
+  const memo = 'YK-pdf-field-definition-implementation, 定義追加準備, 仕様PDF YK 第3項目, 請求担当, 2026-06-19';
+
+  const withoutMemo = buildDispensingUkeSpecificationPdfAllFieldImplementationPack(gapPdfText, [], EXPECTED_SPECS);
+  const withMemo = buildDispensingUkeSpecificationPdfAllFieldImplementationPack(
+    gapPdfText,
+    parseDispensingUkeSpecConfirmationText(memo, MEMO_FALLBACK_DATE),
+    EXPECTED_SPECS
+  );
+
+  assert.strictEqual(withoutMemo.progressReview.readyToDefineCount, 0);
+  assert.strictEqual(withMemo.progressReview.readyToDefineCount, 1, 'the pharmacist\'s memo is reflected');
 });

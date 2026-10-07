@@ -6,6 +6,9 @@ import {
   getAuditIntegrityStatus,
   getAuditRetentionColors,
   makeAuditLogExportFileName,
+  makeDispensingUkeOfficialAllFieldsGateCsvFileName,
+  makeDispensingUkeSpecImplementationPackFileName,
+  makeDispensingUkeSpecReviewCsvFileName,
   makeAuditLogRetentionLedgerCsvFileName,
   makeAuditLogRetentionMonthlyReviewCsvFileName,
   makeDailyClosingReviewCsvFileName,
@@ -204,4 +207,16 @@ test('getAiSuggestionFeedbackDisplay formats status, quality gates, and store co
   assert.strictEqual(attentionDisplay.qualityGateColor, '#b91c1c');
   assert.strictEqual(attentionDisplay.soapDraftColor, '#b45309');
   assert.strictEqual(attentionDisplay.storeColor, '#b45309');
+});
+
+test('official UKE spec export file names follow the yakureki_ + date-time stamp convention', () => {
+  const fixedDate = new Date(2026, 5, 21, 9, 8, 7); // 2026-06-21 09:08:07
+  assert.strictEqual(makeDispensingUkeSpecReviewCsvFileName(fixedDate), 'yakureki_uke_spec_all_fields_20260621_090807.csv');
+  assert.strictEqual(makeDispensingUkeOfficialAllFieldsGateCsvFileName(fixedDate), 'yakureki_official_uke_all_fields_gate_20260621_090807.csv');
+  assert.strictEqual(makeDispensingUkeSpecImplementationPackFileName(fixedDate), 'yakureki_uke_spec_implementation_pack_20260621_090807.txt');
+
+  // 同じ日に2回書き出しても時刻でファイル名が分かれる
+  const later = new Date(2026, 5, 21, 9, 8, 8);
+  assert.notStrictEqual(makeDispensingUkeSpecReviewCsvFileName(later), makeDispensingUkeSpecReviewCsvFileName(fixedDate));
+  assert.match(makeDispensingUkeSpecReviewCsvFileName(), /^yakureki_uke_spec_all_fields_\d{8}_\d{6}\.csv$/);
 });

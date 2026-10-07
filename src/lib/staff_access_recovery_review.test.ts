@@ -12,7 +12,8 @@ import {
   buildStaffAccessRecoveryMonthlyReviewCsv,
   buildStaffAccessRecoveryReview,
   buildStaffAccessRecoveryReviewFromAuditLogs,
-  type StaffAccessRecoveryEvidenceInput
+  type StaffAccessRecoveryEvidenceInput,
+  makeStaffAccessRecoveryMonthlyReviewCsvFileName
 } from './staff_access_recovery_review.ts';
 import type { AuditLog } from '../db/types.ts';
 
@@ -369,4 +370,11 @@ test('staff access recovery check request lists privacy, scenario, admin and rea
   for (const sensitiveValue of ['山田太郎', '薬局太郎', 'patient-001', 'credential-id-secret', '/Users/secret']) {
     assert.doesNotMatch(serialized, new RegExp(sensitiveValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+});
+
+test('makeStaffAccessRecoveryMonthlyReviewCsvFileName uses the yakureki_ prefix and a compact month key', () => {
+  assert.strictEqual(
+    makeStaffAccessRecoveryMonthlyReviewCsvFileName('2026-10'),
+    'yakureki_staff_access_recovery_monthly_review_202610.csv'
+  );
 });
