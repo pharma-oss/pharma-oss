@@ -4,8 +4,56 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, AlertOctagon, RefreshCw, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { resolveClientSyncIdentity } from '@/lib/sync/client_role';
-import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
+import {
+  getSatelliteQueueHealth,
+  flushUnsentLocalQueue,
+  SATELLITE_QUEUE_LIMITS,
+  type SatelliteQueueHealth
+} from '@/lib/sync/satellite_local_queue';
 import { toast } from 'sonner';
+
+export type QueueWarningSeverity = 'danger' | 'warning';
+export type QueueWarningCause = 'limit_exceeded' | 'expired' | 'near_limit';
+
+export interface QueueWarning {
+  severity: QueueWarningSeverity;
+  cause: QueueWarningCause;
+  title: string;
+  description: string;
+}
+
+// 警告条件: 上限超過または期限切れは danger、上限接近のみは warning。いずれにも当たらなければ表示しない。
+// 文言の優先順位は 上限超過 > 期限切れ > 上限接近。
+export function resolveQueueWarning(health: SatelliteQueueHealth | null): QueueWarning | null {
+  if (!health) return null;
+  const limitLabel = SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS.toLocaleString('ja-JP');
+
+  if (health.isLimitExceeded) {
+    return {
+      severity: 'danger',
+      cause: 'limit_exceeded',
+      title: `【要同期】未送信データが ${health.total} 件滞留しています（推奨上限${limitLabel}件超過）`,
+      description: 'サテライト端末の未送信キューが上限に達しています。Hub端末へデータを同期するまで、新規受付等の連続入力は控えてください。'
+    };
+  }
+  if (health.hasExpired) {
+    return {
+      severity: 'danger',
+      cause: 'expired',
+      title: `【要対応】前日以前の未送信データが ${health.expiredCount} 件滞留しています`,
+      description: '未送信のまま日付を跨いだ患者データがあります。データ欠落や重複を防止するため、Hub端末との接続を確認し、即座に同期を完了させてください。'
+    };
+  }
+  if (health.isNearLimit) {
+    return {
+      severity: 'warning',
+      cause: 'near_limit',
+      title: `【注意】未送信データが ${health.total} 件滞留しています（推奨上限${limitLabel}件）`,
+      description: '通信切断が継続すると未送信データが蓄積されます。Hub端末の稼働およびネットワーク接続を確認してください。'
+    };
+  }
+  return null;
+}
 
 export function SatelliteQueueWarningBanner() {
   const router = useRouter();
@@ -57,13 +105,34 @@ export function SatelliteQueueWarningBanner() {
     }
   };
 
-  if (role !== 'satellite' || !health) return null;
+  if (role !== 'satellite') return null;
 
-  // 警告条件: 期限切れがある、または上限超過、または上限接近
-  const isDanger = health.isLimitExceeded || health.hasExpired;
-  const isWarning = !isDanger && health.isNearLimit;
+  return (
+    <SatelliteQueueWarningBannerView
+      health={health}
+      isSyncing={isSyncing}
+      onManualSync={handleManualSync}
+      onOpenSettings={() => router.push('/settings?tab=terminalSync')}
+    />
+  );
+}
 
-  if (!isDanger && !isWarning) return null;
+export interface SatelliteQueueWarningBannerViewProps {
+  health: SatelliteQueueHealth | null;
+  isSyncing: boolean;
+  onManualSync: () => void;
+  onOpenSettings: () => void;
+}
+
+export function SatelliteQueueWarningBannerView({
+  health,
+  isSyncing,
+  onManualSync,
+  onOpenSettings
+}: SatelliteQueueWarningBannerViewProps) {
+  const warning = resolveQueueWarning(health);
+  if (!warning) return null;
+  const isDanger = warning.severity === 'danger';
 
   return (
     <aside
@@ -74,33 +143,21 @@ export function SatelliteQueueWarningBanner() {
     >
       <div className="banner-content">
         <div className="banner-icon-col">
-          {health.isLimitExceeded ? (
+          {warning.cause === 'limit_exceeded' ? (
             <AlertOctagon size={20} className="banner-icon icon-danger" aria-hidden="true" />
           ) : (
             <AlertTriangle size={20} className={`banner-icon ${isDanger ? 'icon-danger' : 'icon-warning'}`} aria-hidden="true" />
           )}
         </div>
         <div className="banner-text-col">
-          <strong className="banner-title">
-            {health.isLimitExceeded
-              ? `【要同期】未送信データが ${health.total} 件滞留しています（推奨上限1,000件超過）`
-              : health.hasExpired
-                ? `【要対応】前日以前の未送信データが ${health.expiredCount} 件滞留しています`
-                : `【注意】未送信データが ${health.total} 件滞留しています（推奨上限1,000件）`}
-          </strong>
-          <p className="banner-desc">
-            {health.isLimitExceeded
-              ? 'サテライト端末の未送信キューが上限に達しています。Hub端末へデータを同期するまで、新規受付等の連続入力は控えてください。'
-              : health.hasExpired
-                ? '未送信のまま日付を跨いだ患者データがあります。データ欠落や重複を防止するため、Hub端末との接続を確認し、即座に同期を完了させてください。'
-                : '通信切断が継続すると未送信データが蓄積されます。Hub端末の稼働およびネットワーク接続を確認してください。'}
-          </p>
+          <strong className="banner-title">{warning.title}</strong>
+          <p className="banner-desc">{warning.description}</p>
         </div>
         <div className="banner-actions">
           <button
             type="button"
             className={`btn-sync-action ${isDanger ? 'btn-danger-sync' : 'btn-warning-sync'}`}
-            onClick={handleManualSync}
+            onClick={onManualSync}
             disabled={isSyncing}
           >
             <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
@@ -109,7 +166,7 @@ export function SatelliteQueueWarningBanner() {
           <button
             type="button"
             className="btn-details-action"
-            onClick={() => router.push('/settings?tab=terminalSync')}
+            onClick={onOpenSettings}
           >
             <span>端末同期設定</span>
             <ArrowRight size={13} aria-hidden="true" />
