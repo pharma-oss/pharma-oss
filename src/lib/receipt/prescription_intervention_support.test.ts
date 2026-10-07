@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   INTERVENTION_CATEGORY_LABELS,
+  buildInterventionAuditDetail,
+  buildInterventionEvent,
+  buildInterventionRecord,
+  resolveInterventionCategory,
   suggestInterventionCategory,
   normalizeVisitInterventionEvents,
   formatDispensingRecordInterventions,
   formatReceiptInterventionSummary,
   validateInterventionReadiness,
+  type InterventionInput,
   type VisitInterventionEvent
 } from '../prescription_intervention_support';
 import { VISIT_SCHEMA } from '@/db/schema';
@@ -245,3 +250,130 @@ test('prescription_intervention_support: monthly claim readiness report catches 
   assert.ok(codes.includes('official_uke_intervention_inquiry_pending'));
 });
 
+// ---- 疑義照会モーダルの入力 -> 保存レコード / 構造化イベント / 監査ログ文言 ----
+
+const NOW = '2026-10-08T01:02:03.000Z';
+
+function interventionInput(overrides: Partial<InterventionInput> = {}): InterventionInput {
+  return {
+    reason: '残薬があるため日数調整',
+    beforeSnapshot: 'アムロジピン錠5mg 28日分',
+    afterSnapshot: 'アムロジピン錠5mg 14日分',
+    inquiryStatus: 'completed',
+    inquiryMethod: 'phone',
+    inquiryDoctor: '鈴木 一郎',
+    inquiryResult: '14日分へ変更で了承',
+    responseDueDate: '',
+    note: '',
+    patientConsented: true,
+    ...overrides
+  };
+}
+
+test('prescription_intervention_support: resolveInterventionCategory keeps the pharmacist\'s choice and only guesses when none was made', () => {
+  const text = { reason: '残薬があるため日数調整' };
+  assert.strictEqual(resolveInterventionCategory(interventionInput({ ...text, category: 'discontinuation' })), 'discontinuation');
+  assert.strictEqual(resolveInterventionCategory(interventionInput({ ...text, category: undefined })), 'leftover_adjustment');
+  assert.strictEqual(
+    resolveInterventionCategory(interventionInput({ reason: '', beforeSnapshot: '', afterSnapshot: '', category: undefined })),
+    'other'
+  );
+});
+
+test('prescription_intervention_support: buildInterventionRecord stamps times and sets the response time only for answered inquiries', () => {
+  const context = { interventionId: 'int_1', visitId: 'visit_9', handledBy: '薬剤師A', now: NOW };
+
+  const answered = buildInterventionRecord(interventionInput({ inquiryStatus: 'completed', responseDueDate: '2026-10-31' }), context);
+  assert.strictEqual(answered.interventionId, 'int_1');
+  assert.strictEqual(answered.visitId, 'visit_9');
+  assert.strictEqual(answered.handledBy, '薬剤師A');
+  assert.strictEqual(answered.contactedAt, NOW);
+  assert.strictEqual(answered.respondedAt, NOW);
+  assert.strictEqual(answered.createdAt, NOW);
+  assert.strictEqual(answered.updatedAt, NOW);
+  assert.strictEqual(answered.responseDueDate, '2026-10-31');
+  assert.strictEqual(answered.inquiryResult, '14日分へ変更で了承');
+  assert.strictEqual(answered.patientConsented, true);
+
+  const pending = buildInterventionRecord(interventionInput({ inquiryStatus: 'pending', inquiryResult: '', responseDueDate: '' }), context);
+  assert.strictEqual(pending.respondedAt, undefined, 'a pending inquiry has no response time');
+  assert.strictEqual(pending.contactedAt, NOW);
+  assert.strictEqual(pending.responseDueDate, undefined, 'a blank due date is not stored as an empty string');
+});
+
+test('prescription_intervention_support: buildInterventionEvent drops blank optional text and keeps patientConsented=false', () => {
+  const context = { eventId: 'int_1', handledBy: '薬剤師A', now: NOW };
+
+  const full = buildInterventionEvent(interventionInput({ note: '患者へ説明済み' }), 'leftover_adjustment', context);
+  assert.deepStrictEqual(full, {
+    eventId: 'int_1',
+    category: 'leftover_adjustment',
+    reason: '残薬があるため日数調整',
+    beforeDrugName: 'アムロジピン錠5mg 28日分',
+    afterDrugName: 'アムロジピン錠5mg 14日分',
+    inquiryStatus: 'completed',
+    inquiryMethod: 'phone',
+    inquiryDoctor: '鈴木 一郎',
+    inquiryResult: '14日分へ変更で了承',
+    patientConsented: true,
+    contactedAt: NOW,
+    respondedAt: NOW,
+    handledBy: '薬剤師A',
+    note: '患者へ説明済み'
+  });
+
+  const sparse = buildInterventionEvent(
+    interventionInput({
+      beforeSnapshot: '', afterSnapshot: '', inquiryDoctor: '', inquiryResult: '', note: '',
+      inquiryStatus: 'pending', patientConsented: false
+    }),
+    'other',
+    context
+  );
+  assert.strictEqual(sparse.beforeDrugName, undefined);
+  assert.strictEqual(sparse.afterDrugName, undefined);
+  assert.strictEqual(sparse.inquiryDoctor, undefined);
+  assert.strictEqual(sparse.inquiryResult, undefined);
+  assert.strictEqual(sparse.note, undefined);
+  assert.strictEqual(sparse.respondedAt, undefined);
+  assert.strictEqual(sparse.patientConsented, false, 'an explicit "not consented" must not be dropped');
+});
+
+test('prescription_intervention_support: buildInterventionAuditDetail writes the full wording, with fallbacks and the optional due date', () => {
+  assert.strictEqual(
+    buildInterventionAuditDetail(interventionInput(), 'leftover_adjustment'),
+    '疑義照会登録 [残薬調整（日数/数量）]: 状態 回答済 / 方法 電話 / 照会先「鈴木 一郎」 / 理由: 残薬があるため日数調整 / 結果: 14日分へ変更で了承。'
+  );
+
+  const pending = buildInterventionAuditDetail(
+    interventionInput({
+      inquiryStatus: 'pending', inquiryMethod: 'fax', inquiryDoctor: '', inquiryResult: '', responseDueDate: '2026-10-31'
+    }),
+    'interaction_inquiry'
+  );
+  assert.strictEqual(
+    pending,
+    '疑義照会登録 [重複投薬・相互作用・禁忌]: 状態 照会中 / 方法 FAX / 照会先「未指定」 / 理由: 残薬があるため日数調整 / 結果: 未回答 / 回答期限: 2026-10-31。'
+  );
+  assert.ok(!buildInterventionAuditDetail(interventionInput(), 'other').includes('回答期限'));
+});
+
+test('prescription_intervention_support: events built from the modal input flow through the real downstream checks', () => {
+  const context = { eventId: 'int_1', handledBy: '薬剤師A', now: NOW };
+  const answered = buildInterventionEvent(interventionInput(), 'leftover_adjustment', context);
+  const pending = buildInterventionEvent(
+    interventionInput({ inquiryStatus: 'pending', inquiryResult: '' }), 'leftover_adjustment', { ...context, eventId: 'int_2' }
+  );
+
+  assert.deepStrictEqual(validateInterventionReadiness([answered]), []);
+  const issues = validateInterventionReadiness([pending]);
+  assert.deepStrictEqual(issues.map((i) => [i.code, i.eventId]), [['intervention_inquiry_pending', 'int_2']]);
+
+  const summary = formatReceiptInterventionSummary(answered);
+  assert.ok(summary.includes('鈴木 一郎医師(電話)'));
+  assert.ok(summary.includes('[残薬調整（日数/数量）]'));
+  assert.ok(summary.includes('(アムロジピン錠5mg 28日分→アムロジピン錠5mg 14日分)'));
+
+  const [row] = formatDispensingRecordInterventions([pending]);
+  assert.ok(row.resultContent.startsWith('照会中（未回答）'), 'a pending inquiry is shown as unanswered on the dispensing record');
+});

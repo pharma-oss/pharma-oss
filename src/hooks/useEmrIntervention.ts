@@ -3,12 +3,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isClaimEditBlocked, getClaimEditBlockedMessage } from '@/lib/claim_edit_guard';
-import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
 import {
-  INTERVENTION_CATEGORY_LABELS,
-  suggestInterventionCategory,
+  buildInterventionAuditDetail,
+  buildInterventionEvent,
+  buildInterventionRecord,
+  resolveInterventionCategory,
   type InterventionCategory,
-  type VisitInterventionEvent
+  type InterventionInput
 } from '@/lib/prescription_intervention_support';
 
 export interface UseEmrInterventionParams {
@@ -45,19 +46,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
     setIntConsented(true);
   }, []);
 
-  const handleAddIntervention = useCallback(async (input: {
-    category?: InterventionCategory;
-    reason: string;
-    beforeSnapshot: string;
-    afterSnapshot: string;
-    inquiryStatus: 'pending' | 'completed';
-    inquiryMethod: 'phone' | 'fax' | 'in_person' | 'other';
-    inquiryDoctor: string;
-    inquiryResult: string;
-    responseDueDate: string;
-    note: string;
-    patientConsented: boolean;
-  }) => {
+  const handleAddIntervention = useCallback(async (input: InterventionInput) => {
     if (!db) return;
     try {
       const visit = await findActiveVisit();
@@ -67,50 +56,26 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         return;
       }
 
-      const category = input.category || suggestInterventionCategory(input.reason, input.beforeSnapshot, input.afterSnapshot);
+      const category = resolveInterventionCategory(input);
       const newId = `int_${uuidv4()}`;
       const now = new Date().toISOString();
       const currentUser = getCurrentUser();
 
-      const newRecord = {
+      const newRecord = buildInterventionRecord(input, {
         interventionId: newId,
         visitId: visit.visitId,
-        beforeSnapshot: input.beforeSnapshot,
-        afterSnapshot: input.afterSnapshot,
-        reason: input.reason,
-        inquiryStatus: input.inquiryStatus,
-        inquiryMethod: input.inquiryMethod,
-        inquiryDoctor: input.inquiryDoctor,
-        inquiryResult: input.inquiryResult,
-        responseDueDate: input.responseDueDate || undefined,
-        contactedAt: now,
-        respondedAt: input.inquiryStatus === 'completed' ? now : undefined,
         handledBy: currentUser.name,
-        note: input.note,
-        patientConsented: input.patientConsented,
-        createdAt: now,
-        updatedAt: now
-      };
+        now
+      });
 
       const insertedDoc = await db.interventions.insert(newRecord);
 
       // visit.interventionEvents への同期保存（コレクションを増やさず visit の入れ子プロパティとして構造化）
-      const event: VisitInterventionEvent = {
+      const event = buildInterventionEvent(input, category, {
         eventId: newId,
-        category,
-        reason: input.reason,
-        beforeDrugName: input.beforeSnapshot || undefined,
-        afterDrugName: input.afterSnapshot || undefined,
-        inquiryStatus: input.inquiryStatus,
-        inquiryMethod: input.inquiryMethod,
-        inquiryDoctor: input.inquiryDoctor || undefined,
-        inquiryResult: input.inquiryResult || undefined,
-        patientConsented: input.patientConsented,
-        contactedAt: now,
-        respondedAt: input.inquiryStatus === 'completed' ? now : undefined,
         handledBy: currentUser.name,
-        note: input.note || undefined
-      };
+        now
+      });
 
       if (typeof visit.patch === 'function') {
         const existingEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : [];
@@ -120,11 +85,10 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
       // 監査ログの記録
       const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
       const patientName = patients[0]?.name || '不明';
-      const categoryLabel = INTERVENTION_CATEGORY_LABELS[category] || category;
       const auditOk = await logAuditAction(
         db,
         'prescription_edit',
-        `疑義照会登録 [${categoryLabel}]: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`,
+        buildInterventionAuditDetail(input, category),
         visit.patientId,
         patientName
       );

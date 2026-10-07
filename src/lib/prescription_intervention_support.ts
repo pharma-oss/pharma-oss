@@ -10,7 +10,8 @@
  * - 第八条: 画面・帳票・算定・UKEの間の整合性を保持する。
  */
 
-import type { Visit } from '@/db/types';
+import type { Intervention, Visit } from '@/db/types';
+import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
 
 export type InterventionCategory =
   | 'generic_change'      // 後発医薬品への変更
@@ -51,6 +52,82 @@ export interface VisitInterventionEvent {
   respondedAt?: string;
   handledBy: string;
   note?: string;
+}
+
+// 疑義照会モーダルの入力(登録時点の状態は 照会中 / 回答済 のみ)
+export interface InterventionInput {
+  category?: InterventionCategory;
+  reason: string;
+  beforeSnapshot: string;
+  afterSnapshot: string;
+  inquiryStatus: 'pending' | 'completed';
+  inquiryMethod: 'phone' | 'fax' | 'in_person' | 'other';
+  inquiryDoctor: string;
+  inquiryResult: string;
+  responseDueDate: string;
+  note: string;
+  patientConsented: boolean;
+}
+
+// 区分は薬剤師の選択を優先し、未選択のときだけ理由・変更前後の文言から推定する
+export function resolveInterventionCategory(input: InterventionInput): InterventionCategory {
+  return input.category || suggestInterventionCategory(input.reason, input.beforeSnapshot, input.afterSnapshot);
+}
+
+// interventions コレクションへ保存するレコード。回答済のときだけ回答日時を入れる。
+export function buildInterventionRecord(
+  input: InterventionInput,
+  context: { interventionId: string; visitId: string; handledBy: string; now: string }
+): Intervention {
+  return {
+    interventionId: context.interventionId,
+    visitId: context.visitId,
+    beforeSnapshot: input.beforeSnapshot,
+    afterSnapshot: input.afterSnapshot,
+    reason: input.reason,
+    inquiryStatus: input.inquiryStatus,
+    inquiryMethod: input.inquiryMethod,
+    inquiryDoctor: input.inquiryDoctor,
+    inquiryResult: input.inquiryResult,
+    responseDueDate: input.responseDueDate || undefined,
+    contactedAt: context.now,
+    respondedAt: input.inquiryStatus === 'completed' ? context.now : undefined,
+    handledBy: context.handledBy,
+    note: input.note,
+    patientConsented: input.patientConsented,
+    createdAt: context.now,
+    updatedAt: context.now
+  };
+}
+
+// visit.interventionEvents へ入れる構造化イベント(調剤録・レセプト摘要の元)。空文字は未記録として落とす。
+export function buildInterventionEvent(
+  input: InterventionInput,
+  category: InterventionCategory,
+  context: { eventId: string; handledBy: string; now: string }
+): VisitInterventionEvent {
+  return {
+    eventId: context.eventId,
+    category,
+    reason: input.reason,
+    beforeDrugName: input.beforeSnapshot || undefined,
+    afterDrugName: input.afterSnapshot || undefined,
+    inquiryStatus: input.inquiryStatus,
+    inquiryMethod: input.inquiryMethod,
+    inquiryDoctor: input.inquiryDoctor || undefined,
+    inquiryResult: input.inquiryResult || undefined,
+    patientConsented: input.patientConsented,
+    contactedAt: context.now,
+    respondedAt: input.inquiryStatus === 'completed' ? context.now : undefined,
+    handledBy: context.handledBy,
+    note: input.note || undefined
+  };
+}
+
+// 監査ログ(prescription_edit)に残す疑義照会登録の文言
+export function buildInterventionAuditDetail(input: InterventionInput, category: InterventionCategory): string {
+  const categoryLabel = INTERVENTION_CATEGORY_LABELS[category] || category;
+  return `疑義照会登録 [${categoryLabel}]: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`;
 }
 
 export interface DispensingRecordInterventionRow {
