@@ -22,7 +22,22 @@ export type {
   PrintPreset
 };
 
-export type PrintPrescriptionItem = PrescriptionItem & ClaimItemPricing & {
+// 薬剤マスタから引いた事実(廃止・在庫・YJコードなど)。印刷時の薬剤師確認(buildPrintAuditItems)が使う。
+export interface PrintItemMasterFacts {
+  isAbolished?: boolean;
+  stockQuantity?: number;
+  prescribedYjCode?: string;
+  prescribedGenericName?: string;
+  prescribedIsHighRisk?: boolean;
+  prescribedIsAbolished?: boolean;
+  prescribedStockQuantity?: number;
+  dispensedYjCode?: string;
+  dispensedIsHighRisk?: boolean;
+  dispensedIsAbolished?: boolean;
+  dispensedStockQuantity?: number;
+}
+
+export type PrintPrescriptionItem = PrescriptionItem & ClaimItemPricing & PrintItemMasterFacts & {
   drugName: string;
   genericName: string;
   dispensedGenericName: string;

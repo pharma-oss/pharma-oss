@@ -74,7 +74,7 @@ import {
 } from '@/lib/claim_return_manager';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
-import { buildPrescriptionInputAudit, type PrescriptionInputAuditItem } from '@/lib/prescription_input_audit';
+import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import {
   buildAiSuggestionsFromPrescriptionAudit,
   summarizeAiSuggestions,
@@ -112,7 +112,8 @@ import {
   getDisplayDrugName,
   isLiquidItem,
   isOintmentItem,
-  formatPrescriptionAuditIssues
+  formatPrescriptionAuditIssues,
+  buildPrintAuditItems
 } from '../helpers';
 
 import {
@@ -231,31 +232,7 @@ export default function PrintPage() {
     return true;
   }, [currentUser]);
 
-  const auditItems = useMemo<PrescriptionInputAuditItem[]>(() => {
-    return prescriptionItems.map((item, index) => ({
-      id: item.itemId || `item-${index}`,
-      drugId: item.drugId,
-      drugCode: item.dispensedDrugCode || item.drugId,
-      drugName: item.dispensedDrug || item.drugName || item.drugId,
-      amount: item.amount,
-      usage: item.usage,
-      days: item.days,
-      dispensingQuantity: (item as any).dispensingQuantity,
-      unit: (item as any).unit,
-      changeReason: item.changeReason,
-      dispensingCategory: (item as any).dispensingCategory,
-      rpComment: item.rpComment,
-      isIppoka: item.isIppoka,
-      isCrushed: item.isCrushed,
-      isDiagnosticTest: item.isDiagnosticTest,
-      isHighRisk: item.isHighRisk,
-      isAbolished: (item as any).isAbolished,
-      abolishedAt: (item as any).abolishedAt,
-      billingAgentGroupKey: item.billingAgentGroupKey,
-      billingAgentGroupReason: item.billingAgentGroupReason,
-      receiptRemark: remarks[item.itemId] ?? item.receiptRemark
-    }));
-  }, [prescriptionItems, remarks]);
+  const auditItems = useMemo(() => buildPrintAuditItems(prescriptionItems, remarks), [prescriptionItems, remarks]);
 
   const prescriptionAudit = useMemo(() => {
     return buildPrescriptionInputAudit(auditItems, { patientAlerts });

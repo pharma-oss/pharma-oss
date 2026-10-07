@@ -5,9 +5,103 @@ import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semant
 import { resolveDosageCategory, resolveEffectiveDosageCategory, resolveGroupDosageCategory, type DosageCategory, type DosageCategorySourceItem } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
-import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
+import type { PrescriptionInputAuditIssue, PrescriptionInputAuditItem } from '@/lib/prescription_input_audit';
 import type { ClaimValidationIssue } from '@/lib/claim_validation';
-import { PATIENT_IDENTITY_MARKS, type PatientIdentityMark } from './types';
+import { resolveClaimItemPricing, type ClaimItemPricingDrug } from '@/lib/claim_item_pricing';
+import { PATIENT_IDENTITY_MARKS, type PatientIdentityMark, type PrintItemMasterFacts, type PrintPrescriptionItem } from './types';
+
+export interface PrintDrugMasterDoc {
+  name?: string;
+  yjCode?: string;
+  genericName?: string;
+  isHighRisk?: boolean;
+  isAbolished?: boolean;
+  stockQuantity?: number;
+}
+
+// 処方薬・調剤薬それぞれのマスタ上の事実を明細へ載せる。
+// 廃止・在庫の判定は、調剤薬(後発品へ変更後)があればそちら、無ければ処方薬の値を使う。
+export function buildPrintItemMasterFacts(
+  prescribed: PrintDrugMasterDoc | undefined,
+  dispensed: PrintDrugMasterDoc | undefined
+): PrintItemMasterFacts {
+  const billing = dispensed || prescribed;
+  return {
+    isAbolished: billing ? billing.isAbolished : false,
+    stockQuantity: billing ? billing.stockQuantity : undefined,
+    prescribedYjCode: prescribed ? prescribed.yjCode : undefined,
+    prescribedGenericName: prescribed ? prescribed.genericName : undefined,
+    prescribedIsHighRisk: prescribed ? prescribed.isHighRisk : false,
+    prescribedIsAbolished: prescribed ? prescribed.isAbolished : false,
+    prescribedStockQuantity: prescribed ? prescribed.stockQuantity : undefined,
+    dispensedYjCode: dispensed ? dispensed.yjCode : undefined,
+    dispensedIsHighRisk: dispensed ? dispensed.isHighRisk : false,
+    dispensedIsAbolished: dispensed ? dispensed.isAbolished : false,
+    dispensedStockQuantity: dispensed ? dispensed.stockQuantity : undefined
+  };
+}
+
+// 保存済みの処方明細と薬剤マスタから、印刷ページが使う明細を組み立てる。
+// 薬価は調剤日時点の版(薬剤師が選び直していればその版)で引き、廃止・在庫などのマスタ上の事実も載せる。
+export function buildPrintPrescriptionItem(
+  item: PrescriptionItem & { drugName?: string },
+  prescribed: (PrintDrugMasterDoc & ClaimItemPricingDrug) | undefined,
+  dispensed: (PrintDrugMasterDoc & ClaimItemPricingDrug) | undefined,
+  dispensingDate: string
+): PrintPrescriptionItem {
+  const pricing = resolveClaimItemPricing(item, { prescribed, dispensed }, dispensingDate);
+  return {
+    ...item,
+    drugName: item.drugName || prescribed?.name || '',
+    dispensedDrug: item.dispensedDrug || dispensed?.name || '',
+    genericName: prescribed?.genericName || '',
+    dispensedGenericName: dispensed?.genericName || '',
+    ...buildPrintItemMasterFacts(prescribed, dispensed),
+    ...pricing
+  };
+}
+
+// 印刷時の薬剤師確認(buildPrescriptionInputAudit)への入力。
+// 廃止薬・在庫・変更調剤の理由・重複投薬の検査はここで渡す値に依存する。
+// 調剤薬は「変更なし」などの表記では実際の変更調剤とみなさない。
+// レセプト摘要は、画面で編集中の値(remarks)を優先する。
+export function buildPrintAuditItems(
+  items: PrintPrescriptionItem[],
+  remarks: Record<string, string> = {}
+): PrescriptionInputAuditItem[] {
+  return items.map((item) => {
+    const dispensedDrug = String(item.dispensedDrug || '').trim();
+    const hasActualDispensedDrug = dispensedDrug && !['変更なし', '変更調剤なし'].includes(dispensedDrug);
+    const receiptRemark = remarks[item.itemId] ?? item.receiptRemark;
+    return {
+      id: item.itemId,
+      rpId: item.rpNumber ? `rp_${item.rpNumber}` : undefined,
+      drugCode: item.drugId,
+      drugName: item.drugName || item.drugId,
+      dispensedDrug: item.dispensedDrug,
+      dispensedDrugCode: item.dispensedDrugCode,
+      changeReason: item.changeReason,
+      amount: item.amount,
+      usage: item.usage,
+      days: item.days,
+      rpComment: item.rpComment,
+      receiptRemark,
+      isIppoka: item.isIppoka,
+      isCrushed: item.isCrushed,
+      showReceiptRemark: !!receiptRemark,
+      yjCode: item.prescribedYjCode || item.yjCode,
+      genericName: item.prescribedGenericName || item.genericName,
+      isHighRisk: !!item.prescribedIsHighRisk,
+      isAbolished: !!item.prescribedIsAbolished,
+      stockQuantity: item.prescribedStockQuantity,
+      dispensedYjCode: hasActualDispensedDrug ? (item.dispensedYjCode || item.yjCode) : undefined,
+      dispensedGenericName: hasActualDispensedDrug ? (item.dispensedGenericName || item.genericName) : undefined,
+      dispensedIsHighRisk: hasActualDispensedDrug ? !!(item.dispensedIsHighRisk || item.isHighRisk) : false,
+      dispensedIsAbolished: hasActualDispensedDrug ? !!(item.dispensedIsAbolished || item.isAbolished) : false,
+      dispensedStockQuantity: hasActualDispensedDrug ? (item.dispensedStockQuantity ?? item.stockQuantity) : undefined
+    };
+  });
+}
 
 export function stableHashText(value: string): number {
   let hash = 0;

@@ -27,8 +27,15 @@ import {
   getDispensingTotalAmountText,
   getPickingEvidence,
   getBagDosageCategory,
-  getBagKindLabel
+  getBagKindLabel,
+  buildPrintAuditItems,
+  buildPrintItemMasterFacts,
+  buildPrintPrescriptionItem,
+  type PrintDrugMasterDoc
 } from './helpers.ts';
+import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
+import type { PrescriptionItem } from '@/db/types';
+import type { PrintPrescriptionItem } from './types.ts';
 
 // PrintPickingFlow.test.ts がソース文字列でしか見ていなかった
 // 帳票・算定まわりの純粋関数を、直接テストへ昇格する (P3 宿題)。
@@ -610,4 +617,157 @@ test('MedicineBagPrint renders usage supplement text next to usage hero (G6-4)',
   assert.ok(html.includes('yakutai-usage-supplement'), '補足用のスタイル要素が存在すること');
 });
 
+// ---- 印刷時の薬剤師確認への入力 ----
+// 過去に印刷ページの分割で、薬剤マスタ由来の項目 (廃止・在庫・YJコード・rpId など) が
+// 監査へ渡されなくなり、廃止薬の選択などが印刷時に検出されなくなっていた。
 
+const drugDoc = (overrides: PrintDrugMasterDoc = {}): PrintDrugMasterDoc => ({
+  yjCode: '', genericName: '', isHighRisk: false, isAbolished: false, stockQuantity: 100, ...overrides
+});
+
+// loadData と同じ経路: 保存済みの明細 + 薬剤マスタ -> 印刷用明細
+function printItem(
+  base: Partial<PrintPrescriptionItem> & Pick<PrintPrescriptionItem, 'itemId' | 'drugId'>,
+  prescribed?: PrintDrugMasterDoc,
+  dispensed?: PrintDrugMasterDoc
+): PrintPrescriptionItem {
+  const stored = { visitId: 'v1', amount: 1, days: 14, usage: '1日1回朝食後', ...base } as PrescriptionItem;
+  return buildPrintPrescriptionItem(stored, prescribed, dispensed, '2026-10-08');
+}
+
+test('buildPrintItemMasterFacts reads the prescribed and dispensed drugs separately and bills against the dispensed one', () => {
+  const facts = buildPrintItemMasterFacts(
+    drugDoc({ yjCode: 'YJ-BRAND', genericName: '一般名', isHighRisk: true, isAbolished: false, stockQuantity: 12 }),
+    drugDoc({ yjCode: 'YJ-GENERIC', isHighRisk: false, isAbolished: true, stockQuantity: 0 })
+  );
+
+  assert.deepStrictEqual(facts, {
+    isAbolished: true,
+    stockQuantity: 0,
+    prescribedYjCode: 'YJ-BRAND',
+    prescribedGenericName: '一般名',
+    prescribedIsHighRisk: true,
+    prescribedIsAbolished: false,
+    prescribedStockQuantity: 12,
+    dispensedYjCode: 'YJ-GENERIC',
+    dispensedIsHighRisk: false,
+    dispensedIsAbolished: true,
+    dispensedStockQuantity: 0
+  });
+});
+
+test('buildPrintItemMasterFacts falls back to the prescribed drug when nothing was substituted, and tolerates missing master rows', () => {
+  const unsubstituted = buildPrintItemMasterFacts(drugDoc({ isAbolished: true, stockQuantity: 7 }), undefined);
+  assert.strictEqual(unsubstituted.isAbolished, true);
+  assert.strictEqual(unsubstituted.stockQuantity, 7);
+  assert.strictEqual(unsubstituted.dispensedYjCode, undefined);
+  assert.strictEqual(unsubstituted.dispensedIsAbolished, false);
+  assert.strictEqual(unsubstituted.dispensedStockQuantity, undefined);
+
+  const missing = buildPrintItemMasterFacts(undefined, undefined);
+  assert.strictEqual(missing.isAbolished, false);
+  assert.strictEqual(missing.stockQuantity, undefined);
+  assert.strictEqual(missing.prescribedIsHighRisk, false);
+});
+
+test('buildPrintPrescriptionItem carries names, master facts and pricing together', () => {
+  const stored = { itemId: 'a', visitId: 'v1', drugId: 'BRAND', dispensedDrugCode: 'GENERIC', amount: 2, days: 7, usage: '1日2回朝夕食後', rpNumber: 1 } as PrescriptionItem;
+  const printed = buildPrintPrescriptionItem(
+    stored,
+    drugDoc({ name: '先発錠', yjCode: 'YJ-B', genericName: '一般名', isHighRisk: true, stockQuantity: 4 }),
+    drugDoc({ name: '後発錠', yjCode: 'YJ-G', isAbolished: true, stockQuantity: 0 }),
+    '2026-10-08'
+  );
+
+  assert.strictEqual(printed.drugName, '先発錠');
+  assert.strictEqual(printed.dispensedDrug, '後発錠');
+  assert.strictEqual(printed.genericName, '一般名');
+  assert.strictEqual(printed.isAbolished, true, 'billed against the dispensed drug');
+  assert.strictEqual(printed.stockQuantity, 0);
+  assert.strictEqual(printed.prescribedStockQuantity, 4);
+  assert.strictEqual(printed.dispensedIsAbolished, true);
+  assert.strictEqual(printed.yjCode, 'YJ-G', 'pricing reads the dispensed drug');
+  assert.strictEqual(printed.amount, 2, 'stored fields are kept');
+  assert.strictEqual(printed.usage, '1日2回朝夕食後');
+
+  // 保存済みの薬品名・調剤薬名があればマスタ名より優先する
+  const named = buildPrintPrescriptionItem(
+    { ...stored, drugName: '保存済み処方名', dispensedDrug: '保存済み調剤名' } as PrescriptionItem & { drugName?: string },
+    drugDoc({ name: '先発錠' }), drugDoc({ name: '後発錠' }), '2026-10-08'
+  );
+  assert.strictEqual(named.drugName, '保存済み処方名');
+  assert.strictEqual(named.dispensedDrug, '保存済み調剤名');
+});
+
+test('buildPrintAuditItems keeps the Rp grouping and ignores placeholder substitutions like 変更なし', () => {
+  const [grouped, ungrouped, placeholder, real] = buildPrintAuditItems([
+    printItem({ itemId: 'a', drugId: 'D1', rpNumber: 2 }, drugDoc()),
+    printItem({ itemId: 'b', drugId: 'D2' }, drugDoc()),
+    printItem({ itemId: 'c', drugId: 'D3', dispensedDrug: '変更なし', dispensedDrugCode: 'D3' }, drugDoc({ isAbolished: true }), drugDoc({ isAbolished: true })),
+    printItem({ itemId: 'd', drugId: 'D4', dispensedDrug: '後発D錠', dispensedDrugCode: 'D4GE' }, drugDoc(), drugDoc({ isAbolished: true, stockQuantity: 3 }))
+  ]);
+
+  assert.strictEqual(grouped.rpId, 'rp_2');
+  assert.strictEqual(ungrouped.rpId, undefined);
+  assert.strictEqual(grouped.drugCode, 'D1', 'the audit item is keyed by the prescribed drug');
+
+  assert.strictEqual(placeholder.dispensedIsAbolished, false, '変更なし is not an actual dispensed drug');
+  assert.strictEqual(placeholder.dispensedYjCode, undefined);
+  assert.strictEqual(placeholder.isAbolished, true, 'the prescribed side is still checked');
+
+  assert.strictEqual(real.dispensedIsAbolished, true);
+  assert.strictEqual(real.dispensedStockQuantity, 3);
+});
+
+test('buildPrintAuditItems prefers the receipt remark being edited over the saved one', () => {
+  const items = [printItem({ itemId: 'a', drugId: 'D1', receiptRemark: '保存済み' }, drugDoc())];
+
+  assert.strictEqual(buildPrintAuditItems(items, {})[0].receiptRemark, '保存済み');
+  assert.strictEqual(buildPrintAuditItems(items, { a: '編集中' })[0].receiptRemark, '編集中');
+  assert.strictEqual(buildPrintAuditItems(items, { a: '編集中' })[0].showReceiptRemark, true);
+
+  const cleared = buildPrintAuditItems(items, { a: '' })[0];
+  assert.strictEqual(cleared.receiptRemark, '', 'an emptied remark wins over the saved text');
+  assert.strictEqual(cleared.showReceiptRemark, false);
+});
+
+test('the print-time pharmacist check catches abolished drugs, stock problems, missing substitution reasons and duplicate therapy', () => {
+  const items = [
+    printItem({ itemId: 'i1', drugId: 'D1', drugName: '廃止薬A錠', rpNumber: 1 }, drugDoc({ yjCode: '2149001F1', genericName: 'ロキソプロフェン', isAbolished: true })),
+    printItem({ itemId: 'i2', drugId: 'D2', drugName: '在庫なしB錠', rpNumber: 2 }, drugDoc({ yjCode: '3999001F1', genericName: 'ビタミンB', stockQuantity: 0 })),
+    printItem({ itemId: 'i3', drugId: 'D3', drugName: 'ロキソニン錠60mg', amount: 3, days: 5, usage: '1日3回毎食後', rpNumber: 3 }, drugDoc({ yjCode: '2149001F2', genericName: 'ロキソプロフェン', stockQuantity: 50 })),
+    printItem({ itemId: 'i4', drugId: 'D4', drugName: 'ボルタレン錠25mg', amount: 3, days: 5, usage: '1日3回毎食後', rpNumber: 3 }, drugDoc({ yjCode: '2149002F1', genericName: 'ジクロフェナク', stockQuantity: 50 })),
+    printItem(
+      { itemId: 'i5', drugId: 'D5', drugName: '先発C錠', dispensedDrug: '後発C錠', dispensedDrugCode: 'D5GE', rpNumber: 4 },
+      drugDoc({ yjCode: '1179001F1', genericName: 'ゾルピデム', stockQuantity: 20 }),
+      drugDoc({ yjCode: '1179001F1', genericName: 'ゾルピデム', stockQuantity: 20 })
+    ),
+    printItem({ itemId: 'i6', drugId: 'D6', drugName: 'ハイリスクD錠', rpNumber: 5 }, drugDoc({ yjCode: '2171001F1', genericName: 'ワルファリン', isHighRisk: true, stockQuantity: 10 }))
+  ];
+
+  const audit = buildPrescriptionInputAudit(buildPrintAuditItems(items), { patientAlerts: [] });
+  const codes = audit.issues.map((issue) => `${issue.severity}:${issue.code}`).sort();
+
+  assert.deepStrictEqual(codes, [
+    'error:abolished_drug_selected',
+    'warning:high_risk_without_comment',
+    'warning:similar_therapy_detected',
+    'warning:stock_empty',
+    'warning:stock_shortage',
+    'warning:substitution_reason_missing'
+  ]);
+  assert.strictEqual(audit.errorCount, 1, 'an abolished drug is an error, which stops printing');
+});
+
+test('buildPrintAuditItems prefers the prescribed drug\'s YJ code and generic name, falling back to the billing drug\'s', () => {
+  const base = { visitId: 'v1', amount: 1, days: 14, usage: '1日1回朝食後', drugName: 'X', dispensedGenericName: '' };
+  const [prescribedFirst, fallback] = buildPrintAuditItems([
+    { ...base, itemId: 'a', drugId: 'D1', yjCode: 'YJ-BILLING', genericName: '請求側一般名', prescribedYjCode: 'YJ-PRESCRIBED', prescribedGenericName: '処方側一般名' },
+    { ...base, itemId: 'b', drugId: 'D2', yjCode: 'YJ-BILLING', genericName: '請求側一般名' }
+  ] as unknown as PrintPrescriptionItem[]);
+
+  assert.strictEqual(prescribedFirst.yjCode, 'YJ-PRESCRIBED');
+  assert.strictEqual(prescribedFirst.genericName, '処方側一般名');
+  assert.strictEqual(fallback.yjCode, 'YJ-BILLING');
+  assert.strictEqual(fallback.genericName, '請求側一般名');
+});

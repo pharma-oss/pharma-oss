@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { FacilitySettings, PatientMedicationInfoTemplate } from '@/db/types';
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
-import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
+import { buildPrintPrescriptionItem } from '@/app/print/helpers';
 import type { PrintPrescriptionItem } from '@/app/print/types';
 
 export interface UsePrintVisitDataReturn {
@@ -120,21 +120,12 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
         const item = items[i];
         const dispensedDrugDoc = item.dispensedDrugCode ? drugsMap.get(item.dispensedDrugCode) : undefined;
         const prescribedDrugDoc = drugsMap.get(item.drugId);
-        // 薬剤師が版を選び直していればそれを、無ければ調剤日時点の版を使う。
-        // 点数の点検 (claim_points_drift) も同じ関数を通す。
-        const pricing = resolveClaimItemPricing(
-          item,
-          { prescribed: prescribedDrugDoc, dispensed: dispensedDrugDoc },
+        itemsData[i] = buildPrintPrescriptionItem(
+          item.toJSON(),
+          prescribedDrugDoc,
+          dispensedDrugDoc,
           dispensingDateForPrice
         );
-        itemsData[i] = {
-          ...item.toJSON(),
-          drugName: item.drugName || prescribedDrugDoc?.name || '',
-          dispensedDrug: item.dispensedDrug || dispensedDrugDoc?.name || '',
-          genericName: prescribedDrugDoc?.genericName || '',
-          dispensedGenericName: dispensedDrugDoc?.genericName || '',
-          ...pricing
-        };
       }
 
       setPrescriptionItems(itemsData);
