@@ -39,7 +39,26 @@ test('parsePickingSystemResult correctly parses external result text', () => {
   assert.strictEqual(result.rows[0].lotNumber, 'LOT123');
 });
 
-test('PickingSupportModal is properly exported as React component', () => {
-  assert.ok(PickingSupportModal);
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+test('PickingSupportModal is properly exported as React component and renders static markup', () => {
+  assert.strictEqual(typeof PickingSupportModal, 'function');
+  const html = renderToStaticMarkup(
+    React.createElement(PickingSupportModal, {
+      isOpen: false,
+      onClose: () => {},
+      items: [],
+      patientName: 'テスト患者',
+      prescriptionId: 'rx-001',
+      onScanGs1: async () => ({ success: true, message: '' }),
+      onRecordShortage: async () => {},
+      onResetPick: () => {},
+      onExportInstruction: async () => {},
+      onImportResultFile: async () => {},
+      onPrintReceipt: () => {}
+    })
+  );
+  assert.strictEqual(html, '');
 });
 

@@ -46,7 +46,17 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
   onSaveReport
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [report, setReport] = useState<Partial<VisitTracingReport>>({});
+  const [report, setReport] = useState<Partial<VisitTracingReport>>(() => {
+    if (existingReport) {
+      return { ...existingReport };
+    }
+    return buildAutoTracingReportDraft({
+      patientName,
+      prescriptionItems,
+      soapProblems,
+      assessment
+    });
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
