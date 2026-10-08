@@ -276,6 +276,27 @@ function toAuditLog(value: AuditLog | { toJSON: () => AuditLog }): AuditLog {
     : value as AuditLog;
 }
 
+// 監査ログを新しい順に読む1回の件数。直前の署名つきログはほぼ先頭にあるので、全件を読まずに済む。
+const PREVIOUS_LOG_PAGE_SIZE = 50;
+
+// ハッシュチェーンの直前行(この端末の、署名つきの最新ログ)を探す。
+// 全件を毎回読むと、ログが何万件にもなった店舗で記録のたびに1秒以上かかる(10万件で約1.2秒、先頭50件なら約27ms)。
+// 先頭のページに無ければ次のページへ進むので、見つかる行は全件を読んだときと同じ。
+async function findPreviousSignedLog(db: PharmacyDatabase, terminalId: string | undefined): Promise<AuditLog | undefined> {
+  for (let skip = 0; ; skip += PREVIOUS_LOG_PAGE_SIZE) {
+    const page = await db.audit_logs.find({
+      sort: [{ timestamp: 'desc' }],
+      skip,
+      limit: PREVIOUS_LOG_PAGE_SIZE
+    }).exec();
+    const found = page
+      .map(toAuditLog)
+      .find((log) => !!log.integrityHash && (log.terminalId || undefined) === terminalId);
+    if (found) return found;
+    if (page.length < PREVIOUS_LOG_PAGE_SIZE) return undefined;
+  }
+}
+
 export async function logAuditAction(
   db: PharmacyDatabase,
   actionType: AuditActionType,
@@ -293,10 +314,7 @@ export async function logAuditAction(
     // standalone(同期無効)では terminalId が undefined になり、従来どおり
     // terminalId なしのログ同士で単一チェーンを継続する(完全な後方互換)。
     const { terminalId } = await resolveClientSyncIdentity();
-    const previousLogs = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
-    const previousSignedLog = previousLogs
-      .map(toAuditLog)
-      .find((log) => !!log.integrityHash && (log.terminalId || undefined) === terminalId);
+    const previousSignedLog = await findPreviousSignedLog(db, terminalId);
     const previousHash = previousSignedLog?.integrityHash || '';
     const unsignedLog: AuditLog = {
       logId,

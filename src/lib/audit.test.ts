@@ -274,3 +274,91 @@ test('logAuditAction signs new audit logs against the latest signed row', async 
     resetClientSyncIdentityCacheForTests();
   }
 });
+
+// ---- 直前のログは全件を読まずに探す ----
+
+// skip / limit を守る簡易な audit_logs。newest-first の配列を渡す。
+function pagedAuditLogs(rowsNewestFirst: AuditLog[]) {
+  const pagesRead: number[] = [];
+  const insertedRows: AuditLog[] = [];
+  const mockDb = {
+    audit_logs: {
+      find: (query: { skip?: number; limit?: number } = {}) => ({
+        exec: async () => {
+          const skip = query.skip ?? 0;
+          pagesRead.push(skip);
+          const page = rowsNewestFirst.slice(skip, query.limit === undefined ? undefined : skip + query.limit);
+          return page.map((row) => ({ toJSON: () => row }));
+        }
+      }),
+      insert: async (row: AuditLog) => { insertedRows.push(row); return row; }
+    }
+  };
+  return { mockDb, pagesRead, insertedRows };
+}
+
+function logRow(index: number, extra: Partial<AuditLog> = {}): AuditLog {
+  return {
+    logId: `log_${index}`,
+    timestamp: new Date(Date.UTC(2026, 6, 1) + (1000 - index) * 60000).toISOString(), // index 0 が最新
+    userId: 'admin_1',
+    userName: '管理者',
+    userRole: 'admin',
+    actionType: 'print',
+    details: `row ${index}`,
+    ...extra
+  };
+}
+
+async function withStandaloneBrowserGlobals<T>(run: () => Promise<T>): Promise<T> {
+  const previous = {
+    window: (globalThis as any).window,
+    sessionStorage: (globalThis as any).sessionStorage,
+    localStorage: (globalThis as any).localStorage
+  };
+  (globalThis as any).window = {};
+  (globalThis as any).sessionStorage = createStorage();
+  (globalThis as any).localStorage = createStorage();
+  resetClientSyncIdentityCacheForTests();
+  try {
+    setCurrentUser(admin);
+    return await run();
+  } finally {
+    (globalThis as any).window = previous.window;
+    (globalThis as any).sessionStorage = previous.sessionStorage;
+    (globalThis as any).localStorage = previous.localStorage;
+    resetClientSyncIdentityCacheForTests();
+  }
+}
+
+test('logAuditAction reads only the newest page when the previous signed log is there', async () => {
+  // 5000件のログ。直前の署名つき行は先頭(最新)。以前は5000件すべてを読んでいた。
+  const rows = Array.from({ length: 5000 }, (_, i) => logRow(i, { integrityHash: `hash-${i}` }));
+  const { mockDb, pagesRead, insertedRows } = pagedAuditLogs(rows);
+
+  await withStandaloneBrowserGlobals(() => logAuditAction(mockDb as any, 'audit_export', 'x'));
+
+  assert.deepStrictEqual(pagesRead, [0], 'one page of the newest logs is enough');
+  assert.strictEqual(insertedRows[0].previousHash, 'hash-0');
+});
+
+test('logAuditAction keeps looking page by page until it finds the previous signed log', async () => {
+  // 先頭の120件は署名なし(旧形式)。署名つきの最新行は121件目 = 3ページ目にある
+  const rows = Array.from({ length: 300 }, (_, i) => logRow(i, i >= 120 ? { integrityHash: `hash-${i}` } : {}));
+  const { mockDb, pagesRead, insertedRows } = pagedAuditLogs(rows);
+
+  await withStandaloneBrowserGlobals(() => logAuditAction(mockDb as any, 'audit_export', 'x'));
+
+  assert.deepStrictEqual(pagesRead, [0, 50, 100]);
+  assert.strictEqual(insertedRows[0].previousHash, 'hash-120', 'the same row a full scan would have found');
+});
+
+test('logAuditAction starts a new chain when no log has been signed yet', async () => {
+  const rows = Array.from({ length: 130 }, (_, i) => logRow(i));
+  const { mockDb, pagesRead, insertedRows } = pagedAuditLogs(rows);
+
+  await withStandaloneBrowserGlobals(() => logAuditAction(mockDb as any, 'audit_export', 'x'));
+
+  assert.deepStrictEqual(pagesRead, [0, 50, 100], 'stops at the last, short page');
+  assert.strictEqual(insertedRows[0].previousHash, '');
+});
