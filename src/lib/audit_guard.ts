@@ -16,20 +16,29 @@ export class AuditLogFailedError extends Error {
 export const ROLLBACK_ALSO_FAILED_NOTE = ' ただし、元に戻す処理にも失敗しました。データを確認してください。';
 
 export const EXPORT_AUDIT_FAILED_MESSAGE = '監査ログ記録に失敗したため、書き出しを中止しました。';
+
+// 監査ログが残らなかったので書き出しを止めたことを示すエラー。画面はメッセージをそのまま利用者へ見せてよい。
+export class ExportAuditFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExportAuditFailedError';
+  }
+}
 export const AUDIT_NOT_RECORDED_NOTICE =
   '監査ログへの記録に失敗しました。この操作の記録が残っていないため、管理者へ連絡してください。';
 
 // 監査ログ -> ダウンロード。監査ログが残らなければダウンロードは起こさず、Error を投げる。
 export async function exportWithAuditFirst(params: {
   logAudit: () => Promise<boolean>;
-  download: () => void;
+  // ダウンロード、またはクリップボードへのコピーなど、データを持ち出す処理
+  download: () => void | Promise<void>;
   failureMessage?: string;
 }): Promise<void> {
   const auditOk = await params.logAudit();
   if (!auditOk) {
-    throw new Error(params.failureMessage ?? EXPORT_AUDIT_FAILED_MESSAGE);
+    throw new ExportAuditFailedError(params.failureMessage ?? EXPORT_AUDIT_FAILED_MESSAGE);
   }
-  params.download();
+  await params.download();
 }
 
 // 書き込み -> 監査ログ。監査ログが残らない、または監査ログの処理が例外になったときは、

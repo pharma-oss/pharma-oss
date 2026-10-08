@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { markClaimClosed, markClaimExported } from '@/lib/claim_lifecycle';
 import { buildClaimExportSnapshot } from '@/lib/claim_snapshot';
 import { isDemoVisit } from '@/lib/demo_data';
@@ -673,10 +674,13 @@ export function ClaimWorkbenchSection({
           }
         }
 
-        await logAuditAction(
-          db,
-          'claim_lifecycle',
-          `オンライン請求審査結果取込: ${file.name} / 取込形式 ${formatOnlineClaimAcceptanceSourceFormat(parseResult.sourceFormat)} / 一致 ${matchedItems.length}件 / 受付済 ${reconcileResult.acceptedCount}件 / 返戻 ${reconcileResult.returnedCount}件。`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'claim_lifecycle',
+            `オンライン請求審査結果取込: ${file.name} / 取込形式 ${formatOnlineClaimAcceptanceSourceFormat(parseResult.sourceFormat)} / 一致 ${matchedItems.length}件 / 受付済 ${reconcileResult.acceptedCount}件 / 返戻 ${reconcileResult.returnedCount}件。`
+          ),
+          (message) => toast.warning(message)
         );
         toast.success(`受付結果を取り込みました（${matchedItems.length}件更新・取込形式: ${formatOnlineClaimAcceptanceSourceFormat(parseResult.sourceFormat)}）。`);
         onRefresh();

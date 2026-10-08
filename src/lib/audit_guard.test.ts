@@ -4,6 +4,7 @@ import {
   AUDIT_NOT_RECORDED_NOTICE,
   AuditLogFailedError,
   EXPORT_AUDIT_FAILED_MESSAGE,
+  ExportAuditFailedError,
   ROLLBACK_ALSO_FAILED_NOTE,
   exportWithAuditFirst,
   recordAuditOrNotify,
@@ -26,14 +27,29 @@ test('exportWithAuditFirst does not download when the audit log fails, and says 
       logAudit: async () => { events.push('audit'); return false; },
       download: () => { events.push('download'); }
     }),
-    new Error(EXPORT_AUDIT_FAILED_MESSAGE)
+    (error: unknown) => error instanceof ExportAuditFailedError && error.message === EXPORT_AUDIT_FAILED_MESSAGE
   );
   assert.deepStrictEqual(events, ['audit']);
 
   await assert.rejects(
     () => exportWithAuditFirst({ logAudit: async () => false, download: () => {}, failureMessage: '個別の文言' }),
-    new Error('個別の文言')
+    (error: unknown) => error instanceof ExportAuditFailedError && error.message === '個別の文言'
   );
+});
+
+test('exportWithAuditFirst waits for an async download such as a clipboard write, and skips it when the audit log fails', async () => {
+  const events: string[] = [];
+  await exportWithAuditFirst({
+    logAudit: async () => { events.push('audit'); return true; },
+    download: async () => { await Promise.resolve(); events.push('copied'); }
+  });
+  assert.deepStrictEqual(events, ['audit', 'copied'], 'the copy has finished when the call returns');
+
+  await assert.rejects(
+    () => exportWithAuditFirst({ logAudit: async () => false, download: async () => { events.push('copied again'); } }),
+    ExportAuditFailedError
+  );
+  assert.deepStrictEqual(events, ['audit', 'copied']);
 });
 
 test('runWithAuditRollback keeps the write when the audit log is recorded', async () => {

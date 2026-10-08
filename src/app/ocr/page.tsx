@@ -30,6 +30,7 @@ import {
   recoverFromPatientMergeFailure
 } from '@/lib/patient_merge_execution';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
   formatOnlineEligibilityFieldMappingReport,
@@ -1372,20 +1373,26 @@ export default function OcrPage() {
       }
 
       // 監査ログの記録
-      await logAuditAction(
-        db,
-        'prescription_ocr',
-        `処方箋受付: ${existingPatient ? '既存患者選択' : '簡易新規患者登録'}「${patientName}」の処方データ（${institutionName.trim()} ${departmentName.trim()} ${doctorName.trim()}、処方薬${prescriptionItems.length}件）を登録しました。`,
-        patientId,
-        patientName
-      );
-      if (existingPatient && patientMasterChanges.length > 0) {
-        await logAuditAction(
+      await recordAuditOrNotify(
+        () => logAuditAction(
           db,
-          'prescription_edit',
-          `患者マスター更新: OCR受付に伴い「${patientName}」の患者情報を更新しました（${patientMasterChanges.join(' / ')}）。${lockedClaimCountForPatient > 0 ? `ロック済み請求${lockedClaimCountForPatient}件は請求時点スナップショットで確認できます。` : 'ロック済み請求はありません。'}`,
+          'prescription_ocr',
+          `処方箋受付: ${existingPatient ? '既存患者選択' : '簡易新規患者登録'}「${patientName}」の処方データ（${institutionName.trim()} ${departmentName.trim()} ${doctorName.trim()}、処方薬${prescriptionItems.length}件）を登録しました。`,
           patientId,
           patientName
+        ),
+        (message) => toast.warning(message)
+      );
+      if (existingPatient && patientMasterChanges.length > 0) {
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'prescription_edit',
+            `患者マスター更新: OCR受付に伴い「${patientName}」の患者情報を更新しました（${patientMasterChanges.join(' / ')}）。${lockedClaimCountForPatient > 0 ? `ロック済み請求${lockedClaimCountForPatient}件は請求時点スナップショットで確認できます。` : 'ロック済み請求はありません。'}`,
+            patientId,
+            patientName
+          ),
+          (message) => toast.warning(message)
         );
       }
 

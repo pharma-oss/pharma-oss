@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Location } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { logAuditAction } from '@/lib/audit';
+import { AuditLogFailedError, runWithAuditRollback } from '@/lib/audit_guard';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';
 
 export interface InventoryRowProps {
@@ -225,16 +226,24 @@ const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: 
         if (!drug.doc || !db) return;
 
         setIsSaving(true);
+        const doc = drug.doc;
+        const previousReorderPoint = doc.reorderPoint;
         try {
-            await drug.doc.patch({ reorderPoint: numeric });
-            await logAuditAction(
-                db,
-                'stock_update',
-                `発注点更新: ${drug.name} の発注点を ${numeric !== undefined ? numeric : '未設定'} に設定しました。`
-            );
+            // 書き込み -> 監査ログ。監査ログが残らなければ発注点を元に戻す。
+            await runWithAuditRollback({
+                write: () => doc.patch({ reorderPoint: numeric }),
+                logAudit: () => logAuditAction(
+                    db,
+                    'stock_update',
+                    `発注点更新: ${drug.name} の発注点を ${numeric !== undefined ? numeric : '未設定'} に設定しました。`
+                ),
+                rollback: () => doc.patch({ reorderPoint: previousReorderPoint }),
+                failureMessage: `${drug.name} の監査ログを記録できなかったため、発注点の変更を取り消しました。`
+            });
         } catch (error) {
             console.error('Failed to update reorderPoint:', error);
             setValue(initialValue);
+            if (error instanceof AuditLogFailedError) alert(error.message);
         } finally {
             setIsSaving(false);
         }

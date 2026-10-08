@@ -6,6 +6,7 @@ import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHeal
 import { getStandbyHubAllowlist, saveStandbyHubAllowlist, verifyStandbyHubEndpoint, computeStandbyHubHmac, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
 import { isAllowedHubEndpoint } from '@/lib/sync/sync_config';
 import { logAuditAction, getCurrentUser } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { useDatabase } from '@/db/DatabaseContext';
 
 // 設定 > 端末同期 タブの本体。役割表示・登録端末一覧・トークン発行/再発行/失効・
@@ -155,7 +156,10 @@ export default function TerminalSyncPanel() {
       setNewStandbyEndpoint('');
       toast.success(`予備機エンドポイント「${trimmedUrl}」を承認済みリストに登録しました。`);
       if (db) {
-        await logAuditAction(db, 'facility_settings_update', `予備機Hubエンドポイント登録: ${trimmedUrl}`);
+        await recordAuditOrNotify(
+          () => logAuditAction(db, 'facility_settings_update', `予備機Hubエンドポイント登録: ${trimmedUrl}`),
+          (message) => toast.warning(message)
+        );
       }
     } catch (e: any) {
       toast.error(`登録に失敗しました: ${e?.message || '不明なエラー'}`);
@@ -189,10 +193,13 @@ export default function TerminalSyncPanel() {
       toast.success(`接続先を予備機（${entry.endpoint}）へ切り替えました。`);
 
       if (db) {
-        await logAuditAction(
-          db,
-          'facility_settings_update',
-          `Hub接続先エンドポイントを変更: 「${oldEndpoint}」 -> 「${entry.endpoint}」`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'facility_settings_update',
+            `Hub接続先エンドポイントを変更: 「${oldEndpoint}」 -> 「${entry.endpoint}」`
+          ),
+          (message) => toast.warning(message)
         );
       }
     } catch (e: any) {
@@ -224,7 +231,10 @@ export default function TerminalSyncPanel() {
       setNewTerminalLabel('');
       toast.success(`端末 ${body.terminalId} を登録しました。`);
       if (db) {
-        await logAuditAction(db, 'facility_settings_update', `サテライト端末登録: ${body.terminalId} (${body.label})`);
+        await recordAuditOrNotify(
+          () => logAuditAction(db, 'facility_settings_update', `サテライト端末登録: ${body.terminalId} (${body.label})`),
+          (message) => toast.warning(message)
+        );
       }
       await refresh();
     } finally {
@@ -248,7 +258,10 @@ export default function TerminalSyncPanel() {
       setIssuedToken({ terminalId: body.terminalId, token: body.token });
       toast.success(`端末 ${terminalId} のトークンを再発行しました。旧トークンは無効です。`);
       if (db) {
-        await logAuditAction(db, 'facility_settings_update', `サテライト端末トークン再発行: ${terminalId}`);
+        await recordAuditOrNotify(
+          () => logAuditAction(db, 'facility_settings_update', `サテライト端末トークン再発行: ${terminalId}`),
+          (message) => toast.warning(message)
+        );
       }
       await refresh();
     } finally {
@@ -268,7 +281,10 @@ export default function TerminalSyncPanel() {
       }
       toast.success(`端末 ${terminalId} を失効させました。`);
       if (db) {
-        await logAuditAction(db, 'facility_settings_update', `サテライト端末失効: ${terminalId}`);
+        await recordAuditOrNotify(
+          () => logAuditAction(db, 'facility_settings_update', `サテライト端末失効: ${terminalId}`),
+          (message) => toast.warning(message)
+        );
       }
       await refresh();
     } finally {
@@ -291,10 +307,13 @@ export default function TerminalSyncPanel() {
       }
       toast.success('競合を確認済みにしました。');
       if (db) {
-        await logAuditAction(
-          db,
-          'facility_settings_update',
-          `同期競合を確認: ${COLLECTION_LABELS[conflict.collection] || conflict.collection} / 端末 ${conflict.terminalId}`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'facility_settings_update',
+            `同期競合を確認: ${COLLECTION_LABELS[conflict.collection] || conflict.collection} / 端末 ${conflict.terminalId}`
+          ),
+          (message) => toast.warning(message)
         );
       }
       await refresh();
@@ -339,7 +358,10 @@ export default function TerminalSyncPanel() {
         // localStorageが使えない環境では鍵も保存されていない
       }
       if (db) {
-        await logAuditAction(db, 'facility_settings_update', `サテライト化に伴う旧ローカルデータ削除: ${legacyNames.length}件のデータベースを削除`);
+        await recordAuditOrNotify(
+          () => logAuditAction(db, 'facility_settings_update', `サテライト化に伴う旧ローカルデータ削除: ${legacyNames.length}件のデータベースを削除`),
+          (message) => toast.warning(message)
+        );
       }
       toast.success(legacyNames.length > 0
         ? `旧ローカルデータ(${legacyNames.length}件のデータベース)を削除しました。`

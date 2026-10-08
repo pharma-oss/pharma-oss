@@ -73,6 +73,8 @@ import {
   getClaimReturnReasonByCode
 } from '@/lib/claim_return_manager';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
+import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { downloadTextFile } from '@/lib/blob_download';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import {
@@ -474,7 +476,7 @@ export default function PrintPage() {
 
     try {
       const reviewer = getCurrentUser();
-      await logAuditAction(
+      const auditOk = await logAuditAction(
         db,
         'ai_suggestion_review',
         buildAiSuggestionDecisionAuditDetail({
@@ -487,6 +489,11 @@ export default function PrintPage() {
         visitData?.patientId,
         patientData?.name
       );
+      if (!auditOk) {
+        // 採否の記録は監査ログだけに残る。残らなかったので、記録したとは伝えない。
+        alert('AI補助提案の採否を監査ログへ記録できませんでした。もう一度操作してください。');
+        return;
+      }
       alert(`AI補助提案を「${getAiSuggestionDecisionLabel(decision)}」として監査ログへ記録しました。`);
     } catch (err) {
       console.error('Failed to record AI suggestion decision:', err);
@@ -731,17 +738,28 @@ export default function PrintPage() {
     try {
       if (!db) return;
       const itemDoc = await db.prescription_items.findOne(itemId).exec();
-      if (itemDoc) await itemDoc.patch({ tokkanType: (value === 'none' ? undefined : value) as any });
-      await logAuditAction(
-        db,
-        'billing_toggle',
-        `特定薬剤管理指導料変更: ${itemId} tokkanType=${value}`,
-        visitData?.patientId,
-        patientData?.name
-      );
+      const previousTokkanType = itemDoc?.tokkanType;
+      // 書き込み -> 監査ログ。監査ログが残らなければ算定の変更を元に戻す。
+      await runWithAuditRollback({
+        write: async () => {
+          if (itemDoc) await itemDoc.patch({ tokkanType: (value === 'none' ? undefined : value) as any });
+        },
+        logAudit: () => logAuditAction(
+          db,
+          'billing_toggle',
+          `特定薬剤管理指導料変更: ${itemId} tokkanType=${value}`,
+          visitData?.patientId,
+          patientData?.name
+        ),
+        rollback: async () => {
+          if (itemDoc) await itemDoc.patch({ tokkanType: previousTokkanType });
+        },
+        failureMessage: '監査ログを記録できなかったため、特定薬剤管理指導料の変更を取り消しました。'
+      });
     } catch (e) {
       setPrescriptionItems(previousItems);
       console.error('Failed to change tokkan:', e);
+      if (e instanceof AuditLogFailedError) alert(e.message);
     }
   };
 
@@ -873,12 +891,15 @@ export default function PrintPage() {
 
   const handleOfficialUkeExportSuccess = useCallback(async (result: SingleDispensingUkeOfficialResult) => {
     if (!db) return;
-    await logAuditAction(
-      db,
-      'uke_export',
-      `公式レセプト（UKE / RECEIPTY.CYO）エクスポート: 患者「${patientData?.name}」の公式電子レセプト（点数: ${result.totalPoints}点、レコード数: ${result.records.length}行）を出力しました。`,
-      visitData?.patientId,
-      patientData?.name
+    await recordAuditOrNotify(
+      () => logAuditAction(
+        db,
+        'uke_export',
+        `公式レセプト（UKE / RECEIPTY.CYO）エクスポート: 患者「${patientData?.name}」の公式電子レセプト（点数: ${result.totalPoints}点、レコード数: ${result.records.length}行）を出力しました。`,
+        visitData?.patientId,
+        patientData?.name
+      ),
+      (message) => alert(message)
     );
   }, [db, patientData?.name, visitData?.patientId]);
 
@@ -1078,24 +1099,26 @@ export default function PrintPage() {
       differences: claimSnapshotDifferences,
       suggestions: claimReturnCorrectionSuggestions
     });
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-
-    if (db) {
-      await logAuditAction(
-        db,
-        'claim_lifecycle',
-        `請求時点差分CSVエクスポート: ${fileName} に ${claimSnapshotDifferences.length}件の差分と返戻修正候補 ${claimReturnCorrectionSuggestions.length}件を書き出しました。`,
-        visitData?.patientId,
-        patientData?.name
-      );
+    const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+    if (!db) {
+      download();
+      return;
+    }
+    try {
+      // 監査ログを先に残し、残らなければ書き出さない
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'claim_lifecycle',
+          `請求時点差分CSVエクスポート: ${fileName} に ${claimSnapshotDifferences.length}件の差分と返戻修正候補 ${claimReturnCorrectionSuggestions.length}件を書き出しました。`,
+          visitData?.patientId,
+          patientData?.name
+        ),
+        download
+      });
+    } catch (e) {
+      console.error('Failed to export claim snapshot differences:', e);
+      alert(e instanceof ExportAuditFailedError ? e.message : '請求時点差分CSVを書き出せませんでした。');
     }
   };
 
@@ -1114,15 +1137,27 @@ export default function PrintPage() {
       differences: claimSnapshotDifferences,
       suggestions: claimReturnCorrectionSuggestions
     });
-    await navigator.clipboard.writeText(memo);
-    if (db) {
-      await logAuditAction(
-        db,
-        'claim_lifecycle',
-        `返戻修正メモコピー: 請求時点差分 ${claimSnapshotDifferences.length}件、返戻修正候補 ${claimReturnCorrectionSuggestions.length}件を患者情報付きの院内引き継ぎメモとしてコピーしました。`,
-        visitData?.patientId,
-        patientData?.name
-      );
+    const copy = () => navigator.clipboard.writeText(memo);
+    try {
+      if (db) {
+        // 患者情報付きのメモを持ち出す前に、監査ログを残す。残らなければコピーしない。
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'claim_lifecycle',
+            `返戻修正メモコピー: 請求時点差分 ${claimSnapshotDifferences.length}件、返戻修正候補 ${claimReturnCorrectionSuggestions.length}件を患者情報付きの院内引き継ぎメモとしてコピーしました。`,
+            visitData?.patientId,
+            patientData?.name
+          ),
+          download: copy
+        });
+      } else {
+        await copy();
+      }
+    } catch (e) {
+      console.error('Failed to copy the claim return correction memo:', e);
+      alert(e instanceof ExportAuditFailedError ? e.message : '返戻修正メモをコピーできませんでした。');
+      return;
     }
     alert('返戻修正メモをクリップボードにコピーしました。');
   };

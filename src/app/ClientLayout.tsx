@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DatabaseProvider } from '@/db/DatabaseProvider';
 import { getCurrentUser, isAuthenticatedUser, setCurrentUser, logAuditAction, UNAUTHENTICATED_USER } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
 import type { Patient, User } from '@/db/types';
 import { toast } from 'sonner';
@@ -374,10 +375,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       const { getDatabase } = await import('@/db');
       const db = await getDatabase();
       if (!db) return;
-      await logAuditAction(
-        db,
-        'login',
-        `スタッフログイン: 操作者「${user.name} (${user.role})」としてログインしました。`
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'login',
+          `スタッフログイン: 操作者「${user.name} (${user.role})」としてログインしました。`
+        ),
+        (message) => toast.warning(message)
       );
     } catch (err) {
       console.error('Failed to log login audit action:', err);

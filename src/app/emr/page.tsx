@@ -12,6 +12,8 @@ import { calculatePatientAge } from '@/lib/patient_age';
 import { findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
+import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
+import { downloadTextFile } from '@/lib/blob_download';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
   buildSoapAiDraftSuggestions,
@@ -309,7 +311,7 @@ export default function EmrPage() {
     try {
       const patients = await db.patients.find({ selector: { patientId: editable.visit.patientId } }).exec();
       const patientName = patients[0]?.name || '不明';
-      await logAuditAction(
+      const auditOk = await logAuditAction(
         db,
         'ai_suggestion_review',
         buildAiSuggestionDecisionAuditDetail({
@@ -321,7 +323,11 @@ export default function EmrPage() {
         editable.visit.patientId,
         patientName
       );
-      toast.success(`SOAP ${draft.type} にAI補助下書きを反映し、監査ログへ記録しました。内容を確認・承認してください。`);
+      if (auditOk) {
+        toast.success(`SOAP ${draft.type} にAI補助下書きを反映し、監査ログへ記録しました。内容を確認・承認してください。`);
+      } else {
+        toast.warning(`SOAP ${draft.type} に反映しましたが、監査ログ記録に失敗しました。`);
+      }
     } catch (error) {
       console.error('Failed to log SOAP AI draft application:', error);
       toast.warning(`SOAP ${draft.type} に反映しましたが、監査ログ記録に失敗しました。`);
@@ -341,12 +347,15 @@ export default function EmrPage() {
           const patients = await db.patients.find({ selector: { patientId } }).exec();
           patientName = patients[0]?.name || '不明';
         }
-        await logAuditAction(
-          db,
-          'ai_draft_approved',
-          `AI下書き承認: SOAP ${entry.type} / 提案ID: ${entry.aiDraftId || '-'} / 承認者: ${reviewer?.name || '薬剤師'} / 確定テキスト: ${String(entry.text || '').slice(0, 120)}`,
-          patientId,
-          patientName
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'ai_draft_approved',
+            `AI下書き承認: SOAP ${entry.type} / 提案ID: ${entry.aiDraftId || '-'} / 承認者: ${reviewer?.name || '薬剤師'} / 確定テキスト: ${String(entry.text || '').slice(0, 120)}`,
+            patientId,
+            patientName
+          ),
+          (message) => toast.warning(message)
         );
       } catch (err) {
         console.error('Failed to log ai_draft_approved audit log:', err);
@@ -794,10 +803,13 @@ export default function EmrPage() {
           data.shortageRecordedAt = new Date().toISOString();
           return data;
         });
-        await logAuditAction(
-          db,
-          'stock_update',
-          `ピッキング不足登録: 「${drugName}」の不足 ${quantity} を記録しました。${trimmedNote ? `メモ: ${trimmedNote}` : ''}`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'stock_update',
+            `ピッキング不足登録: 「${drugName}」の不足 ${quantity} を記録しました。${trimmedNote ? `メモ: ${trimmedNote}` : ''}`
+          ),
+          (message) => toast.warning(message)
         );
         toast.success(`不足を記録しました（${drugName} / ${quantity}）`);
       } else {
@@ -807,10 +819,13 @@ export default function EmrPage() {
           delete data.shortageRecordedAt;
           return data;
         });
-        await logAuditAction(
-          db,
-          'stock_update',
-          `ピッキング不足解除: 「${drugName}」の不足記録を解除しました。`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'stock_update',
+            `ピッキング不足解除: 「${drugName}」の不足記録を解除しました。`
+          ),
+          (message) => toast.warning(message)
         );
         toast.success('不足記録を解除しました');
       }
@@ -874,12 +889,15 @@ export default function EmrPage() {
         toast.error('印刷ウィンドウを開けませんでした。ポップアップを許可してください。');
         return;
       }
-      await logAuditAction(
-        db,
-        'print',
-        `ピッキングリスト印刷: 「${patientName}」のピッキングリストをレジロール用に印刷しました（${pickingItems.length}品目）。`,
-        patientId,
-        patientName
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'print',
+          `ピッキングリスト印刷: 「${patientName}」のピッキングリストをレジロール用に印刷しました（${pickingItems.length}品目）。`,
+          patientId,
+          patientName
+        ),
+        (message) => toast.warning(message)
       );
     } catch (e) {
       console.error('Failed to print picking receipt:', e);
@@ -939,27 +957,21 @@ export default function EmrPage() {
       });
       const fileName = buildPickingInstructionFileName(visit.visitId);
       const csv = buildPickingInstructionCsv(instruction);
-      const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      await logAuditAction(
-        db,
-        'stock_update',
-        `ピッキング指示CSV書き出し: 「${fileName}」に${instruction.items.length}品目を出力しました（外部ピッキングシステム連携用・店舗内利用限定）。`,
-        visit.patientId,
-        patientDoc?.name
-      );
+      // 患者名と処方内容を持ち出す書き出し。監査ログを先に残し、残らなければ書き出さない。
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'stock_update',
+          `ピッキング指示CSV書き出し: 「${fileName}」に${instruction.items.length}品目を出力しました（外部ピッキングシステム連携用・店舗内利用限定）。`,
+          visit.patientId,
+          patientDoc?.name
+        ),
+        download: () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8')
+      });
       toast.success(`ピッキング指示CSVを書き出しました（${instruction.items.length}品目）。`);
     } catch (e) {
       console.error('Failed to export picking instruction:', e);
-      toast.error('ピッキング指示CSVの書き出しに失敗しました');
+      toast.error(e instanceof ExportAuditFailedError ? e.message : 'ピッキング指示CSVの書き出しに失敗しました');
     }
   }, [db, findActiveVisit, pickingItems]);
 
@@ -1058,12 +1070,15 @@ export default function EmrPage() {
       }
 
       const patientDoc = await db.patients.findOne(visit.patientId).exec();
-      await logAuditAction(
-        db,
-        'stock_update',
-        `${buildPickingResultAuditDetail(plan)}（結果ファイル: ${file.name}）。反映後は現物とロット・期限の一致を確認してください。`,
-        visit.patientId,
-        patientDoc?.name
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'stock_update',
+          `${buildPickingResultAuditDetail(plan)}（結果ファイル: ${file.name}）。反映後は現物とロット・期限の一致を確認してください。`,
+          visit.patientId,
+          patientDoc?.name
+        ),
+        (message) => toast.warning(message)
       );
       toast.success(`外部ピッキング結果を反映しました（${plan.summary}）。`);
     } catch (e) {
