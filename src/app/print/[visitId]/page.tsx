@@ -837,9 +837,13 @@ export default function PrintPage() {
       visitId,
       patientId: visitData?.patientId,
       patientName: patientData?.name,
-      print: () => window.print()
+      print: () => window.print(),
+      medicationInfo: {
+        approvedCount: medicationInfoContents.length - medicationInfoFallbackCount,
+        fallbackCount: medicationInfoFallbackCount
+      }
     });
-    if (outcome.status === 'blocked') {
+    if (outcome.status !== 'printed') {
       alert(outcome.message);
     }
   };

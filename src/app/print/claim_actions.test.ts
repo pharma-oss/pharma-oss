@@ -7,6 +7,7 @@ import {
   buildItemClaimFlagAuditDetail,
   buildItemClaimFlagPatches,
   buildPrintAuditDetail,
+  buildPrintFailureAuditDetail,
   persistClaimLifecycleWithAudit,
   persistClaimOptions,
   readClaimOptionsState,
@@ -217,6 +218,74 @@ test('buildPrintAuditDetail records the visit and falls back for an unnamed pati
   );
   assert.match(buildPrintAuditDetail('v_0002', undefined), /患者 未設定$/);
   assert.match(buildPrintAuditDetail('v_0003', ''), /患者 未設定$/);
+});
+
+test('buildPrintAuditDetail records how many 薬情 were approved versus fallback boilerplate', () => {
+  assert.equal(
+    buildPrintAuditDetail('v_0001', 'デモ患者 みどり', { approvedCount: 3, fallbackCount: 1 }),
+    '帳票印刷実行: 受付ID v_0001 / 患者 デモ患者 みどり / 薬情 承認版 3件 / 定型文 1件'
+  );
+  assert.match(buildPrintAuditDetail('v_0002', undefined, { approvedCount: 0, fallbackCount: 0 }), /患者 未設定 \/ 薬情 承認版 0件 \/ 定型文 0件$/);
+});
+
+test('printDocumentsWithAuditLog writes the 薬情 counts into the print audit entry', async () => {
+  const harness = createHarness();
+
+  await printDocumentsWithAuditLog({
+    db: harness.db,
+    visitId: 'v_0001',
+    patientName: 'デモ患者 みどり',
+    print: () => {},
+    medicationInfo: { approvedCount: 2, fallbackCount: 1 },
+    logAudit: harness.logAudit
+  });
+
+  assert.match(harness.auditEntries[0].details, /薬情 承認版 2件 \/ 定型文 1件$/);
+});
+
+test('buildPrintFailureAuditDetail names the visit and the patient', () => {
+  assert.equal(
+    buildPrintFailureAuditDetail('v_0001', 'デモ患者 みどり'),
+    '帳票印刷失敗: 受付ID v_0001 / 患者 デモ患者 みどり / 監査ログ記録後にブラウザ印刷で失敗しました。'
+  );
+  assert.match(buildPrintFailureAuditDetail('v_0002', ''), /患者 未設定/);
+});
+
+test('printDocumentsWithAuditLog records a failure entry and reports it when the browser print throws', async () => {
+  const harness = createHarness();
+  const events = harness.events;
+
+  const outcome = await printDocumentsWithAuditLog({
+    db: harness.db,
+    visitId: 'v_0001',
+    patientId: 'pt_0001',
+    patientName: 'デモ患者 みどり',
+    print: () => { events.push('print'); throw new Error('プリンタに接続できません'); },
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(outcome, { status: 'failed', message: '印刷に失敗しました: プリンタに接続できません' });
+  assert.deepEqual(events, ['audit', 'print', 'audit'], '開始の記録 → 印刷 → 失敗の記録');
+  assert.equal(harness.auditEntries.length, 2);
+  assert.match(harness.auditEntries[0].details, /^帳票印刷実行:/);
+  assert.match(harness.auditEntries[1].details, /^帳票印刷失敗: 受付ID v_0001/);
+  assert.equal(harness.auditEntries[1].actionType, 'print');
+  assert.equal(harness.auditEntries[1].patientId, 'pt_0001');
+});
+
+test('printDocumentsWithAuditLog still reports the print failure when the failure record itself cannot be written', async () => {
+  const harness = createHarness();
+  let calls = 0;
+
+  const outcome = await printDocumentsWithAuditLog({
+    db: harness.db,
+    visitId: 'v_0001',
+    print: () => { throw 'blocked by browser'; },
+    logAudit: async () => { calls += 1; return calls === 1; }
+  });
+
+  assert.deepEqual(outcome, { status: 'failed', message: '印刷に失敗しました: blocked by browser' });
+  assert.equal(calls, 2);
 });
 
 // ---------------------------------------------------------------------------

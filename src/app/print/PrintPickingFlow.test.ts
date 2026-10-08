@@ -274,8 +274,10 @@ test('print page delegates document printing to the audited claim action', () =>
   assert.match(body, /if \(!db\)/);
   assert.match(body, /await printDocumentsWithAuditLog\(/);
   assert.match(body, /print: \(\) => window\.print\(\)/);
-  assert.match(body, /outcome\.status === 'blocked'/);
+  // 印刷済み以外 (監査ログ失敗による中止・ブラウザ印刷の失敗) はどちらも利用者へ知らせる。
+  assert.match(body, /outcome\.status !== 'printed'/);
   assert.match(body, /alert\(outcome\.message\)/);
+  assert.match(body, /medicationInfo: \{/);
 
   // 監査ログを通さない印刷経路が増えていないこと。
   const directPrintCalls = printSource.match(/window\.print\(\)/g) || [];

@@ -41,8 +41,26 @@ export const CLAIM_ACTION_MESSAGES = {
 
 type MaybeDatabase = PharmacyDatabase | null | undefined;
 
-export function buildPrintAuditDetail(visitId: string, patientName?: string): string {
-  return `帳票印刷実行: 受付ID ${visitId} / 患者 ${patientName || '未設定'}`;
+// 患者に渡す薬情が、承認済みの文面か、承認が無いための定型文かを、印刷の記録に残す。
+export interface PrintMedicationInfoCounts {
+  approvedCount: number;
+  fallbackCount: number;
+}
+
+export function buildPrintAuditDetail(
+  visitId: string,
+  patientName?: string,
+  medicationInfo?: PrintMedicationInfoCounts
+): string {
+  const base = `帳票印刷実行: 受付ID ${visitId} / 患者 ${patientName || '未設定'}`;
+  return medicationInfo
+    ? `${base} / 薬情 承認版 ${medicationInfo.approvedCount}件 / 定型文 ${medicationInfo.fallbackCount}件`
+    : base;
+}
+
+// 監査ログを残して印刷を始めたあと、ブラウザの印刷が例外で失敗したときの記録。
+export function buildPrintFailureAuditDetail(visitId: string, patientName?: string): string {
+  return `帳票印刷失敗: 受付ID ${visitId} / 患者 ${patientName || '未設定'} / 監査ログ記録後にブラウザ印刷で失敗しました。`;
 }
 
 export interface PrintDocumentsWithAuditLogParams {
@@ -51,12 +69,14 @@ export interface PrintDocumentsWithAuditLogParams {
   patientId?: string;
   patientName?: string;
   print: () => void;
+  medicationInfo?: PrintMedicationInfoCounts;
   logAudit?: LogAuditActionFn;
 }
 
 export type PrintDocumentsOutcome =
   | { status: 'printed' }
-  | { status: 'blocked'; message: string };
+  | { status: 'blocked'; message: string }
+  | { status: 'failed'; message: string };
 
 /**
  * 監査ログの記録に成功したときだけ印刷を実行する。
@@ -66,21 +86,30 @@ export type PrintDocumentsOutcome =
 export async function printDocumentsWithAuditLog(
   params: PrintDocumentsWithAuditLogParams
 ): Promise<PrintDocumentsOutcome> {
-  const { db, visitId, patientId, patientName, print, logAudit = logAuditAction } = params;
+  const { db, visitId, patientId, patientName, print, medicationInfo, logAudit = logAuditAction } = params;
   if (!db) {
     return { status: 'blocked', message: CLAIM_ACTION_MESSAGES.databaseNotReady };
   }
   const auditOk = await logAudit(
     db,
     'print',
-    buildPrintAuditDetail(visitId, patientName),
+    buildPrintAuditDetail(visitId, patientName, medicationInfo),
     patientId,
     patientName
   );
   if (!auditOk) {
     return { status: 'blocked', message: CLAIM_ACTION_MESSAGES.printAuditFailed };
   }
-  print();
+  try {
+    print();
+  } catch (error) {
+    console.error('Failed to print documents:', error);
+    await logAudit(db, 'print', buildPrintFailureAuditDetail(visitId, patientName), patientId, patientName);
+    return {
+      status: 'failed',
+      message: `印刷に失敗しました: ${error instanceof Error ? error.message : String(error)}`
+    };
+  }
   return { status: 'printed' };
 }
 
