@@ -5,6 +5,8 @@ import {
   buildInterventionAuditDetail,
   buildInterventionEvent,
   buildInterventionRecord,
+  deleteInterventionWithAudit,
+  recordInterventionWithAudit,
   resolveInterventionCategory,
   suggestInterventionCategory,
   normalizeVisitInterventionEvents,
@@ -12,8 +14,10 @@ import {
   formatReceiptInterventionSummary,
   validateInterventionReadiness,
   type InterventionInput,
+  type InterventionStoreDb,
   type VisitInterventionEvent
 } from '../prescription_intervention_support';
+import type { Intervention } from '@/db/types';
 import { VISIT_SCHEMA } from '@/db/schema';
 
 test('prescription_intervention_support: suggestInterventionCategory identifies categories deterministically', () => {
@@ -376,4 +380,166 @@ test('prescription_intervention_support: events built from the modal input flow 
 
   const [row] = formatDispensingRecordInterventions([pending]);
   assert.ok(row.resultContent.startsWith('照会中（未回答）'), 'a pending inquiry is shown as unanswered on the dispensing record');
+});
+
+// ---- 登録・削除: 監査ログが残らなければ書いたものを全部戻す ----
+
+// メソッドが this を使う本物の RxDocument に近い形(this を失うと壊れる)
+class FakeVisit {
+  patches: VisitInterventionEvent[][] = [];
+  failOnPatch = 0;
+  constructor(public patientId: string, public interventionEvents?: VisitInterventionEvent[]) {}
+  async patch(patch: { interventionEvents: VisitInterventionEvent[] }) {
+    this.patches.push(patch.interventionEvents);
+    if (this.failOnPatch && this.patches.length === this.failOnPatch) throw new Error('patch failed');
+    this.interventionEvents = patch.interventionEvents;
+  }
+}
+
+function fakeStore(options: { existing?: Intervention; patientsFail?: boolean; removeFails?: boolean } = {}) {
+  const calls = { inserted: [] as Intervention[], removed: [] as string[] };
+  const db: InterventionStoreDb = {
+    interventions: {
+      insert: async (record) => {
+        calls.inserted.push(record);
+        return { remove: async () => { if (options.removeFails) throw new Error('remove failed'); calls.removed.push(record.interventionId); } };
+      },
+      findOne: () => ({
+        exec: async () => options.existing
+          ? { toJSON: () => options.existing!, remove: async () => { calls.removed.push(options.existing!.interventionId); } }
+          : null
+      })
+    },
+    patients: {
+      find: () => ({ exec: async () => { if (options.patientsFail) throw new Error('patients failed'); return [{ name: '山田 太郎' }]; } })
+    }
+  };
+  return { db, calls };
+}
+
+const storedEvent = (eventId: string): VisitInterventionEvent => ({
+  eventId, category: 'other', reason: '既存', inquiryStatus: 'completed', inquiryMethod: 'phone',
+  patientConsented: true, contactedAt: NOW, handledBy: '薬剤師A'
+});
+const newInput = interventionInput();
+const newRecord = buildInterventionRecord(newInput, { interventionId: 'int_new', visitId: 'v1', handledBy: '薬剤師A', now: NOW });
+const newEvent = buildInterventionEvent(newInput, 'leftover_adjustment', { eventId: 'int_new', handledBy: '薬剤師A', now: NOW });
+
+test('recordInterventionWithAudit saves the record, appends the event and audits with the patient name', async () => {
+  const { db, calls } = fakeStore();
+  const visit = new FakeVisit('p1', [storedEvent('int_old')]);
+  const audited: Array<[string, string, string]> = [];
+
+  await recordInterventionWithAudit({
+    db, visit, record: newRecord, event: newEvent, auditDetail: '登録文言',
+    logAudit: async (patientId, patientName, detail) => { audited.push([patientId, patientName, detail]); return true; }
+  });
+
+  assert.deepStrictEqual(calls.inserted.map((r) => r.interventionId), ['int_new']);
+  assert.deepStrictEqual(visit.interventionEvents?.map((e) => e.eventId), ['int_old', 'int_new']);
+  assert.deepStrictEqual(audited, [['p1', '山田 太郎', '登録文言']]);
+  assert.deepStrictEqual(calls.removed, []);
+});
+
+test('recordInterventionWithAudit removes the record AND the appended event when the audit log fails', async () => {
+  const { db, calls } = fakeStore();
+  const visit = new FakeVisit('p1', [storedEvent('int_old')]);
+
+  await assert.rejects(
+    () => recordInterventionWithAudit({ db, visit, record: newRecord, event: newEvent, auditDetail: 'x', logAudit: async () => false }),
+    new Error('疑義照会記録の監査ログ記録に失敗したため、記録を元に戻しました。')
+  );
+
+  assert.deepStrictEqual(calls.removed, ['int_new']);
+  assert.deepStrictEqual(visit.interventionEvents?.map((e) => e.eventId), ['int_old'], 'no orphaned event stays on the visit');
+  assert.strictEqual(visit.patches.length, 2, 'appended once, restored once');
+});
+
+test('recordInterventionWithAudit also undoes everything when a step after the write throws', async () => {
+  const { db, calls } = fakeStore({ patientsFail: true });
+  const visit = new FakeVisit('p1');
+
+  await assert.rejects(
+    () => recordInterventionWithAudit({ db, visit, record: newRecord, event: newEvent, auditDetail: 'x', logAudit: async () => true }),
+    /patients failed/
+  );
+  assert.deepStrictEqual(calls.removed, ['int_new']);
+  assert.deepStrictEqual(visit.interventionEvents, [], 'a visit that had no events goes back to none');
+});
+
+test('recordInterventionWithAudit only removes the record when the event append itself fails', async () => {
+  const { db, calls } = fakeStore();
+  const visit = new FakeVisit('p1', [storedEvent('int_old')]);
+  visit.failOnPatch = 1;
+
+  await assert.rejects(
+    () => recordInterventionWithAudit({ db, visit, record: newRecord, event: newEvent, auditDetail: 'x', logAudit: async () => true }),
+    /patch failed/
+  );
+  assert.deepStrictEqual(calls.removed, ['int_new']);
+  assert.strictEqual(visit.patches.length, 1, 'nothing to restore because nothing was appended');
+});
+
+test('recordInterventionWithAudit keeps the original error even if the rollback itself fails', async () => {
+  const { db } = fakeStore({ removeFails: true });
+  const visit = new FakeVisit('p1');
+
+  await assert.rejects(
+    () => recordInterventionWithAudit({ db, visit, record: newRecord, event: newEvent, auditDetail: 'x', logAudit: async () => false }),
+    new Error('疑義照会記録の監査ログ記録に失敗したため、記録を元に戻しました。')
+  );
+});
+
+test('recordInterventionWithAudit works for a visit handle without a patch method', async () => {
+  const { db, calls } = fakeStore();
+  const visit = { patientId: 'p1' };
+
+  await assert.rejects(
+    () => recordInterventionWithAudit({ db, visit, record: newRecord, event: newEvent, auditDetail: 'x', logAudit: async () => false }),
+    /監査ログ記録に失敗/
+  );
+  assert.deepStrictEqual(calls.removed, ['int_new']);
+});
+
+test('deleteInterventionWithAudit removes the record and its event and audits the deletion', async () => {
+  const { db, calls } = fakeStore({ existing: newRecord });
+  const visit = new FakeVisit('p1', [storedEvent('int_old'), newEvent]);
+  const audited: string[] = [];
+
+  const result = await deleteInterventionWithAudit({
+    db, visit, interventionId: 'int_new', logAudit: async (_p, _n, detail) => { audited.push(detail); return true; }
+  });
+
+  assert.deepStrictEqual(result, { deleted: true });
+  assert.deepStrictEqual(calls.removed, ['int_new']);
+  assert.deepStrictEqual(visit.interventionEvents?.map((e) => e.eventId), ['int_old']);
+  assert.deepStrictEqual(audited, ['疑義照会削除: ID int_new']);
+});
+
+test('deleteInterventionWithAudit brings the record and the event back when the audit log fails', async () => {
+  const { db, calls } = fakeStore({ existing: newRecord });
+  const visit = new FakeVisit('p1', [storedEvent('int_old'), newEvent]);
+
+  await assert.rejects(
+    () => deleteInterventionWithAudit({ db, visit, interventionId: 'int_new', logAudit: async () => false }),
+    new Error('疑義照会削除の監査ログ記録に失敗したため、削除を取り消しました。')
+  );
+
+  assert.deepStrictEqual(calls.inserted.map((r) => r.interventionId), ['int_new'], 'the deleted record is re-inserted');
+  assert.deepStrictEqual(visit.interventionEvents?.map((e) => e.eventId), ['int_old', 'int_new']);
+});
+
+test('deleteInterventionWithAudit does nothing and logs nothing for an unknown id', async () => {
+  const { db, calls } = fakeStore();
+  const visit = new FakeVisit('p1', [storedEvent('int_old')]);
+  let audited = false;
+
+  const result = await deleteInterventionWithAudit({
+    db, visit, interventionId: 'missing', logAudit: async () => { audited = true; return true; }
+  });
+
+  assert.deepStrictEqual(result, { deleted: false });
+  assert.strictEqual(audited, false);
+  assert.deepStrictEqual(calls.removed, []);
+  assert.strictEqual(visit.patches.length, 0);
 });

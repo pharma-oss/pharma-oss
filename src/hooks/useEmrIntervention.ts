@@ -7,6 +7,8 @@ import {
   buildInterventionAuditDetail,
   buildInterventionEvent,
   buildInterventionRecord,
+  deleteInterventionWithAudit,
+  recordInterventionWithAudit,
   resolveInterventionCategory,
   type InterventionCategory,
   type InterventionInput
@@ -68,8 +70,6 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         now
       });
 
-      const insertedDoc = await db.interventions.insert(newRecord);
-
       // visit.interventionEvents への同期保存（コレクションを増やさず visit の入れ子プロパティとして構造化）
       const event = buildInterventionEvent(input, category, {
         eventId: newId,
@@ -77,26 +77,16 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         now
       });
 
-      if (typeof visit.patch === 'function') {
-        const existingEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : [];
-        await visit.patch({ interventionEvents: [...existingEvents, event] });
-      }
-
-      // 監査ログの記録
-      const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-      const patientName = patients[0]?.name || '不明';
-      const auditOk = await logAuditAction(
+      // 保存 -> イベント追記 -> 監査ログ。監査ログが残らなければ、書いたものを全部元に戻す。
+      await recordInterventionWithAudit({
         db,
-        'prescription_edit',
-        buildInterventionAuditDetail(input, category),
-        visit.patientId,
-        patientName
-      );
-
-      if (!auditOk) {
-        await insertedDoc.remove();
-        throw new Error('疑義照会記録の監査ログ記録に失敗したため、記録を元に戻しました。');
-      }
+        visit,
+        record: newRecord,
+        event,
+        auditDetail: buildInterventionAuditDetail(input, category),
+        logAudit: (patientId, patientName, detail) =>
+          logAuditAction(db, 'prescription_edit', detail, patientId, patientName)
+      });
 
       setInterventions((prev: any[]) => [...prev, newRecord]);
       toast.success(input.inquiryStatus === 'pending' ? '疑義照会を照会中として記録しました' : '疑義照会・処方変更を記録しました');
@@ -116,26 +106,14 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         return;
       }
 
-      const doc = await db.interventions.findOne({ selector: { interventionId } }).exec();
-      if (doc) {
-        await doc.remove();
-
-        // visit.interventionEvents からも削除
-        if (typeof visit.patch === 'function' && Array.isArray(visit.interventionEvents)) {
-          await visit.patch({
-            interventionEvents: visit.interventionEvents.filter((ev: any) => ev.eventId !== interventionId)
-          });
-        }
-
-        const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-        const patientName = patients[0]?.name || '不明';
-        await logAuditAction(
-          db,
-          'prescription_edit',
-          `疑義照会削除: ID ${interventionId}`,
-          visit.patientId,
-          patientName
-        );
+      const { deleted } = await deleteInterventionWithAudit({
+        db,
+        visit,
+        interventionId,
+        logAudit: (patientId, patientName, detail) =>
+          logAuditAction(db, 'prescription_edit', detail, patientId, patientName)
+      });
+      if (deleted) {
         toast.success('疑義照会を削除しました。');
         setInterventions((prev) => prev.filter((i) => (i.interventionId || i.id) !== interventionId));
       }

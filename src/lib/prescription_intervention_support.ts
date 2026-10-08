@@ -130,6 +130,113 @@ export function buildInterventionAuditDetail(input: InterventionInput, category:
   return `疑義照会登録 [${categoryLabel}]: 状態 ${inquiryStatusLabel[input.inquiryStatus]} / 方法 ${inquiryMethodLabel[input.inquiryMethod]} / 照会先「${input.inquiryDoctor || '未指定'}」 / 理由: ${input.reason} / 結果: ${input.inquiryResult || '未回答'}${input.responseDueDate ? ` / 回答期限: ${input.responseDueDate}` : ''}。`;
 }
 
+// ---- 登録・削除の書き込み手順(監査ログが残らなければ、書いたものを全部元に戻す) ----
+
+export interface InterventionVisitHandle {
+  patientId: string;
+  interventionEvents?: VisitInterventionEvent[];
+  patch?: (patch: { interventionEvents: VisitInterventionEvent[] }) => Promise<unknown>;
+}
+
+export interface InterventionStoreDb {
+  interventions: {
+    insert: (record: Intervention) => Promise<{ remove: () => Promise<unknown> }>;
+    findOne: (query: { selector: { interventionId: string } }) => {
+      exec: () => Promise<{ toJSON: () => Intervention; remove: () => Promise<unknown> } | null>;
+    };
+  };
+  patients: {
+    find: (query: { selector: { patientId: string } }) => { exec: () => Promise<Array<{ name?: string }>> };
+  };
+}
+
+export type InterventionAuditFn = (patientId: string, patientName: string, detail: string) => Promise<boolean>;
+
+async function bestEffort(label: string, action: () => Promise<unknown>): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    // 取り消し自体の失敗は、元のエラーを隠さないよう記録だけ残す
+    console.error(`Failed to roll back intervention change (${label}):`, error);
+  }
+}
+
+// 疑義照会の登録: interventions への保存 -> visit.interventionEvents への追記 -> 監査ログ。
+// 途中で失敗したら、保存したレコードと追記したイベントの両方を元に戻して失敗を投げる。
+export async function recordInterventionWithAudit(params: {
+  db: InterventionStoreDb;
+  visit: InterventionVisitHandle;
+  record: Intervention;
+  event: VisitInterventionEvent;
+  auditDetail: string;
+  logAudit: InterventionAuditFn;
+}): Promise<void> {
+  const { db, visit, record, event, auditDetail, logAudit } = params;
+  const previousEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : [];
+  const insertedDoc = await db.interventions.insert(record);
+  let eventAppended = false;
+  try {
+    if (typeof visit.patch === 'function') {
+      await visit.patch({ interventionEvents: [...previousEvents, event] });
+      eventAppended = true;
+    }
+    const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
+    const patientName = patients[0]?.name || '不明';
+    const auditOk = await logAudit(visit.patientId, patientName, auditDetail);
+    if (!auditOk) {
+      throw new Error('疑義照会記録の監査ログ記録に失敗したため、記録を元に戻しました。');
+    }
+  } catch (error) {
+    await bestEffort('remove record', () => insertedDoc.remove());
+    if (eventAppended && typeof visit.patch === 'function') {
+      // RxDocument のメソッドなので this を保ったまま visit.patch(...) で呼ぶ
+      await bestEffort('restore events', () => visit.patch!({ interventionEvents: previousEvents }));
+    }
+    throw error;
+  }
+}
+
+// 疑義照会の削除: 削除 -> visit.interventionEvents から除外 -> 監査ログ。
+// 監査ログが残らなければ、削除したレコードとイベントを戻して失敗を投げる。
+export async function deleteInterventionWithAudit(params: {
+  db: InterventionStoreDb;
+  visit: InterventionVisitHandle;
+  interventionId: string;
+  logAudit: InterventionAuditFn;
+}): Promise<{ deleted: boolean }> {
+  const { db, visit, interventionId, logAudit } = params;
+  const doc = await db.interventions.findOne({ selector: { interventionId } }).exec();
+  if (!doc) return { deleted: false };
+
+  const snapshot = doc.toJSON();
+  const previousEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : null;
+  let removed = false;
+  let eventsPatched = false;
+  try {
+    await doc.remove();
+    removed = true;
+    if (typeof visit.patch === 'function' && previousEvents) {
+      await visit.patch({ interventionEvents: previousEvents.filter((ev) => ev.eventId !== interventionId) });
+      eventsPatched = true;
+    }
+    const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
+    const patientName = patients[0]?.name || '不明';
+    const auditOk = await logAudit(visit.patientId, patientName, `疑義照会削除: ID ${interventionId}`);
+    if (!auditOk) {
+      throw new Error('疑義照会削除の監査ログ記録に失敗したため、削除を取り消しました。');
+    }
+  } catch (error) {
+    if (eventsPatched && typeof visit.patch === 'function' && previousEvents) {
+      await bestEffort('restore events', () => visit.patch!({ interventionEvents: previousEvents }));
+    }
+    if (removed) {
+      await bestEffort('re-insert record', () => db.interventions.insert(snapshot));
+    }
+    throw error;
+  }
+  return { deleted: true };
+}
+
 export interface DispensingRecordInterventionRow {
   eventId: string;
   contactedAtStr: string;
