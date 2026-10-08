@@ -304,8 +304,14 @@ export function buildPrescriptionInputAudit(
   for (const [category, group] of yjCategoryGroups.entries()) {
     if (group.length <= 1) continue;
     const uniqueDrugs = new Map<string, PrescriptionInputAuditItem>();
+    // 一般名だけで束ねた群 (YJコードが無い薬) では、同じ一般名でも処方された薬品コードが違えば別の薬として数える。
+    // 一般名をキーにすると、先発品と後発品のような同成分の2剤が1剤に畳まれ、重複が指摘されない。
+    // 同じ薬品コードの重複は same_drug_duplicated が別に扱う。
+    const isGenericGroup = category.startsWith('generic:');
     for (const item of group) {
-      const key = getEffectiveYjCode(item) || getEffectiveGenericName(item) || normalizeText(item.drugCode) || normalizeText(item.drugName);
+      const key = isGenericGroup
+        ? normalizeText(item.drugCode) || normalizeText(item.drugName) || getEffectiveGenericName(item)
+        : getEffectiveYjCode(item) || getEffectiveGenericName(item) || normalizeText(item.drugCode) || normalizeText(item.drugName);
       if (key) uniqueDrugs.set(key, item);
     }
     if (uniqueDrugs.size <= 1) continue;

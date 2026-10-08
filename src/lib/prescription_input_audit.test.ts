@@ -454,4 +454,52 @@ test('buildPrescriptionInputAudit flags conflict between manual dosage category 
   assert.equal(conflict4.length, 0, '自動判定時は警告が出ないこと');
 });
 
+// ---- 一般名だけが同じ薬(YJコードが無い)の重複 ----
+
+const genericOnlyItem = (id: string, drugCode: string, drugName: string, genericName: string, rpId = id) => ({
+  id, rpId, drugCode, drugName, amount: '1', usage: '1日1回朝食後', days: '14', genericName
+});
+const codesOf = (items: ReturnType<typeof genericOnlyItem>[]) =>
+  buildPrescriptionInputAudit(items).issues.map((issue) => issue.code);
+
+test('buildPrescriptionInputAudit flags two different products with the same generic name when no YJ code is available', () => {
+  const audit = buildPrescriptionInputAudit([
+    genericOnlyItem('a', 'brand', 'ロキソニン錠60mg', 'ロキソプロフェンナトリウム水和物'),
+    genericOnlyItem('b', 'generic', 'ロキソプロフェンNa錠60mg「サワイ」', 'ロキソプロフェンナトリウム水和物')
+  ]);
+
+  const issue = audit.issues.find((i) => i.code === 'similar_therapy_detected');
+  assert.ok(issue, 'a brand and a generic of the same ingredient is a duplicate therapy candidate');
+  assert.deepStrictEqual(issue.itemIds, ['a', 'b']);
+  assert.match(issue.message, /成分:/);
+  assert.ok(!audit.issues.some((i) => i.code === 'same_drug_duplicated'));
+});
+
+test('the same product listed twice is a same-drug duplicate, not a similar-therapy one', () => {
+  const codes = codesOf([
+    genericOnlyItem('a', 'same', 'ロキソニン錠60mg', 'ロキソプロフェン', 'rp1'),
+    genericOnlyItem('b', 'same', 'ロキソニン錠60mg', 'ロキソプロフェン', 'rp2')
+  ]);
+
+  assert.ok(codes.includes('same_drug_duplicated'));
+  assert.ok(!codes.includes('similar_therapy_detected'));
+});
+
+test('different ingredients without a YJ code are not reported as similar therapy', () => {
+  const codes = codesOf([
+    genericOnlyItem('a', 'x', 'ロキソニン錠60mg', 'ロキソプロフェン'),
+    genericOnlyItem('b', 'y', 'ムコスタ錠100mg', 'レバミピド')
+  ]);
+
+  assert.ok(!codes.includes('similar_therapy_detected'));
+});
+
+test('products without a drug code are told apart by name when they share a generic name', () => {
+  const codes = codesOf([
+    genericOnlyItem('a', '', 'ロキソニン錠60mg', 'ロキソプロフェン'),
+    genericOnlyItem('b', '', 'ロキソプロフェンNa錠60mg', 'ロキソプロフェン')
+  ]);
+
+  assert.ok(codes.includes('similar_therapy_detected'));
+});
 
