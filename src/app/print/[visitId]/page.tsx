@@ -812,9 +812,14 @@ export default function PrintPage() {
     if (!canEditBilling || !db) return;
     const item = prescriptionItems[idx];
     if (!item) return;
+    let saved: { billingAgentGroupKey?: string; billingAgentGroupReason?: string } | null = null;
     try {
       const itemDoc = await db.prescription_items.findOne(itemId).exec();
       if (itemDoc) {
+        saved = {
+          billingAgentGroupKey: itemDoc.billingAgentGroupKey || undefined,
+          billingAgentGroupReason: itemDoc.billingAgentGroupReason || undefined
+        };
         await itemDoc.patch({
           billingAgentGroupKey: item.billingAgentGroupKey || undefined,
           billingAgentGroupReason: item.billingAgentGroupReason || undefined
@@ -822,6 +827,14 @@ export default function PrintPage() {
       }
     } catch (e) {
       console.error('Failed to persist billing agent override:', e);
+      // 画面だけ新しい値のまま残ると、保存されていない算定の上書きを保存済みと見間違える。保存済みの値へ戻す。
+      if (saved) {
+        const persisted = saved;
+        setPrescriptionItems((prev) => prev.map((it, i) => i === idx ? { ...it, ...persisted } : it));
+        alert('同一剤グループの上書きを保存できませんでした。保存済みの値へ戻しました。もう一度入力してください。');
+      } else {
+        alert('同一剤グループの上書きを保存できませんでした。画面の値は保存されていません。ページを開き直して確認してください。');
+      }
     }
   };
 
