@@ -1188,7 +1188,7 @@ export default function PrintPage() {
     postalCode: settingsData?.pharmacyPostalCode || '123-4567',
     address: settingsData?.pharmacyAddress || '東京都渋谷区桜丘町26-1',
     phone: settingsData?.pharmacyPhone || '03-1234-5678',
-    registrationNumber: settingsData?.registrationNumber || 'T1234567890123',
+    registrationNumber: settingsData?.registrationNumber || '',
     pharmacistName: settingsData?.defaultPharmacistName || '山田'
   };
 

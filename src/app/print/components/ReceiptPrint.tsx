@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText } from 'lucide-react';
 import { formatYen } from '@/lib/billing';
+import { hasRealRegistrationNumber } from '@/lib/facility_placeholders';
 import type { PharmacyInfo } from '../types';
 
 export interface ReceiptPrintProps {
@@ -115,7 +116,9 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
             <span>{pharmacyAddressLine}</span>
             <span>TEL: {pharmacyInfo.phone}</span>
             {pharmacyInfo.code ? <span>保険薬局コード: {pharmacyInfo.code}</span> : null}
-            <span>登録番号: {pharmacyInfo.registrationNumber}</span>
+            {hasRealRegistrationNumber(pharmacyInfo.registrationNumber)
+              ? <span>登録番号: {pharmacyInfo.registrationNumber}</span>
+              : null}
           </div>
           <div className="receipt-seal-box">領収印</div>
         </div>

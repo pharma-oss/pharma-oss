@@ -553,7 +553,7 @@ const create = async () => {
                     pharmacyAddress: oldDoc.pharmacyAddress || '東京都渋谷区桜丘町26-1',
                     pharmacyPhone: oldDoc.pharmacyPhone || '03-1234-5678',
                     pharmacyFax: oldDoc.pharmacyFax || '',
-                    registrationNumber: oldDoc.registrationNumber || 'T1234567890123',
+                    registrationNumber: oldDoc.registrationNumber || '',
                     ownerName: oldDoc.ownerName || '',
                     managerName: oldDoc.managerName || '',
                     defaultPharmacistName: oldDoc.defaultPharmacistName || '山田'
@@ -680,7 +680,7 @@ const create = async () => {
             pharmacyAddress: '東京都渋谷区桜丘町26-1',
             pharmacyPhone: '03-1234-5678',
             pharmacyFax: '',
-            registrationNumber: 'T1234567890123',
+            registrationNumber: '',
             ownerName: '',
             managerName: '',
             defaultPharmacistName: '山田',

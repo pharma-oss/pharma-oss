@@ -1,6 +1,7 @@
 import type { AuditLog, FacilitySettings, User } from '../db/types.ts';
 import { hasLoginCredential, isRemovedDemoStaffUserId } from './initial_staff.ts';
 import { buildOnboardingE2EReport } from './onboarding_e2e.ts';
+import { PLACEHOLDER_REGISTRATION_NUMBER } from './facility_placeholders.ts';
 
 export type InitialSetupStatus = 'complete' | 'attention' | 'blocked';
 export type InitialSetupTab = 'facility' | 'master' | 'backup' | 'audit' | 'staff';
@@ -49,7 +50,7 @@ const FACILITY_PLACEHOLDER_VALUES = new Set([
   '123-4567',
   '東京都渋谷区桜丘町26-1',
   '03-1234-5678',
-  'T1234567890123',
+  PLACEHOLDER_REGISTRATION_NUMBER,
   '山田'
 ]);
 

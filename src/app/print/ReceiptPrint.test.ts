@@ -80,3 +80,38 @@ test('ReceiptPrint renders official receipt with patient copay, insurance breakd
   assert.ok(html.includes('03-1234-5678'), '薬局電話番号が表示されていること');
   assert.ok(html.includes('領収印'), '領収印枠が存在すること');
 });
+
+// ---- 適格請求書登録番号: 設定済みの番号だけを印字する(見本の値や空欄を領収書に載せない) ----
+
+function renderReceiptWithRegistrationNumber(registrationNumber: string): string {
+  return renderToStaticMarkup(
+    React.createElement(ReceiptPrint, {
+      patientData: { name: '領収 太郎', patientId: 'PAT-RCPT-001' },
+      totalPoints: 83,
+      insuranceAmounts: { burdenRatio: 30, totalCostYen: 830, insurerBurdenYen: 580, patientCopayYen: 250 },
+      receiptBreakdownRows: [{ label: '調剤基本料', points: 45, note: '45点' }],
+      pharmacyInfo: { ...mockPharmacyInfo, registrationNumber },
+      pharmacyAddressLine: '東京都千代田区1-1-1',
+      receiptRunId: 'RCPT-2026-001',
+      currentDateStr: '2026年10月6日',
+      dispensingDateStr: '2026年10月6日',
+      prescriptionDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+}
+
+test('ReceiptPrint prints a configured registration number', () => {
+  const html = renderReceiptWithRegistrationNumber('T9876543210987');
+  assert.ok(html.includes('登録番号: T9876543210987'));
+});
+
+test('ReceiptPrint does not print the sample registration number or an empty one', () => {
+  for (const value of ['T1234567890123', '', '   ']) {
+    const html = renderReceiptWithRegistrationNumber(value);
+    assert.ok(!html.includes('登録番号'), `no 登録番号 line for ${JSON.stringify(value)}`);
+    assert.ok(!html.includes('T1234567890123'), 'the sample number never reaches a patient copy');
+    assert.ok(html.includes('保険薬局コード: 1312345'), 'the rest of the pharmacy block is unaffected');
+  }
+});
+
