@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 import { DrugStock } from '@/db/types';
 import { buildDeadStockCsv, buildDeadStockReport, type DeadStockEntry } from '@/lib/dead_stock';
 import type { DrugWithSearchCache } from '../types';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface DeadStockPanelProps {
     db: any;
@@ -63,7 +64,7 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `dead_stock_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`;
+        link.download = `dead_stock_${toLocalDateKey().replace(/-/g, '')}.csv`;
         link.click();
         URL.revokeObjectURL(url);
     };

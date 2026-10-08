@@ -1,3 +1,5 @@
+import { toLocalDateKey } from '@/lib/local_date';
+
 let schedulerPromise: Promise<any> | null = null;
 
 async function initScheduler() {
@@ -278,7 +280,7 @@ export function parseDeliverySlip(text: string): DeliveryItem[] {
   // Assuming each line might look like: "Code  Name   Quantity   Lot   ExpirationDate"
   const lines = text.split('\n');
   const items: DeliveryItem[] = [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey();
   const dateRegex = /20\d{2}[-/.]\d{1,2}(?:[-/.]\d{1,2})?/;
 
   for (const line of lines) {

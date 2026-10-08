@@ -2,6 +2,7 @@ import type { CalculationResultItem } from './calculator.ts';
 import type { ClaimValidationIssue, ClaimValidationSeverity } from './claim_validation.ts';
 import type { FacilitySettings } from '@/db/types';
 import { escapeCSVField } from './receipt/uke_generator.ts';
+import { toLocalDateKey } from './local_date';
 
 export type ClaimOfficialRuleCategory = 'prohibited' | 'monthly_count' | 'within_month';
 export type ClaimOfficialRuleSourceKind = 'notification' | 'qa' | 'return_case';
@@ -396,6 +397,6 @@ export function formatClaimOfficialRuleBatchReview(report: ClaimOfficialRuleBatc
 }
 
 export function makeClaimOfficialRuleReviewFileName(date = new Date()): string {
-  const stamp = date.toISOString().slice(0, 10).replace(/-/g, '');
+  const stamp = toLocalDateKey(date).replace(/-/g, '');
   return `算定ルール確認_${stamp}.csv`;
 }

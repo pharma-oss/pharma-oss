@@ -74,3 +74,23 @@ test('buildDeadStockCsv exports idle stock with expiry attention flags', () => {
   assert.match(csv, /"不動の軟膏","B-02","5","600","2026-02-01","2026-01-10","155","2026-09-30","要確認"/);
   assert.match(csv, /"記録なしシロップ","棚位置未設定","2","80","","","記録なし","",""/);
 });
+
+test('buildDeadStockReport counts idle days by the local calendar day, also early in the morning', () => {
+  // 日本時間の9時前はUTCではまだ前日で、以前は朝だけ「不動日数」が1日少なく出ていた
+  const idleDaysAt = (now: Date) => buildDeadStockReport({ ...baseInput, now })
+    .find((entry) => entry.drugCode === 'D-002')!.idleDays;
+  assert.strictEqual(idleDaysAt(new Date(2026, 6, 6, 8, 30)), idleDaysAt(new Date(2026, 6, 6, 9, 0)));
+  assert.strictEqual(idleDaysAt(new Date(2026, 6, 6, 0, 30)), idleDaysAt(new Date(2026, 6, 6, 23, 30)));
+});
+
+test('buildDeadStockReport dates a visit by the local day it was registered, not the UTC day', () => {
+  // ローカルの朝8:30に受け付けた処方(日本時間ではUTCの前日)が、その日の調剤として数えられる
+  const registeredAtMorning = new Date(2026, 6, 1, 8, 30).toISOString();
+  const entries = buildDeadStockReport({
+    ...baseInput,
+    thresholdDays: 1,
+    visits: [{ visitId: 'v0', issueDate: registeredAtMorning, status: 'completed' }, baseInput.visits[0]]
+  });
+  const ointment = entries.find((entry) => entry.drugCode === 'D-002')!;
+  assert.strictEqual(ointment.lastDispensedAt, '2026-07-01');
+});

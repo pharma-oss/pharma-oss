@@ -79,6 +79,7 @@ import { downloadTextFile } from '@/lib/blob_download';
 import { AuditLogFailedError, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { restoreDrugMasterFromRollback, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
 import { drugMasterCandidateKindLabel } from '@/lib/drug_master_update_ui';
+import { toLocalDateKey } from '@/lib/local_date';
 
 interface DrugMasterImportSource {
   sourceFileName: string;
@@ -327,7 +328,7 @@ export function useDrugMasterSettings({
 
       // 薬価の版に付ける適用開始日。行の「変更年月日」(項番30) を使う。
       // 列が無い / 空の行は取込日で代用する。
-      const importedOn = new Date().toISOString().slice(0, 10);
+      const importedOn = toLocalDateKey();
       let priceRevisionFromChangeDate = 0;
       let priceRevisionFromImportDate = 0;
       let priceSkippedAsUnorderable = 0;

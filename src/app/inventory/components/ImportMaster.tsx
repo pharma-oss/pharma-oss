@@ -8,6 +8,7 @@ import { generateUUID } from '@/lib/crypto';
 import { processPrescription, parseDeliverySlip } from '@/lib/ocr/processor';
 import { logAuditAction } from '@/lib/audit';
 import type { DrugWithSearchCache } from '../types';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface ImportMasterProps {
     db: any;
@@ -236,7 +237,7 @@ export function ImportMaster({
         try {
             const stockInserts: DrugStock[] = [];
             const drugUpdates = new Map<string, number>();
-            const defaultArrivalDate = new Date().toISOString().split('T')[0];
+            const defaultArrivalDate = toLocalDateKey();
 
             for (let i = 0; i < parsedData.length; i++) {
                 const item = parsedData[i];

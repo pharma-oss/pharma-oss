@@ -6,6 +6,7 @@ import {
   type DispensingUkeRecordSpec,
   type DispensingUkeRecordSpecSource
 } from './dispensing_uke_validation';
+import { toLocalDateKey } from '../local_date';
 
 export type DispensingUkeSpecificationPdfFieldMode =
   | '数字'
@@ -171,7 +172,7 @@ export function parseDispensingUkeSpecConfirmationText(
   value: string,
   fallbackReviewedAt = new Date()
 ): DispensingUkeSpecificationPdfFieldDefinitionImplementationConfirmation[] {
-  const fallbackDateText = fallbackReviewedAt.toISOString().slice(0, 10);
+  const fallbackDateText = toLocalDateKey(fallbackReviewedAt);
   return value
     .split(/\r?\n/)
     .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))

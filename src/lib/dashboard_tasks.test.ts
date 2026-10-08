@@ -18,6 +18,7 @@ import {
   classifyDashboardVisits,
   aggregatePrescriptionItemRequirements,
   calculateDashboardStockShortages,
+  getEffectiveAvailableStock,
   buildClaimPublicInsuranceSummary,
   EMPTY_COUNTS
 } from './dashboard_tasks';
@@ -602,5 +603,29 @@ describe('dashboard_tasks pure functions', () => {
       assert.equal(tasks[0].waitMinutes, 45);
       assert.equal(tasks[1].visitId, 'v_normal');
     });
+  });
+});
+
+describe('getEffectiveAvailableStock uses the local calendar day', () => {
+  // ローカル時刻で組み立てるので、どのタイムゾーンでも「その日の朝」を表す。
+  // 日本時間の9時前はUTCではまだ前日で、以前は期限当日のロットが有効在庫として数えられていた。
+  const lots = [
+    { quantity: 10, expirationDate: '2026-10-08' },
+    { quantity: 5, expirationDate: '2026-10-09' }
+  ];
+
+  it('treats a lot that expires today as expired early in the morning', () => {
+    const result = getEffectiveAvailableStock(lots, undefined, new Date(2026, 9, 8, 8, 30));
+    assert.deepEqual(result, { effectiveAvailable: 5, expiredQuantity: 10 });
+  });
+
+  it('gives the same answer at 9:00 and just before midnight', () => {
+    assert.deepEqual(getEffectiveAvailableStock(lots, undefined, new Date(2026, 9, 8, 9, 0)), { effectiveAvailable: 5, expiredQuantity: 10 });
+    assert.deepEqual(getEffectiveAvailableStock(lots, undefined, new Date(2026, 9, 8, 23, 59)), { effectiveAvailable: 5, expiredQuantity: 10 });
+  });
+
+  it('keeps a lot that expires tomorrow as available until tomorrow starts', () => {
+    const result = getEffectiveAvailableStock(lots, undefined, new Date(2026, 9, 7, 8, 30));
+    assert.deepEqual(result, { effectiveAvailable: 15, expiredQuantity: 0 });
   });
 });

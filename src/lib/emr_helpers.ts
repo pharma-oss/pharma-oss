@@ -1,4 +1,5 @@
 import type { TracingReportStatus } from '@/db/types';
+import { toLocalDateKey } from './local_date';
 
 export function toDateInputValue(value?: string): string {
   if (!value) return '';
@@ -6,8 +7,7 @@ export function toDateInputValue(value?: string): string {
 }
 
 export function todayDateInputValue(): string {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return toLocalDateKey();
 }
 
 export const inquiryStatusLabel = {

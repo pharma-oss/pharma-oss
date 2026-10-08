@@ -20,6 +20,7 @@ import { isDemoVisit } from './demo_data';
 import { getPublicInsuranceCategoryName } from './patient_public_insurance';
 import { evaluateInsuranceEligibility } from './insurance_eligibility';
 import { calculateReorderAmounts } from './inventory_reorder_support';
+import { toLocalDateKey } from './local_date';
 
 export interface DashboardTask {
   visitId: string;
@@ -198,10 +199,7 @@ export function isSameLocalDate(value: string, date: Date): boolean {
 }
 
 export function formatDateInput(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return toLocalDateKey(date);
 }
 
 export function addLocalDays(date: Date, days: number): Date {
@@ -1238,7 +1236,7 @@ export function getEffectiveAvailableStock(
     return { effectiveAvailable: qty, expiredQuantity: 0 };
   }
 
-  const nowDateStr = now.toISOString().slice(0, 10);
+  const nowDateStr = toLocalDateKey(now);
   const nowTime = new Date(`${nowDateStr}T00:00:00Z`).getTime();
 
   let effectiveAvailable = 0;

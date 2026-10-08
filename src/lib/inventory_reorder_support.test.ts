@@ -214,3 +214,17 @@ test('buildEnhancedInventoryOrderCsv & Memo maintain STRICT ZERO PATIENT DATA po
     assert.strictEqual(pattern.test(memo), false, `Memo must not match ${pattern}`);
   }
 });
+
+test('evaluateStockLotExpiry counts a lot that expires today as expired early in the morning', () => {
+  // ローカル時刻の朝8:30。日本時間の9時前はUTCではまだ前日で、以前は期限切れ0・残り1日と判定された。
+  const lots: StockLotExpiryLike[] = [{ quantity: 10, expirationDate: '2026-10-08' }];
+  for (const now of [new Date(2026, 9, 8, 0, 30), new Date(2026, 9, 8, 8, 30), new Date(2026, 9, 8, 23, 59)]) {
+    const risk = evaluateStockLotExpiry(lots, now);
+    assert.equal(risk.expiredQuantity, 10, now.toString());
+    assert.equal(risk.daysToNearestExpiry, 0, now.toString());
+    assert.equal(risk.hasExpired, true);
+  }
+  const dayBefore = evaluateStockLotExpiry(lots, new Date(2026, 9, 7, 8, 30));
+  assert.equal(dayBefore.expiredQuantity, 0);
+  assert.equal(dayBefore.daysToNearestExpiry, 1);
+});

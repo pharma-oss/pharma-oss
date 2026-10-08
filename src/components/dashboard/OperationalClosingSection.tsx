@@ -35,6 +35,7 @@ import type {
   DashboardFollowUpCandidate,
   DashboardInventoryRisk
 } from '@/hooks/useDashboardTasks';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface OperationalClosingSectionProps {
   db: any;
@@ -202,7 +203,7 @@ export function OperationalClosingSection({
   const handleExportOperationalClosingCsv = useCallback(() => {
     const report = getClosingReport();
     const csv = buildOperationalClosingCsv(report);
-    const fileName = `daily_closing_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileName = `daily_closing_report_${toLocalDateKey()}.csv`;
     downloadUtf8Csv(fileName, csv);
     toast.success('日次締めCSVを作成しました');
   }, [getClosingReport]);

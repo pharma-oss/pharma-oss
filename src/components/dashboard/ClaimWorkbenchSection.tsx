@@ -61,6 +61,7 @@ import { ClaimWorkbenchRow } from './DashboardRows';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
 import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface ClaimWorkbenchSectionProps {
   db: any;
@@ -708,7 +709,7 @@ export function ClaimWorkbenchSection({
   const handleExportClaimWorkbenchCsv = useCallback(() => {
     if (claimWorkItems.length === 0) return;
     const csv = buildClaimWorkbenchCsv(claimWorkItems.map(toClaimWorkbenchExportItem));
-    downloadUtf8Csv(`claim_workbench_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadUtf8Csv(`claim_workbench_${toLocalDateKey()}.csv`, csv);
     toast.success('月次請求ワークCSVを作成しました');
   }, [claimWorkItems]);
 

@@ -1,5 +1,6 @@
 import { Drug } from '@/db/types';
 import { type InventoryOrderRisk } from '@/lib/inventory_order';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export type DrugWithSearchCache = Drug & {
     searchNameLower: string;
@@ -26,7 +27,7 @@ export function toHalfWidth(str: string): string {
 }
 
 export function todayDateKey(): string {
-    return new Date().toISOString().split('T')[0];
+    return toLocalDateKey();
 }
 
 export function defaultReceivingDraft(candidate: InventoryOrderRisk): ReceivingDraft {

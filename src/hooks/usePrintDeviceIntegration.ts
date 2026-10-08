@@ -11,6 +11,7 @@ import { logAuditAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { formatPrescriptionAuditIssues } from '@/app/print/helpers';
 import { PHARMACY_DEVICE_HANDOFF_STATUS_LABELS } from '@/app/print/types';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface UsePrintDeviceIntegrationProps {
   db: any;
@@ -88,8 +89,8 @@ export function usePrintDeviceIntegration({
 
   const buildPharmacyDevicePrescriptionPayload = useCallback((): PharmacyDevicePrescriptionPayload => ({
     visitId,
-    prescriptionDate: visitData?.prescriptionDate || visitData?.issueDate || new Date().toISOString().slice(0, 10),
-    dispensingDate: visitData?.dispensingDate || new Date().toISOString().slice(0, 10),
+    prescriptionDate: visitData?.prescriptionDate || visitData?.issueDate || toLocalDateKey(),
+    dispensingDate: visitData?.dispensingDate || toLocalDateKey(),
     patient: {
       patientId: patientData?.patientId || patientData?.id || visitData?.patientId || '',
       name: patientData?.name || '',

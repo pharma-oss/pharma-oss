@@ -1,4 +1,5 @@
 import type { VisitTracingReport, SoapStructuredAssessment } from '@/db/types';
+import { toLocalDateKey } from './local_date';
 
 export interface TracingReportDraftInput {
   patientName: string;
@@ -112,7 +113,7 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
     destinationDepartment: existingReport?.destinationDepartment || '',
     destinationDoctor: existingReport?.destinationDoctor || '',
     status: existingReport?.status || 'draft',
-    reportDate: existingReport?.reportDate || new Date().toISOString().slice(0, 10)
+    reportDate: existingReport?.reportDate || toLocalDateKey()
   };
 }
 
@@ -135,7 +136,7 @@ export function generateTracingReportPrintHtml(
   const safeDestDept = escapeHtml(report.destinationDepartment);
   const safeDestDoc = escapeHtml(report.destinationDoctor);
   const safePatientName = escapeHtml(patientName);
-  const safeReportDate = escapeHtml(report.reportDate || new Date().toISOString().slice(0, 10));
+  const safeReportDate = escapeHtml(report.reportDate || toLocalDateKey());
   const safePharmName = escapeHtml(pharmacyInfo.pharmacyName || '保険薬局');
   const safePharmPhone = escapeHtml(pharmacyInfo.pharmacyPhone || '-');
   const safePharmFax = escapeHtml(pharmacyInfo.pharmacyFax || '-');

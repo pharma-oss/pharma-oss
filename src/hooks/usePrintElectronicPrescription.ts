@@ -15,6 +15,7 @@ import {
   ELECTRONIC_PRESCRIPTION_HPKI_STATUS_LABELS,
   ELECTRONIC_PRESCRIPTION_FILE_SIGNATURE_STATUS_LABELS
 } from '../app/print/types';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export interface UsePrintElectronicPrescriptionProps {
   db: any;
@@ -95,7 +96,7 @@ export function usePrintElectronicPrescription({
     type: 'yakureki-electronic-prescription-dispensing-result' as const,
     schemaVersion: 1 as const,
     prescriptionDate: visitData?.prescriptionDate || visitData?.issueDate,
-    dispensingDate: visitData?.dispensingDate || new Date().toISOString().slice(0, 10),
+    dispensingDate: visitData?.dispensingDate || toLocalDateKey(),
     totalPoints,
     signatureRequirement: {
       hpkiSignatureRequired: visitData?.electronicPrescription

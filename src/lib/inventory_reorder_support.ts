@@ -1,4 +1,5 @@
 import { choosePrimarySupplier, csvCell, formatInventoryAmount } from './inventory_order.ts';
+import { toLocalDateKey } from './local_date.ts';
 
 export const EXPIRY_URGENT_DAYS = 60;
 export const EXPIRY_ATTENTION_DAYS = 180;
@@ -93,7 +94,7 @@ export function evaluateStockLotExpiry(
   lots: readonly StockLotExpiryLike[],
   now: Date = new Date()
 ): InventoryExpiryRisk {
-  const nowDateStr = now.toISOString().slice(0, 10);
+  const nowDateStr = toLocalDateKey(now);
   const nowTime = new Date(`${nowDateStr}T00:00:00Z`).getTime();
 
   let nearestExpirationDate: string | null = null;
@@ -219,7 +220,7 @@ export function findInStockSubstitutes(
     const lots = stockLotsByDrugCode?.get(drug.code) || [];
     let availableAmount = drug.stockQuantity ?? 0;
     if (lots.length > 0) {
-      const nowDateStr = new Date().toISOString().slice(0, 10);
+      const nowDateStr = toLocalDateKey();
       const nowTime = new Date(`${nowDateStr}T00:00:00Z`).getTime();
       availableAmount = lots.reduce((sum, lot) => {
         const qty = typeof lot.quantity === 'number' && Number.isFinite(lot.quantity) ? Math.max(0, lot.quantity) : 0;

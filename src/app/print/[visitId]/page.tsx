@@ -152,6 +152,7 @@ import { usePrintVisitData } from '@/hooks/usePrintVisitData';
 import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
 import { usePrintElectronicPrescription } from '@/hooks/usePrintElectronicPrescription';
 import { usePrintDeviceIntegration } from '@/hooks/usePrintDeviceIntegration';
+import { toLocalDateKey } from '@/lib/local_date';
 
 export default function PrintPage() {
   const params = useParams();
@@ -242,7 +243,7 @@ export default function PrintPage() {
 
   const calculatedFees = useMemo(() => {
     if (!settingsData || !patientData) return [];
-    const visitDateStr = visitData?.dispensingDate || visitData?.prescriptionDate || visitData?.issueDate || new Date().toISOString().slice(0, 10);
+    const visitDateStr = visitData?.dispensingDate || visitData?.prescriptionDate || visitData?.issueDate || toLocalDateKey();
     return calculateDispensingFees(settingsData, prescriptionItems, patientData, visitDateStr, claimOptions);
   }, [settingsData, prescriptionItems, patientData, visitData, claimOptions]);
 

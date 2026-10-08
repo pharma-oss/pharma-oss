@@ -2,6 +2,8 @@
 // 在庫があるのに一定期間出庫(調剤)も入庫もない薬品を洗い出し、
 // 期限リスクと金額を添えて分譲・返品・棚卸の判断材料にする。
 
+import { toLocalDateKey, toLocalDateKeyFromValue } from './local_date.ts';
+
 export interface DeadStockDrugLike {
   code: string;
   name: string;
@@ -75,11 +77,12 @@ export function buildDeadStockReport({
   thresholdDays,
   now = new Date()
 }: DeadStockReportInput): DeadStockEntry[] {
-  const nowDateOnly = now.toISOString().slice(0, 10);
+  const nowDateOnly = toLocalDateKey(now);
 
   const visitDateById = new Map<string, string>();
   for (const visit of visits) {
-    const date = toDateOnly(visit.issueDate);
+    // 受付日時は toISOString() で保存されている(UTC)。端末の暦日へ直してから日付にする
+    const date = toLocalDateKeyFromValue(visit.issueDate);
     if (date) visitDateById.set(visit.visitId, date);
   }
 
