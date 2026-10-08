@@ -6,6 +6,7 @@
 // 在庫への反映はロット数量と薬品マスタの在庫数を同時に更新する。
 
 import { logAuditAction } from '@/lib/audit';
+import { runWithAuditRollback } from '@/lib/audit_guard';
 import { compareStockLotsByExpiration } from '@/lib/stock';
 
 export type StockTransferDirection = 'out' | 'in';
@@ -86,8 +87,78 @@ export interface StockTransferInput {
 
 const roundQuantity = (value: number): number => Math.round(value * 100) / 100;
 
-// 分譲出庫: ロット在庫と薬品マスタ在庫数を引き落とし、監査ログへ記録する
-export async function applyStockTransferOut(db: any, input: StockTransferInput): Promise<StockTransferRecord> {
+export const STOCK_TRANSFER_AUDIT_FAILED =
+  '譲渡・譲受の法定記録(監査ログ)を残せなかったため、在庫の増減を取り消しました。もう一度やり直してください。';
+
+export interface StockTransferDeps {
+  // 法定記録の書き込み。既定は監査ログ(テストでは差し替える)。残せなければ false。
+  logAudit?: (db: any, detail: string) => Promise<boolean>;
+}
+
+const defaultLogAudit = (db: any, detail: string): Promise<boolean> => logAuditAction(db, 'stock_update', detail);
+
+interface UndoableWrite {
+  apply: () => Promise<void>;
+  undo: () => Promise<void>;
+}
+
+// 逆順に全部を戻す。1つ失敗しても残りは戻し、最初の失敗を投げる(呼び出し側が「戻せなかった」と伝える)。
+async function undoWrites(done: UndoableWrite[]): Promise<void> {
+  let firstError: unknown;
+  for (const write of done.slice().reverse()) {
+    try {
+      await write.undo();
+    } catch (error) {
+      console.error('Failed to undo a stock transfer write:', error);
+      firstError ??= error;
+    }
+  }
+  if (firstError !== undefined) throw firstError;
+}
+
+// 書き込みを順に行う。途中で失敗したら、そこまでを戻して失敗を投げる(runWithAuditRollback の write の前提)。
+async function applyWrites(writes: UndoableWrite[]): Promise<UndoableWrite[]> {
+  const done: UndoableWrite[] = [];
+  try {
+    for (const write of writes) {
+      await write.apply();
+      done.push(write);
+    }
+  } catch (error) {
+    await undoWrites(done).catch(() => undefined);
+    throw error;
+  }
+  return done;
+}
+
+interface TransferWritten {
+  record: StockTransferRecord;
+  done: UndoableWrite[];
+}
+
+// 書き込み -> 法定記録(監査ログ)。記録が残らなければ在庫の増減を戻して失敗にする。
+function applyTransfer(
+  db: any,
+  deps: StockTransferDeps | undefined,
+  record: StockTransferRecord,
+  writes: UndoableWrite[]
+): Promise<StockTransferRecord> {
+  const logAudit = deps?.logAudit ?? defaultLogAudit;
+  return runWithAuditRollback<TransferWritten>({
+    write: async () => ({ record, done: await applyWrites(writes) }),
+    logAudit: ({ record: written }) => logAudit(db, buildTransferAuditDetail(written)),
+    rollback: ({ done }) => undoWrites(done),
+    failureMessage: STOCK_TRANSFER_AUDIT_FAILED
+  }).then(({ record: written }) => written);
+}
+
+const patchQuantity = (doc: any, field: 'quantity' | 'stockQuantity', before: number, after: number): UndoableWrite => ({
+  apply: () => doc.patch({ [field]: after }),
+  undo: () => doc.patch({ [field]: before })
+});
+
+// 分譲出庫: ロット在庫と薬品マスタ在庫数を引き落とし、法定記録(監査ログ)へ記録する
+export async function applyStockTransferOut(db: any, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
   if (!db) throw new Error('データベースが未接続です。');
   if (!(input.quantity > 0)) throw new Error('数量は0より大きい値を入力してください。');
   if (!input.partnerName.trim()) throw new Error('分譲先(相手方の名称)を入力してください。');
@@ -103,6 +174,8 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput):
 
   let lotNumber = '';
   let expirationDate = '';
+  // どのロットから何を引くか。書き込みの前にすべて決め、足りなければ何も書かずに失敗にする。
+  const writes: UndoableWrite[] = [];
 
   if (input.lotId) {
     const lotDoc = lotDocs.find((doc: any) => doc.id === input.lotId);
@@ -112,7 +185,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput):
     }
     lotNumber = lotDoc.lotNumber || '';
     expirationDate = lotDoc.expirationDate || '';
-    await lotDoc.patch({ quantity: roundQuantity(lotDoc.quantity - input.quantity) });
+    writes.push(patchQuantity(lotDoc, 'quantity', lotDoc.quantity, roundQuantity(lotDoc.quantity - input.quantity)));
   } else if (lotDocs.length > 0) {
     // ロット未指定: 期限の近い順に引き落とす
     const sorted = lotDocs.slice().sort((a: any, b: any) => compareStockLotsByExpiration(a, b));
@@ -122,7 +195,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput):
       if (remaining <= 0) break;
       const take = Math.min(lotDoc.quantity, remaining);
       if (take <= 0) continue;
-      await lotDoc.patch({ quantity: roundQuantity(lotDoc.quantity - take) });
+      writes.push(patchQuantity(lotDoc, 'quantity', lotDoc.quantity, roundQuantity(lotDoc.quantity - take)));
       remaining = roundQuantity(remaining - take);
       if (lotDoc.lotNumber) usedLots.push(lotDoc.lotNumber);
       if (!expirationDate && lotDoc.expirationDate) expirationDate = lotDoc.expirationDate;
@@ -133,7 +206,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput):
     lotNumber = usedLots.join(',');
   }
 
-  await drugDoc.patch({ stockQuantity: roundQuantity(currentTotal - input.quantity) });
+  writes.push(patchQuantity(drugDoc, 'stockQuantity', currentTotal, roundQuantity(currentTotal - input.quantity)));
 
   const record: StockTransferRecord = {
     direction: 'out',
@@ -147,12 +220,11 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput):
     note: input.note?.trim() || undefined,
     transferredAt: new Date().toISOString()
   };
-  await logAuditAction(db, 'stock_update', buildTransferAuditDetail(record));
-  return record;
+  return applyTransfer(db, deps, record, writes);
 }
 
-// 分譲入庫: 新規ロットを登録し、薬品マスタ在庫数へ加算、監査ログへ記録する
-export async function applyStockTransferIn(db: any, input: StockTransferInput): Promise<StockTransferRecord> {
+// 分譲入庫: 新規ロットを登録し、薬品マスタ在庫数へ加算、法定記録(監査ログ)へ記録する
+export async function applyStockTransferIn(db: any, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
   if (!db) throw new Error('データベースが未接続です。');
   if (!(input.quantity > 0)) throw new Error('数量は0より大きい値を入力してください。');
   if (!input.partnerName.trim()) throw new Error('分譲元(相手方の名称)を入力してください。');
@@ -163,18 +235,28 @@ export async function applyStockTransferIn(db: any, input: StockTransferInput): 
   const pad = (n: number) => String(n).padStart(2, '0');
   const now = new Date();
   const arrivalDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const lotId = `stock_transfer_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
+  const currentTotal = drugDoc.stockQuantity || 0;
 
-  await db.drug_stocks.insert({
-    id: `stock_transfer_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
-    drugCode: input.drugCode,
-    janCode: input.janCode?.trim() || '',
-    lotNumber: input.lotNumber?.trim() || '',
-    expirationDate: input.expirationDate || '',
-    quantity: input.quantity,
-    arrivalDate,
-    supplier: `分譲: ${input.partnerName.trim()}`
-  });
-  await drugDoc.patch({ stockQuantity: roundQuantity((drugDoc.stockQuantity || 0) + input.quantity) });
+  const writes: UndoableWrite[] = [
+    {
+      apply: () => db.drug_stocks.insert({
+        id: lotId,
+        drugCode: input.drugCode,
+        janCode: input.janCode?.trim() || '',
+        lotNumber: input.lotNumber?.trim() || '',
+        expirationDate: input.expirationDate || '',
+        quantity: input.quantity,
+        arrivalDate,
+        supplier: `分譲: ${input.partnerName.trim()}`
+      }),
+      undo: async () => {
+        const lotDoc = await db.drug_stocks.findOne(lotId).exec();
+        if (lotDoc) await lotDoc.remove();
+      }
+    },
+    patchQuantity(drugDoc, 'stockQuantity', currentTotal, roundQuantity(currentTotal + input.quantity))
+  ];
 
   const record: StockTransferRecord = {
     direction: 'in',
@@ -188,8 +270,7 @@ export async function applyStockTransferIn(db: any, input: StockTransferInput): 
     note: input.note?.trim() || undefined,
     transferredAt: now.toISOString()
   };
-  await logAuditAction(db, 'stock_update', buildTransferAuditDetail(record));
-  return record;
+  return applyTransfer(db, deps, record, writes);
 }
 
 const escapeHtml = (value: string): string => (
