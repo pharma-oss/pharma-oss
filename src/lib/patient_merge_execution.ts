@@ -1,5 +1,6 @@
 import type { Patient } from '@/db/types';
 import type { PatientMergeExecutionPlan, PatientMergeOperation } from './patient_merge';
+import { runWithAuditRollback } from './audit_guard';
 
 export interface PatientMergeExecutionStore {
   upsertPatient(patient: Patient): Promise<void>;
@@ -176,6 +177,28 @@ export async function applyPatientMergeExecutionPlan(
     ...result,
     rollbackOperations: buildPatientMergeRollbackOperations(result.appliedOperations)
   };
+}
+
+export const PATIENT_MERGE_AUDIT_ROLLED_BACK = '患者統合の監査ログ記録に失敗したため、統合を取り消しました。';
+
+// 患者統合の実行: 適用 -> 監査ログ。監査ログが残らなければ、適用した操作を逆順に取り消して失敗にする。
+export async function applyPatientMergeExecutionPlanWithAudit(params: {
+  store: PatientMergeExecutionStore;
+  executionPlan: PatientMergeExecutionPlan;
+  buildAuditDetail: (result: PatientMergeApplyResult) => string;
+  logAudit: (detail: string) => Promise<boolean>;
+}): Promise<PatientMergeApplyResult> {
+  const { store, executionPlan, buildAuditDetail, logAudit } = params;
+  return runWithAuditRollback({
+    write: () => applyPatientMergeExecutionPlan(store, executionPlan),
+    logAudit: (result) => logAudit(buildAuditDetail(result)),
+    rollback: async (result) => {
+      for (const operation of result.rollbackOperations) {
+        await applyPatientMergeOperation(store, operation);
+      }
+    },
+    failureMessage: PATIENT_MERGE_AUDIT_ROLLED_BACK
+  });
 }
 
 export async function rollbackPatientMergeExecutionPlan(

@@ -52,7 +52,7 @@ import {
 } from '@/lib/patient_merge';
 import {
   createRxdbPatientMergeExecutionStore,
-  applyPatientMergeExecutionPlan,
+  applyPatientMergeExecutionPlanWithAudit,
   applyPatientMergeOperation,
   PatientMergeExecutionError
 } from '@/lib/patient_merge_execution';
@@ -67,6 +67,7 @@ import {
   type MigrationCsvPreview
 } from '@/lib/backup_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
+import { AuditLogFailedError, recordAuditOrNotify } from '@/lib/audit_guard';
 import type { AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
 
 function makeBackupGenerationReviewCsvFileName(formatDateTimeStamp: (date: Date) => string, date = new Date()): string {
@@ -246,7 +247,10 @@ export function useBackupSettings({
       setPatientDuplicateMessage(report.groups.length === 0
         ? `重複候補はありません（対象 ${report.scannedPatientCount}名）。`
         : `重複候補 ${report.groups.length}グループ・${report.duplicatePatientCount}名が見つかりました。残す患者を選び、統合確認へ進んでください。`);
-      await logAuditAction(db, 'prescription_edit', buildPatientDuplicateScanAuditDetail(report));
+      await recordAuditOrNotify(
+        () => logAuditAction(db, 'prescription_edit', buildPatientDuplicateScanAuditDetail(report)),
+        (message) => toast.warning(message)
+      );
     } catch (error) {
       console.error('Failed to scan duplicate patients:', error);
       setPatientDuplicateReport(null);
@@ -310,19 +314,29 @@ export function useBackupSettings({
     const store = createRxdbPatientMergeExecutionStore(db);
     setIsApplyingDuplicateMerge(true);
     try {
-      const result = await applyPatientMergeExecutionPlan(store, executionPlan);
-      await logAuditAction(
-        db,
-        'prescription_edit',
-        `患者統合実行: ${plan.summary}。${result.auditDetail}`,
-        plan.targetPatientId,
-        plan.mergedPatient.name
-      );
+      // 適用 -> 監査ログ。監査ログが残らなければ、統合を取り消す。
+      await applyPatientMergeExecutionPlanWithAudit({
+        store,
+        executionPlan,
+        buildAuditDetail: (result) => `患者統合実行: ${plan.summary}。${result.auditDetail}`,
+        logAudit: (detail) => logAuditAction(
+          db,
+          'prescription_edit',
+          detail,
+          plan.targetPatientId,
+          plan.mergedPatient.name
+        )
+      });
       setDuplicateMergeReview(null);
       toast.success('患者統合を実行しました。');
       await handleScanPatientDuplicates();
     } catch (error: any) {
       console.error('Failed to apply duplicate merge:', error);
+      if (error instanceof AuditLogFailedError) {
+        setPatientDuplicateMessage(`${error.message} 候補を確認し直してください。`);
+        toast.error('患者統合を取り消しました（監査ログを記録できませんでした）。');
+        return;
+      }
       if (error instanceof PatientMergeExecutionError && error.rollbackOperations.length > 0) {
         try {
           for (const operation of error.rollbackOperations) {

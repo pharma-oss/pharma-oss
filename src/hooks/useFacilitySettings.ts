@@ -24,6 +24,8 @@ import {
   normalizeAiAssistMode
 } from '@/lib/ai_assist_policy';
 import { downloadTextFile } from '@/lib/blob_download';
+import { exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
+import { saveFacilitySettingsWithAudit } from '@/lib/facility_settings_save';
 
 interface UseFacilitySettingsProps {
   db: PharmacyDatabase | null;
@@ -120,21 +122,32 @@ export function useFacilitySettings({
 
   const handleExportOfficialFeeCodeCsv = async () => {
     if (!ensurePermission('manage_facility_settings')) return;
-    const fileName = makeOfficialFeeCodeOverrideCsvFileName();
-    const csv = buildOfficialFeeCodeOverrideTemplateCsv(settings.officialFeeCodeOverrides || {});
-    downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
-    const configuredCount = countConfiguredOfficialFeeCodes(settings.officialFeeCodeOverrides);
-    if (db) {
-      await logAuditAction(
-        db,
-        'facility_settings_update',
-        `公式算定コードCSVひな形書出: ${fileName} / 設定済み ${configuredCount}件`
-      );
-      if (refreshAuditEvidence) {
-        await refreshAuditEvidence();
+    try {
+      const fileName = makeOfficialFeeCodeOverrideCsvFileName();
+      const csv = buildOfficialFeeCodeOverrideTemplateCsv(settings.officialFeeCodeOverrides || {});
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      const configuredCount = countConfiguredOfficialFeeCodes(settings.officialFeeCodeOverrides);
+      if (db) {
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'facility_settings_update',
+            `公式算定コードCSVひな形書出: ${fileName} / 設定済み ${configuredCount}件`
+          ),
+          download
+        });
+        if (refreshAuditEvidence) {
+          await refreshAuditEvidence();
+        }
+      } else {
+        download();
       }
+      toast.success('公式算定コードCSVを書き出しました。');
+    } catch (error: any) {
+      console.error('handleExportOfficialFeeCodeCsv failed:', error);
+      toast.error(`公式算定コードCSVを書き出せませんでした: ${error.message || error}`);
     }
-    toast.success('公式算定コードCSVを書き出しました。');
   };
 
   const handleImportOfficialFeeCodeCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,10 +235,14 @@ export function useFacilitySettings({
       }
     }));
     if (db) {
-      await logAuditAction(
-        db,
-        'facility_settings_update',
-        `公式算定コード公式表CSV候補反映: ${officialFeeCodeMasterFileName || 'ファイル名未取得'} / 候補 ${officialFeeCodeMasterProposal.matchedCount}件 / 未一致 ${officialFeeCodeMasterProposal.unresolvedCount}件 / 重複 ${officialFeeCodeMasterProposal.duplicateCount}件`
+      // 画面の入力へ反映するだけで、保存は別の操作。記録が残らなかったときは知らせる。
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'facility_settings_update',
+          `公式算定コード公式表CSV候補反映: ${officialFeeCodeMasterFileName || 'ファイル名未取得'} / 候補 ${officialFeeCodeMasterProposal.matchedCount}件 / 未一致 ${officialFeeCodeMasterProposal.unresolvedCount}件 / 重複 ${officialFeeCodeMasterProposal.duplicateCount}件`
+        ),
+        (message) => toast.warning(message)
       );
       if (refreshAuditEvidence) {
         await refreshAuditEvidence();
@@ -240,24 +257,35 @@ export function useFacilitySettings({
       toast.info('先に公式表CSVを照合してください。');
       return;
     }
+    try {
 
-    const fileName = makeOfficialFeeCodeMasterProposalReviewCsvFileName();
-    const csv = buildOfficialFeeCodeMasterProposalReviewCsv(
-      officialFeeCodeMasterProposal,
-      officialFeeCodeMasterFileName || '公式表CSV'
-    );
-    downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
-    if (db) {
-      await logAuditAction(
-        db,
-        'facility_settings_update',
-        `公式算定コード照合結果CSV書出: ${fileName} / 元ファイル ${officialFeeCodeMasterFileName || 'ファイル名未取得'} / 候補 ${officialFeeCodeMasterProposal.matchedCount}件 / 未一致 ${officialFeeCodeMasterProposal.unresolvedCount}件 / 重複 ${officialFeeCodeMasterProposal.duplicateCount}件`
+      const fileName = makeOfficialFeeCodeMasterProposalReviewCsvFileName();
+      const csv = buildOfficialFeeCodeMasterProposalReviewCsv(
+        officialFeeCodeMasterProposal,
+        officialFeeCodeMasterFileName || '公式表CSV'
       );
-      if (refreshAuditEvidence) {
-        await refreshAuditEvidence();
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      if (db) {
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'facility_settings_update',
+            `公式算定コード照合結果CSV書出: ${fileName} / 元ファイル ${officialFeeCodeMasterFileName || 'ファイル名未取得'} / 候補 ${officialFeeCodeMasterProposal.matchedCount}件 / 未一致 ${officialFeeCodeMasterProposal.unresolvedCount}件 / 重複 ${officialFeeCodeMasterProposal.duplicateCount}件`
+          ),
+          download
+        });
+        if (refreshAuditEvidence) {
+          await refreshAuditEvidence();
+        }
+      } else {
+        download();
       }
+      toast.success('公式算定コードの照合結果CSVを書き出しました。');
+    } catch (error: any) {
+      console.error('handleExportOfficialFeeCodeMasterProposalReviewCsv failed:', error);
+      toast.error(`公式算定コードの照合結果CSVを書き出せませんでした: ${error.message || error}`);
     }
-    toast.success('公式算定コードの照合結果CSVを書き出しました。');
   };
 
   const handleSaveSettings = async () => {
@@ -265,19 +293,18 @@ export function useFacilitySettings({
     if (!db) return;
     setIsSavingSettings(true);
     try {
-      const doc = await db.facility_settings.findOne('default').exec();
-      if (doc) {
-        await doc.patch(settings);
-      } else {
-        await db.facility_settings.insert(settings);
-      }
       const officialFeeCodeOverrideCount = countConfiguredOfficialFeeCodes(settings.officialFeeCodeOverrides);
-      
-      await logAuditAction(
+
+      // 書き込み -> 監査ログ。監査ログが残らなければ保存前の値へ戻す。
+      await saveFacilitySettingsWithAudit({
         db,
-        'facility_settings_update',
-        `施設基準設定変更: 薬局情報を「調剤基本料${settings.baseFeeCategory} 等、公式算定コード${officialFeeCodeOverrideCount}件、AI補助${AI_ASSIST_MODE_LABELS[normalizeAiAssistMode(settings.aiAssistMode)]}」に更新しました。`
-      );
+        settings,
+        logAudit: () => logAuditAction(
+          db,
+          'facility_settings_update',
+          `施設基準設定変更: 薬局情報を「調剤基本料${settings.baseFeeCategory} 等、公式算定コード${officialFeeCodeOverrideCount}件、AI補助${AI_ASSIST_MODE_LABELS[normalizeAiAssistMode(settings.aiAssistMode)]}」に更新しました。`
+        )
+      });
 
       if (refreshAuditEvidence) {
         await refreshAuditEvidence();
@@ -286,7 +313,7 @@ export function useFacilitySettings({
       toast.success('施設基準を保存しました。');
     } catch (error: any) {
       console.error('Failed to save facility settings securely:', error);
-      toast.error('保存に失敗しました。');
+      toast.error(error?.message ? `保存に失敗しました。${error.message}` : '保存に失敗しました。');
     } finally {
       setIsSavingSettings(false);
     }

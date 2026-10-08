@@ -8,6 +8,7 @@ import type {
 import type { ExternalConnectorReadinessCheck, ExternalConnectorReadinessReport } from '@/lib/external_connector_readiness';
 import { isDemoVisit } from '@/lib/demo_data';
 import { logAuditAction } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { formatPrescriptionAuditIssues } from '@/app/print/helpers';
 import { PHARMACY_DEVICE_HANDOFF_STATUS_LABELS } from '@/app/print/types';
 
@@ -189,12 +190,15 @@ export function usePrintDeviceIntegration({
       });
       const result = await response.json() as PharmacyDeviceOperationResult;
       if (!response.ok || result.status !== 'success' || !result.outcome || !result.transferId || !result.payloadHash || !result.connectorKind || !result.interfaceVersion) {
-        await logAuditAction(
-          db,
-          'external_device_handoff',
-          `外部調剤機器連携失敗: ${operationLabel} / 状態 ${result.status} / ${result.message}`,
-          visitData.patientId,
-          patientData.name
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'external_device_handoff',
+            `外部調剤機器連携失敗: ${operationLabel} / 状態 ${result.status} / ${result.message}`,
+            visitData.patientId,
+            patientData.name
+          ),
+          (message) => alert(message)
         );
         alert(result.message || `外部調剤機器への${operationLabel}に失敗しました。`);
         return;

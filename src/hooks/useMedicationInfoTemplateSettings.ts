@@ -43,6 +43,7 @@ import {
   findDrugInfosByDrugNames
 } from '@/lib/drug_info_reference';
 import { downloadTextFile } from '@/lib/blob_download';
+import { exportWithAuditFirst } from '@/lib/audit_guard';
 
 export interface UseMedicationInfoTemplateSettingsOptions {
   db: PharmacyDatabase | null;
@@ -412,13 +413,19 @@ export function useMedicationInfoTemplateSettings({
       }));
       const fileName = makePatientMedicationInfoSafetyDraftCsvFileName(generatedAt);
       const csv = buildPatientMedicationInfoTemplateCsv(templates);
-      downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
       if (db) {
-        await logAuditAction(
-          db,
-          'patient_medication_info_template',
-          `薬情テンプレ副作用・使用上注意案CSV書出: ${fileName} / ${templates.length}件 / 承認情報なし`
-        );
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'patient_medication_info_template',
+            `薬情テンプレ副作用・使用上注意案CSV書出: ${fileName} / ${templates.length}件 / 承認情報なし`
+          ),
+          download
+        });
+      } else {
+        download();
       }
       toast.success(`副作用・使用上の注意案CSVを${templates.length.toLocaleString()}件書き出しました。`);
     } catch (error: any) {
@@ -431,23 +438,34 @@ export function useMedicationInfoTemplateSettings({
 
   const handleExportMedicationInfoCsv = async () => {
     if (!ensurePermission('manage_facility_settings')) return;
-    const latestTemplatesByDrugCode = new Map<string, PatientMedicationInfoTemplate>();
-    for (const template of sortMedicationInfoTemplates(medicationInfoTemplates)) {
-      if (template.status === 'retired' || latestTemplatesByDrugCode.has(template.drugCode)) continue;
-      latestTemplatesByDrugCode.set(template.drugCode, template);
+    try {
+      const latestTemplatesByDrugCode = new Map<string, PatientMedicationInfoTemplate>();
+      for (const template of sortMedicationInfoTemplates(medicationInfoTemplates)) {
+        if (template.status === 'retired' || latestTemplatesByDrugCode.has(template.drugCode)) continue;
+        latestTemplatesByDrugCode.set(template.drugCode, template);
+      }
+      const templates = Array.from(latestTemplatesByDrugCode.values());
+      const fileName = makePatientMedicationInfoCsvFileName();
+      const csv = buildPatientMedicationInfoTemplateCsv(templates);
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      if (db) {
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'patient_medication_info_template',
+            `薬情テンプレCSV書出: ${fileName} / ${templates.length}件 / 承認情報を除外`
+          ),
+          download
+        });
+      } else {
+        download();
+      }
+      toast.success(`薬情テンプレCSVを${templates.length}件書き出しました。`);
+    } catch (error: any) {
+      console.error('handleExportMedicationInfoCsv failed:', error);
+      toast.error(`薬情テンプレCSVを書き出せませんでした: ${error.message || error}`);
     }
-    const templates = Array.from(latestTemplatesByDrugCode.values());
-    const fileName = makePatientMedicationInfoCsvFileName();
-    const csv = buildPatientMedicationInfoTemplateCsv(templates);
-    downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
-    if (db) {
-      await logAuditAction(
-        db,
-        'patient_medication_info_template',
-        `薬情テンプレCSV書出: ${fileName} / ${templates.length}件 / 承認情報を除外`
-      );
-    }
-    toast.success(`薬情テンプレCSVを${templates.length}件書き出しました。`);
   };
 
   const handleImportMedicationInfoCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {

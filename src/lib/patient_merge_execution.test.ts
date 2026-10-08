@@ -5,8 +5,11 @@ import {
   buildPatientMergeExecutionPlan,
   buildPatientMergePlan
 } from './patient_merge.ts';
+import { AuditLogFailedError } from './audit_guard.ts';
 import {
   applyPatientMergeExecutionPlan,
+  applyPatientMergeExecutionPlanWithAudit,
+  PATIENT_MERGE_AUDIT_ROLLED_BACK,
   buildPatientMergeRollbackOperations,
   createRxdbPatientMergeExecutionStore,
   PatientMergeExecutionError,
@@ -205,3 +208,55 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   assert.ok(calls.some((call) => call.startsWith('patch:v1')));
   assert.ok(calls.some((call) => call.startsWith('patch:a1')));
 });
+
+// ---- 監査ログが残らなければ統合を取り消す ----
+
+function statefulPatientStore() {
+  const state = {
+    patients: { pt_target: { ...targetPatient }, pt_source: { ...sourcePatient } } as Record<string, Patient>,
+    visits: { visit_1: 'pt_source' } as Record<string, string>,
+    alerts: { alert_1: 'pt_source' } as Record<string, string>
+  };
+  const store: PatientMergeExecutionStore = {
+    async upsertPatient(patient) { state.patients[patient.patientId] = { ...patient }; },
+    async deletePatient(patientId) { delete state.patients[patientId]; },
+    async patchVisitPatient(visitId, patientId) { state.visits[visitId] = patientId; },
+    async patchAlertPatient(alertId, patientId) { state.alerts[alertId] = patientId; }
+  };
+  return { state, store };
+}
+
+test('applyPatientMergeExecutionPlanWithAudit keeps the merge and audits once', async () => {
+  const { state, store } = statefulPatientStore();
+  const details: string[] = [];
+
+  await applyPatientMergeExecutionPlanWithAudit({
+    store, executionPlan: executionPlan(),
+    buildAuditDetail: (result) => `統合: ${result.appliedOperations.length}操作`,
+    logAudit: async (detail) => { details.push(detail); return true; }
+  });
+
+  assert.deepStrictEqual(details, [`統合: ${executionPlan().applyOperations.length}操作`], 'the wording is built from the apply result');
+  assert.strictEqual('pt_source' in state.patients, false, 'the source patient is deleted');
+  assert.strictEqual(state.visits.visit_1, 'pt_target');
+  assert.strictEqual(state.alerts.alert_1, 'pt_target');
+});
+
+test('applyPatientMergeExecutionPlanWithAudit brings the source patient, visits and alerts back when the audit log fails', async () => {
+  const { state, store } = statefulPatientStore();
+  const before = JSON.parse(JSON.stringify(state));
+
+  await assert.rejects(
+    () => applyPatientMergeExecutionPlanWithAudit({
+      store, executionPlan: executionPlan(), buildAuditDetail: () => 'x', logAudit: async () => false
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuditLogFailedError);
+      assert.strictEqual(error.message, PATIENT_MERGE_AUDIT_ROLLED_BACK);
+      return true;
+    }
+  );
+
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(state)), before, 'the data is exactly as it was before the merge');
+});
+

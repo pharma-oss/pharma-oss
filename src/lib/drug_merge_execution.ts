@@ -1,3 +1,4 @@
+import { runWithAuditRollback } from './audit_guard.ts';
 // 薬品統合計画の実行とロールバック。patient_merge_execution と同じ構成。
 // 途中で失敗した場合は適用済み操作の逆操作を返し、呼び出し側で取り消せるようにする。
 import type { Drug } from '../db/types.ts';
@@ -134,3 +135,26 @@ export async function applyDrugMergeExecutionPlan(
     rollbackOperations: buildDrugMergeRollbackOperations(appliedOperations)
   };
 }
+
+export const DRUG_MERGE_AUDIT_ROLLED_BACK = '薬品統合の監査ログ記録に失敗したため、統合を取り消しました。';
+
+// 薬品統合の実行: 適用 -> 監査ログ。監査ログが残らなければ、適用した操作を取り消して失敗にする。
+export async function applyDrugMergeExecutionPlanWithAudit(params: {
+  store: DrugMergeExecutionStore;
+  executionPlan: DrugMergeExecutionPlan;
+  buildAuditDetail: (result: DrugMergeApplyResult) => string;
+  logAudit: (detail: string) => Promise<boolean>;
+}): Promise<DrugMergeApplyResult> {
+  const { store, executionPlan, buildAuditDetail, logAudit } = params;
+  return runWithAuditRollback({
+    write: () => applyDrugMergeExecutionPlan(store, executionPlan),
+    logAudit: (result) => logAudit(buildAuditDetail(result)),
+    rollback: async (result) => {
+      for (const operation of result.rollbackOperations) {
+        await applyDrugMergeOperation(store, operation);
+      }
+    },
+    failureMessage: DRUG_MERGE_AUDIT_ROLLED_BACK
+  });
+}
+

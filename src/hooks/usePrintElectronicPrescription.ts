@@ -8,6 +8,7 @@ import {
 } from '@/lib/electronic_prescription';
 import { isDemoVisit } from '@/lib/demo_data';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { formatPrescriptionAuditIssues, getElectronicPrescriptionDocumentKinds } from '../app/print/helpers';
 import {
   ELECTRONIC_PRESCRIPTION_OPERATION_LABELS,
@@ -276,23 +277,29 @@ export function usePrintElectronicPrescription({
       });
       const result = await response.json() as ElectronicPrescriptionOperationResult;
       if (operation === 'dispensing_result_search' && result.status === 'not_found') {
-        await logAuditAction(
-          db,
-          'electronic_prescription',
-          `電子処方箋操作完了: ${operationLabel} / 調剤結果IDなし`,
-          visitData?.patientId,
-          patientData?.name
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'electronic_prescription',
+            `電子処方箋操作完了: ${operationLabel} / 調剤結果IDなし`,
+            visitData?.patientId,
+            patientData?.name
+          ),
+          (message) => alert(message)
         );
         alert(result.message || '電子処方箋管理サービスに調剤結果IDが見つかりませんでした。');
         return;
       }
       if (result.status !== 'success') {
-        await logAuditAction(
-          db,
-          'electronic_prescription',
-          `電子処方箋操作失敗: ${operationLabel} / 状態 ${result.status} / ${result.message}`,
-          visitData?.patientId,
-          patientData?.name
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'electronic_prescription',
+            `電子処方箋操作失敗: ${operationLabel} / 状態 ${result.status} / ${result.message}`,
+            visitData?.patientId,
+            patientData?.name
+          ),
+          (message) => alert(message)
         );
         alert(result.message || `${operationLabel}に失敗しました。`);
         return;

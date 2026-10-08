@@ -50,6 +50,7 @@ import {
   getAiSuggestionFeedbackDisplay
 } from '@/lib/audit_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
+import { exportWithAuditFirst } from '@/lib/audit_guard';
 import type { BackupSchedulePolicy } from '@/lib/backup';
 import type { ExternalConnectorReadinessReport } from '@/lib/external_connector_readiness';
 import { buildOnlineEligibilityFieldReadinessReport } from '@/lib/online_eligibility_field_readiness';
@@ -532,23 +533,15 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
         currentStoreCode: settings.pharmacyCode || undefined
       });
       const fileName = makeDailyClosingReviewCsvFileName(review.monthKey);
-      const blob = new Blob([`\ufeff${buildOperationalClosingMonthlyReviewCsv(review)}`], {
-        type: 'text/csv;charset=utf-8'
+      // 監査ログを先に残し、残らなければ書き出さない(誰が何を持ち出したかを追えなくしない)
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'audit_export',
+          `日次締め月次レビューCSVエクスポート: ${fileName} に ${review.approvalCount}件の承認ログサマリを書き出しました。`
+        ),
+        download: () => downloadTextFile(fileName, `\ufeff${buildOperationalClosingMonthlyReviewCsv(review)}`, 'text/csv;charset=utf-8')
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      await logAuditAction(
-        db,
-        'audit_export',
-        `日次締め月次レビューCSVエクスポート: ${fileName} に ${review.approvalCount}件の承認ログサマリを書き出しました。`
-      );
 
       const refreshed = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const refreshedRows = refreshed.map(d => d.toJSON());
@@ -577,23 +570,15 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
         currentStoreCode: settings.pharmacyCode || undefined
       });
       const fileName = makeDailyClosingStoreBenchmarkBiExportFileName(review.monthKey);
-      const blob = new Blob([buildOperationalClosingStoreBenchmarkBiExport(review)], {
-        type: 'application/json;charset=utf-8'
+      // 監査ログを先に残し、残らなければ書き出さない(誰が何を持ち出したかを追えなくしない)
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'audit_export',
+          `店舗別KPIベンチマークJSONエクスポート: ${fileName} に ${review.storeBenchmark.storeCount}件の店舗別KPIサマリを書き出しました（患者情報なし、外部BI連携用）。`
+        ),
+        download: () => downloadTextFile(fileName, buildOperationalClosingStoreBenchmarkBiExport(review), 'application/json;charset=utf-8')
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      await logAuditAction(
-        db,
-        'audit_export',
-        `店舗別KPIベンチマークJSONエクスポート: ${fileName} に ${review.storeBenchmark.storeCount}件の店舗別KPIサマリを書き出しました（患者情報なし、外部BI連携用）。`
-      );
 
       const refreshed = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const refreshedRows = refreshed.map(d => d.toJSON());
@@ -706,23 +691,15 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
         currentAiAssistMode: normalizeAiAssistMode(settings.aiAssistMode)
       });
       const fileName = makeAiSuggestionFeedbackReviewCsvFileName(review.monthKey);
-      const blob = new Blob([`\ufeff${buildAiSuggestionFeedbackMonthlyReviewCsv(review)}`], {
-        type: 'text/csv;charset=utf-8'
+      // 監査ログを先に残し、残らなければ書き出さない(誰が何を持ち出したかを追えなくしない)
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'audit_export',
+          `AI補助フィードバック月次レビューCSVエクスポート: ${fileName} に ${review.totalCount}件の採否ログと ${review.storeComparison.storeCount}件の店舗別サマリを書き出しました。`
+        ),
+        download: () => downloadTextFile(fileName, `\ufeff${buildAiSuggestionFeedbackMonthlyReviewCsv(review)}`, 'text/csv;charset=utf-8')
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      await logAuditAction(
-        db,
-        'audit_export',
-        `AI補助フィードバック月次レビューCSVエクスポート: ${fileName} に ${review.totalCount}件の採否ログと ${review.storeComparison.storeCount}件の店舗別サマリを書き出しました。`
-      );
 
       const refreshed = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const refreshedRows = refreshed.map(d => d.toJSON());
@@ -753,23 +730,15 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
         currentAiAssistMode: normalizeAiAssistMode(settings.aiAssistMode)
       });
       const fileName = makeAiSuggestionFeedbackBiExportFileName(review.monthKey);
-      const blob = new Blob([buildAiSuggestionFeedbackBiExport(review, generatedAt)], {
-        type: 'application/json;charset=utf-8'
+      // 監査ログを先に残し、残らなければ書き出さない(誰が何を持ち出したかを追えなくしない)
+      await exportWithAuditFirst({
+        logAudit: () => logAuditAction(
+          db,
+          'audit_export',
+          `AI補助フィードバックBI JSONエクスポート: ${fileName} に ${review.totalCount}件の採否ログと ${review.storeComparison.storeCount}件の店舗別フィードバック比較を書き出しました（患者情報なし）。`
+        ),
+        download: () => downloadTextFile(fileName, buildAiSuggestionFeedbackBiExport(review, generatedAt), 'application/json;charset=utf-8')
       });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      await logAuditAction(
-        db,
-        'audit_export',
-        `AI補助フィードバックBI JSONエクスポート: ${fileName} に ${review.totalCount}件の採否ログと ${review.storeComparison.storeCount}件の店舗別フィードバック比較を書き出しました（患者情報なし）。`
-      );
 
       const refreshed = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
       const refreshedRows = refreshed.map(d => d.toJSON());

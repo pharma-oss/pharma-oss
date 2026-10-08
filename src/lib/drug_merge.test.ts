@@ -7,9 +7,12 @@ import {
   buildDrugMergeRollbackOperations,
   invertDrugMergeOperation
 } from './drug_merge.ts';
+import { AuditLogFailedError, ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
 import {
   applyDrugMergeExecutionPlan,
+  applyDrugMergeExecutionPlanWithAudit,
   applyDrugMergeOperation,
+  DRUG_MERGE_AUDIT_ROLLED_BACK,
   createRxdbDrugMergeExecutionStore,
   DrugMergeExecutionError,
   type DrugMergeExecutionStore
@@ -174,3 +177,91 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   assert.ok(calls.some((call) => call.includes('patch:item_1') && call.includes('drugId')));
   assert.ok(calls.some((call) => call.includes('patch:stock_1') && call.includes('drugCode')));
 });
+
+// ---- 監査ログが残らなければ統合を取り消す ----
+
+function statefulDrugStore(options: { failOnRollback?: boolean } = {}) {
+  const state = {
+    drugs: { drug_target: { ...targetDrug }, drug_source: { ...sourceDrug } } as Record<string, Drug>,
+    items: {
+      item_1: { drugId: 'drug_source', dispensedDrugCode: 'drug_source' },
+      item_2: { drugId: 'drug_source', dispensedDrugCode: '' }
+    } as Record<string, Record<string, string>>,
+    stocks: { stock_1: 'drug_source', stock_2: 'drug_source' } as Record<string, string>
+  };
+  let applying = true;
+  const store: DrugMergeExecutionStore = {
+    async upsertDrug(drug) { if (!applying && options.failOnRollback) throw new Error('rollback failed'); state.drugs[drug.code] = { ...drug }; },
+    async deleteDrug(code) { delete state.drugs[code]; },
+    async patchItemDrugField(itemId, field, code) { state.items[itemId][field] = code; },
+    async patchStockDrug(stockId, code) { state.stocks[stockId] = code; }
+  };
+  return { state, store, startRollback: () => { applying = false; } };
+}
+
+const mergePlanInput = {
+  targetDrug,
+  sourceDrug,
+  sourceItemRefs: [
+    { itemId: 'item_1', field: 'drugId' as const },
+    { itemId: 'item_1', field: 'dispensedDrugCode' as const },
+    { itemId: 'item_2', field: 'drugId' as const }
+  ],
+  sourceStockIds: ['stock_1', 'stock_2']
+};
+
+test('applyDrugMergeExecutionPlanWithAudit keeps the merge and audits with the wording built from the result', async () => {
+  const { state, store } = statefulDrugStore();
+  const executionPlan = buildDrugMergeExecutionPlan(buildDrugMergePlan(mergePlanInput));
+  const details: string[] = [];
+
+  const result = await applyDrugMergeExecutionPlanWithAudit({
+    store, executionPlan,
+    buildAuditDetail: (r) => `統合実行: ${r.appliedOperations.length}操作`,
+    logAudit: async (detail) => { details.push(detail); return true; }
+  });
+
+  assert.strictEqual(details.length, 1);
+  assert.match(details[0], /^統合実行: \d+操作$/);
+  assert.strictEqual('drug_source' in state.drugs, false, 'the source drug is gone');
+  assert.strictEqual(state.items.item_1.drugId, 'drug_target');
+  assert.strictEqual(state.stocks.stock_2, 'drug_target');
+  assert.ok(result.rollbackOperations.length > 0);
+});
+
+test('applyDrugMergeExecutionPlanWithAudit puts every drug, item and stock back when the audit log fails', async () => {
+  const { state, store } = statefulDrugStore();
+  const before = JSON.parse(JSON.stringify(state));
+  const executionPlan = buildDrugMergeExecutionPlan(buildDrugMergePlan(mergePlanInput));
+
+  await assert.rejects(
+    () => applyDrugMergeExecutionPlanWithAudit({ store, executionPlan, buildAuditDetail: () => 'x', logAudit: async () => false }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuditLogFailedError);
+      assert.strictEqual(error.message, DRUG_MERGE_AUDIT_ROLLED_BACK);
+      return true;
+    }
+  );
+
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(state)), before, 'the data is exactly as it was before the merge');
+});
+
+test('applyDrugMergeExecutionPlanWithAudit says so when the undo also fails', async () => {
+  const { state, store, startRollback } = statefulDrugStore({ failOnRollback: true });
+  const executionPlan = buildDrugMergeExecutionPlan(buildDrugMergePlan(mergePlanInput));
+
+  await assert.rejects(
+    () => applyDrugMergeExecutionPlanWithAudit({
+      store, executionPlan, buildAuditDetail: () => 'x',
+      logAudit: async () => { startRollback(); return false; }
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuditLogFailedError);
+      assert.strictEqual(error.rollbackFailed, true);
+      assert.strictEqual(error.message, `${DRUG_MERGE_AUDIT_ROLLED_BACK}${ROLLBACK_ALSO_FAILED_NOTE}`);
+      return true;
+    }
+  );
+  assert.strictEqual('drug_source' in state.drugs, false, 'the half-undone state is reported, not hidden');
+});
+

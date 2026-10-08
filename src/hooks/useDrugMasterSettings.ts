@@ -71,11 +71,13 @@ import {
 } from '@/lib/drug_merge';
 import {
   createRxdbDrugMergeExecutionStore,
-  applyDrugMergeExecutionPlan,
+  applyDrugMergeExecutionPlanWithAudit,
   applyDrugMergeOperation,
   DrugMergeExecutionError
 } from '@/lib/drug_merge_execution';
 import { downloadTextFile } from '@/lib/blob_download';
+import { AuditLogFailedError, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { restoreDrugMasterFromRollback, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
 import { drugMasterCandidateKindLabel } from '@/lib/drug_master_update_ui';
 
 interface DrugMasterImportSource {
@@ -505,22 +507,38 @@ export function useDrugMasterSettings({
       updatedCount = artifacts.summary.updatedCount;
       abolishedCount = artifacts.summary.abolishedCount;
 
-      const upsertResult = await db.drugs.bulkUpsert(afterRows);
-      if (upsertResult.error.length > 0) {
-        console.error('Failed to upsert some drug master records:', upsertResult.error);
-        throw new Error(`${upsertResult.error.length}件の薬品マスタ更新に失敗しました。`);
-      }
-
       const diffCsvFileName = makeDrugMasterDiffCsvFileName(artifacts.versionId);
       const rollbackFileName = makeDrugMasterRollbackFileName(artifacts.versionId);
+
+      // 書き込み -> 監査ログ。監査ログが残らなければ、取り込み前の薬品マスタへ戻す。
+      // 差分CSV・ロールバックJSONの書き出しは、監査ログが残ってから行う。
+      await runWithAuditRollback({
+        write: async () => {
+          const upsertResult = await db.drugs.bulkUpsert(afterRows);
+          if (upsertResult.error.length > 0) {
+            console.error('Failed to upsert some drug master records:', upsertResult.error);
+            // 一部だけ書き込まれた状態を残さない
+            try {
+              await restoreDrugMasterFromRollback(db, artifacts.rollback);
+            } catch (restoreError) {
+              console.error('Failed to undo a partial drug master update:', restoreError);
+            }
+            throw new Error(`${upsertResult.error.length}件の薬品マスタ更新に失敗しました。取り込み前の状態へ戻しました。`);
+          }
+        },
+        logAudit: () => logAuditAction(
+          db,
+          'drug_master_update',
+          `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}（名称・廃止フラグを据え置いた薬品 ${attributesKeptStored}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
+        ),
+        rollback: async () => {
+          await restoreDrugMasterFromRollback(db, artifacts.rollback);
+        },
+        failureMessage: '薬品マスタ更新の監査ログ記録に失敗したため、取り込み前の状態へ戻しました。'
+      });
+
       downloadTextFile(diffCsvFileName, `\ufeff${buildDrugMasterDiffCsv(artifacts)}`, 'text/csv;charset=utf-8');
       downloadTextFile(rollbackFileName, JSON.stringify(artifacts.rollback, null, 2), 'application/json;charset=utf-8');
-
-      await logAuditAction(
-        db,
-        'drug_master_update',
-        `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}（名称・廃止フラグを据え置いた薬品 ${attributesKeptStored}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
-      );
 
       if (refreshAuditEvidence) {
         await refreshAuditEvidence();
@@ -646,28 +664,23 @@ export function useDrugMasterSettings({
       );
       if (!confirmed) return;
 
-      if (payload.restoreRows.length > 0) {
-        const restoreResult = await db.drugs.bulkUpsert(payload.restoreRows);
-        if (restoreResult.error.length > 0) {
-          console.error('Failed to restore some drug master rollback records:', restoreResult.error);
-          throw new Error(`${restoreResult.error.length}件の薬品マスター復元に失敗しました。`);
-        }
-      }
-
-      let deletedCount = 0;
-      for (const code of payload.deleteCodes) {
-        const doc = await db.drugs.findOne(code).exec();
-        if (doc) {
-          await doc.remove();
-          deletedCount++;
-        }
-      }
-
-      await logAuditAction(
-        db,
-        'drug_master_update',
-        `医薬品マスターロールバック: 版 ${payload.versionId}（${payload.sourceFileName}）の更新前へ戻しました（復元: ${payload.restoreRows.length}件, 追加削除: ${deletedCount}件）。`
-      );
+      // 復元 -> 監査ログ。監査ログが残らなければ、復元前の薬品マスタへ戻す。
+      let restored: DrugMasterRestoreResult | undefined;
+      await runWithAuditRollback({
+        write: async () => {
+          restored = await restoreDrugMasterFromRollback(db, payload);
+          return restored;
+        },
+        logAudit: () => logAuditAction(
+          db,
+          'drug_master_update',
+          `医薬品マスターロールバック: 版 ${payload.versionId}（${payload.sourceFileName}）の更新前へ戻しました（復元: ${payload.restoreRows.length}件, 追加削除: ${restored?.deletedCount ?? 0}件）。`
+        ),
+        rollback: async (result) => {
+          await result.undo();
+        },
+        failureMessage: '医薬品マスターロールバックの監査ログ記録に失敗したため、ロールバック前の状態へ戻しました。'
+      });
 
       if (refreshAuditEvidence) {
         await refreshAuditEvidence();
@@ -725,7 +738,10 @@ export function useDrugMasterSettings({
       setDrugDuplicateMessage(report.groups.length === 0
         ? `統合が必要な重複候補はありません（対象 ${report.scannedDrugCount.toLocaleString('ja-JP')}件。店舗未使用のマスタ由来重複 ${report.inactiveGroupCount}グループは対象外）。`
         : `統合候補 ${report.groups.length}グループ・${report.duplicateDrugCount}件が見つかりました。残す薬品を選び、統合確認へ進んでください。`);
-      await logAuditAction(db, 'drug_master_update', buildDrugDuplicateScanAuditDetail(report));
+      await recordAuditOrNotify(
+        () => logAuditAction(db, 'drug_master_update', buildDrugDuplicateScanAuditDetail(report)),
+        (message) => toast.warning(message)
+      );
     } catch (error) {
       console.error('Failed to scan duplicate drugs:', error);
       setDrugDuplicateReport(null);
@@ -798,17 +814,23 @@ export function useDrugMasterSettings({
     const store = createRxdbDrugMergeExecutionStore(db);
     setIsApplyingDrugMerge(true);
     try {
-      const result = await applyDrugMergeExecutionPlan(store, executionPlan);
-      await logAuditAction(
-        db,
-        'drug_master_update',
-        `薬品統合実行: ${plan.summary}。${result.auditDetail}`
-      );
+      // 適用 -> 監査ログ。監査ログが残らなければ、統合を取り消す。
+      await applyDrugMergeExecutionPlanWithAudit({
+        store,
+        executionPlan,
+        buildAuditDetail: (result) => `薬品統合実行: ${plan.summary}。${result.auditDetail}`,
+        logAudit: (detail) => logAuditAction(db, 'drug_master_update', detail)
+      });
       setDrugMergeReview(null);
       toast.success('薬品統合を実行しました。');
       await handleScanDrugDuplicates();
     } catch (error: any) {
       console.error('Failed to apply drug merge:', error);
+      if (error instanceof AuditLogFailedError) {
+        setDrugDuplicateMessage(`${error.message} 候補を確認し直してください。`);
+        toast.error('薬品統合を取り消しました（監査ログを記録できませんでした）。');
+        return;
+      }
       if (error instanceof DrugMergeExecutionError && error.rollbackOperations.length > 0) {
         try {
           for (const operation of error.rollbackOperations) {

@@ -28,6 +28,7 @@ import {
 } from '@/lib/receipt/dispensing_uke_spec_pdf';
 import type { DispensingUkeOfficialSpecPdfFetchResult } from '@/lib/receipt/dispensing_uke_official_spec_pdf';
 import { downloadTextFile } from '@/lib/blob_download';
+import { exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
 import {
   buildClaimPointsDriftCsv,
   buildClaimPointsDriftReview,
@@ -85,10 +86,13 @@ export function useOfficialAuditSettings({
     sourceLabel: string
   ) => {
     if (!db) return;
-    await logAuditAction(
-      db,
-      'official_spec_review',
-      `UKE仕様PDF全項目突合: ${sourceLabel} / 判定 ${gate.statusLabel} / レコード ${gate.parsedRecordTypeCount}/${gate.expectedRecordTypeCount} / 抽出 ${gate.parsedFieldCount}項目 / 定義済み ${gate.definedFieldCount}項目 / 残 ${gate.remainingFieldCount}項目 / 停止理由 ${gate.blockerCount}件`
+    await recordAuditOrNotify(
+      () => logAuditAction(
+        db,
+        'official_spec_review',
+        `UKE仕様PDF全項目突合: ${sourceLabel} / 判定 ${gate.statusLabel} / レコード ${gate.parsedRecordTypeCount}/${gate.expectedRecordTypeCount} / 抽出 ${gate.parsedFieldCount}項目 / 定義済み ${gate.definedFieldCount}項目 / 残 ${gate.remainingFieldCount}項目 / 停止理由 ${gate.blockerCount}件`
+      ),
+      (message) => toast.warning(message)
     );
     if (refreshAuditEvidence) {
       await refreshAuditEvidence();
@@ -161,18 +165,26 @@ export function useOfficialAuditSettings({
     try {
       const fileName = makeDispensingUkeSpecReviewCsvFileName();
       const csv = buildDispensingUkeSpecificationPdfAllFieldCompletionGateCsv(dispensingUkeSpecCompletionGate);
-      downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
       if (db) {
-        await logAuditAction(
-          db,
-          'official_spec_review',
-          `UKE仕様PDF全項目突合CSV書出: ${fileName} / 判定 ${dispensingUkeSpecCompletionGate.statusLabel} / 残 ${dispensingUkeSpecCompletionGate.remainingFieldCount}項目 / 停止理由 ${dispensingUkeSpecCompletionGate.blockerCount}件`
-        );
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'official_spec_review',
+            `UKE仕様PDF全項目突合CSV書出: ${fileName} / 判定 ${dispensingUkeSpecCompletionGate.statusLabel} / 残 ${dispensingUkeSpecCompletionGate.remainingFieldCount}項目 / 停止理由 ${dispensingUkeSpecCompletionGate.blockerCount}件`
+          ),
+          download
+        });
         if (refreshAuditEvidence) {
           await refreshAuditEvidence();
         }
+      } else {
+        download();
       }
       toast.success('UKE仕様PDFの確認結果CSVを書き出しました。');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'UKE仕様PDFの確認結果CSVを書き出せませんでした。');
     } finally {
       setIsExportingDispensingUkeSpecReview(false);
     }
@@ -186,18 +198,26 @@ export function useOfficialAuditSettings({
     try {
       const fileName = makeDispensingUkeOfficialAllFieldsGateCsvFileName();
       const csv = buildDispensingUkeOfficialAllFieldDefinitionGateCsv(dispensingUkeOfficialAllFieldsGate);
-      downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
+      const download = () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8');
       if (db) {
-        await logAuditAction(
-          db,
-          'official_spec_review',
-          `公式提出UKE allFields完了ゲートCSV書出: ${fileName} / 判定 ${dispensingUkeOfficialAllFieldsGate.statusLabel} / レコード ${dispensingUkeOfficialAllFieldsGate.completedRecordTypeCount}/${dispensingUkeOfficialAllFieldsGate.expectedRecordTypes.length} / 定義 ${dispensingUkeOfficialAllFieldsGate.definedFieldCount}/${dispensingUkeOfficialAllFieldsGate.expectedFieldCount} / 指摘 ${dispensingUkeOfficialAllFieldsGate.issueCount}件`
-        );
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'official_spec_review',
+            `公式提出UKE allFields完了ゲートCSV書出: ${fileName} / 判定 ${dispensingUkeOfficialAllFieldsGate.statusLabel} / レコード ${dispensingUkeOfficialAllFieldsGate.completedRecordTypeCount}/${dispensingUkeOfficialAllFieldsGate.expectedRecordTypes.length} / 定義 ${dispensingUkeOfficialAllFieldsGate.definedFieldCount}/${dispensingUkeOfficialAllFieldsGate.expectedFieldCount} / 指摘 ${dispensingUkeOfficialAllFieldsGate.issueCount}件`
+          ),
+          download
+        });
         if (refreshAuditEvidence) {
           await refreshAuditEvidence();
         }
+      } else {
+        download();
       }
       toast.success('公式提出UKE allFields完了ゲートCSVを書き出しました。');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '公式提出UKE allFields完了ゲートCSVを書き出せませんでした。');
     } finally {
       setIsExportingDispensingUkeOfficialAllFieldsGate(false);
     }
@@ -219,20 +239,26 @@ export function useOfficialAuditSettings({
       setDispensingUkeSpecCompletionLabel(formatDispensingUkeSpecificationPdfAllFieldCompletionGate(pack.completionGate));
 
       const fileName = makeDispensingUkeSpecImplementationPackFileName();
-      downloadTextFile(
+      const download = () => downloadTextFile(
         fileName,
         buildDispensingUkeSpecificationPdfAllFieldImplementationPackText(pack),
         'text/plain;charset=utf-8'
       );
       if (db) {
-        await logAuditAction(
-          db,
-          'official_spec_review',
-          `UKE仕様PDF実装パック書出: ${fileName} / 判定 ${pack.completionGate.statusLabel} / 実装タスク ${pack.implementationPlan.taskCount}件 / 定義追加準備 ${pack.progressReview.readyToDefineCount}件 / 追加候補 ${pack.candidateReport.candidateCount}件 / 残 ${pack.remainingActionReport.remainingFieldCount}項目`
-        );
+        // 監査ログを先に残し、残らなければ書き出さない
+        await exportWithAuditFirst({
+          logAudit: () => logAuditAction(
+            db,
+            'official_spec_review',
+            `UKE仕様PDF実装パック書出: ${fileName} / 判定 ${pack.completionGate.statusLabel} / 実装タスク ${pack.implementationPlan.taskCount}件 / 定義追加準備 ${pack.progressReview.readyToDefineCount}件 / 追加候補 ${pack.candidateReport.candidateCount}件 / 残 ${pack.remainingActionReport.remainingFieldCount}項目`
+          ),
+          download
+        });
         if (refreshAuditEvidence) {
           await refreshAuditEvidence();
         }
+      } else {
+        download();
       }
       toast.success('UKE仕様PDFの実装パックを書き出しました。');
     } catch (error) {
@@ -318,7 +344,10 @@ export function useOfficialAuditSettings({
 
       const review = buildClaimPointsDriftReview(inputs);
       setClaimPointsDrift(review);
-      await logAuditAction(db, 'claim_points_review', `請求点数の変動点検: ${formatClaimPointsDriftSummary(review)}`);
+      await recordAuditOrNotify(
+        () => logAuditAction(db, 'claim_points_review', `請求点数の変動点検: ${formatClaimPointsDriftSummary(review)}`),
+        (message) => toast.warning(message)
+      );
       if (refreshAuditEvidence) await refreshAuditEvidence();
       toast.success(formatClaimPointsDriftSummary(review));
     } catch (error: any) {
@@ -429,10 +458,13 @@ export function useOfficialAuditSettings({
 
       const review = buildDosageCategoryConflictReview(inputs, pointsList);
       setDosageCategoryConflict(review);
-      await logAuditAction(
-        db,
-        'claim_points_review',
-        `剤形判定の食い違い点検: ${formatDosageCategoryConflictSummary(review)}`
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'claim_points_review',
+          `剤形判定の食い違い点検: ${formatDosageCategoryConflictSummary(review)}`
+        ),
+        (message) => toast.warning(message)
       );
       if (refreshAuditEvidence) await refreshAuditEvidence();
       toast.success(formatDosageCategoryConflictSummary(review));
