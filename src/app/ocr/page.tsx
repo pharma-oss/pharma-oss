@@ -25,10 +25,9 @@ import {
   type PatientMergePlan
 } from '@/lib/patient_merge';
 import {
-  applyPatientMergeExecutionPlan,
-  applyPatientMergeOperation,
+  applyPatientMergeExecutionPlanWithAudit,
   createRxdbPatientMergeExecutionStore,
-  PatientMergeExecutionError
+  recoverFromPatientMergeFailure
 } from '@/lib/patient_merge_execution';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
@@ -833,14 +832,19 @@ export default function OcrPage() {
     setIsApplyingPatientMerge(true);
     setPatientMergeMessage('');
     try {
-      const result = await applyPatientMergeExecutionPlan(store, executionPlan);
-      await logAuditAction(
-        db,
-        'prescription_edit',
-        `患者統合実行: ${plan.summary}。${result.auditDetail}`,
-        plan.targetPatientId,
-        plan.mergedPatient.name
-      );
+      // 適用 -> 監査ログ。監査ログが残らなければ、統合を取り消す。
+      await applyPatientMergeExecutionPlanWithAudit({
+        store,
+        executionPlan,
+        buildAuditDetail: (result) => `患者統合実行: ${plan.summary}。${result.auditDetail}`,
+        logAudit: (detail) => logAuditAction(
+          db,
+          'prescription_edit',
+          detail,
+          plan.targetPatientId,
+          plan.mergedPatient.name
+        )
+      });
       setPatientCandidates((current) => current
         .filter((patient) => patient.patientId !== plan.sourcePatientId)
         .map((patient) => (
@@ -858,20 +862,9 @@ export default function OcrPage() {
       toast.success('患者統合を実行しました。');
     } catch (error) {
       console.error('Failed to apply patient merge:', error);
-      if (error instanceof PatientMergeExecutionError && error.rollbackOperations.length > 0) {
-        try {
-          for (const operation of error.rollbackOperations) {
-            await applyPatientMergeOperation(store, operation);
-          }
-          setPatientMergeMessage('患者統合に失敗したため、適用済みの操作を取り消しました。候補を確認し直してください。');
-        } catch (rollbackError) {
-          console.error('Failed to rollback patient merge:', rollbackError);
-          setPatientMergeMessage('患者統合に失敗し、取り消しにも失敗しました。監査ログと患者データを確認してください。');
-        }
-      } else {
-        setPatientMergeMessage('患者統合を実行できませんでした。候補を確認し直してください。');
-      }
-      toast.error('患者統合に失敗しました。');
+      const outcome = await recoverFromPatientMergeFailure(store, error);
+      setPatientMergeMessage(outcome.message);
+      toast.error(outcome.toast);
     } finally {
       setIsApplyingPatientMerge(false);
     }

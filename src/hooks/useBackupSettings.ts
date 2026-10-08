@@ -53,8 +53,7 @@ import {
 import {
   createRxdbPatientMergeExecutionStore,
   applyPatientMergeExecutionPlanWithAudit,
-  applyPatientMergeOperation,
-  PatientMergeExecutionError
+  recoverFromPatientMergeFailure
 } from '@/lib/patient_merge_execution';
 import {
   buildBackupScheduleReviewState,
@@ -67,7 +66,7 @@ import {
   type MigrationCsvPreview
 } from '@/lib/backup_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
-import { AuditLogFailedError, recordAuditOrNotify } from '@/lib/audit_guard';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import type { AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
 
 function makeBackupGenerationReviewCsvFileName(formatDateTimeStamp: (date: Date) => string, date = new Date()): string {
@@ -332,25 +331,9 @@ export function useBackupSettings({
       await handleScanPatientDuplicates();
     } catch (error: any) {
       console.error('Failed to apply duplicate merge:', error);
-      if (error instanceof AuditLogFailedError) {
-        setPatientDuplicateMessage(`${error.message} 候補を確認し直してください。`);
-        toast.error('患者統合を取り消しました（監査ログを記録できませんでした）。');
-        return;
-      }
-      if (error instanceof PatientMergeExecutionError && error.rollbackOperations.length > 0) {
-        try {
-          for (const operation of error.rollbackOperations) {
-            await applyPatientMergeOperation(store, operation);
-          }
-          setPatientDuplicateMessage('患者統合に失敗したため、適用済みの操作を取り消しました。候補を確認し直してください。');
-        } catch (rollbackError) {
-          console.error('Failed to rollback duplicate merge:', rollbackError);
-          setPatientDuplicateMessage('患者統合に失敗し、取り消しにも失敗しました。監査ログと患者データを確認してください。');
-        }
-      } else {
-        setPatientDuplicateMessage('患者統合を実行できませんでした。候補を確認し直してください。');
-      }
-      toast.error('患者統合に失敗しました。');
+      const outcome = await recoverFromPatientMergeFailure(store, error);
+      setPatientDuplicateMessage(outcome.message);
+      toast.error(outcome.toast);
     } finally {
       setIsApplyingDuplicateMerge(false);
     }

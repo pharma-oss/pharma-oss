@@ -1,6 +1,6 @@
 import type { Patient } from '@/db/types';
 import type { PatientMergeExecutionPlan, PatientMergeOperation } from './patient_merge';
-import { runWithAuditRollback } from './audit_guard';
+import { AuditLogFailedError, runWithAuditRollback } from './audit_guard';
 
 export interface PatientMergeExecutionStore {
   upsertPatient(patient: Patient): Promise<void>;
@@ -199,6 +199,43 @@ export async function applyPatientMergeExecutionPlanWithAudit(params: {
     },
     failureMessage: PATIENT_MERGE_AUDIT_ROLLED_BACK
   });
+}
+
+export interface PatientMergeFailureOutcome {
+  // 画面に残す説明文(候補の確認し直しを促す)
+  message: string;
+  // 失敗を知らせるトースト
+  toast: string;
+}
+
+// 患者統合が例外で終わったあとの後始末と、利用者への伝え方。
+// - 監査ログが残らなかった: applyPatientMergeExecutionPlanWithAudit がすでに取り消している
+// - 途中の操作で失敗した: 適用済みの操作を取り消す(取り消しにも失敗したらデータの確認を促す)
+// - 何も適用していない: 取り消すものはない
+// 受付画面(OCR)と設定の患者重複点検の両方がこれを使い、失敗時の扱いと文言を揃える。
+export async function recoverFromPatientMergeFailure(
+  store: PatientMergeExecutionStore,
+  error: unknown
+): Promise<PatientMergeFailureOutcome> {
+  if (error instanceof AuditLogFailedError) {
+    return {
+      message: `${error.message} 候補を確認し直してください。`,
+      toast: '患者統合を取り消しました（監査ログを記録できませんでした）。'
+    };
+  }
+  const toast = '患者統合に失敗しました。';
+  if (error instanceof PatientMergeExecutionError && error.rollbackOperations.length > 0) {
+    try {
+      for (const operation of error.rollbackOperations) {
+        await applyPatientMergeOperation(store, operation);
+      }
+      return { message: '患者統合に失敗したため、適用済みの操作を取り消しました。候補を確認し直してください。', toast };
+    } catch (rollbackError) {
+      console.error('Failed to rollback patient merge:', rollbackError);
+      return { message: '患者統合に失敗し、取り消しにも失敗しました。監査ログと患者データを確認してください。', toast };
+    }
+  }
+  return { message: '患者統合を実行できませんでした。候補を確認し直してください。', toast };
 }
 
 export async function rollbackPatientMergeExecutionPlan(

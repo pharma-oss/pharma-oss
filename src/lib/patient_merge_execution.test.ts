@@ -13,6 +13,7 @@ import {
   buildPatientMergeRollbackOperations,
   createRxdbPatientMergeExecutionStore,
   PatientMergeExecutionError,
+  recoverFromPatientMergeFailure,
   rollbackPatientMergeExecutionPlan,
   type PatientMergeExecutionStore
 } from './patient_merge_execution.ts';
@@ -260,3 +261,64 @@ test('applyPatientMergeExecutionPlanWithAudit brings the source patient, visits 
   assert.deepStrictEqual(JSON.parse(JSON.stringify(state)), before, 'the data is exactly as it was before the merge');
 });
 
+
+// ---- 失敗後の後始末と利用者への伝え方(受付画面と設定の患者重複点検で共通) ----
+
+test('recoverFromPatientMergeFailure reports a cancelled merge without touching the store when the audit log failed', async () => {
+  const { calls, store } = createStore();
+
+  const outcome = await recoverFromPatientMergeFailure(store, new AuditLogFailedError(PATIENT_MERGE_AUDIT_ROLLED_BACK));
+
+  assert.strictEqual(outcome.message, `${PATIENT_MERGE_AUDIT_ROLLED_BACK} 候補を確認し直してください。`);
+  assert.match(outcome.toast, /取り消しました/);
+  assert.deepStrictEqual(calls, [], 'applyPatientMergeExecutionPlanWithAudit has already undone the merge');
+});
+
+test('recoverFromPatientMergeFailure undoes the applied prefix of a merge that failed part-way', async () => {
+  const { state, store } = statefulPatientStore();
+  const before = JSON.parse(JSON.stringify(state));
+  const failing: PatientMergeExecutionStore = {
+    ...store,
+    async patchAlertPatient() { throw new Error('alert patch failed'); }
+  };
+
+  const error = await applyPatientMergeExecutionPlan(failing, executionPlan()).then(() => null, (caught: unknown) => caught);
+  assert.ok(error instanceof PatientMergeExecutionError);
+  assert.strictEqual(state.visits.visit_1, 'pt_target', 'the merge is half applied before the recovery');
+
+  const outcome = await recoverFromPatientMergeFailure(store, error);
+
+  assert.match(outcome.message, /適用済みの操作を取り消しました/);
+  assert.strictEqual(outcome.toast, '患者統合に失敗しました。');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(state)), before, 'the data is exactly as it was before the merge');
+});
+
+test('recoverFromPatientMergeFailure tells the user to check the data when the undo fails too', async () => {
+  const { store } = statefulPatientStore();
+  const failing: PatientMergeExecutionStore = {
+    ...store,
+    async patchAlertPatient() { throw new Error('alert patch failed'); }
+  };
+  const error = await applyPatientMergeExecutionPlan(failing, executionPlan()).then(() => null, (caught: unknown) => caught);
+  const brokenUndo: PatientMergeExecutionStore = {
+    ...store,
+    async patchVisitPatient() { throw new Error('undo failed'); }
+  };
+
+  const outcome = await recoverFromPatientMergeFailure(brokenUndo, error);
+
+  assert.match(outcome.message, /取り消しにも失敗しました/);
+  assert.strictEqual(outcome.toast, '患者統合に失敗しました。');
+});
+
+test('recoverFromPatientMergeFailure has nothing to undo for a plan that was rejected or an unknown error', async () => {
+  const { calls, store } = createStore();
+  const blocked = new PatientMergeExecutionError('blocked', null, []);
+
+  for (const error of [blocked, new Error('unexpected')]) {
+    const outcome = await recoverFromPatientMergeFailure(store, error);
+    assert.strictEqual(outcome.message, '患者統合を実行できませんでした。候補を確認し直してください。');
+    assert.strictEqual(outcome.toast, '患者統合に失敗しました。');
+  }
+  assert.deepStrictEqual(calls, []);
+});
