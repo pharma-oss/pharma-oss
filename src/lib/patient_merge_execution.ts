@@ -52,7 +52,9 @@ export function createRxdbPatientMergeExecutionStore(db: {
     async upsertPatient(patient) {
       const patientDoc = await db.patients.findOne(patient.patientId).exec();
       if (patientDoc) {
-        await patientDoc.patch(patient);
+        // 文書全体を patient の内容にする。patch だと、統合で補われた項目(保険情報・公費など)が統合前の記録に
+        // 無いために消えず、取り消しても統合前の状態に戻らない。
+        await patientDoc.incrementalModify(() => ({ ...patient }));
       } else {
         await db.patients.insert(patient);
       }

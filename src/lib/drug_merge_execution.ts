@@ -58,7 +58,9 @@ export function createRxdbDrugMergeExecutionStore(db: {
     async upsertDrug(drug) {
       const drugDoc = await db.drugs.findOne(drug.code).exec();
       if (drugDoc) {
-        await drugDoc.patch(drug);
+        // 文書全体を drug の内容にする。patch だと、統合で補われた項目(棚番地・YJコード・ハイリスク区分など)が
+        // 統合前の記録に無いために消えず、取り消しても統合前の状態に戻らない。
+        await drugDoc.incrementalModify(() => ({ ...drug }));
       } else {
         await db.drugs.insert(drug);
       }

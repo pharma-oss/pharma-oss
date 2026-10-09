@@ -149,6 +149,8 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   const calls: string[] = [];
   const makeDoc = (id: string) => ({
     patch: async (value: unknown) => { calls.push(`patch:${id}:${JSON.stringify(value)}`); },
+    // 薬品本体は文書全体を差し替える(patch だと統合前に無かった項目が取り消しで消えない)
+    incrementalModify: async (mutate: (data: unknown) => unknown) => { calls.push(`replace:${id}:${JSON.stringify(mutate({}))}`); },
     remove: async () => { calls.push(`remove:${id}`); }
   });
   const collection = (docs: Record<string, ReturnType<typeof makeDoc>>) => ({
@@ -171,7 +173,7 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   await assert.rejects(() => store.patchItemDrugField('item_missing', 'drugId', 'drug_target'), /処方明細が見つかりません/);
   await assert.rejects(() => store.patchStockDrug('stock_missing', 'drug_target'), /在庫ロットが見つかりません/);
 
-  assert.ok(calls.some((call) => call.startsWith('patch:drug_target')));
+  assert.ok(calls.some((call) => call.startsWith('replace:drug_target') && call.includes('"stockQuantity":30')), 'the kept drug is replaced as a whole');
   assert.ok(calls.includes('insert:drug_new'));
   assert.ok(calls.includes('remove:drug_target'));
   assert.ok(calls.some((call) => call.includes('patch:item_1') && call.includes('drugId')));

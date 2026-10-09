@@ -181,6 +181,8 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   const calls: string[] = [];
   const makeDoc = (id: string) => ({
     patch: async (value: unknown) => { calls.push(`patch:${id}:${JSON.stringify(value)}`); },
+    // 患者本体は文書全体を差し替える(patch だと統合前に無かった項目が取り消しで消えない)
+    incrementalModify: async (mutate: (data: unknown) => unknown) => { calls.push(`replace:${id}:${JSON.stringify(mutate({}))}`); },
     remove: async () => { calls.push(`remove:${id}`); }
   });
   const collection = (docs: Record<string, ReturnType<typeof makeDoc>>) => ({
@@ -203,7 +205,7 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   await assert.rejects(() => store.patchVisitPatient('v_missing', 'pt_existing'), /受付が見つかりません/);
   await assert.rejects(() => store.patchAlertPatient('a_missing', 'pt_existing'), /アラートが見つかりません/);
 
-  assert.ok(calls.some((call) => call.startsWith('patch:pt_existing')));
+  assert.ok(calls.some((call) => call.startsWith('replace:pt_existing') && call.includes('既存')), 'the kept patient is replaced as a whole');
   assert.ok(calls.includes('insert:pt_new'));
   assert.ok(calls.includes('remove:pt_existing'));
   assert.ok(calls.some((call) => call.startsWith('patch:v1')));
