@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { BookOpen, ChevronDown, Clock, History, Save, MessageSquare, AlertTriangle, Activity, FileText, CreditCard, Loader2, CheckCircle2, Plus, Printer, Trash2, Sparkles, Camera, Upload, ClipboardList, Download } from 'lucide-react';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { useDatabase } from '@/db/DatabaseProvider';
@@ -161,10 +161,17 @@ export default function EmrPage() {
     });
   }, [db, targetVisitId]);
 
+  // 最後にURLから反映した検索文字列。URLが変わったときだけ反映するために覚えておく。
+  const appliedLocationSearchRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const syncFromLocation = () => {
-      const searchParams = new URLSearchParams(window.location.search);
+      // 毎回反映すると、?openPicking=1 の付いたURLのままでは、閉じたモーダルが300ms後に開き直して閉じられない。
+      const search = window.location.search;
+      if (search === appliedLocationSearchRef.current) return;
+      appliedLocationSearchRef.current = search;
+      const searchParams = new URLSearchParams(search);
       const visitId = searchParams.get('visitId');
       if (visitId && visitId !== targetVisitId) {
         setTargetVisitId(visitId);
@@ -185,6 +192,9 @@ export default function EmrPage() {
       window.clearInterval(interval);
       window.removeEventListener('popstate', syncFromLocation);
     };
+    // setIntReason / setIsInterventionModalOpen は useEmrIntervention が返す useState のセッター(変わらない)。
+    // そのフックはこの effect より後ろで呼ぶため、依存配列に書くと宣言前の参照になる。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetVisitId]);
 
   useEffect(() => {
@@ -1699,6 +1709,7 @@ useEffect(() => {
                       保存画像を確認
                       {initialQuestionnaire.imageByteSize ? `（${Math.round(initialQuestionnaire.imageByteSize / 1024)}KB）` : ''}
                     </summary>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- DBに保存した data URL の画像。next/image の最適化の対象にならない */}
                     <img src={initialQuestionnaire.imageDataUrl} alt="保存済み初回質問表" />
                   </details>
                 )}

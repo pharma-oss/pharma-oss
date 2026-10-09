@@ -265,6 +265,21 @@ async function run() {
       await page.goto(`${baseUrl}/print/${encodeURIComponent(effectiveVisitId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await wait(2500);
       await assertSelectors(page, requiredPrintSelectors, 'print onboarding');
+
+      // 「ピッキングへ」(?openPicking=1)で開いたモーダルは、閉じたら閉じたままであること。
+      // URLを毎回反映していた頃は、閉じても300ms後に開き直して閉じられなかった。
+      await page.goto(`${baseUrl}/emr?visitId=${encodeURIComponent(effectiveVisitId)}&openPicking=1`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      const pickingMarker = '[data-testid="picking-instruction-export"]';
+      const isPickingModalOpen = () => page.$eval(pickingMarker, (element) => element.closest('dialog')?.open === true).catch(() => false);
+      await page.waitForSelector(pickingMarker, { timeout: 20000 });
+      await page.waitForFunction(
+        (selector) => document.querySelector(selector)?.closest('dialog')?.open === true,
+        { timeout: 10000 },
+        pickingMarker
+      );
+      await page.click('button[aria-label="閉じる"]');
+      await wait(1200);
+      assertOk(!(await isPickingModalOpen()), 'picking modal reopened after it was closed while the URL still had openPicking=1.');
     }
 
     const blockingLogs = logs.filter((line) => !/RxDB dev-mode warning|RxDB Open Core RxStorage|Failed to load resource/.test(line));
