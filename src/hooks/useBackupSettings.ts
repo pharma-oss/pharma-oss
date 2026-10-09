@@ -647,15 +647,17 @@ export function useBackupSettings({
 
     setIsImportingBackup(true);
     try {
+      // 復旧は全部書けたときだけ反映される(途中で失敗したら復旧前の状態へ戻る)。
       const result = await importDatabaseBackup(db, pendingBackupPayload);
-      const auditOk = await logAuditAction(
-        db,
-        'backup_import',
-        `バックアップ復旧: ${backupRestoreSourceName || backupFile?.name || 'ファイル'} から ${result.totalRows}件のローカルデータを復旧しました。${backupRestoreSourceEncrypted ? '（復号後反映）' : ''}`
+      // 復旧そのものは成功している。災害復旧を監査ログの失敗で取り消さず、記録が残らなかったことだけ知らせる。
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'backup_import',
+          `バックアップ復旧: ${backupRestoreSourceName || backupFile?.name || 'ファイル'} から ${result.totalRows}件のローカルデータを復旧しました。${backupRestoreSourceEncrypted ? '（復号後反映）' : ''}`
+        ),
+        (message) => toast.warning(`バックアップは復旧しましたが、${message}`)
       );
-      if (!auditOk) {
-        throw new Error('バックアップ復旧の監査ログ記録に失敗しました。復旧後のデータと監査ログを確認してください。');
-      }
       toast.success(`バックアップを復旧しました（${result.totalRows}件）。`);
       
       setPendingBackupPayload(null);

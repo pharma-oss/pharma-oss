@@ -188,6 +188,8 @@ test('importDatabaseBackup rejects bulk upsert write errors', async () => {
   const db = Object.fromEntries(BACKUP_COLLECTIONS.map((collectionName) => [
     collectionName,
     {
+      findByIds: () => ({ exec: async () => new Map() }),
+      bulkRemove: async () => ({ error: [] }),
       bulkUpsert: async () => ({ error: collectionName === 'patients' ? [new Error('write failed')] : [] })
     }
   ])) as any;

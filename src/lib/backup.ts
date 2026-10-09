@@ -1,6 +1,7 @@
 import type { AuditLog, PharmacyDatabase } from '../db/types.ts';
 import CryptoJS from 'crypto-js';
 import type { OpsReviewStatus } from './ops_review_status.ts';
+import { ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
 
 export const BACKUP_APP_ID = 'yakureki';
 export const BACKUP_FORMAT_VERSION = 1;
@@ -84,6 +85,12 @@ type ReadableCollection = {
 
 type WritableCollection = {
   bulkUpsert: (rows: Record<string, unknown>[]) => Promise<BulkWriteResultLike | undefined>;
+};
+
+// 復旧前の状態へ戻せるよう、既存の行の読み出しと、新しく入った行の削除ができるコレクション
+type RestorableCollection = WritableCollection & {
+  findByIds: (ids: string[]) => { exec: () => Promise<Map<string, { toJSON: () => Record<string, unknown> }>> };
+  bulkRemove: (ids: string[]) => Promise<BulkWriteResultLike | undefined>;
 };
 
 type BulkWriteResultLike = {
@@ -212,32 +219,83 @@ export async function buildDatabaseBackup(
   };
 }
 
+// 復旧の途中で失敗した。rollbackFailed は、書き換えたデータを元に戻す処理にも失敗したことを表す。
+export class BackupRestoreError extends Error {
+  readonly rollbackFailed: boolean;
+  constructor(message: string, rollbackFailed: boolean) {
+    super(message);
+    this.name = 'BackupRestoreError';
+    this.rollbackFailed = rollbackFailed;
+  }
+}
+
+export const BACKUP_RESTORE_ROLLED_BACK_NOTE = ' 復旧前の状態へ戻しました。';
+
+// コレクションごとに書き込み、途中で失敗したら、そこまでに書き換えた分をすべて復旧前の状態へ戻す。
+// (以前は途中で失敗すると、前半のコレクションだけがバックアップの内容になった状態が残った)
+// 戻すのは、バックアップに含まれる主キーの行だけ: 既存の行は復旧前の内容へ、復旧で新しく入った行は削除する。
 export async function importDatabaseBackup(
   db: PharmacyDatabase,
   backup: YakurekiBackup
 ): Promise<BackupImportResult> {
   const collections: BackupImportCollectionResult[] = [];
   let totalRows = 0;
+  const undoSteps: Array<() => Promise<void>> = [];
 
-  // 店舗設定 (権限ロール・印刷プリセット等) の自動復元
-  if (backup.localSettings) {
-    importLocalSettings(backup.localSettings);
+  try {
+    for (const collectionName of BACKUP_COLLECTIONS) {
+      const rows = backup.collections[collectionName] || [];
+      collections.push({ collection: collectionName, rows: rows.length });
+      totalRows += rows.length;
+
+      if (rows.length === 0) {
+        continue;
+      }
+
+      const collection = db[collectionName] as unknown as RestorableCollection;
+      const pk = PRIMARY_KEYS[collectionName];
+      const ids = rows.map((row) => String(row[pk] || '')).filter(Boolean);
+      const existing = await collection.findByIds(ids).exec();
+      const previousRows = Array.from(existing.values()).map((doc) => doc.toJSON());
+      const newIds = ids.filter((id) => !existing.has(id));
+      // 書き込みの途中で一部だけ書けた場合も戻せるよう、書き込みの前に取り消しを登録する
+      undoSteps.push(async () => {
+        if (previousRows.length > 0) {
+          const restored = await collection.bulkUpsert(previousRows);
+          if (restored?.error && restored.error.length > 0) {
+            throw new Error(`${collectionName} を復旧前の内容へ戻せませんでした。`);
+          }
+        }
+        if (newIds.length > 0) {
+          await collection.bulkRemove(newIds);
+        }
+      });
+
+      const result = await collection.bulkUpsert(rows);
+      if (result?.error && result.error.length > 0) {
+        throw new Error(`${collectionName} の復旧で ${result.error.length}件の書き込みに失敗しました。`);
+      }
+    }
+  } catch (error) {
+    let rollbackFailed = false;
+    for (const undo of undoSteps.reverse()) {
+      try {
+        await undo();
+      } catch (undoError) {
+        rollbackFailed = true;
+        console.error('Failed to roll back a backup restore step:', undoError);
+      }
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new BackupRestoreError(
+      `${reason}${rollbackFailed ? ROLLBACK_ALSO_FAILED_NOTE : BACKUP_RESTORE_ROLLED_BACK_NOTE}`,
+      rollbackFailed
+    );
   }
 
-  for (const collectionName of BACKUP_COLLECTIONS) {
-    const rows = backup.collections[collectionName] || [];
-    collections.push({ collection: collectionName, rows: rows.length });
-    totalRows += rows.length;
-
-    if (rows.length === 0) {
-      continue;
-    }
-
-    const collection = db[collectionName] as unknown as WritableCollection;
-    const result = await collection.bulkUpsert(rows);
-    if (result?.error && result.error.length > 0) {
-      throw new Error(`${collectionName} の復旧で ${result.error.length}件の書き込みに失敗しました。`);
-    }
+  // 店舗設定 (権限ロール・印刷プリセット等) の自動復元。データの復旧がすべて成功してから反映する。
+  if (backup.localSettings) {
+    importLocalSettings(backup.localSettings);
   }
 
   return { totalRows, collections };
