@@ -77,6 +77,7 @@ import {
 } from '@/lib/drug_merge_execution';
 import { downloadTextFile } from '@/lib/blob_download';
 import { AuditLogFailedError, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { drugRecordFromDocument } from '@/lib/drug_record';
 import { restoreDrugMasterFromRollback, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
 import { drugMasterCandidateKindLabel } from '@/lib/drug_master_update_ui';
 import { toLocalDateKey } from '@/lib/local_date';
@@ -375,25 +376,7 @@ export function useDrugMasterSettings({
       const codes = new Set(parsedMasterCsv.rows.map((row: any) => String(row.code)));
 
       const existingDrugsMap = await db.drugs.findByIds(Array.from(codes)).exec();
-      const beforeRows: Partial<Drug>[] = Array.from(existingDrugsMap.values()).map((existingDrugDoc) => ({
-        code: existingDrugDoc.code,
-        name: existingDrugDoc.name,
-        yjCode: existingDrugDoc.yjCode,
-        isGeneric: existingDrugDoc.isGeneric,
-        genericName: existingDrugDoc.genericName,
-        isAbolished: existingDrugDoc.isAbolished,
-        price: existingDrugDoc.price,
-        priceHistory: existingDrugDoc.priceHistory,
-        stockQuantity: existingDrugDoc.stockQuantity,
-        location: existingDrugDoc.location,
-        isNarcotic: existingDrugDoc.isNarcotic,
-        isPsychotropic: existingDrugDoc.isPsychotropic,
-        isPoisonous: existingDrugDoc.isPoisonous,
-        isHighRisk: existingDrugDoc.isHighRisk,
-        documentUrl: existingDrugDoc.documentUrl,
-        unitText: existingDrugDoc.unitText,
-        unitCode: existingDrugDoc.unitCode
-      }));
+      const beforeRows: Partial<Drug>[] = Array.from(existingDrugsMap.values()).map((existingDrugDoc) => drugRecordFromDocument(existingDrugDoc));
 
       // 取込済みより古いマスターを取り込むと、版を持たない薬品の現在薬価が巻き戻る。
       // ファイル全体の変更年月日と、取込済みの版の適用開始日で新旧を判定する。
@@ -415,25 +398,7 @@ export function useDrugMasterSettings({
             targetDoc = bulkUpsertMap.get(code) || null;
         } else {
             const existingDrugDoc = existingDrugsMap.get(code);
-            targetDoc = existingDrugDoc ? {
-                code: existingDrugDoc.code,
-                name: existingDrugDoc.name,
-                yjCode: existingDrugDoc.yjCode,
-                isGeneric: existingDrugDoc.isGeneric,
-                genericName: existingDrugDoc.genericName,
-                isAbolished: existingDrugDoc.isAbolished,
-                price: existingDrugDoc.price,
-                priceHistory: existingDrugDoc.priceHistory,
-                stockQuantity: existingDrugDoc.stockQuantity,
-                location: existingDrugDoc.location,
-                isNarcotic: existingDrugDoc.isNarcotic,
-                isPsychotropic: existingDrugDoc.isPsychotropic,
-                isPoisonous: existingDrugDoc.isPoisonous,
-                isHighRisk: existingDrugDoc.isHighRisk,
-                documentUrl: existingDrugDoc.documentUrl,
-                unitText: existingDrugDoc.unitText,
-                unitCode: existingDrugDoc.unitCode
-            } : null;
+            targetDoc = existingDrugDoc ? drugRecordFromDocument(existingDrugDoc) : null;
         }
 
         if (targetDoc) {
