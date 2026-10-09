@@ -9,6 +9,7 @@ import { processPrescription, parseDeliverySlip } from '@/lib/ocr/processor';
 import { logAuditAction } from '@/lib/audit';
 import type { DrugWithSearchCache } from '../types';
 import { toLocalDateKey } from '@/lib/local_date';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 export interface ImportMasterProps {
     db: any;
@@ -337,7 +338,7 @@ export function ImportMaster({
             for (let i = drugRollbackPatches.length - 1; i >= 0; i--) {
                 try {
                     const rollback = drugRollbackPatches[i];
-                    await rollback.doc.patch({ stockQuantity: rollback.stockQuantity });
+                    await restoreFields(rollback.doc, { stockQuantity: rollback.stockQuantity });
                 } catch (rollbackError) {
                     console.error('Failed to rollback master stock quantity:', rollbackError);
                 }

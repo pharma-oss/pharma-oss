@@ -1,5 +1,6 @@
 import type { FacilitySettings, PharmacyDatabase } from '../db/types.ts';
 import { runWithAuditRollback } from './audit_guard.ts';
+import { restoreFields } from './rxdb_restore.ts';
 
 export const FACILITY_SETTINGS_AUDIT_ROLLED_BACK = '施設基準設定の監査ログ記録に失敗したため、変更を元に戻しました。';
 
@@ -37,7 +38,7 @@ export async function saveFacilitySettingsWithAudit(params: {
     logAudit,
     rollback: async () => {
       if (doc && previous) {
-        await doc.patch(buildFacilitySettingsRestorePatch(previous, settings));
+        await restoreFields(doc, buildFacilitySettingsRestorePatch(previous, settings));
         return;
       }
       const inserted = await db.facility_settings.findOne('default').exec();

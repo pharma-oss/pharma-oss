@@ -9,6 +9,7 @@ import {
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import type { ClaimLifecycleState } from '@/lib/claim_lifecycle';
 import type { AuditActionType, PharmacyDatabase } from '@/db/types';
+import { restoreFields, restoreWith } from '@/lib/rxdb_restore';
 
 // 印刷画面の「監査ログが残らなければ操作を確定させない」契約をまとめた層。
 //
@@ -296,7 +297,7 @@ export async function applyItemClaimFlagWithAudit(
     patientName
   );
   if (!auditOk) {
-    await itemDoc.patch(previousPatch);
+    await restoreFields(itemDoc, previousPatch);
     throw new Error(CLAIM_ACTION_MESSAGES.itemClaimToggleAuditRolledBack);
   }
   return patch;
@@ -343,7 +344,7 @@ export async function persistClaimLifecycleWithAudit(
   const auditOk = await logAudit(db, 'claim_lifecycle', detail, patientId, patientName);
   if (!auditOk) {
     const rollbackLifecycle: ClaimLifecycleState = previousLifecycle || { status: 'draft' };
-    await visitDoc.patch({ claimLifecycle: rollbackLifecycle } as any);
+    await restoreFields(visitDoc, { claimLifecycle: rollbackLifecycle });
     applyLifecycle(rollbackLifecycle);
     throw new Error(CLAIM_ACTION_MESSAGES.claimLifecycleAuditRolledBack);
   }
@@ -448,7 +449,7 @@ export async function applyDrugPriceOverrideWithAudit(
     patientName
   );
   if (!auditOk) {
-    await itemDoc.modify((data) => writeOverride(data, previousOverride));
+    await restoreWith(itemDoc, (data) => writeOverride(data, previousOverride));
     throw new Error(CLAIM_ACTION_MESSAGES.drugPriceOverrideAuditRolledBack);
   }
 

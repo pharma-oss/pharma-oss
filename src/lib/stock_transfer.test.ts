@@ -11,6 +11,7 @@ import {
   type StockTransferRecord
 } from './stock_transfer.ts';
 import { AuditLogFailedError, ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
+import { RxLikeStore } from './test_support/rxdb_like_doc.ts';
 
 const outRecord: StockTransferRecord = {
   direction: 'out',
@@ -93,33 +94,44 @@ test('transfer document renders required legal fields and escapes HTML', () => {
 
 interface FakeLot { id: string; drugCode: string; lotNumber: string; expirationDate: string; quantity: number }
 
-// 最小の RxDB 風インメモリDB。patch は自身のフィールドを更新し、failPatchOn に一致する書き込みは失敗させる。
+// 最小の RxDB 風インメモリDB。ドキュメントは本物と同じ「版」の性質を持つ(test_support/rxdb_like_doc):
+// 同じインスタンスで一度書いたあとにもう一度 patch() すると CONFLICT になる。
+// failPatchOn に一致する書き込みは失敗させる。
 function createFakeStockDb(options: { stockQuantity?: number; lots?: FakeLot[]; failPatchOn?: (field: string, value: number) => boolean } = {}) {
-  const drug: { name: string; stockQuantity: number; patch: (v: { stockQuantity: number }) => Promise<void> } = {
-    name: 'アムロジピン錠5mg',
-    stockQuantity: options.stockQuantity ?? 100,
-    async patch(values) {
-      if (options.failPatchOn?.('stockQuantity', values.stockQuantity)) throw new Error('drug patch failed');
-      drug.stockQuantity = values.stockQuantity;
-    }
+  const failWrite = (values: Record<string, unknown>) => {
+    const [field, value] = Object.entries(values)[0] ?? ['', 0];
+    return !!options.failPatchOn?.(field, value as number);
   };
-  const lots: FakeLot[] = (options.lots ?? []).map((lot) => ({ ...lot }));
-  const lotDoc = (lot: FakeLot) => Object.assign(lot, {
-    async patch(values: { quantity: number }) {
-      if (options.failPatchOn?.('quantity', values.quantity)) throw new Error('lot patch failed');
-      lot.quantity = values.quantity;
-    },
-    async remove() { lots.splice(lots.indexOf(lot), 1); }
-  });
+  const drugStore = new RxLikeStore({ name: 'アムロジピン錠5mg', stockQuantity: options.stockQuantity ?? 100 });
+  drugStore.failWrite = failWrite;
+  const lotStores = new Map<string, RxLikeStore>();
+  const addLot = (lot: FakeLot) => {
+    const store = new RxLikeStore({ ...lot });
+    store.failWrite = failWrite;
+    lotStores.set(lot.id, store);
+  };
+  (options.lots ?? []).forEach(addLot);
   const db = {
-    drugs: { findOne: () => ({ exec: async () => drug }) },
+    drugs: { findOne: () => ({ exec: async () => drugStore.open() }) },
     drug_stocks: {
-      find: () => ({ exec: async () => lots.map(lotDoc) }),
-      findOne: (id: string) => ({ exec: async () => { const lot = lots.find((l) => l.id === id); return lot ? lotDoc(lot) : null; } }),
-      insert: async (lot: FakeLot) => { lots.push({ ...lot }); }
+      find: () => ({ exec: async () => [...lotStores.values()].filter((store) => !store.removed).map((store) => store.open()) }),
+      findOne: (id: string) => ({ exec: async () => { const store = lotStores.get(id); return store && !store.removed ? store.open() : null; } }),
+      insert: async (lot: FakeLot) => { addLot(lot); }
     }
   };
-  const snapshot = () => JSON.parse(JSON.stringify({ stockQuantity: drug.stockQuantity, lots: lots.map(({ id, drugCode, lotNumber, expirationDate, quantity }) => ({ id, drugCode, lotNumber, expirationDate, quantity })) }));
+  const drug = { get stockQuantity() { return drugStore.current().stockQuantity as number; } };
+  const lots = {
+    get length() { return [...lotStores.values()].filter((store) => !store.removed).length; },
+    find: (predicate: (lot: FakeLot) => boolean) => [...lotStores.values()].filter((store) => !store.removed).map((store) => store.current() as unknown as FakeLot).find(predicate),
+    some: (predicate: (lot: FakeLot) => boolean) => [...lotStores.values()].filter((store) => !store.removed).some((store) => predicate(store.current() as unknown as FakeLot))
+  };
+  const snapshot = () => JSON.parse(JSON.stringify({
+    stockQuantity: drugStore.current().stockQuantity,
+    lots: [...lotStores.values()].filter((store) => !store.removed).map((store) => {
+      const { id, drugCode, lotNumber, expirationDate, quantity } = store.current() as unknown as FakeLot;
+      return { id, drugCode, lotNumber, expirationDate, quantity };
+    })
+  }));
   return { db, drug, lots, snapshot };
 }
 
@@ -202,7 +214,7 @@ test('applyStockTransferOut undoes the lots already drawn when a later write fai
 
   await assert.rejects(
     () => applyStockTransferOut(db, outInput, { logAudit: async () => { audited = true; return true; } }),
-    /lot patch failed/
+    /write failed/
   );
 
   assert.deepStrictEqual(snapshot(), before, 'the lot written before the failure is put back');
@@ -237,7 +249,7 @@ test('applyStockTransferIn removes the new lot when the stock update fails', asy
   const { db, snapshot } = createFakeStockDb({ lots: twoLots, failPatchOn: (field) => field === 'stockQuantity' });
   const before = snapshot();
 
-  await assert.rejects(() => applyStockTransferIn(db, inInput, { logAudit: async () => true }), /drug patch failed/);
+  await assert.rejects(() => applyStockTransferIn(db, inInput, { logAudit: async () => true }), /write failed/);
 
   assert.deepStrictEqual(snapshot(), before);
 });

@@ -62,6 +62,7 @@ import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboa
 import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 export interface ClaimWorkbenchSectionProps {
   db: any;
@@ -435,7 +436,7 @@ export function ClaimWorkbenchSection({
       console.error('Failed to export official UKE:', err);
       for (const rollback of claimLifecycleRollbacks) {
         try {
-          await rollback.visitDoc.patch({ claimLifecycle: rollback.previousLifecycle });
+          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
         } catch (rErr) {
           console.error('Failed to rollback monthly official claim lifecycle changes:', rErr);
         }
@@ -552,7 +553,7 @@ export function ClaimWorkbenchSection({
       console.error('Failed to export UKE:', err);
       for (const rollback of claimLifecycleRollbacks) {
         try {
-          await rollback.visitDoc.patch({ claimLifecycle: rollback.previousLifecycle });
+          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
         } catch (rErr) {
           console.error('Failed to rollback monthly claim lifecycle changes:', rErr);
         }
@@ -616,7 +617,7 @@ export function ClaimWorkbenchSection({
       console.error('Failed to close accepted claims:', err);
       for (const rollback of claimLifecycleRollbacks) {
         try {
-          await rollback.visitDoc.patch({ claimLifecycle: rollback.previousLifecycle });
+          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
         } catch (rErr) {
           console.error('Rollback error:', rErr);
         }

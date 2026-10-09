@@ -58,6 +58,7 @@ import { OrderWorkbench } from './components/OrderWorkbench';
 import { ImportMaster } from './components/ImportMaster';
 import { InventoryRow } from './components/InventoryRow';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 type InventoryTab = 'drugs' | 'locations' | 'import' | 'import-ocr' | 'daily-check' | 'order-workbench' | 'transfer' | 'dead-stock';
 const INVENTORY_TABS: InventoryTab[] = ['drugs', 'locations', 'import', 'import-ocr', 'daily-check', 'order-workbench', 'transfer', 'dead-stock'];
@@ -569,7 +570,7 @@ export default function InventoryPage() {
           console.error('Failed to register received stock:', error);
           if (drugDoc) {
               try {
-                  await drugDoc.patch({ stockQuantity: previousStockQuantity });
+                  await restoreFields(drugDoc, { stockQuantity: previousStockQuantity });
               } catch (rollbackError) {
                   console.error('Failed to rollback received stock quantity:', rollbackError);
               }

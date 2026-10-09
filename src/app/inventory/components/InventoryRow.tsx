@@ -6,6 +6,7 @@ import { generateUUID } from '@/lib/crypto';
 import { logAuditAction } from '@/lib/audit';
 import { AuditLogFailedError, runWithAuditRollback } from '@/lib/audit_guard';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 export interface InventoryRowProps {
     drug: DrugWithSearchCache;
@@ -47,7 +48,7 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
 
             if (!auditOk) {
                 try {
-                    await drug.doc.patch({ stockQuantity: previousStockQuantity });
+                    await restoreFields(drug.doc, { stockQuantity: previousStockQuantity });
                     alert(`${drug.name} の監査ログを記録できなかったため、在庫補正を取り消しました。`);
                 } catch (rollbackError) {
                     console.error('Failed to rollback negative stock adjustment:', rollbackError);
@@ -237,7 +238,7 @@ const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: 
                     'stock_update',
                     `発注点更新: ${drug.name} の発注点を ${numeric !== undefined ? numeric : '未設定'} に設定しました。`
                 ),
-                rollback: () => doc.patch({ reorderPoint: previousReorderPoint }),
+                rollback: () => restoreFields(doc, { reorderPoint: previousReorderPoint }),
                 failureMessage: `${drug.name} の監査ログを記録できなかったため、発注点の変更を取り消しました。`
             });
         } catch (error) {

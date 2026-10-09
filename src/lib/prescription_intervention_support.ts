@@ -12,6 +12,7 @@
 
 import type { Intervention, Visit } from '@/db/types';
 import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
+import { restoreFields } from './rxdb_restore.ts';
 
 export type InterventionCategory =
   | 'generic_change'      // 後発医薬品への変更
@@ -190,7 +191,7 @@ export async function recordInterventionWithAudit(params: {
     await bestEffort('remove record', () => insertedDoc.remove());
     if (eventAppended && typeof visit.patch === 'function') {
       // RxDocument のメソッドなので this を保ったまま visit.patch(...) で呼ぶ
-      await bestEffort('restore events', () => visit.patch!({ interventionEvents: previousEvents }));
+      await bestEffort('restore events', () => restoreFields(visit as any, { interventionEvents: previousEvents }));
     }
     throw error;
   }
@@ -227,7 +228,7 @@ export async function deleteInterventionWithAudit(params: {
     }
   } catch (error) {
     if (eventsPatched && typeof visit.patch === 'function' && previousEvents) {
-      await bestEffort('restore events', () => visit.patch!({ interventionEvents: previousEvents }));
+      await bestEffort('restore events', () => restoreFields(visit as any, { interventionEvents: previousEvents }));
     }
     if (removed) {
       await bestEffort('re-insert record', () => db.interventions.insert(snapshot));

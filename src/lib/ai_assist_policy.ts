@@ -1,4 +1,5 @@
 import type { AiAssistMode, PharmacyDatabase } from '../db/types.ts';
+import { restoreFields } from './rxdb_restore.ts';
 
 export type AiAssistItemSeverity = 'critical' | 'warning' | 'info';
 
@@ -75,7 +76,7 @@ export async function applyAiAssistModeWithAudit(params: {
   await doc.patch({ aiAssistMode: recommendedMode });
   const auditOk = await logAudit(auditDetail);
   if (!auditOk) {
-    await doc.patch({ aiAssistMode: previousMode });
+    await restoreFields(doc, { aiAssistMode: previousMode });
     throw new Error('監査ログ記録に失敗したため、AI補助モードを元に戻しました。');
   }
 }

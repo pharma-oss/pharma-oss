@@ -8,6 +8,7 @@
 import { logAuditAction } from '@/lib/audit';
 import { runWithAuditRollback } from '@/lib/audit_guard';
 import { compareStockLotsByExpiration } from '@/lib/stock';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 export type StockTransferDirection = 'out' | 'in';
 
@@ -154,7 +155,7 @@ function applyTransfer(
 
 const patchQuantity = (doc: any, field: 'quantity' | 'stockQuantity', before: number, after: number): UndoableWrite => ({
   apply: () => doc.patch({ [field]: after }),
-  undo: () => doc.patch({ [field]: before })
+  undo: () => restoreFields(doc, { [field]: before })
 });
 
 // 分譲出庫: ロット在庫と薬品マスタ在庫数を引き落とし、法定記録(監査ログ)へ記録する

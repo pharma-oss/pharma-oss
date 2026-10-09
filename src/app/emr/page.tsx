@@ -12,7 +12,7 @@ import { calculatePatientAge } from '@/lib/patient_age';
 import { findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
-import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
+import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { downloadTextFile } from '@/lib/blob_download';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
@@ -56,6 +56,7 @@ import {
   consumeFromStockLot,
   inquiryMethodLabel,
   inquiryStatusLabel,
+  applyReversiblePatches,
   rollbackAppliedPatches,
   safeStockQuantity,
   toDateInputValue,
@@ -1484,31 +1485,24 @@ useEffect(() => {
         label: `visit ${visit.visitId}`
       });
 
-      const appliedPatches: ReversiblePatch[] = [];
-      try {
-        for (const operation of patchOperations) {
-          await operation.doc.patch(operation.patch);
-          appliedPatches.push(operation);
-        }
-      } catch (patchError) {
-        await rollbackAppliedPatches(appliedPatches);
-        throw patchError;
-      }
-
-      // 監査ログ
-      const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-      const patientName = patients[0]?.name || '不明';
-      const auditOk = await logAuditAction(
-        db,
-        'prescription_edit',
-        `薬歴入力完了: 患者「${patientName}」の薬歴SOAP入力を完了し、ステータスを完了に変更しました。在庫引き落としを処理しました。`,
-        visit.patientId,
-        patientName
-      );
-      if (!auditOk) {
-        await rollbackAppliedPatches(appliedPatches);
-        throw new Error('薬歴完了の監査ログ記録に失敗したため、在庫と受付ステータスを元に戻しました。');
-      }
+      // 書き込み(在庫の引き落としと受付ステータス) -> 監査ログ。監査ログが残らない、または監査ログの処理が
+      // 例外になったときは、書き込みを元に戻す。戻せなかった場合は、その旨がメッセージに加わる。
+      await runWithAuditRollback({
+        write: () => applyReversiblePatches(patchOperations),
+        logAudit: async () => {
+          const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
+          const patientName = patients[0]?.name || '不明';
+          return logAuditAction(
+            db,
+            'prescription_edit',
+            `薬歴入力完了: 患者「${patientName}」の薬歴SOAP入力を完了し、ステータスを完了に変更しました。在庫引き落としを処理しました。`,
+            visit.patientId,
+            patientName
+          );
+        },
+        rollback: (appliedPatches) => rollbackAppliedPatches(appliedPatches),
+        failureMessage: '薬歴完了の監査ログ記録に失敗したため、在庫と受付ステータスを元に戻しました。'
+      });
 
       toast.success('薬歴を完了し、在庫を引き落としました。');
     } catch (err) {

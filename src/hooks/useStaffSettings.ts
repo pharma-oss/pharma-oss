@@ -27,6 +27,7 @@ import {
   makeStaffAccessRecoveryMonthlyReviewCsvFileName
 } from '@/lib/staff_access_recovery_review';
 import { verifyAuditLogIntegrity, type AuditIntegrityReport } from '@/lib/audit_integrity';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 interface UseStaffSettingsProps {
   db: PharmacyDatabase | null;
@@ -193,7 +194,7 @@ export function useStaffSettings({
           `パスキー登録: スタッフ「${staff.name}」のパスキー認証デバイスを登録しました。`
         );
         if (!auditOk) {
-          await doc.patch({
+          await restoreFields(doc, {
             passkeyCredentialId: previousCredentialId,
             passkeyPublicKey: previousPublicKey
           });
@@ -290,7 +291,7 @@ export function useStaffSettings({
         })
       );
       if (!auditOk) {
-        await doc.patch({ salt: previousSalt, passwordHash: previousPasswordHash });
+        await restoreFields(doc, { salt: previousSalt, passwordHash: previousPasswordHash });
         throw new Error('パスワード再設定の監査ログ記録に失敗したため、変更を取り消しました。');
       }
 
@@ -344,7 +345,7 @@ export function useStaffSettings({
         })
       );
       if (!auditOk) {
-        await doc.patch({
+        await restoreFields(doc, {
           passkeyCredentialId: previousCredentialId,
           passkeyPublicKey: previousPublicKey
         });

@@ -153,6 +153,7 @@ import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
 import { usePrintElectronicPrescription } from '@/hooks/usePrintElectronicPrescription';
 import { usePrintDeviceIntegration } from '@/hooks/usePrintDeviceIntegration';
 import { toLocalDateKey } from '@/lib/local_date';
+import { restoreFields } from '@/lib/rxdb_restore';
 
 export default function PrintPage() {
   const params = useParams();
@@ -576,7 +577,7 @@ export default function PrintPage() {
         patientData?.name
       );
       if (!auditOk) {
-        if (itemDoc) await itemDoc.patch({ isIppoka: !checked });
+        if (itemDoc) await restoreFields(itemDoc, { isIppoka: !checked });
         setPrescriptionItems(previousItems);
         alert('一包化フラグ変更の監査ログ記録に失敗したため、変更を元に戻しました。');
       }
@@ -607,7 +608,7 @@ export default function PrintPage() {
         patientData?.name
       );
       if (!auditOk) {
-        if (itemDoc) await itemDoc.patch({ isCrushed: !checked });
+        if (itemDoc) await restoreFields(itemDoc, { isCrushed: !checked });
         setPrescriptionItems(previousItems);
         alert('粉砕フラグ変更の監査ログ記録に失敗したため、変更を元に戻しました。');
       }
@@ -753,7 +754,7 @@ export default function PrintPage() {
           patientData?.name
         ),
         rollback: async () => {
-          if (itemDoc) await itemDoc.patch({ tokkanType: previousTokkanType });
+          if (itemDoc) await restoreFields(itemDoc, { tokkanType: previousTokkanType });
         },
         failureMessage: '監査ログを記録できなかったため、特定薬剤管理指導料の変更を取り消しました。'
       });
