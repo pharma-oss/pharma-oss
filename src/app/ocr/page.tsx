@@ -31,6 +31,7 @@ import {
 } from '@/lib/patient_merge_execution';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@/lib/prescription_registration';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
   formatOnlineEligibilityFieldMappingReport,
@@ -1338,18 +1339,17 @@ export default function OcrPage() {
         };
       }
 
-      const patientWrite = existingPatient?.doc
-        ? existingPatient.doc.patch(patientUpdatePayload)
-        : db.patients.insert({
-            patientId,
-            kana: '', // Empty placeholder
-            gender: 'other',
-            ...patientUpdatePayload
-          });
-
-      const [, , prescriptionItemsResult] = await Promise.all([
-        patientWrite,
-        db.visits.insert({
+      // 患者 -> 受付 -> 処方明細の順に書き、どれかが失敗したら書いた分を取り消す(受付だけ、明細が欠けた受付が残らない)
+      await registerPrescriptionAtomically({
+        db,
+        patientId,
+        existingPatientDoc: existingPatient?.doc,
+        patientUpdate: patientUpdatePayload,
+        newPatientDefaults: {
+          kana: '', // Empty placeholder
+          gender: 'other'
+        },
+        visit: {
           visitId,
           patientId,
           institutionId: institutionName.trim().slice(0, 100),
@@ -1365,15 +1365,9 @@ export default function OcrPage() {
           ...(appliedElectronicPrescription
             ? { electronicPrescription: appliedElectronicPrescription }
             : {})
-        }),
-        db.prescription_items.bulkInsert(prescriptionItems),
-      ]);
-
-      // bulkInsertは個別docの失敗を例外にしないため、明示的に確認して処方明細の黙失を防ぐ
-      if (prescriptionItemsResult?.error?.length > 0) {
-        console.error('Failed to insert prescription items:', JSON.stringify(prescriptionItemsResult.error, null, 2).slice(0, 4000));
-        throw new Error(`処方明細の保存に失敗しました（${prescriptionItemsResult.error.length}件）。`);
-      }
+        },
+        items: prescriptionItems
+      });
 
       // 監査ログの記録
       await recordAuditOrNotify(
@@ -1405,7 +1399,11 @@ export default function OcrPage() {
     } catch (error) {
       // 🛡️ Sentinel: Do not leak raw error objects to the UI, but log for debugging
       console.error('Failed to save data securely:', error);
-      toast.error('保存に失敗しました。');
+      toast.error(
+        error instanceof PrescriptionRegistrationError && error.rollbackFailed
+          ? '保存に失敗し、途中まで保存されたデータを取り消せませんでした。受付一覧と患者情報を確認してください。'
+          : '保存に失敗しました。'
+      );
       setIsSaving(false); // Only set to false on error, success redirects
     }
   };
