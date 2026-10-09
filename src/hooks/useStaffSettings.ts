@@ -27,7 +27,7 @@ import {
   makeStaffAccessRecoveryMonthlyReviewCsvFileName
 } from '@/lib/staff_access_recovery_review';
 import { verifyAuditLogIntegrity, type AuditIntegrityReport } from '@/lib/audit_integrity';
-import { restoreFields } from '@/lib/rxdb_restore';
+import { patchWithAuditRollback } from '@/lib/doc_audit_write';
 
 interface UseStaffSettingsProps {
   db: PharmacyDatabase | null;
@@ -181,25 +181,21 @@ export function useStaffSettings({
       
       const doc = await db.users.findOne(staff.userId).exec();
       if (doc) {
-        const previousCredentialId = staff.passkeyCredentialId || '';
-        const previousPublicKey = staff.passkeyPublicKey || '';
-        await doc.patch({
-          passkeyCredentialId: creds.credentialId,
-          passkeyPublicKey: creds.publicKey
+        // 書き込み -> 監査ログ。監査ログが残らなければ、登録前の認証情報へ戻す。
+        await patchWithAuditRollback({
+          doc,
+          patch: { passkeyCredentialId: creds.credentialId, passkeyPublicKey: creds.publicKey },
+          previous: {
+            passkeyCredentialId: staff.passkeyCredentialId || '',
+            passkeyPublicKey: staff.passkeyPublicKey || ''
+          },
+          logAudit: () => logAuditAction(
+            db,
+            'passkey_register',
+            `パスキー登録: スタッフ「${staff.name}」のパスキー認証デバイスを登録しました。`
+          ),
+          failureMessage: 'パスキー登録の監査ログ記録に失敗したため、登録を取り消しました。'
         });
-        
-        const auditOk = await logAuditAction(
-          db,
-          'passkey_register',
-          `パスキー登録: スタッフ「${staff.name}」のパスキー認証デバイスを登録しました。`
-        );
-        if (!auditOk) {
-          await restoreFields(doc, {
-            passkeyCredentialId: previousCredentialId,
-            passkeyPublicKey: previousPublicKey
-          });
-          throw new Error('パスキー登録の監査ログ記録に失敗したため、登録を取り消しました。');
-        }
         
         toast.success(`スタッフ「${staff.name}」のパスキーを登録しました！`);
         if (isOnboardingStaffSetup && staff.userId === currentUser.userId) {
@@ -272,28 +268,27 @@ export function useStaffSettings({
         throw new Error('対象スタッフが見つかりません。');
       }
 
-      const previousSalt = staffRecoveryTarget.salt || '';
-      const previousPasswordHash = staffRecoveryTarget.passwordHash || '';
       const salt = generateSalt();
       const passwordHash = await hashPassword(password, salt);
-      await doc.patch({ salt, passwordHash });
-
-      const auditOk = await logAuditAction(
-        db,
-        'staff_credential_recovery',
-        buildStaffCredentialRecoveryAuditDetail({
-          reason: staffRecoveryReason,
-          action: 'password_reset',
-          targetStaff: staffRecoveryTarget,
-          operatorName: currentUser.name || '管理者',
-          checklist: staffRecoveryChecklist,
-          note: staffRecoveryNote
-        })
-      );
-      if (!auditOk) {
-        await restoreFields(doc, { salt: previousSalt, passwordHash: previousPasswordHash });
-        throw new Error('パスワード再設定の監査ログ記録に失敗したため、変更を取り消しました。');
-      }
+      // 書き込み -> 監査ログ。監査ログが残らなければ、元のパスワードへ戻す。
+      await patchWithAuditRollback({
+        doc,
+        patch: { salt, passwordHash },
+        previous: { salt: staffRecoveryTarget.salt || '', passwordHash: staffRecoveryTarget.passwordHash || '' },
+        logAudit: () => logAuditAction(
+          db,
+          'staff_credential_recovery',
+          buildStaffCredentialRecoveryAuditDetail({
+            reason: staffRecoveryReason,
+            action: 'password_reset',
+            targetStaff: staffRecoveryTarget,
+            operatorName: currentUser.name || '管理者',
+            checklist: staffRecoveryChecklist,
+            note: staffRecoveryNote
+          })
+        ),
+        failureMessage: 'パスワード再設定の監査ログ記録に失敗したため、変更を取り消しました。'
+      });
 
       setStaffRecoveryPassword('');
       await fetchAuditLogs();
@@ -325,32 +320,28 @@ export function useStaffSettings({
         throw new Error('対象スタッフが見つかりません。');
       }
 
-      const previousCredentialId = staffRecoveryTarget.passkeyCredentialId || '';
-      const previousPublicKey = staffRecoveryTarget.passkeyPublicKey || '';
-      await doc.patch({
-        passkeyCredentialId: '',
-        passkeyPublicKey: ''
+      // 書き込み -> 監査ログ。監査ログが残らなければ、解除前のパスキーへ戻す。
+      await patchWithAuditRollback({
+        doc,
+        patch: { passkeyCredentialId: '', passkeyPublicKey: '' },
+        previous: {
+          passkeyCredentialId: staffRecoveryTarget.passkeyCredentialId || '',
+          passkeyPublicKey: staffRecoveryTarget.passkeyPublicKey || ''
+        },
+        logAudit: () => logAuditAction(
+          db,
+          'staff_credential_recovery',
+          buildStaffCredentialRecoveryAuditDetail({
+            reason: staffRecoveryReason,
+            action: 'passkey_clear',
+            targetStaff: staffRecoveryTarget,
+            operatorName: currentUser.name || '管理者',
+            checklist: staffRecoveryChecklist,
+            note: staffRecoveryNote
+          })
+        ),
+        failureMessage: 'パスキー解除の監査ログ記録に失敗したため、変更を取り消しました。'
       });
-
-      const auditOk = await logAuditAction(
-        db,
-        'staff_credential_recovery',
-        buildStaffCredentialRecoveryAuditDetail({
-          reason: staffRecoveryReason,
-          action: 'passkey_clear',
-          targetStaff: staffRecoveryTarget,
-          operatorName: currentUser.name || '管理者',
-          checklist: staffRecoveryChecklist,
-          note: staffRecoveryNote
-        })
-      );
-      if (!auditOk) {
-        await restoreFields(doc, {
-          passkeyCredentialId: previousCredentialId,
-          passkeyPublicKey: previousPublicKey
-        });
-        throw new Error('パスキー解除の監査ログ記録に失敗したため、変更を取り消しました。');
-      }
 
       await fetchAuditLogs();
       toast.success(`スタッフ「${staffRecoveryTarget.name}」のパスキーを解除しました。`);
