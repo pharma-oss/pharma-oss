@@ -1,7 +1,5 @@
 import type { TracingReportStatus } from '@/db/types';
-import { ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard';
 import { toLocalDateKey } from './local_date';
-import { restoreFields } from './rxdb_restore.ts';
 
 export function toDateInputValue(value?: string): string {
   if (!value) return '';
@@ -92,12 +90,12 @@ export async function compressQuestionnaireImage(
   return { dataUrl: fallback, byteSize: dataUrlByteSize(fallback) };
 }
 
-export type ReversiblePatch = {
-  doc: { patch: (patch: Record<string, unknown>) => Promise<unknown> };
-  patch: Record<string, unknown>;
-  rollbackPatch: Record<string, unknown>;
-  label: string;
-};
+export {
+  applyReversiblePatches,
+  PatchRollbackError,
+  rollbackAppliedPatches,
+  type ReversiblePatch
+} from './rxdb_restore.ts';
 
 export function safeStockQuantity(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
@@ -117,52 +115,6 @@ export function consumeFromStockLot(
     workingQuantities.set(stock.id, available - deducted);
   }
   return deducted;
-}
-
-// 元に戻せなかった書き込み(label)。呼び出し側は「データを確認してください」と利用者に伝える。
-export class PatchRollbackError extends Error {
-  readonly failedLabels: string[];
-  constructor(failedLabels: string[]) {
-    super(`元に戻せなかった書き込み: ${failedLabels.join(', ')}`);
-    this.name = 'PatchRollbackError';
-    this.failedLabels = failedLabels;
-  }
-}
-
-// 適用済みの書き込みを逆順に戻す。1つ失敗しても残りは戻し、戻せなかったものがあれば最後に PatchRollbackError を投げる。
-export async function rollbackAppliedPatches(appliedPatches: ReversiblePatch[]): Promise<void> {
-  const failedLabels: string[] = [];
-  for (let i = appliedPatches.length - 1; i >= 0; i--) {
-    const operation = appliedPatches[i];
-    try {
-      await restoreFields(operation.doc, operation.rollbackPatch);
-    } catch (error) {
-      console.error(`Failed to rollback ${operation.label}:`, error);
-      failedLabels.push(operation.label);
-    }
-  }
-  if (failedLabels.length > 0) throw new PatchRollbackError(failedLabels);
-}
-
-// 書き込みを順に適用し、適用済みの一覧を返す。途中で失敗したらそこまでを戻して元のエラーを投げる。
-// 戻す処理にも失敗したときは、その旨をメッセージに加える(在庫が中途半端に残っていることを利用者に伝える)。
-export async function applyReversiblePatches(operations: ReversiblePatch[]): Promise<ReversiblePatch[]> {
-  const applied: ReversiblePatch[] = [];
-  try {
-    for (const operation of operations) {
-      await operation.doc.patch(operation.patch);
-      applied.push(operation);
-    }
-  } catch (error) {
-    try {
-      await rollbackAppliedPatches(applied);
-    } catch {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`${reason}${ROLLBACK_ALSO_FAILED_NOTE}`);
-    }
-    throw error;
-  }
-  return applied;
 }
 
 export interface PickingItem {

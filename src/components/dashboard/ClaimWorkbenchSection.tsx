@@ -62,7 +62,7 @@ import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboa
 import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
-import { restoreFields } from '@/lib/rxdb_restore';
+import { applyReversiblePatches, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
 
 export interface ClaimWorkbenchSectionProps {
   db: any;
@@ -333,7 +333,9 @@ export function ClaimWorkbenchSection({
     }
 
     setIsExportingOfficialUke(true);
-    const claimLifecycleRollbacks: Array<{ visitDoc: any; previousLifecycle: any }> = [];
+    // 請求状態の書き換え。まとめて適用し、途中や後続の監査ログで失敗したらまとめて戻す。
+    const lifecyclePatches: ReversiblePatch[] = [];
+    let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
       const { cases, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
@@ -385,7 +387,6 @@ export function ClaimWorkbenchSection({
         const visitDoc = visitDocs[i];
         const caseItem = cases[i];
         const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
-        claimLifecycleRollbacks.push({ visitDoc, previousLifecycle });
         const updatedLifecycle = markClaimExported({
           current: previousLifecycle,
           at: generatedAt.toISOString(),
@@ -401,8 +402,14 @@ export function ClaimWorkbenchSection({
             exportedFileName: officialFileName
           }) : undefined
         });
-        await visitDoc.patch({ claimLifecycle: updatedLifecycle });
+        lifecyclePatches.push({
+          doc: visitDoc,
+          patch: { claimLifecycle: updatedLifecycle },
+          rollbackPatch: { claimLifecycle: previousLifecycle },
+          label: `visit ${visitDoc.visitId}`
+        });
       }
+      appliedLifecyclePatches = await applyReversiblePatches(lifecyclePatches);
 
       const lifecycleAuditOk = await logAuditAction(
         db,
@@ -434,14 +441,8 @@ export function ClaimWorkbenchSection({
       onRefresh();
     } catch (err: any) {
       console.error('Failed to export official UKE:', err);
-      for (const rollback of claimLifecycleRollbacks) {
-        try {
-          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
-        } catch (rErr) {
-          console.error('Failed to rollback monthly official claim lifecycle changes:', rErr);
-        }
-      }
-      toast.error(`公式UKEの出力に失敗しました: ${err.message || err}`);
+      const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
+      toast.error(`公式UKEの出力に失敗しました: ${err.message || err}${undoNote}`);
     } finally {
       setIsExportingOfficialUke(false);
     }
@@ -464,7 +465,9 @@ export function ClaimWorkbenchSection({
     }
 
     setIsExportingUke(true);
-    const claimLifecycleRollbacks: Array<{ visitDoc: any; previousLifecycle: any }> = [];
+    // 請求状態の書き換え。まとめて適用し、途中や後続の監査ログで失敗したらまとめて戻す。
+    const lifecyclePatches: ReversiblePatch[] = [];
+    let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
       const { cases, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
@@ -503,7 +506,6 @@ export function ClaimWorkbenchSection({
         const visitDoc = visitDocs[i];
         const caseItem = cases[i];
         const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
-        claimLifecycleRollbacks.push({ visitDoc, previousLifecycle });
         const updatedLifecycle = markClaimExported({
           current: previousLifecycle,
           at: generatedAt.toISOString(),
@@ -519,8 +521,14 @@ export function ClaimWorkbenchSection({
             exportedFileName: ukeFileName
           }) : undefined
         });
-        await visitDoc.patch({ claimLifecycle: updatedLifecycle });
+        lifecyclePatches.push({
+          doc: visitDoc,
+          patch: { claimLifecycle: updatedLifecycle },
+          rollbackPatch: { claimLifecycle: previousLifecycle },
+          label: `visit ${visitDoc.visitId}`
+        });
       }
+      appliedLifecyclePatches = await applyReversiblePatches(lifecyclePatches);
 
       const lifecycleAuditOk = await logAuditAction(
         db,
@@ -551,14 +559,8 @@ export function ClaimWorkbenchSection({
       onRefresh();
     } catch (err: any) {
       console.error('Failed to export UKE:', err);
-      for (const rollback of claimLifecycleRollbacks) {
-        try {
-          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
-        } catch (rErr) {
-          console.error('Failed to rollback monthly claim lifecycle changes:', rErr);
-        }
-      }
-      toast.error(`UKEの出力に失敗しました: ${err.message || err}`);
+      const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
+      toast.error(`UKEの出力に失敗しました: ${err.message || err}${undoNote}`);
     } finally {
       setIsExportingUke(false);
     }
@@ -585,7 +587,9 @@ export function ClaimWorkbenchSection({
     }
 
     setIsClosingAccepted(true);
-    const claimLifecycleRollbacks: Array<{ visitDoc: any; previousLifecycle: any }> = [];
+    // 請求状態の書き換え。まとめて適用し、途中や後続の監査ログで失敗したらまとめて戻す。
+    const lifecyclePatches: ReversiblePatch[] = [];
+    let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
       const targetVisitIds = closable.map((item) => item.visitId);
       const visitDocs = await db.visits.find({ selector: { visitId: { $in: targetVisitIds } } }).exec();
@@ -593,15 +597,20 @@ export function ClaimWorkbenchSection({
 
       for (const visitDoc of visitDocs) {
         const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
-        claimLifecycleRollbacks.push({ visitDoc, previousLifecycle });
         const updatedLifecycle = markClaimClosed({
           current: previousLifecycle,
           at: closedAt.toISOString(),
           by: operator.name || '管理者',
           note: '月次請求ワークベンチ一括締め'
         });
-        await visitDoc.patch({ claimLifecycle: updatedLifecycle });
+        lifecyclePatches.push({
+          doc: visitDoc,
+          patch: { claimLifecycle: updatedLifecycle },
+          rollbackPatch: { claimLifecycle: previousLifecycle },
+          label: `visit ${visitDoc.visitId}`
+        });
       }
+      appliedLifecyclePatches = await applyReversiblePatches(lifecyclePatches);
 
       const auditOk = await logAuditAction(
         db,
@@ -615,14 +624,8 @@ export function ClaimWorkbenchSection({
       onRefresh();
     } catch (err: any) {
       console.error('Failed to close accepted claims:', err);
-      for (const rollback of claimLifecycleRollbacks) {
-        try {
-          await restoreFields(rollback.visitDoc, { claimLifecycle: rollback.previousLifecycle });
-        } catch (rErr) {
-          console.error('Rollback error:', rErr);
-        }
-      }
-      toast.error(`請求完了の更新に失敗しました: ${err.message || err}`);
+      const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
+      toast.error(`請求完了の更新に失敗しました: ${err.message || err}${undoNote}`);
     } finally {
       setIsClosingAccepted(false);
     }
@@ -669,12 +672,20 @@ export function ClaimWorkbenchSection({
           return;
         }
 
+        // 途中の受付で書き込みに失敗したら、そこまでの更新を戻す(一部の受付だけ更新された状態を残さない)
+        const importPatches: ReversiblePatch[] = [];
         for (const matched of matchedItems) {
           const doc = visits.find((v: any) => v.visitId === matched.row.visitId);
           if (doc && matched.nextLifecycle) {
-            await doc.patch({ claimLifecycle: matched.nextLifecycle });
+            importPatches.push({
+              doc,
+              patch: { claimLifecycle: matched.nextLifecycle },
+              rollbackPatch: { claimLifecycle: doc.claimLifecycle ? toPlain(doc.claimLifecycle) : undefined },
+              label: `visit ${doc.visitId}`
+            });
           }
         }
+        await applyReversiblePatches(importPatches);
 
         await recordAuditOrNotify(
           () => logAuditAction(
