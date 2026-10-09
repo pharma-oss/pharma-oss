@@ -58,7 +58,8 @@ import { OrderWorkbench } from './components/OrderWorkbench';
 import { ImportMaster } from './components/ImportMaster';
 import { InventoryRow } from './components/InventoryRow';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
-import { restoreFields } from '@/lib/rxdb_restore';
+import { runWithAuditRollback } from '@/lib/audit_guard';
+import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
 
 type InventoryTab = 'drugs' | 'locations' | 'import' | 'import-ocr' | 'daily-check' | 'order-workbench' | 'transfer' | 'dead-stock';
 const INVENTORY_TABS: InventoryTab[] = ['drugs', 'locations', 'import', 'import-ocr', 'daily-check', 'order-workbench', 'transfer', 'dead-stock'];
@@ -522,9 +523,6 @@ export default function InventoryPage() {
       }
 
       setReceivingDrugId(candidate.drugId);
-      let insertedStockDoc: { remove: () => Promise<unknown> } | null = null;
-      let drugDoc: any | null = null;
-      let previousStockQuantity = 0;
 
       try {
           const stockInsert: DrugStock = {
@@ -537,23 +535,20 @@ export default function InventoryPage() {
           };
           if (supplierName) stockInsert.supplier = supplierName;
 
-          insertedStockDoc = await db.drug_stocks.insert(stockInsert);
-          drugDoc = await db.drugs.findOne(candidate.drugId).exec();
-          if (!drugDoc) {
-              throw new Error('対象薬品が見つかりません。');
-          }
-
-          previousStockQuantity = drugDoc.stockQuantity || 0;
-          await drugDoc.patch({ stockQuantity: previousStockQuantity + quantity });
-
-          const auditOk = await logAuditAction(
-              db,
-              'stock_update',
-              `発注ワークベンチ入庫登録: ${candidate.drugName} を ${quantity} 入庫しました。ロット ${lotNumber}、使用期限 ${expirationDate}。`
-          );
-          if (!auditOk) {
-              throw new Error('入庫登録の監査ログ記録に失敗しました。');
-          }
+          // 書き込み(ロット登録と薬品マスタの在庫数) -> 監査ログ。監査ログが残らなければ、書いたものを取り消す。
+          await runWithAuditRollback({
+              write: () => writeDeliveryStock(db, [stockInsert], new Map([[candidate.drugId, quantity]])),
+              logAudit: () => logAuditAction(
+                  db,
+                  'stock_update',
+                  `発注ワークベンチ入庫登録: ${candidate.drugName} を ${quantity} 入庫しました。ロット ${lotNumber}、使用期限 ${expirationDate}。`
+              ),
+              rollback: async (written) => {
+                  const note = await written.undo();
+                  if (note) throw new Error(note);
+              },
+              failureMessage: '入庫登録の監査ログ記録に失敗したため、入庫を取り消しました。'
+          });
 
           setOrderedDrugIds((current) => {
               const next = new Set(current);
@@ -568,21 +563,7 @@ export default function InventoryPage() {
           alert(`${candidate.drugName} の入庫を登録しました。`);
       } catch (error) {
           console.error('Failed to register received stock:', error);
-          if (drugDoc) {
-              try {
-                  await restoreFields(drugDoc, { stockQuantity: previousStockQuantity });
-              } catch (rollbackError) {
-                  console.error('Failed to rollback received stock quantity:', rollbackError);
-              }
-          }
-          if (insertedStockDoc) {
-              try {
-                  await insertedStockDoc.remove();
-              } catch (rollbackError) {
-                  console.error('Failed to rollback received stock lot:', rollbackError);
-              }
-          }
-          alert('入庫登録に失敗しました。');
+          alert(deliveryWriteFailureMessage(error, '入庫登録に失敗しました。'));
       } finally {
           setReceivingDrugId('');
       }

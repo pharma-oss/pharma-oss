@@ -9,7 +9,8 @@ import { processPrescription, parseDeliverySlip } from '@/lib/ocr/processor';
 import { logAuditAction } from '@/lib/audit';
 import type { DrugWithSearchCache } from '../types';
 import { toLocalDateKey } from '@/lib/local_date';
-import { restoreFields } from '@/lib/rxdb_restore';
+import { runWithAuditRollback } from '@/lib/audit_guard';
+import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
 
 export interface ImportMasterProps {
     db: any;
@@ -232,8 +233,6 @@ export function ImportMaster({
     const executeImport = async () => {
         if (!db) return;
         setIsImporting(true);
-        const insertedStockDocs: Array<{ remove: () => Promise<unknown> }> = [];
-        const drugRollbackPatches: Array<{ doc: any; stockQuantity: number }> = [];
 
         try {
             const stockInserts: DrugStock[] = [];
@@ -261,62 +260,25 @@ export function ImportMaster({
             }
 
             if (stockInserts.length > 0) {
-                // Insert stocks
-                const stockInsertResult = await db.drug_stocks.bulkInsert(stockInserts);
-                insertedStockDocs.push(...stockInsertResult.success);
-                if (stockInsertResult.error.length > 0) {
-                    console.error('Failed to insert some stock lots:', stockInsertResult.error);
-                    throw new Error(`${stockInsertResult.error.length} 件のロット在庫登録に失敗しました。`);
-                }
-
-                // Update drugs quantities
-                const drugIds = Array.from(drugUpdates.keys());
-                const drugDocsMap = await db.drugs.findByIds(drugIds).exec();
-
-                const updates = [];
-                for (const [id, doc] of drugDocsMap.entries()) {
-                    const diff = drugUpdates.get(id) || 0;
-                    const currentQty = doc.stockQuantity || 0;
-                    drugRollbackPatches.push({ doc, stockQuantity: currentQty });
-                    updates.push({
-                        code: doc.code,
-                        name: doc.name,
-                        yjCode: doc.yjCode,
-                        isGeneric: doc.isGeneric,
-                        genericName: doc.genericName,
-                        isAbolished: doc.isAbolished,
-                        price: doc.price,
-                        location: doc.location,
-                        isNarcotic: doc.isNarcotic,
-                        isPsychotropic: doc.isPsychotropic,
-                        isPoisonous: doc.isPoisonous,
-                        isHighRisk: doc.isHighRisk,
-                        documentUrl: doc.documentUrl,
-                        stockQuantity: currentQty + diff
-                    });
-                }
-
-                if (updates.length > 0) {
-                    const drugUpdateResult = await db.drugs.bulkUpsert(updates);
-                    if (drugUpdateResult.error.length > 0) {
-                        console.error('Failed to update some master stock quantities:', drugUpdateResult.error);
-                        throw new Error(`${drugUpdateResult.error.length} 件のマスタ在庫更新に失敗しました。`);
-                    }
-                }
-
-                // 発注ワークベンチで「発注済み」の薬品が届いていれば、消し込み操作なしでチェックを外す
-                const receivedDrugCodes = Array.from(drugUpdates.keys());
-                const autoClearedCount = onDrugsReceived(receivedDrugCodes);
-
-                // 監査ログの記録
-                const auditOk = await logAuditAction(
-                    db,
-                    'stock_update',
-                    `卸データ/納品書インポート: 在庫データを ${stockInserts.length} 件インポートしました。${autoClearedCount > 0 ? `発注ワークベンチの発注済みチェックを${autoClearedCount}件自動解除しました。` : ''}`
-                );
-                if (!auditOk) {
-                    throw new Error('在庫インポートの監査ログ記録に失敗しました。');
-                }
+                // 書き込み(ロット登録と薬品マスタの在庫数) -> 監査ログ。監査ログが残らなければ、書いたものを取り消す。
+                let autoClearedCount = 0;
+                await runWithAuditRollback({
+                    write: () => writeDeliveryStock(db, stockInserts, drugUpdates),
+                    logAudit: async () => {
+                        // 発注ワークベンチで「発注済み」の薬品が届いていれば、消し込み操作なしでチェックを外す
+                        autoClearedCount = onDrugsReceived(Array.from(drugUpdates.keys()));
+                        return logAuditAction(
+                            db,
+                            'stock_update',
+                            `卸データ/納品書インポート: 在庫データを ${stockInserts.length} 件インポートしました。${autoClearedCount > 0 ? `発注ワークベンチの発注済みチェックを${autoClearedCount}件自動解除しました。` : ''}`
+                        );
+                    },
+                    rollback: async (written) => {
+                        const note = await written.undo();
+                        if (note) throw new Error(note);
+                    },
+                    failureMessage: '在庫インポートの監査ログ記録に失敗したため、取り込みを取り消しました。'
+                });
 
                 alert(
                     `${stockInserts.length} 件の在庫データをインポートしました。` +
@@ -328,22 +290,7 @@ export function ImportMaster({
             }
         } catch (error) {
             console.error('Import error:', error);
-            for (let i = insertedStockDocs.length - 1; i >= 0; i--) {
-                try {
-                    await insertedStockDocs[i].remove();
-                } catch (rollbackError) {
-                    console.error('Failed to rollback imported stock lot:', rollbackError);
-                }
-            }
-            for (let i = drugRollbackPatches.length - 1; i >= 0; i--) {
-                try {
-                    const rollback = drugRollbackPatches[i];
-                    await restoreFields(rollback.doc, { stockQuantity: rollback.stockQuantity });
-                } catch (rollbackError) {
-                    console.error('Failed to rollback master stock quantity:', rollbackError);
-                }
-            }
-            alert('インポート中にエラーが発生しました。');
+            alert(deliveryWriteFailureMessage(error, 'インポート中にエラーが発生しました。'));
         } finally {
             setIsImporting(false);
         }
