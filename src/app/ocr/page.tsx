@@ -700,7 +700,10 @@ export default function OcrPage() {
     patientName,
     pendingElectronicPrescription,
     prescriptionDate,
-    selectedPatientId
+    selectedPatientId,
+    setAppliedElectronicPrescription,
+    setElectronicPrescriptionMessage,
+    setElectronicPrescriptionStatus
   ]);
 
   const handleApplyPrescriptionQrData = useCallback(async (
@@ -771,7 +774,7 @@ export default function OcrPage() {
     }
     setElectronicPrescriptionStatus('unchecked');
     setElectronicPrescriptionMessage(`${qrSourceLabel[source]}で読み取った処方箋QRを反映しました。電子処方箋ではありません。`);
-  }, [hasCurrentPrescriptionInput]);
+  }, [hasCurrentPrescriptionInput, setAppliedElectronicPrescription, setElectronicPrescriptionMessage, setElectronicPrescriptionPaperOriginalConfirmed, setElectronicPrescriptionStatus, setEligibilityResult, setEligibilityStatus, setPendingElectronicPrescription, setSelectedPatientId]);
 
   const applyPatientCandidate = useCallback((patient: PatientCandidate) => {
     setSelectedPatientId(patient.patientId);
@@ -781,7 +784,7 @@ export default function OcrPage() {
     if (patient.insuranceInfo?.burdenRatio) setBurdenRatio(String(patient.insuranceInfo.burdenRatio));
     setEligibilityStatus('unchecked');
     setEligibilityResult(null);
-  }, []);
+  }, [setEligibilityResult, setEligibilityStatus, setSelectedPatientId]);
 
   const openPatientMergeReview = useCallback(async (sourcePatient: PatientCandidate) => {
     if (!db || !selectedPatient) return;
@@ -815,7 +818,7 @@ export default function OcrPage() {
     } finally {
       setIsLoadingPatientMergeReview(false);
     }
-  }, [db, selectedPatient]);
+  }, [db, selectedPatient, setIsLoadingPatientMergeReview, setPatientMergeMessage, setPatientMergeReview]);
 
   const handleApplyPatientMerge = useCallback(async () => {
     if (!db || !patientMergeReview) return;
@@ -869,7 +872,7 @@ export default function OcrPage() {
     } finally {
       setIsApplyingPatientMerge(false);
     }
-  }, [db, patientMergeReview]);
+  }, [db, patientMergeReview, setIsApplyingPatientMerge, setPatientCandidates, setPatientMergeMessage, setPatientMergeReview, setSelectedPatientId]);
 
   const applyProviderHistory = useCallback((provider: ProviderHistoryOption) => {
     setInstitutionCode(provider.institutionCode);
@@ -931,7 +934,7 @@ export default function OcrPage() {
     } else {
       toast.warning('OCRから患者・処方元情報のみ転記しました。処方薬は読み取れませんでした。');
     }
-  }, []);
+  }, [setEligibilityResult, setEligibilityStatus, setSelectedPatientId]);
 
   const startOcr = useCallback(async (file: File) => {
     setIsProcessing(true);

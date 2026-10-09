@@ -667,6 +667,7 @@ export const PatientBanner = React.memo(function PatientBanner({
                 </div>
                 {questionnaireImageDataUrl && (
                   <div className="questionnaire-preview">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- DBに保存した data URL の画像。next/image の最適化の対象にならない */}
                     <img src={questionnaireImageDataUrl} alt="初回質問表の軽量保存画像" />
                   </div>
                 )}

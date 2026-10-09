@@ -25,9 +25,14 @@ export interface PrescribedDrugSelectUpdate {
   value: PrescriptionFieldValue;
 }
 
+// 薬品を選んだときに参照する処方明細の項目だけ。Prescription そのものも、そのまま渡せる。
+export type PrescribedDrugSelectSource = Pick<Prescription, 'dispensedDrug' | 'unitText' | 'unitCode'> & {
+  electronicUnitConversion?: Partial<NonNullable<Prescription['electronicUnitConversion']>>;
+};
+
 export function calculatePrescribedDrugSelectUpdates(
   drug: DrugMasterRecord,
-  prescription: Pick<Prescription, 'dispensedDrug' | 'electronicUnitConversion' | 'unitText' | 'unitCode'>
+  prescription: PrescribedDrugSelectSource
 ): PrescribedDrugSelectUpdate[] {
   const auditMeta = getDrugAuditMeta(drug);
   const updates: PrescribedDrugSelectUpdate[] = [
@@ -72,22 +77,21 @@ export const PrescribedDrugInput = React.memo(({
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const { id: prescriptionId, dispensedDrug, unitText, unitCode } = prescription;
+  const prescribedUnitCode = prescription.electronicUnitConversion?.prescribedUnitCode;
+  const prescribedUnitText = prescription.electronicUnitConversion?.prescribedUnitText;
   const selectDrug = useCallback((drug: DrugMasterRecord) => {
-    const updates = calculatePrescribedDrugSelectUpdates(drug, prescription);
+    const updates = calculatePrescribedDrugSelectUpdates(drug, {
+      dispensedDrug,
+      unitText,
+      unitCode,
+      electronicUnitConversion: { prescribedUnitCode, prescribedUnitText }
+    });
     for (const update of updates) {
-      onChange(prescription.id, update.field, update.value, index);
+      onChange(prescriptionId, update.field, update.value, index);
     }
     setShowDropdown(false);
-  }, [
-    index,
-    onChange,
-    prescription.dispensedDrug,
-    prescription.electronicUnitConversion?.prescribedUnitCode,
-    prescription.electronicUnitConversion?.prescribedUnitText,
-    prescription.unitText,
-    prescription.unitCode,
-    prescription.id
-  ]);
+  }, [index, onChange, prescriptionId, dispensedDrug, unitText, unitCode, prescribedUnitCode, prescribedUnitText]);
 
   useEffect(() => {
     let isMounted = true;

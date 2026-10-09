@@ -117,13 +117,13 @@ export function usePrintDeviceIntegration({
     }))
   }), [visitId, visitData, patientData, prescriptionItems]);
 
-  const patchPharmacyDeviceHandoff = async (handoff: VisitPharmacyDeviceHandoff) => {
+  const patchPharmacyDeviceHandoff = useCallback(async (handoff: VisitPharmacyDeviceHandoff) => {
     if (!db) throw new Error('データベースの初期化が完了していません。');
     const visitDoc = await db.visits.findOne(visitId).exec();
     if (!visitDoc) throw new Error('対象の受付が見つかりません。');
     await visitDoc.patch({ pharmacyDeviceHandoff: handoff });
     setVisitData((previous: any) => previous ? { ...previous, pharmacyDeviceHandoff: handoff } : previous);
-  };
+  }, [db, visitId, setVisitData]);
 
   const handlePharmacyDeviceOperation = useCallback(async (operation: PharmacyDeviceOperation) => {
     if (!ensurePermission('print_documents')) return;
@@ -244,7 +244,8 @@ export function usePrintDeviceIntegration({
     prescriptionAudit,
     visitId,
     prescriptionItems,
-    buildPharmacyDevicePrescriptionPayload
+    buildPharmacyDevicePrescriptionPayload,
+    patchPharmacyDeviceHandoff
   ]);
 
   return {
