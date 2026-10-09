@@ -27,6 +27,7 @@ import { OperationalClosingSection } from '@/components/dashboard/OperationalClo
 import { InventoryAlertSection } from '@/components/dashboard/InventoryAlertSection';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { AuditLog, FacilitySettings } from '@/db/types';
+import { loadDashboardAuditLogs } from '@/lib/dashboard_audit_logs';
 import {
   useDashboardTasks,
   type DashboardFollowUpCandidate
@@ -83,10 +84,11 @@ export default function Dashboard() {
     if (!db) return;
     let cancelled = false;
 
-    db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec()
+    // 日次締めが使う分(今日のログとバックアップ関連)だけを読む。全件は読まない。
+    loadDashboardAuditLogs(db)
       .then((logs) => {
         if (!cancelled) {
-          setAuditLogs(logs.map((log) => log.toJSON()));
+          setAuditLogs(logs);
         }
       })
       .catch((err) => console.error('Failed to load dashboard audit logs:', err));
