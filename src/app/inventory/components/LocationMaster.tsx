@@ -9,6 +9,92 @@ export const buildLocationDisplayText = (p1: string, p2: string, p3: string): st
     [p1, p2, p3].filter(Boolean).join('-')
 );
 
+export interface BulkLocationRangeInput {
+    prefix: string;
+    start: number;
+    end: number;
+    existingLocations: Array<{ displayText: string }>;
+}
+
+export function buildBulkLocationDocs(input: BulkLocationRangeInput): Location[] {
+    const { prefix, start, end, existingLocations } = input;
+    const existingSet = new Set(existingLocations.map((l) => l.displayText));
+    const padLength = String(end).length >= 2 ? String(end).length : 2;
+    const newDocs: Location[] = [];
+
+    for (let num = start; num <= end; num += 1) {
+        const numStr = String(num).padStart(padLength, '0');
+        const displayText = prefix ? `${prefix}-${numStr}` : numStr;
+        if (existingSet.has(displayText)) continue;
+
+        newDocs.push({
+            id: generateUUID(),
+            part1: prefix,
+            part2: numStr,
+            part3: '',
+            displayText
+        });
+    }
+
+    return newDocs;
+}
+
+export interface BulkLocationInsertResult {
+    successCount: number;
+    errorCount: number;
+    rolledBack: boolean;
+    errorMessage?: string;
+}
+
+export async function executeBulkLocationInsert(
+    locationsCollection: any,
+    docs: Location[]
+): Promise<BulkLocationInsertResult> {
+    if (!locationsCollection || docs.length === 0) {
+        return { successCount: 0, errorCount: 0, rolledBack: false };
+    }
+
+    const result = await locationsCollection.bulkInsert(docs);
+    const errors = Array.isArray(result?.error) ? result.error : [];
+    const successes = Array.isArray(result?.success) ? result.success : [];
+
+    if (errors.length > 0) {
+        const insertedIds = successes
+            .map((doc: any) => doc?.id || doc?.primary)
+            .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+
+        let rolledBack = false;
+        if (insertedIds.length > 0) {
+            try {
+                await locationsCollection.bulkRemove(insertedIds);
+                rolledBack = true;
+            } catch (removeErr) {
+                console.error('Failed to rollback partially inserted locations', removeErr);
+                rolledBack = false;
+            }
+        }
+
+        return {
+            successCount: successes.length,
+            errorCount: errors.length,
+            rolledBack,
+            errorMessage: `棚番の一括作成に失敗しました（${errors.length}件の書き込みエラー）。${
+                insertedIds.length > 0
+                    ? rolledBack
+                        ? '作成を取り消しました。'
+                        : '作成の取り消しに失敗しました。'
+                    : ''
+            }`.trim()
+        };
+    }
+
+    return {
+        successCount: successes.length,
+        errorCount: 0,
+        rolledBack: false
+    };
+}
+
 export interface LocationMasterProps {
     db: any;
     locations: Location[];
@@ -66,30 +152,24 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
 
         setIsBulkCreating(true);
         try {
-            const existingSet = new Set(locations.map((l) => l.displayText));
-            const padLength = String(end).length >= 2 ? String(end).length : 2;
-            const newDocs: any[] = [];
-
-            for (let num = start; num <= end; num += 1) {
-                const numStr = String(num).padStart(padLength, '0');
-                const displayText = prefix ? `${prefix}-${numStr}` : numStr;
-                if (existingSet.has(displayText)) continue;
-
-                newDocs.push({
-                    id: generateUUID(),
-                    part1: prefix,
-                    part2: numStr,
-                    part3: '',
-                    displayText
-                });
-            }
+            const newDocs = buildBulkLocationDocs({
+                prefix,
+                start,
+                end,
+                existingLocations: locations
+            });
 
             if (newDocs.length === 0) {
                 alert('作成対象の棚番はすべて登録済みです。');
                 return;
             }
 
-            await db.locations.bulkInsert(newDocs);
+            const insertResult = await executeBulkLocationInsert(db.locations, newDocs);
+            if (insertResult.errorCount > 0) {
+                alert(insertResult.errorMessage || `棚番の一括作成に失敗しました（${insertResult.errorCount}件の書き込みエラー）。`);
+                return;
+            }
+
             setBulkPrefix('');
             setBulkStart('1');
             setBulkEnd('10');
