@@ -39,15 +39,51 @@ export function buildBulkLocationDocs(input: BulkLocationRangeInput): Location[]
     return newDocs;
 }
 
+export interface BulkInsertResultLike {
+    success?: Array<{ id?: string; primary?: string }>;
+    error?: unknown[];
+}
+
+export interface BulkRemoveResultLike {
+    success?: unknown[];
+    error?: unknown[];
+}
+
+export interface BulkLocationCollectionLike {
+    bulkInsert: (docs: Location[]) => Promise<BulkInsertResultLike>;
+    bulkRemove: (ids: string[]) => Promise<BulkRemoveResultLike>;
+}
+
 export interface BulkLocationInsertResult {
     successCount: number;
     errorCount: number;
     rolledBack: boolean;
+    rollbackErrorCount?: number;
     errorMessage?: string;
 }
 
+export interface BulkLocationCreateOutcome {
+    alertMessage: string | null;
+    resetForm: boolean;
+}
+
+export function resolveBulkLocationCreateOutcome(
+    result: BulkLocationInsertResult
+): BulkLocationCreateOutcome {
+    if (result.errorCount > 0) {
+        return {
+            alertMessage: result.errorMessage || `棚番の一括作成に失敗しました（${result.errorCount}件の書き込みエラー）。`,
+            resetForm: false
+        };
+    }
+    return {
+        alertMessage: null,
+        resetForm: true
+    };
+}
+
 export async function executeBulkLocationInsert(
-    locationsCollection: any,
+    locationsCollection: BulkLocationCollectionLike | null | undefined,
     docs: Location[]
 ): Promise<BulkLocationInsertResult> {
     if (!locationsCollection || docs.length === 0) {
@@ -60,17 +96,38 @@ export async function executeBulkLocationInsert(
 
     if (errors.length > 0) {
         const insertedIds = successes
-            .map((doc: any) => doc?.id || doc?.primary)
-            .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+            .map((doc) => doc?.id || doc?.primary)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
         let rolledBack = false;
+        let rollbackErrorCount = 0;
+
         if (insertedIds.length > 0) {
             try {
-                await locationsCollection.bulkRemove(insertedIds);
-                rolledBack = true;
+                const removeResult = await locationsCollection.bulkRemove(insertedIds);
+                const removeErrors = Array.isArray(removeResult?.error) ? removeResult.error : [];
+                if (removeErrors.length === 0) {
+                    rolledBack = true;
+                } else {
+                    rolledBack = false;
+                    rollbackErrorCount = removeErrors.length;
+                    console.error('Failed to remove some inserted locations during rollback', removeResult.error);
+                }
             } catch (removeErr) {
                 console.error('Failed to rollback partially inserted locations', removeErr);
                 rolledBack = false;
+                rollbackErrorCount = insertedIds.length;
+            }
+        }
+
+        let rollbackNote = '';
+        if (insertedIds.length > 0) {
+            if (rolledBack) {
+                rollbackNote = '作成を取り消しました。';
+            } else {
+                rollbackNote = rollbackErrorCount > 0
+                    ? `作成の取り消しに失敗しました（${rollbackErrorCount}件が未削除）。`
+                    : '作成の取り消しに失敗しました。';
             }
         }
 
@@ -78,13 +135,8 @@ export async function executeBulkLocationInsert(
             successCount: successes.length,
             errorCount: errors.length,
             rolledBack,
-            errorMessage: `棚番の一括作成に失敗しました（${errors.length}件の書き込みエラー）。${
-                insertedIds.length > 0
-                    ? rolledBack
-                        ? '作成を取り消しました。'
-                        : '作成の取り消しに失敗しました。'
-                    : ''
-            }`.trim()
+            rollbackErrorCount: rollbackErrorCount > 0 ? rollbackErrorCount : undefined,
+            errorMessage: `棚番の一括作成に失敗しました（${errors.length}件の書き込みエラー）。${rollbackNote}`.trim()
         };
     }
 
@@ -165,17 +217,19 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
             }
 
             const insertResult = await executeBulkLocationInsert(db.locations, newDocs);
-            if (insertResult.errorCount > 0) {
-                alert(insertResult.errorMessage || `棚番の一括作成に失敗しました（${insertResult.errorCount}件の書き込みエラー）。`);
-                return;
+            const outcome = resolveBulkLocationCreateOutcome(insertResult);
+            if (outcome.alertMessage) {
+                alert(outcome.alertMessage);
             }
-
-            setBulkPrefix('');
-            setBulkStart('1');
-            setBulkEnd('10');
-        } catch (err: any) {
+            if (outcome.resetForm) {
+                setBulkPrefix('');
+                setBulkStart('1');
+                setBulkEnd('10');
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err || '');
             console.error('Failed to bulk create locations', err);
-            alert(`棚番の一括作成に失敗しました: ${err?.message || err}`);
+            alert(`棚番の一括作成に失敗しました: ${message}`);
         } finally {
             setIsBulkCreating(false);
         }

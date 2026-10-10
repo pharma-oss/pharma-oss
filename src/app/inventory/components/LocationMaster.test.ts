@@ -10,6 +10,7 @@ import {
   buildLocationDisplayText,
   buildBulkLocationDocs,
   executeBulkLocationInsert,
+  resolveBulkLocationCreateOutcome,
   LocationMaster
 } from './LocationMaster';
 
@@ -154,6 +155,78 @@ test('executeBulkLocationInsert detects partial bulkInsert failure, rolls back i
   } finally {
     await db.close();
   }
+});
+
+test('executeBulkLocationInsert detects bulkRemove failure during rollback and marks rolledBack false with detailed error message', async () => {
+  const db = await createTestLocationsDb();
+  try {
+    const initialDoc = {
+      id: 'clashing-id-001',
+      part1: 'ORIG',
+      part2: '01',
+      part3: '',
+      displayText: 'ORIG-01'
+    };
+    await db.locations.insert(initialDoc);
+
+    // ストレージ層の bulkWrite を差し替え、rx-collection-bulk-remove 時に 409 エラーを返させて取り消し失敗を再現する
+    const storage = db.locations.storageInstance;
+    const origBulkWrite = storage.bulkWrite.bind(storage);
+    storage.bulkWrite = async (rows: any[], context: string) =>
+      context === 'rx-collection-bulk-remove'
+        ? { error: rows.map((r: any) => ({ status: 409, isError: true, documentId: r.document.id, writeRow: r, documentInDb: r.previous })) }
+        : origBulkWrite(rows, context);
+
+    const docs = [
+      { id: 'new-id-1', part1: 'TEST', part2: '01', part3: '', displayText: 'TEST-01' },
+      { id: 'clashing-id-001', part1: 'TEST', part2: '02', part3: '', displayText: 'TEST-02' },
+      { id: 'new-id-3', part1: 'TEST', part2: '03', part3: '', displayText: 'TEST-03' }
+    ];
+
+    const result = await executeBulkLocationInsert(db.locations, docs);
+    assert.strictEqual(result.errorCount, 1);
+    assert.strictEqual(result.successCount, 2);
+    assert.strictEqual(result.rolledBack, false, 'rolledBack must be false when bulkRemove reports errors');
+    assert.strictEqual(result.rollbackErrorCount, 2);
+    assert.match(result.errorMessage || '', /作成の取り消しに失敗しました（2件が未削除）/);
+
+    // 取り消しが失敗したため、DB には 1件（既存）+ 2件（ロールバック失敗で残存）= 3件存在する
+    const totalCount = await db.locations.count().exec();
+    assert.strictEqual(totalCount, 3);
+  } finally {
+    await db.close();
+  }
+});
+
+test('resolveBulkLocationCreateOutcome returns no alert and resets form on complete success', () => {
+  const outcome = resolveBulkLocationCreateOutcome({
+    successCount: 5,
+    errorCount: 0,
+    rolledBack: false
+  });
+  assert.strictEqual(outcome.alertMessage, null);
+  assert.strictEqual(outcome.resetForm, true);
+});
+
+test('resolveBulkLocationCreateOutcome returns error alert and keeps form when errorCount > 0', () => {
+  const outcomeRollbackSuccess = resolveBulkLocationCreateOutcome({
+    successCount: 2,
+    errorCount: 1,
+    rolledBack: true,
+    errorMessage: '棚番の一括作成に失敗しました（1件の書き込みエラー）。作成を取り消しました。'
+  });
+  assert.strictEqual(outcomeRollbackSuccess.resetForm, false);
+  assert.match(outcomeRollbackSuccess.alertMessage || '', /作成を取り消しました。/);
+
+  const outcomeRollbackFailed = resolveBulkLocationCreateOutcome({
+    successCount: 2,
+    errorCount: 1,
+    rolledBack: false,
+    rollbackErrorCount: 2,
+    errorMessage: '棚番の一括作成に失敗しました（1件の書き込みエラー）。作成の取り消しに失敗しました（2件が未削除）。'
+  });
+  assert.strictEqual(outcomeRollbackFailed.resetForm, false);
+  assert.match(outcomeRollbackFailed.alertMessage || '', /未削除/);
 });
 
 test('LocationMaster component renders static markup with form inputs', () => {
