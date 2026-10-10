@@ -59,6 +59,7 @@ import { ImportMaster } from './components/ImportMaster';
 import { InventoryRow } from './components/InventoryRow';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
 import { runWithAuditRollback } from '@/lib/audit_guard';
+import { DRUGS_WITH_RECORDED_STOCK_SELECTOR } from '@/lib/inventory_drug_query';
 import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
 
 type InventoryTab = 'drugs' | 'locations' | 'import' | 'import-ocr' | 'daily-check' | 'order-workbench' | 'transfer' | 'dead-stock';
@@ -256,11 +257,9 @@ export default function InventoryPage() {
     });
 
     // 在庫を持つ薬品はコード順に関係なく常に一覧・分譲・不動在庫の対象にする
+    // (マイナス在庫の薬品も含む: lib/inventory_drug_query)
     const stockedDrugSub = db.drugs.find({
-        selector: {
-            isAbolished: { $ne: true },
-            stockQuantity: { $gt: 0 }
-        }
+        selector: DRUGS_WITH_RECORDED_STOCK_SELECTOR
     }).$.subscribe(data => {
         setStockedDrugs(mapDrugDocs(data));
     });
