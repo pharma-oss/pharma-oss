@@ -75,6 +75,7 @@ import {
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
 import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { downloadTextFile } from '@/lib/blob_download';
+import { userFacingErrorMessage } from '@/lib/user_facing_error';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import {
@@ -906,7 +907,7 @@ export default function PrintPage() {
       return true;
     } catch (error) {
       console.error('Failed to change the claim lifecycle:', error);
-      alert(error instanceof Error && /[ぁ-んァ-ヶ一-龥]/.test(error.message) ? error.message : '請求状態を更新できませんでした。');
+      alert(userFacingErrorMessage(error, '請求状態を更新できませんでした。'));
       return false;
     }
   };

@@ -13,6 +13,7 @@ import {
   type InterventionCategory,
   type InterventionInput
 } from '@/lib/prescription_intervention_support';
+import { userFacingErrorMessage } from '@/lib/user_facing_error';
 
 export interface UseEmrInterventionParams {
   db: any;
@@ -92,7 +93,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
       toast.success(input.inquiryStatus === 'pending' ? '疑義照会を照会中として記録しました' : '疑義照会・処方変更を記録しました');
     } catch (err) {
       console.error('Failed to save intervention:', err);
-      toast.error('保存に失敗しました');
+      toast.error(userFacingErrorMessage(err, '保存に失敗しました'));
     }
   }, [db, findActiveVisit]);
 
@@ -119,7 +120,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
       }
     } catch (e: any) {
       console.error('Failed to delete intervention:', e);
-      toast.error('疑義照会の削除に失敗しました。');
+      toast.error(userFacingErrorMessage(e, '疑義照会の削除に失敗しました。'));
     }
   }, [db, findActiveVisit]);
 
