@@ -12,7 +12,7 @@
 
 import type { Intervention, Visit } from '@/db/types';
 import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
-import { restoreFields } from './rxdb_restore.ts';
+import { plainCopy, restoreFields } from './rxdb_restore.ts';
 
 export type InterventionCategory =
   | 'generic_change'      // 後発医薬品への変更
@@ -173,7 +173,7 @@ export async function recordInterventionWithAudit(params: {
   logAudit: InterventionAuditFn;
 }): Promise<void> {
   const { db, visit, record, event, auditDetail, logAudit } = params;
-  const previousEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : [];
+  const previousEvents = Array.isArray(visit.interventionEvents) ? plainCopy(visit.interventionEvents) : [];
   const insertedDoc = await db.interventions.insert(record);
   let eventAppended = false;
   try {
@@ -210,7 +210,7 @@ export async function deleteInterventionWithAudit(params: {
   if (!doc) return { deleted: false };
 
   const snapshot = doc.toJSON();
-  const previousEvents = Array.isArray(visit.interventionEvents) ? visit.interventionEvents : null;
+  const previousEvents = Array.isArray(visit.interventionEvents) ? plainCopy(visit.interventionEvents) : null;
   let removed = false;
   let eventsPatched = false;
   try {

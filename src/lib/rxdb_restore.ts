@@ -102,3 +102,12 @@ export async function undoAppliedPatchesNote(appliedPatches: ReversiblePatch[]):
     return ROLLBACK_ALSO_FAILED_NOTE;
   }
 }
+
+// 取り消し用に「元の値」を取っておくときの複製。
+//
+// 文書のプロパティ(doc.claimLifecycle など入れ子の値)は structuredClone できない場合があり、そのまま書き戻すと
+// RxError (DOC24) で書けない(開発ビルドの実ブラウザで、請求状態の取り消しが必ず失敗した)。JSON で複製すれば
+// 書き戻せる。文書全体の toJSON() から取る場合は不要。undefined はそのまま返す。
+export function plainCopy<T>(value: T): T {
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+}

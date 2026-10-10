@@ -62,7 +62,7 @@ import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboa
 import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
-import { applyReversiblePatches, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
+import { applyReversiblePatches, plainCopy, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
 
 export interface ClaimWorkbenchSectionProps {
   db: any;
@@ -386,7 +386,7 @@ export function ClaimWorkbenchSection({
       for (let i = 0; i < visitDocs.length; i++) {
         const visitDoc = visitDocs[i];
         const caseItem = cases[i];
-        const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
+        const previousLifecycle = visitDoc.claimLifecycle ? plainCopy(visitDoc.claimLifecycle) : undefined;
         const updatedLifecycle = markClaimExported({
           current: previousLifecycle,
           at: generatedAt.toISOString(),
@@ -505,7 +505,7 @@ export function ClaimWorkbenchSection({
       for (let i = 0; i < visitDocs.length; i++) {
         const visitDoc = visitDocs[i];
         const caseItem = cases[i];
-        const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
+        const previousLifecycle = visitDoc.claimLifecycle ? plainCopy(visitDoc.claimLifecycle) : undefined;
         const updatedLifecycle = markClaimExported({
           current: previousLifecycle,
           at: generatedAt.toISOString(),
@@ -596,7 +596,7 @@ export function ClaimWorkbenchSection({
       const closedAt = new Date();
 
       for (const visitDoc of visitDocs) {
-        const previousLifecycle = visitDoc.claimLifecycle ? toPlain(visitDoc.claimLifecycle) : undefined;
+        const previousLifecycle = visitDoc.claimLifecycle ? plainCopy(visitDoc.claimLifecycle) : undefined;
         const updatedLifecycle = markClaimClosed({
           current: previousLifecycle,
           at: closedAt.toISOString(),
@@ -680,7 +680,7 @@ export function ClaimWorkbenchSection({
             importPatches.push({
               doc,
               patch: { claimLifecycle: matched.nextLifecycle },
-              rollbackPatch: { claimLifecycle: doc.claimLifecycle ? toPlain(doc.claimLifecycle) : undefined },
+              rollbackPatch: { claimLifecycle: doc.claimLifecycle ? plainCopy(doc.claimLifecycle) : undefined },
               label: `visit ${doc.visitId}`
             });
           }
