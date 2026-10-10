@@ -897,6 +897,20 @@ export default function PrintPage() {
     });
   };
 
+  // 請求状態を変える操作(返戻登録・再請求準備・請求完了)用。失敗したら、利用者へ理由を伝える。
+  // persistClaimLifecycle は失敗を投げるだけなので、そのままボタンから呼ぶと、画面は元に戻るのに何も表示されない。
+  // 日本語のメッセージ(監査ログが残らず取り消した、など)はそのまま見せ、内部のエラー文言は見せない。
+  const tryPersistClaimLifecycle = async (nextLifecycle: ClaimLifecycleState, detail: string): Promise<boolean> => {
+    try {
+      await persistClaimLifecycle(nextLifecycle, detail);
+      return true;
+    } catch (error) {
+      console.error('Failed to change the claim lifecycle:', error);
+      alert(error instanceof Error && /[ぁ-んァ-ヶ一-龥]/.test(error.message) ? error.message : '請求状態を更新できませんでした。');
+      return false;
+    }
+  };
+
   const itemsForUke = useMemo(() => {
     return prescriptionItems.map((item) => ({
       ...item,
@@ -1058,8 +1072,9 @@ export default function PrintPage() {
       reason: reasonText,
       reasonCode: summary.reason.code
     });
-    await persistClaimLifecycle(nextLifecycle, summary.auditDetails);
-    setReturnReasonNote('');
+    if (await tryPersistClaimLifecycle(nextLifecycle, summary.auditDetails)) {
+      setReturnReasonNote('');
+    }
   };
 
   const selectedReturnReason = getClaimReturnReasonByCode(returnReasonCode)
@@ -1075,7 +1090,7 @@ export default function PrintPage() {
       by: currentUser?.name || '担当者',
       reason: note.trim()
     });
-    await persistClaimLifecycle(nextLifecycle, `再請求準備 (${note.trim()})`);
+    await tryPersistClaimLifecycle(nextLifecycle, `再請求準備 (${note.trim()})`);
   };
 
   const handleCloseClaim = async () => {
@@ -1085,7 +1100,7 @@ export default function PrintPage() {
       at: new Date().toISOString(),
       by: currentUser?.name || '担当者'
     });
-    await persistClaimLifecycle(nextLifecycle, '請求完了');
+    await tryPersistClaimLifecycle(nextLifecycle, '請求完了');
   };
 
   const claimExportSnapshot = claimLifecycle?.exportSnapshot;

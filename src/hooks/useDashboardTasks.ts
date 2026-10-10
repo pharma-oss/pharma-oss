@@ -75,7 +75,7 @@ export function useDashboardTasks() {
     const currentUser = getCurrentUser();
     const visitDoc = await db.visits.findOne(candidate.visitId).exec();
     if (!visitDoc) {
-      throw new Error('Visit was not found.');
+      throw new Error('対象の受付が見つかりません。');
     }
     const previousVisit = visitDoc.toJSON() as Visit;
     const hadExistingFollowUp = Object.prototype.hasOwnProperty.call(previousVisit, 'followUp');

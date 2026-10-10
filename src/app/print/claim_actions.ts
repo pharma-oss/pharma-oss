@@ -36,7 +36,7 @@ export const CLAIM_ACTION_MESSAGES = {
   prescriptionItemNotFound: '対象の処方明細が見つかりません。',
   drugPriceOverrideAuditRolledBack: '薬価の版変更の監査ログ記録に失敗したため、変更を元に戻しました。',
   officialCopaymentAuditRolledBack: '一部負担金額の監査ログ記録に失敗したため、記録を元に戻しました。',
-  claimLifecycleVisitNotFound: 'Visit was not found.',
+  claimLifecycleVisitNotFound: '対象の受付が見つかりません。',
   claimLifecycleAuditRolledBack: '請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。'
 } as const;
 

@@ -318,6 +318,25 @@ test('print page delegates item-level claim flags to the audited claim action', 
   assert.doesNotMatch(body, /const auditOk = await logAuditAction\(/);
 });
 
+test('print page tells the user why a claim lifecycle change did not go through', () => {
+  const wrapper = section(printSource, 'const tryPersistClaimLifecycle = async', 'const itemsForUke = useMemo');
+  // 失敗を投げるだけだと、画面は元に戻るのに何も表示されない(実ブラウザで確認)。理由を alert で見せる。
+  assert.match(wrapper, /await persistClaimLifecycle\(nextLifecycle, detail\)/);
+  assert.match(wrapper, /alert\(/);
+  assert.match(wrapper, /return false/);
+
+  // 返戻登録・再請求準備・請求完了は、素の persistClaimLifecycle ではなく、この包みを通す
+  for (const [start, end] of [
+    ['const handleRegisterReturn = async', 'const selectedReturnReason ='],
+    ['const handlePrepareRebilling = async', 'const handleCloseClaim = async'],
+    ['const handleCloseClaim = async', 'const claimExportSnapshot =']
+  ]) {
+    const body = section(printSource, start, end);
+    assert.match(body, /tryPersistClaimLifecycle\(/, start);
+    assert.doesNotMatch(body, /[^y]persistClaimLifecycle\(/, start);
+  }
+});
+
 test('print page registers returns with a reason code, not free text', () => {
   const body = section(printSource, 'const handleRegisterReturn = async', 'const selectedReturnReason =');
 
@@ -325,7 +344,7 @@ test('print page registers returns with a reason code, not free text', () => {
   assert.doesNotMatch(body, /window\.prompt\(/);
   assert.match(body, /buildReturnCorrectionSummary\(/);
   assert.match(body, /reasonCode: summary\.reason\.code/);
-  assert.match(body, /persistClaimLifecycle\(nextLifecycle, summary\.auditDetails\)/);
+  assert.match(body, /tryPersistClaimLifecycle\(nextLifecycle, summary\.auditDetails\)/);
 
   // 選択 UI が消えると、コードは既定値のまま固定されてしまう。
   assert.match(printSource, /data-testid="claim-return-reason-picker"/);
