@@ -1281,7 +1281,7 @@ export function TerminalSyncPanelView({
           font-family: monospace;
         }
         .standby-hub-item-meta {
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           color: var(--muted-foreground, #64748b);
         }
         :global(.standby-hub-verified-icon) {
