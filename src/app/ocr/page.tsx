@@ -2637,7 +2637,7 @@ export default function OcrPage() {
         .status-chip.compact {
           min-height: 28px;
           padding: 0.25rem 0.5rem;
-          font-size: 0.74rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
         }
 
@@ -2760,7 +2760,7 @@ export default function OcrPage() {
 
         .electronic-prescription-review dt {
           color: var(--text-muted);
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
         }
 
@@ -2899,7 +2899,7 @@ export default function OcrPage() {
           align-items: center;
           padding: 0.1rem 0.35rem;
           border-radius: var(--radius-sm);
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
           white-space: nowrap;
         }
@@ -2950,7 +2950,7 @@ export default function OcrPage() {
           color: white;
           border-radius: var(--radius-sm);
           padding: 0.08rem 0.38rem;
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
         }
 
@@ -2978,7 +2978,7 @@ export default function OcrPage() {
           align-items: center;
           padding: 0.12rem 0.45rem;
           border-radius: var(--radius-sm);
-          font-size: 0.74rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
         }
 
@@ -3050,7 +3050,7 @@ export default function OcrPage() {
           border-radius: 5px;
           background: #eef2ff;
           color: #3730a3;
-          font-size: 0.68rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
           line-height: 1.3;
           padding: 0.15rem 0.32rem;
@@ -3061,7 +3061,7 @@ export default function OcrPage() {
           align-items: flex-start;
           gap: 0.25rem;
           color: #92400e;
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
           line-height: 1.35;
         }
@@ -3078,7 +3078,7 @@ export default function OcrPage() {
           min-height: 28px;
           padding: 0.25rem 0.45rem;
           cursor: pointer;
-          font-size: 0.74rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
         }
 
@@ -3137,7 +3137,7 @@ export default function OcrPage() {
         .merge-patient-grid span,
         .merge-patient-grid small {
           color: var(--text-muted);
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
         }
 
         .merge-patient-grid strong {
@@ -3161,7 +3161,7 @@ export default function OcrPage() {
         .merge-checklist span {
           border-radius: 5px;
           padding: 0.24rem 0.4rem;
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
           line-height: 1.35;
           overflow-wrap: anywhere;
@@ -3310,7 +3310,7 @@ export default function OcrPage() {
         }
 
         .processing-tag {
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           color: var(--primary);
           background: var(--primary-light);
           padding: 2px 8px;
