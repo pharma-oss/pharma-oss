@@ -149,3 +149,37 @@ test('importDatabaseBackup applies the local settings only after every collectio
     await db.close();
   }
 });
+
+test('importDatabaseBackup detects bulkRemove error during rollback and marks rollbackFailed true', async () => {
+  const db = await createDb();
+  try {
+    await seed(db);
+
+    // ストレージ層の bulkWrite を差し替え、rx-collection-bulk-remove 時に 409 エラーを返させて取り消し失敗を再現する
+    const storage = db.patients.storageInstance;
+    const origBulkWrite = storage.bulkWrite.bind(storage);
+    storage.bulkWrite = async (rows: any[], context: string) =>
+      context === 'rx-collection-bulk-remove'
+        ? { error: rows.map((r: any) => ({ status: 409, isError: true, documentId: r.document.patientId, writeRow: r, documentInDb: r.previous })) }
+        : origBulkWrite(rows, context);
+
+    // patients に新規患者 p2 を追加し、後続の visits で書き込み失敗を発生させる
+    const broken = failingVisits(db);
+    const backup = backupOf({
+      patients: [{ patientId: 'p2', name: '新しい患者' }],
+      visits: [{ visitId: 'v2', patientId: 'p2', status: 'processing' }]
+    });
+
+    await assert.rejects(
+      () => importDatabaseBackup({ ...broken, patients: db.patients } as any, backup),
+      (error: unknown) => error instanceof BackupRestoreError && error.rollbackFailed === true && error.message.endsWith(ROLLBACK_ALSO_FAILED_NOTE)
+    );
+
+    // bulkRemove が失敗したため、新規追加された p2 は削除されずに DB に残存する
+    const patient2 = await db.patients.findOne('p2').exec();
+    assert.notStrictEqual(patient2, null, 'new patient remains when bulkRemove rollback fails');
+  } finally {
+    await db.close();
+  }
+});
+

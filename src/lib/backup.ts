@@ -267,7 +267,10 @@ export async function importDatabaseBackup(
           }
         }
         if (newIds.length > 0) {
-          await collection.bulkRemove(newIds);
+          const removed = await collection.bulkRemove(newIds);
+          if (removed?.error && removed.error.length > 0) {
+            throw new Error(`${collectionName} の新規追加分を取り消せませんでした。`);
+          }
         }
       });
 
