@@ -45,6 +45,77 @@ import {
 import { downloadTextFile } from '@/lib/blob_download';
 import { exportWithAuditFirst } from '@/lib/audit_guard';
 
+export interface RollbackMedicationInfoTemplateWritesResult {
+  rolledBack: boolean;
+  rollbackErrorCount: number;
+  rollbackNote?: string;
+}
+
+export interface MedicationInfoTemplateCollectionLike {
+  bulkUpsert: (docs: PatientMedicationInfoTemplate[]) => Promise<{ error?: unknown[] } | unknown>;
+  findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
+}
+
+export function buildMedicationInfoTemplateSaveErrorMessage(
+  error: unknown,
+  rollbackResult?: RollbackMedicationInfoTemplateWritesResult | null
+): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  const base = `薬情テンプレを保存できませんでした: ${reason}`;
+  if (rollbackResult && !rollbackResult.rolledBack && rollbackResult.rollbackNote) {
+    return `${base} ${rollbackResult.rollbackNote}`;
+  }
+  return base;
+}
+
+export async function rollbackMedicationInfoTemplateWrites(
+  collection: MedicationInfoTemplateCollectionLike,
+  previousTemplatesById: Map<string, PatientMedicationInfoTemplate | undefined>,
+  attemptedWriteTemplateIds: string[]
+): Promise<RollbackMedicationInfoTemplateWritesResult> {
+  const previousTemplates = Array.from(previousTemplatesById.values()).filter(
+    (template): template is PatientMedicationInfoTemplate => !!template
+  );
+  let rollbackErrorCount = 0;
+  if (previousTemplates.length > 0) {
+    try {
+      const rollbackResult = (await collection.bulkUpsert(previousTemplates)) as { error?: unknown[] } | undefined;
+      const errors = Array.isArray(rollbackResult?.error) ? rollbackResult.error : [];
+      if (errors.length > 0) {
+        rollbackErrorCount += errors.length;
+        console.error('Failed to restore previous templates during rollback:', rollbackResult?.error);
+      }
+    } catch (upsertErr) {
+      rollbackErrorCount += previousTemplates.length;
+      console.error('Failed to execute bulkUpsert during rollback:', upsertErr);
+    }
+  }
+
+  const newTemplateIds = attemptedWriteTemplateIds.filter((templateId) => !previousTemplatesById.get(templateId));
+  for (const templateId of newTemplateIds) {
+    try {
+      const savedDoc = await collection.findOne(templateId).exec();
+      if (savedDoc) await savedDoc.remove();
+    } catch (removeErr) {
+      rollbackErrorCount += 1;
+      console.error('Failed to remove new template during rollback:', removeErr);
+    }
+  }
+
+  if (rollbackErrorCount > 0) {
+    return {
+      rolledBack: false,
+      rollbackErrorCount,
+      rollbackNote: `作成・更新の取り消しに失敗しました（${rollbackErrorCount}件の復元エラー）。`
+    };
+  }
+
+  return {
+    rolledBack: true,
+    rollbackErrorCount: 0
+  };
+}
+
 export interface UseMedicationInfoTemplateSettingsOptions {
   db: PharmacyDatabase | null;
   currentUser: User;
@@ -308,26 +379,17 @@ export function useMedicationInfoTemplateSettings({
       setMedicationInfoTemplateForm(medicationInfoTemplateToForm(savedTemplate));
       await refreshAuditEvidence();
       toast.success(`薬情テンプレを${MEDICATION_INFO_TEMPLATE_STATUS_LABELS[targetStatus]}で保存しました。`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      let rollbackResult: RollbackMedicationInfoTemplateWritesResult | null = null;
       if (previousTemplatesById) {
-        try {
-          const previousTemplates = Array.from(previousTemplatesById.values()).filter(
-            (template): template is PatientMedicationInfoTemplate => !!template
-          );
-          if (previousTemplates.length > 0) {
-            await db.patient_medication_info_templates.bulkUpsert(previousTemplates);
-          }
-          const newTemplateIds = attemptedWriteTemplateIds.filter((templateId) => !previousTemplatesById?.get(templateId));
-          for (const templateId of newTemplateIds) {
-            const savedDoc = await db.patient_medication_info_templates.findOne(templateId).exec();
-            if (savedDoc) await savedDoc.remove();
-          }
-        } catch (rollbackError) {
-          console.error('Failed to roll back patient medication info template writes:', rollbackError);
-        }
+        rollbackResult = await rollbackMedicationInfoTemplateWrites(
+          db.patient_medication_info_templates,
+          previousTemplatesById,
+          attemptedWriteTemplateIds
+        );
       }
       console.error('Failed to save patient medication info template:', err);
-      toast.error(`薬情テンプレを保存できませんでした: ${err.message || err}`);
+      toast.error(buildMedicationInfoTemplateSaveErrorMessage(err, rollbackResult));
     } finally {
       setIsSavingMedicationInfoTemplate(false);
     }
