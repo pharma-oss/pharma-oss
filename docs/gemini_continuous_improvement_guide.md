@@ -1,7 +1,7 @@
 # Gemini 向け 継続改善ガイド
 
 - **作成**: 2026-10-11（初版の実測基準: `898fa43`）
-- **改訂**: 2026-10-11（第1〜7サイクルの検証結果を反映。基準コミット: `417ede5`、作業ツリーはクリーン）。SW-G（完了）・SW-D（完了）・SW-H の追加、§2.1・§2.2・§2.6・§4.2・§4.3・§5・§6・§7・§8.1・§10・§11 の追記。第7サイクルで、改訂前のガイドで動いた形跡（旧テンプレート、`tee`、ベースライン未実行）があったため、**読んだガイドの版を報告に書かせる**規則を §0・§10・§11 に追加
+- **改訂**: 2026-10-11（第1〜8サイクルの検証結果を反映。基準コミット: `f63a698`、作業ツリーはクリーン）。SW-G・SW-D（完了）、SW-A（一部完了）、SW-H の追加。第8サイクルの検証で、**SW-A の検索パターンが `0.7rem` ちょうどを拾わない欠陥**（元の 14 件は 23 件が正しかった）が見つかったため修正し、見た目だけを変えるテーマの確認手順（§8.2）と、複数テーマを 1 回の起動で行う一括実行の規則（§1.1）を追加
 - **性質**: 単発の計画書ではなく、**毎回の起動で最初に読ませる常設の運用書**。改善テーマは起動プロンプトで指定されるか、§4 の掃引メニューから選ぶ。
 - **上位文書（矛盾したらこちらが優先）**: `.agents/AGENTS.md` → `.agents/skills/honest-verification/SKILL.md` → `docs/golden_rules_and_roadmap.md` 第Ⅰ部（十箇条）と第Ⅳ部（実装方針）。
 - **この文書を編集しない**。気づいた改善点は報告に書く。
@@ -53,6 +53,19 @@ cat docs/gemini_continuous_improvement_guide.md                          # 最�
 **ゲートを通すために次のことをしてはならない**: 型を `any` やオプショナル（`?`）に緩める、テストの期待値を変える、`assert` を消す、`skip` を付ける、`eslint-disable` を足す。通らないなら、通らないと報告する。
 
 ---
+
+### 1.1 一括実行（複数テーマを 1 回の起動で行う）
+
+**起動プロンプトがテーマの一覧を明示したときだけ**行う。一覧に無いテーマを足さない。一覧にある上限（件数・ファイル数）を超えない。
+
+- **テーマごとに §1 の全手順**（準備 → 宣言 → 実装 → ゲート → 変異 → コミット → 報告）を行う。**1 テーマ = 1 コミット。** 報告を省略形にしない。§2・§3・§8 の規則は一括実行でも緩めない。
+- **ゲートの出力はテーマごとに別のディレクトリ**: `TAG=<テーマID>-baseline` と `TAG=<テーマID>-final`（例: `swa-soap-baseline`）。再実行は別の名前で保存する（§5）。
+- **ベースライン**: 各テーマの開始時に自分で実行する。ただし、**直前のテーマの final が緑で、その後 `git status --short` が空かつ HEAD が同じ**なら、その final を次のテーマのベースラインとして引用してよい（出力ファイルのパスを書く）。最初のテーマは必ず自分で実行する。
+- **各テーマの開始時**に `git status --short` が空であること。
+- **テーマが中断したとき**（§1 の「途中で止まる条件」に当たった、または §3 の「提案して止まる」に当たった）: そのテーマの**未コミットの変更**を、宣言した「触るファイル」に限って `git checkout -- <ファイル>` で戻し、理由を記録して、**次のテーマへ進む**。
+- **バッチ全体を止める**のは、(a) 最初のベースラインが赤、(b) 変更を戻した後も `git status --short` が空にならない、(c) 他の人の未コミット変更を見つけた、のどれか。止めた場合は、そこまでの結果と理由を報告する。
+- **報告**: テーマごとの §10 の報告を `/tmp/pharma-improvement/<stamp>-reports/<テーマID>.md` に保存する。最後に、①バッチ全体の一覧表（テーマ ID・コミット・結果＝完了／中断／見送り・理由・報告ファイルのパス）と、②各テーマの §10 の報告を**そのまま続けて**出力する。報告の先頭に「読んだガイドの版」を書く（§10）。
+- `git push` はしない（§3）。コミットは 1 テーマ 1 件で、後から 1 件ずつ取り消せる粒度にする。
 
 ## 2. 絶対規則（違反した提出物は内容を読まずに差し戻す）
 
@@ -170,7 +183,7 @@ grep -rnE 'Promise\.all\(.*\.remove\(\)' src --include='*.ts' --include='*.tsx' 
 echo "SW-D UTC で日付を切る箇所:"
 grep -rnE 'toISOString\(\)\.slice\(0, *10\)' src --include='*.ts' --include='*.tsx' | grep -v '\.test\.'
 echo "SW-A 12px 未満の生 font-size（印刷ページ除外）:"
-grep -rnE "font-?[sS]ize:[[:space:]]*['\"]?0\.([0-6][0-9]*|7[0-4][0-9]*)rem" src --include='*.css' --include='*.tsx' --include='*.ts' | grep -v -E '\.test\.' | grep -vi print
+grep -rnE "font-?[sS]ize:[[:space:]]*['\"]?0\.([0-6][0-9]*|7([0-4][0-9]*)?)rem" src --include='*.css' --include='*.tsx' --include='*.ts' | grep -v -E '\.test\.' | grep -vi print
 echo "SW-E any:"
 grep -rnE ':[[:space:]]*any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test\.' | wc -l
 grep -rnE 'as any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test\.' | wc -l
@@ -182,7 +195,7 @@ grep -rnE 'as any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test
 | **SW-G**（完了） | 取り消し・復旧（ロールバック）の経路で、書き込みの戻り値を見ない箇所。`bulkRemove` / `bulkUpsert` も `bulkInsert` と同じく個別の失敗を**例外にせず** `{ success, error }` を返す | **5 か所すべて修正・検証済み**: `LocationMaster.tsx`（`72a9f57`・`b133f65`）、`prescription_registration.ts`（`00f0421`）、`backup.ts`（`be6a658`）、`useMedicationInfoTemplateSettings.ts` の単体保存（`5014bc1`）と CSV インポート（`396d27a`）。上のコマンドが出す 11 行（取り消しの共通関数に集約されたため、テンプレのフックの呼び出しは 3 か所）は、すべて戻り値の `error` を検査している | **このクラスの新しい `bulkRemove` / `bulkUpsert` を足すときの確認観点として残す**（取り消しの戻り値を見ない、取り消せなかったのに「取り消しました」と言う）。手本のテスト: `LocationMaster.test.ts` の `bulkRemove` が 409 を返すテスト（§7 のコード） |
 | **SW-H** | 一括削除で、どれが消えてどれが消えなかったかを利用者に伝えない箇所 | **1 か所**（利用者向け）: `src/app/inventory/components/LocationMaster.tsx:244`（`handleDeleteUnused`。`Promise.all(docs.map((d) => d.remove()))` の失敗は、固定文の `alert` だけ）。`src/db/index.ts:203` はデモユーザーの掃除で対象外 | 失敗した件数と、残っている件数を伝える（`Promise.allSettled` で結果を集める）。SW-G の LocationMaster 分と**同じコミットにしない** |
 | **SW-D**（完了） | UTC の日付で「今日」「受付日」を作る | 第7サイクル（`417ede5`）で、`src/` の非テストコードから呼ばれていなかった `print/helpers.ts` の `toDateOnly`（UTC で日付を切る死んだ関数）を、未使用 import とテスト（1 件・assert 3 件）ごと削除した。**残る 8 件はすべて正しい**（往復検証＝実在日付の確認が 6 件、開発用スクリプト 1 件、説明コメント 1 件） | **新しく `toISOString().slice(0, 10)` で「今日」「受付日」を作らない**（§7 の日付。`toLocalDateKey` / `toLocalDateKeyFromValue` を使う）。他ファイルの同名の private 関数（`dead_stock.ts`、`drug_price_history.ts`）は実際に使われている別物なので触らない |
-| **SW-A** | 12px 未満の生の `font-size`（`--fs-2xs` の 12px が下限） | **14 件／3 ファイル**: `emr/components/SoapComponents.tsx` 4、`ocr/page.tsx` 7、`inventory/inventory.css` 3（`0.65`〜`0.74rem`） | `var(--fs-2xs)` へ。**見た目が変わる**ので §8 の実画面確認（1280/768/375px）が条件。`SoapComponents.tsx` と `ocr/page.tsx` の CSS は `<style jsx>` で、同一ファイル内の別コンポーネントには当たらない（無言で無スタイルになる）。**0.75rem 以上 1rem 未満の生値 49 件は別テーマ**（トークンに寄せると見た目が動く）。1rem 以上（見出し）と印刷ページ（`print.css`、`print/[visitId]`）は対象外 |
+| **SW-A**（一部完了） | 12px 未満の生の `font-size`（`--fs-2xs` の 12px が下限）。**検索パターンは `0.7rem` ちょうど（11.2px）を含める**（元のパターンは `7[0-4]…` で `0.7rem` を拾わず、9 件を見落としていた） | **残り 20 件／5 ファイル**（初版の実測は 23 件）: `inventory/inventory.css` 3（1032・1081・1101 行目、すべて `0.7rem`）、`emr/components/SoapComponents.tsx` 4、`emr/components/EmrInsightCards.tsx` 1、`components/TerminalSyncPanel.tsx` 1、`ocr/page.tsx` 11。**修正済み**: `inventory.css` の 917・1001・1076 行目（`f63a698`。変更前後の実測で `.order-reason-tag` 11.52px・`.toggle-indicator` 10.4px・`.sub-type` 10.88px → すべて 12px、横スクロール 0px のまま） | `var(--fs-2xs)` へ。**見た目が変わる**ので §8.1・§8.2 の実画面確認が条件。`SoapComponents.tsx` と `ocr/page.tsx` の CSS は `<style jsx>` で、同一ファイル内の別コンポーネントには当たらない（無言で無スタイルになる）。**0.75rem 以上 1rem 未満の生値 40 件は別テーマ**（トークンに寄せると見た目が動く）。1rem 以上（見出し）と印刷ページ（`print.css`、`print/[visitId]`）は対象外。**1 ファイル 1 コミット** |
 | **SW-C** | 失敗が利用者に伝わらない `catch` | 付録 A のスクリプトで**候補 183 件**（通知・再 throw・エラー状態のセット等が無い `catch`。`72a9f57` で +1（取り消し失敗の二次ログ。分類 (c)）。`b133f65` では増減なし。`src/lib` 51、`src/lib/sync` 24、`src/hooks` 19、`src/db` 10、…） | **182 件を一括で直さない。** 精度は高くない（localStorage の失敗の無視、取り消し失敗の二次ログ、再試行の経路など、意図的なものが多い）。1 テーマ 3〜5 件に絞り、各件を次の 3 つに分類してから動く: **(a) 利用者の操作による書き込み・書き出しの失敗**→ 通知必須（これだけ直す）／**(b) 読み込み失敗**→ 空表示と区別がつかないなら通知／**(c) 二次的なログ**→ 直さない。分類結果は報告の表にする |
 | **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 290 件、`as any` 41 件（`72a9f57` で +1、`b133f65` で −3、`5014bc1`・`396d27a` で各 −1） | **1 ファイル（または 1 フック）単位**。型を足した結果 `tsc` が本当の不整合を出したら、**それを直すのは別コミット（`fix:`）で、報告に「型で暴かれた不整合」として書く**。`refactor:` に混ぜない。型を緩めて通すのは禁止 |
 | **SW-F** | **回帰ガード（減らす対象ではなく、悪化させない対象）** | 下のコードブロックの 5 つの数字 | **どのテーマの前後でも実行し、報告に書く。** 1 つでも悪化したら、そのコミットは認めない |
@@ -204,9 +217,9 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 ### 4.3 サイクルの推奨順
 
-第1〜7サイクル（SW-B、SW-G の 5 か所、SW-D）は検証済みで、**SW-G と SW-D は完了**。次は次の順にする。
+第1〜8サイクル（SW-B、SW-G の 5 か所、SW-D、SW-A の `inventory.css` 3 件）は検証済みで、**SW-G と SW-D は完了**。次は次の順にする。
 
-1. **SW-A**（12px 未満の生 `font-size`。見た目が変わるので §8.1 の実画面確認が必須。1 ファイルずつ別コミットにする。最初は `inventory/inventory.css` の 3 件）
+1. **SW-A の残り 20 件**（1 ファイル 1 コミット。見た目が変わるので §8.1・§8.2 が必須）: `inventory.css` の 3 件 → `SoapComponents.tsx` → `EmrInsightCards.tsx` → `TerminalSyncPanel.tsx` → `ocr/page.tsx`
 2. **SW-H**（1 か所。画面ハンドラを変えるので §8.1 が必須）
 3. **SW-C**（分類が要る。(a) のみ）
 4. **SW-E**（1 ファイルずつ）
@@ -241,7 +254,7 @@ npm run build           > "$OUT/build.txt" 2>&1; echo "exit $?" >> "$OUT/build.t
 tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 ```
 
-ベースライン（`417ede5`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`396d27a` は 2190）:
+ベースライン（`f63a698`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`396d27a` は 2190、`417ede5` 以降は 2189）:
 
 | 検証 | コマンド | ベースライン |
 |---|---|---|
@@ -389,6 +402,16 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 
 ---
 
+### 8.2 見た目だけを変えるテーマ（CSS・文字サイズ・余白）の確認
+
+ハンドラを変えないテーマでも、**変更前後の実測**を表にする。「描画できた」は確認に数えない。第8サイクルで有効だった方法:
+
+1. **変更前後の計算済みスタイルを、同じスクリプトで測る。** 変更後を測り、次に変更前の CSS へ一時的に戻して（`git show <コミット>^:<ファイル> > <ファイル>`）同じ測定をして、戻す（`git checkout -- <ファイル>`）。測るものは、対象要素の `getComputedStyle(el).fontSize`、`getBoundingClientRect()` の幅と高さ、`document.documentElement.scrollWidth - document.documentElement.clientWidth`（横スクロール）。幅 1280 / 768 / 375px。
+2. **デモデータに出てこない要素（例: 代替薬の展開）は、プローブ要素で測る。** 対象のクラス名の `<span>` を `document.createElement` で画面に差し込み、計算済みスタイルを読んで、読んだ直後に取り除く。クラス名のスタイルが効いていること（CSS 変数が解決されて期待どおりの px になること）を、データに依存せず確かめられる。
+3. **375px で折り返しが「変更前からあった」のか「変更で新たに生じた」のか**を、変更前の測定と比べて書く。
+4. 測り終えたら、`git status --short` が空であること、dev サーバを止めたこと、スクリプトを消したことを確認する。
+5. データが再現できず測れなかった要素は、「測れなかった」と理由を書く（プローブで測れた場合はそう書く）。
+
 ## 9. コミット
 
 - **1 テーマ = 1 コミット。** `feat(scope):` / `fix(scope):` / `refactor(scope):` / `test(scope):` / `docs:` / `chore(scope):`。**メッセージは英語**、1 行目は「利用者や読む人にとって何が変わるか」を書く（直近の例: `fix(inventory): show drugs with negative stock in the inventory list and count them in the warning`）。
@@ -497,6 +520,12 @@ PY
 
 ```bash
 gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは SW-A のうち src/app/inventory/inventory.css の 3 か所だけです。この分は見た目が変わるため、§8.1 の実画面確認（1280 / 768 / 375px）が必須です。完了したら §10 の報告を出力して停止してください。"
+```
+
+一括実行の例（§1.1。テーマの一覧と上限を、起動プロンプトで明示する）:
+
+```bash
+gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って §1.1 の一括実行をしてください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは次の順に、各 1 コミットで行います。(1) SW-A: src/app/inventory/inventory.css の残り 3 か所。(2) SW-A: src/app/emr/components/SoapComponents.tsx の 4 か所。(3) SW-A: src/app/emr/components/EmrInsightCards.tsx の 1 か所。(4) SW-A: src/components/TerminalSyncPanel.tsx の 1 か所。(5) SW-A: src/app/ocr/page.tsx の 11 か所。(6) SW-H: src/app/inventory/components/LocationMaster.tsx の handleDeleteUnused。(7) SW-C: 183 件の候補を (a)(b)(c) に分類した表を /tmp/pharma-improvement/<stamp>-reports/sw-c-classification.md に保存し、(a) に分類した箇所のうち最大 5 か所だけを 1 コミットで直す。(8) SW-E: any が多いファイルを最大 2 つ、1 ファイル 1 コミットで。この一覧に無いテーマは行わないでください。SW-A は見た目が変わるため §8.2、SW-H と SW-C は画面の通知やハンドラが変わるため §8.1 の実画面確認が必須です（SW-A のうち画面のデータを再現できない要素はプローブ要素で測ってください）。各テーマの報告は §10 に従い /tmp/pharma-improvement/<stamp>-reports/ に保存し、最後に一覧表と全報告を出力して停止してください。"
 ```
 
 戻ってきた報告は §11 の手順で検証してから取り込む。
