@@ -23,6 +23,11 @@ interface PatientDocument {
   toJSON: () => Record<string, unknown>;
 }
 
+export interface BulkRemoveResultLike {
+  success?: unknown[];
+  error?: unknown[];
+}
+
 interface RegistrationDb {
   patients: {
     insert: (doc: any) => Promise<unknown>;
@@ -34,7 +39,7 @@ interface RegistrationDb {
   };
   prescription_items: {
     bulkInsert: (docs: any[]) => Promise<{ success?: Array<{ primary?: string; itemId?: string }>; error?: Array<{ documentId?: string }> }>;
-    bulkRemove: (ids: string[]) => Promise<unknown>;
+    bulkRemove: (ids: string[]) => Promise<BulkRemoveResultLike | unknown>;
   };
 }
 
@@ -72,7 +77,13 @@ export async function registerPrescriptionAtomically(params: {
     const result = await db.prescription_items.bulkInsert(items);
     const insertedIds = (result?.success ?? []).map((doc) => doc.primary ?? doc.itemId).filter((id): id is string => !!id);
     if (insertedIds.length > 0) {
-      undoSteps.push(() => db.prescription_items.bulkRemove(insertedIds).then(() => undefined));
+      undoSteps.push(async () => {
+        const removeResult = (await db.prescription_items.bulkRemove(insertedIds)) as BulkRemoveResultLike | undefined;
+        const removeErrors = Array.isArray(removeResult?.error) ? removeResult.error : [];
+        if (removeErrors.length > 0) {
+          throw new Error(`処方明細の取り消しに失敗しました（${removeErrors.length}件）。`);
+        }
+      });
     }
     if (result?.error && result.error.length > 0) {
       console.error('Failed to insert prescription items:', JSON.stringify(result.error, null, 2).slice(0, 4000));

@@ -123,3 +123,40 @@ test('registerPrescriptionAtomically reports when the undo itself fails', async 
     assert.strictEqual((await counts(db)).visits, 0, 'the other undo steps still ran');
   } finally { await db.close(); }
 });
+
+test('registerPrescriptionAtomically reports rollbackFailed when bulkRemove returns errors in RxDB storage result', async () => {
+  const db = await createDb();
+  try {
+    // i2 は別の受付の明細としてすでに存在 => bulkInsert はこの1件だけ失敗し、i1 のみ成功する
+    await db.prescription_items.insert({ itemId: 'i2', visitId: 'other_visit', drugId: 'EXISTING' });
+
+    // ストレージ層の bulkWrite を差し替え、rx-collection-bulk-remove 時に 409 エラーを返させて取り消し失敗を再現する
+    const storage = db.prescription_items.storageInstance;
+    const origBulkWrite = storage.bulkWrite.bind(storage);
+    storage.bulkWrite = async (rows: any[], context: string) =>
+      context === 'rx-collection-bulk-remove'
+        ? { error: rows.map((r: any) => ({ status: 409, isError: true, documentId: r.document.itemId, writeRow: r, documentInDb: r.previous })) }
+        : origBulkWrite(rows, context);
+
+    await assert.rejects(
+      () => registerPrescriptionAtomically({
+        db,
+        patientId: 'p1',
+        patientUpdate: { name: '山田' },
+        newPatientDefaults: {},
+        visit,
+        items
+      }),
+      (error: unknown) => error instanceof PrescriptionRegistrationError && error.rollbackFailed === true
+    );
+
+    // bulkRemove が失敗したため、取り消せなかった i1 と既存の i2 の計 2 件が DB に残る
+    assert.strictEqual((await counts(db)).items, 2, 'partially inserted item remains when rollback fails');
+    // 受付(visit)と患者(patient)の取り消しは成功している
+    assert.strictEqual((await counts(db)).visits, 0, 'visit undo still succeeded');
+    assert.strictEqual((await counts(db)).patients, 0, 'patient undo still succeeded');
+  } finally {
+    await db.close();
+  }
+});
+
