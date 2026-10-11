@@ -267,7 +267,7 @@ export const SoapAiDraftInsightCard = React.memo(function SoapAiDraftInsightCard
       <style jsx>{`
         .soap-ai-disclaimer {
           display: block;
-          font-size: 0.7rem;
+          font-size: var(--fs-2xs);
           color: var(--text-muted);
           font-weight: 500;
           margin-top: 0.15rem;
