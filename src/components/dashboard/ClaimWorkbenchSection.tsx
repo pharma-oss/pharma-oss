@@ -165,11 +165,11 @@ export function ClaimWorkbenchSection({
         const drug = toPlain<any>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
         return {
           ...item,
-          drugName: drug?.name || item.drugName || item.drugId,
-          price: resolveDrugPrice(drug ?? {}, dispensingDateForPrice).price ?? item.price ?? 0,
-          yjCode: drug?.yjCode || item.yjCode,
-          genericName: drug?.genericName || item.genericName,
-          isHighRisk: !!(drug?.isHighRisk || item.isHighRisk)
+          drugName: drug?.name || item.dispensedDrug || item.drugId,
+          price: resolveDrugPrice(drug ?? {}, dispensingDateForPrice).price ?? 0,
+          yjCode: drug?.yjCode,
+          genericName: drug?.genericName,
+          isHighRisk: !!drug?.isHighRisk
         };
       });
 
