@@ -914,7 +914,7 @@
     align-items: center;
     padding: 0.1rem 0.45rem;
     border-radius: 4px;
-    font-size: 0.72rem;
+    font-size: var(--fs-2xs);
     font-weight: 750;
 }
 
@@ -998,7 +998,7 @@
 }
 
 .toggle-indicator {
-    font-size: 0.65rem;
+    font-size: var(--fs-2xs);
     color: var(--text-muted);
 }
 
@@ -1073,7 +1073,7 @@
     border-radius: 2px;
     background: var(--bg-subtle);
     color: var(--text-muted);
-    font-size: 0.68rem;
+    font-size: var(--fs-2xs);
 }
 
 .sub-price {
