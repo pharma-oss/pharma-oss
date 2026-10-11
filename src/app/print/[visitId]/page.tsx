@@ -584,6 +584,7 @@ export default function PrintPage() {
     } catch (e) {
       setPrescriptionItems(previousItems);
       console.error('Failed to toggle ippoka:', e);
+      alert('一包化フラグの変更に失敗しました。');
     }
   };
 
@@ -615,6 +616,7 @@ export default function PrintPage() {
     } catch (e) {
       setPrescriptionItems(previousItems);
       console.error('Failed to toggle crushed:', e);
+      alert('粉砕フラグの変更に失敗しました。');
     }
   };
 
@@ -780,6 +782,7 @@ export default function PrintPage() {
         if (itemDoc) await itemDoc.patch({ receiptRemark: value });
       } catch (e) {
         console.error('Failed to save receipt remark:', e);
+        alert('レセ適コメントの保存に失敗しました。');
       }
     }, 500);
   };

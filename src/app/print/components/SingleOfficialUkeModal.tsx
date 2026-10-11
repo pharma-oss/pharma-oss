@@ -146,6 +146,8 @@ export function SingleOfficialUkeModal({
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy UKE text:', err);
+      setExportError('クリップボードへのコピーに失敗しました。');
+      alert('クリップボードへのコピーに失敗しました。');
     }
   }, [officialResult]);
 
