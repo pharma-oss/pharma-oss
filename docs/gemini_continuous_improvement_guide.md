@@ -1,7 +1,7 @@
 # Gemini 向け 継続改善ガイド
 
 - **作成**: 2026-10-11（初版の実測基準: `898fa43`）
-- **改訂**: 2026-10-11（第1〜6サイクルの検証結果を反映。基準コミット: `396d27a`、作業ツリーはクリーン）。SW-G・SW-H の追加（SW-G は完了）、§2.1・§2.2・§2.6・§4.2・§4.3・§5・§6・§7・§8.1・§10・§11 の追記。第5〜6サイクルの検証を受けて、報告の出力は保存ファイルから引くこと、ベースラインは毎サイクル別ディレクトリで実行すること、型と重複とテスト名の規則を追加
+- **改訂**: 2026-10-11（第1〜7サイクルの検証結果を反映。基準コミット: `417ede5`、作業ツリーはクリーン）。SW-G（完了）・SW-D（完了）・SW-H の追加、§2.1・§2.2・§2.6・§4.2・§4.3・§5・§6・§7・§8.1・§10・§11 の追記。第7サイクルで、改訂前のガイドで動いた形跡（旧テンプレート、`tee`、ベースライン未実行）があったため、**読んだガイドの版を報告に書かせる**規則を §0・§10・§11 に追加
 - **性質**: 単発の計画書ではなく、**毎回の起動で最初に読ませる常設の運用書**。改善テーマは起動プロンプトで指定されるか、§4 の掃引メニューから選ぶ。
 - **上位文書（矛盾したらこちらが優先）**: `.agents/AGENTS.md` → `.agents/skills/honest-verification/SKILL.md` → `docs/golden_rules_and_roadmap.md` 第Ⅰ部（十箇条）と第Ⅳ部（実装方針）。
 - **この文書を編集しない**。気づいた改善点は報告に書く。
@@ -11,6 +11,14 @@
 ## 0. 最初にやること
 
 **あなたは毎回まっさらな状態で起動される。** 前回の記憶は無い。状態はすべて git と実測値にある。
+
+**最初の 1 手: 本書の版を記録し、本書を今あらためて読む。** 本書は、レビューの結果を受けて何度も改訂される。以前に読んだ内容・要約・キャッシュを使わない（改訂前の版で動いた報告が実際に出た）。
+
+```bash
+git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md   # 出力（7 桁のハッシュ）を控え、報告の先頭に書く（§10）
+cat docs/gemini_continuous_improvement_guide.md                          # 最初から最後まで読む
+```
+
 
 1. 次の 4 つを、この順に読む: `.agents/AGENTS.md`、`.agents/skills/honest-verification/SKILL.md`、金科玉条 第Ⅰ部、本書。
 2. `git status --short` を実行する。**本書自身（`docs/gemini_continuous_improvement_guide.md`）以外の行が 1 つでもあれば止まる。** 他の人（利用者や別のエージェント）の未コミット変更の可能性があり、上書きしてはならない。何が変更されているかだけを報告して終わる。
@@ -173,7 +181,7 @@ grep -rnE 'as any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test
 | **SW-B**（完了） | `bulkInsert` の戻り値を見ない書き込み | `72a9f57` で `LocationMaster.tsx` の 1 件を修正済み。他の 5 件は検査済み。**このクラスの新規の呼び出しを足すときの確認観点として残す**（`bulkInsert` は個別の失敗を例外にしない） | ロールバック自体の戻り値の検査は **SW-G** で補完済み（`b133f65`） |
 | **SW-G**（完了） | 取り消し・復旧（ロールバック）の経路で、書き込みの戻り値を見ない箇所。`bulkRemove` / `bulkUpsert` も `bulkInsert` と同じく個別の失敗を**例外にせず** `{ success, error }` を返す | **5 か所すべて修正・検証済み**: `LocationMaster.tsx`（`72a9f57`・`b133f65`）、`prescription_registration.ts`（`00f0421`）、`backup.ts`（`be6a658`）、`useMedicationInfoTemplateSettings.ts` の単体保存（`5014bc1`）と CSV インポート（`396d27a`）。上のコマンドが出す 11 行（取り消しの共通関数に集約されたため、テンプレのフックの呼び出しは 3 か所）は、すべて戻り値の `error` を検査している | **このクラスの新しい `bulkRemove` / `bulkUpsert` を足すときの確認観点として残す**（取り消しの戻り値を見ない、取り消せなかったのに「取り消しました」と言う）。手本のテスト: `LocationMaster.test.ts` の `bulkRemove` が 409 を返すテスト（§7 のコード） |
 | **SW-H** | 一括削除で、どれが消えてどれが消えなかったかを利用者に伝えない箇所 | **1 か所**（利用者向け）: `src/app/inventory/components/LocationMaster.tsx:244`（`handleDeleteUnused`。`Promise.all(docs.map((d) => d.remove()))` の失敗は、固定文の `alert` だけ）。`src/db/index.ts:203` はデモユーザーの掃除で対象外 | 失敗した件数と、残っている件数を伝える（`Promise.allSettled` で結果を集める）。SW-G の LocationMaster 分と**同じコミットにしない** |
-| **SW-D** | UTC の日付で「今日」「受付日」を作る | 9 件。うち 8 件は往復検証（実在日付の確認）か開発用スクリプト・説明コメントで**正しい**。残り 1 件が `src/app/print/helpers.ts:140` の `toDateOnly`（UTC で日付を切る。`src/` の非テストコードに**呼び出しが無い**。`src/app/print/[visitId]/page.tsx:112` で import されているだけ） | 呼び出し 0 件を `grep -rn "toDateOnly" src` で再確認 → 関数・未使用 import・それだけを検査するテスト（`helpers.test.ts`、`PrintPickingFlow.test.ts` の該当 assert）を削除。**削除したテスト・assert の数を報告に明記**。他ファイルの同名関数（`dead_stock.ts`、`drug_price_history.ts`）は別物なので触らない |
+| **SW-D**（完了） | UTC の日付で「今日」「受付日」を作る | 第7サイクル（`417ede5`）で、`src/` の非テストコードから呼ばれていなかった `print/helpers.ts` の `toDateOnly`（UTC で日付を切る死んだ関数）を、未使用 import とテスト（1 件・assert 3 件）ごと削除した。**残る 8 件はすべて正しい**（往復検証＝実在日付の確認が 6 件、開発用スクリプト 1 件、説明コメント 1 件） | **新しく `toISOString().slice(0, 10)` で「今日」「受付日」を作らない**（§7 の日付。`toLocalDateKey` / `toLocalDateKeyFromValue` を使う）。他ファイルの同名の private 関数（`dead_stock.ts`、`drug_price_history.ts`）は実際に使われている別物なので触らない |
 | **SW-A** | 12px 未満の生の `font-size`（`--fs-2xs` の 12px が下限） | **14 件／3 ファイル**: `emr/components/SoapComponents.tsx` 4、`ocr/page.tsx` 7、`inventory/inventory.css` 3（`0.65`〜`0.74rem`） | `var(--fs-2xs)` へ。**見た目が変わる**ので §8 の実画面確認（1280/768/375px）が条件。`SoapComponents.tsx` と `ocr/page.tsx` の CSS は `<style jsx>` で、同一ファイル内の別コンポーネントには当たらない（無言で無スタイルになる）。**0.75rem 以上 1rem 未満の生値 49 件は別テーマ**（トークンに寄せると見た目が動く）。1rem 以上（見出し）と印刷ページ（`print.css`、`print/[visitId]`）は対象外 |
 | **SW-C** | 失敗が利用者に伝わらない `catch` | 付録 A のスクリプトで**候補 183 件**（通知・再 throw・エラー状態のセット等が無い `catch`。`72a9f57` で +1（取り消し失敗の二次ログ。分類 (c)）。`b133f65` では増減なし。`src/lib` 51、`src/lib/sync` 24、`src/hooks` 19、`src/db` 10、…） | **182 件を一括で直さない。** 精度は高くない（localStorage の失敗の無視、取り消し失敗の二次ログ、再試行の経路など、意図的なものが多い）。1 テーマ 3〜5 件に絞り、各件を次の 3 つに分類してから動く: **(a) 利用者の操作による書き込み・書き出しの失敗**→ 通知必須（これだけ直す）／**(b) 読み込み失敗**→ 空表示と区別がつかないなら通知／**(c) 二次的なログ**→ 直さない。分類結果は報告の表にする |
 | **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 290 件、`as any` 41 件（`72a9f57` で +1、`b133f65` で −3、`5014bc1`・`396d27a` で各 −1） | **1 ファイル（または 1 フック）単位**。型を足した結果 `tsc` が本当の不整合を出したら、**それを直すのは別コミット（`fix:`）で、報告に「型で暴かれた不整合」として書く**。`refactor:` に混ぜない。型を緩めて通すのは禁止 |
@@ -196,13 +204,12 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 ### 4.3 サイクルの推奨順
 
-第1〜6サイクル（SW-B、SW-G の 5 か所）は検証済みで、**SW-G は完了**。次は次の順にする。
+第1〜7サイクル（SW-B、SW-G の 5 か所、SW-D）は検証済みで、**SW-G と SW-D は完了**。次は次の順にする。
 
-1. **SW-D**（死コード削除。挙動変更なし）
-2. **SW-A**（実画面確認が要る。1 画面ずつ別コミットにしてよい）
-3. **SW-H**（1 か所。画面ハンドラを変えるので §8.1 が必須）
-4. **SW-C**（分類が要る。(a) のみ）
-5. **SW-E**（1 ファイルずつ）
+1. **SW-A**（12px 未満の生 `font-size`。見た目が変わるので §8.1 の実画面確認が必須。1 ファイルずつ別コミットにする。最初は `inventory/inventory.css` の 3 件）
+2. **SW-H**（1 か所。画面ハンドラを変えるので §8.1 が必須）
+3. **SW-C**（分類が要る。(a) のみ）
+4. **SW-E**（1 ファイルずつ）
 
 ### 4.4 着手しない領域
 
@@ -234,13 +241,13 @@ npm run build           > "$OUT/build.txt" 2>&1; echo "exit $?" >> "$OUT/build.t
 tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 ```
 
-ベースライン（`396d27a`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`b133f65` は 2181）:
+ベースライン（`417ede5`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`396d27a` は 2190）:
 
 | 検証 | コマンド | ベースライン |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | 出力なし、exit 0 |
 | Lint | `npm run lint` | 問題行なし、exit 0（警告 0 件） |
-| テスト | `npm test` | `ℹ tests 2190` / `ℹ suites 106` / `ℹ pass 2190` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 60〜110 秒（負荷で変わる） |
+| テスト | `npm test` | `ℹ tests 2189` / `ℹ suites 106` / `ℹ pass 2189` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 60〜120 秒（負荷で変わる） |
 | ビルド | `npm run build` | exit 0、静的ページ 28 本（`Generating static pages … (n/28)`）。複数 lockfile によるルート推定の警告と Node.js SQLite の実験機能警告は既知 |
 
 注意:
@@ -398,6 +405,7 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 ```
 ## <テーマID>: <タイトル>
 
+- 読んだガイドの版: <`git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md` の出力。§0 で控えたもの>
 - コミット: <hash>（`git log -1 --format=%h` の出力）
 - 変更ファイル: <`git show --stat <hash>` の出力>
 - 宣言した「触るファイル」との差: <無ければ「なし」>
@@ -444,6 +452,7 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 
 提出物は、あなたの報告を信じずに次の手順で検証される。**報告を書く前に自分でも同じことをしておく**と、差し戻されない。
 
+0. **報告の「読んだガイドの版」が、レビュー時点の `git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md` の出力と一致するか**、報告の見出しが現行の §10 のテンプレートか、`tee` を使っていないか、`-baseline` / `-final` のディレクトリがあるかを確認する。版が無い・古い・見出しが旧テンプレートなら、**改訂前のガイドで動いた**と判定して、内容を読まずに差し戻す。
 1. `git log` で実コミットを確認し、`tsc` / `lint` / `npm test` / `npm run build` を**最初から自分で再実行**する。報告の数字は転記しない。
 2. 報告に貼られたコマンド出力の真偽: パッケージ名・バージョン、`npm test` の実スクリプト文字列との一致、`suites` 数と `duration_ms` が実測レンジ（約 106 suites・約 60〜110 秒。負荷で変わる）に収まるか、**保存ファイルの内容と一致するか**、出力に出てくるファイル名が `find` で実在するか。
 3. 変異表の「落ちたテスト名」を `grep -n "test('" <ファイル>` の実在文字列と照合する。
@@ -484,8 +493,10 @@ PY
 
 ## 付録 B: 起動プロンプトの例（人が使う）
 
+**起動プロンプトには、「ガイドを今あらためて `cat` で読む」ことを必ず書く。** 以前のセッションの内容が残っていると、改訂前の版で動く。
+
 ```bash
-gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。テーマは SW-D（src/app/print/helpers.ts の呼び出しのない toDateOnly の削除）だけです。完了したら §10 の報告を出力して停止してください。"
+gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは SW-A のうち src/app/inventory/inventory.css の 3 か所だけです。この分は見た目が変わるため、§8.1 の実画面確認（1280 / 768 / 375px）が必須です。完了したら §10 の報告を出力して停止してください。"
 ```
 
 戻ってきた報告は §11 の手順で検証してから取り込む。
