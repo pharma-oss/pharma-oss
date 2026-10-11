@@ -68,6 +68,18 @@ export function buildMedicationInfoTemplateSaveErrorMessage(
   return base;
 }
 
+export function buildMedicationInfoTemplateCsvImportErrorMessage(
+  error: unknown,
+  rollbackResult?: RollbackMedicationInfoTemplateWritesResult | null
+): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  const base = `薬情テンプレCSVを取り込めませんでした: ${reason}`;
+  if (rollbackResult && !rollbackResult.rolledBack && rollbackResult.rollbackNote) {
+    return `${base} ${rollbackResult.rollbackNote}`;
+  }
+  return base;
+}
+
 export async function rollbackMedicationInfoTemplateWrites(
   collection: MedicationInfoTemplateCollectionLike,
   previousTemplatesById: Map<string, PatientMedicationInfoTemplate | undefined>,
@@ -78,16 +90,19 @@ export async function rollbackMedicationInfoTemplateWrites(
   );
   let rollbackErrorCount = 0;
   if (previousTemplates.length > 0) {
-    try {
-      const rollbackResult = (await collection.bulkUpsert(previousTemplates)) as { error?: unknown[] } | undefined;
-      const errors = Array.isArray(rollbackResult?.error) ? rollbackResult.error : [];
-      if (errors.length > 0) {
-        rollbackErrorCount += errors.length;
-        console.error('Failed to restore previous templates during rollback:', rollbackResult?.error);
+    for (let start = 0; start < previousTemplates.length; start += 500) {
+      const chunk = previousTemplates.slice(start, start + 500);
+      try {
+        const rollbackResult = (await collection.bulkUpsert(chunk)) as { error?: unknown[] } | undefined;
+        const errors = Array.isArray(rollbackResult?.error) ? rollbackResult.error : [];
+        if (errors.length > 0) {
+          rollbackErrorCount += errors.length;
+          console.error('Failed to restore previous templates during rollback:', rollbackResult?.error);
+        }
+      } catch (upsertErr) {
+        rollbackErrorCount += chunk.length;
+        console.error('Failed to execute bulkUpsert during rollback:', upsertErr);
       }
-    } catch (upsertErr) {
-      rollbackErrorCount += previousTemplates.length;
-      console.error('Failed to execute bulkUpsert during rollback:', upsertErr);
     }
   }
 
@@ -634,26 +649,17 @@ export function useMedicationInfoTemplateSettings({
       });
       await refreshAuditEvidence();
       toast.success(`${writes.length}件を下書きとして取り込みました。承認準備完了は${parsed.readyForApprovalCount}件です。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let rollbackResult: RollbackMedicationInfoTemplateWritesResult | null = null;
       if (previousTemplatesById) {
-        try {
-          const previousTemplates = Array.from(previousTemplatesById.values()).filter(
-            (template): template is PatientMedicationInfoTemplate => !!template
-          );
-          for (let start = 0; start < previousTemplates.length; start += 500) {
-            await db.patient_medication_info_templates.bulkUpsert(previousTemplates.slice(start, start + 500));
-          }
-          const newTemplateIds = attemptedTemplateIds.filter((templateId) => !previousTemplatesById?.get(templateId));
-          for (const templateId of newTemplateIds) {
-            const savedDoc = await db.patient_medication_info_templates.findOne(templateId).exec();
-            if (savedDoc) await savedDoc.remove();
-          }
-        } catch (rollbackError) {
-          console.error('Failed to roll back medication info CSV import:', rollbackError);
-        }
+        rollbackResult = await rollbackMedicationInfoTemplateWrites(
+          db.patient_medication_info_templates,
+          previousTemplatesById,
+          attemptedTemplateIds
+        );
       }
       console.error('Failed to import medication info CSV:', error);
-      toast.error(`薬情テンプレCSVを取り込めませんでした: ${error.message || error}`);
+      toast.error(buildMedicationInfoTemplateCsvImportErrorMessage(error, rollbackResult));
     } finally {
       setIsImportingMedicationInfoCsv(false);
     }

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   buildMedicationInfoTemplateSaveErrorMessage,
+  buildMedicationInfoTemplateCsvImportErrorMessage,
   rollbackMedicationInfoTemplateWrites,
   type MedicationInfoTemplateCollectionLike
 } from './useMedicationInfoTemplateSettings.ts';
@@ -40,6 +41,32 @@ test('buildMedicationInfoTemplateSaveErrorMessage appends rollback failure note 
   assert.strictEqual(
     message,
     '薬情テンプレを保存できませんでした: 書き込みタイムアウト 作成・更新の取り消しに失敗しました（1件の復元エラー）。'
+  );
+});
+
+test('buildMedicationInfoTemplateCsvImportErrorMessage formats base message on successful rollback', () => {
+  const message = buildMedicationInfoTemplateCsvImportErrorMessage(
+    new Error('監査ログ記録に失敗したため、取り込みを取り消しました。'),
+    { rolledBack: true, rollbackErrorCount: 0 }
+  );
+  assert.strictEqual(
+    message,
+    '薬情テンプレCSVを取り込めませんでした: 監査ログ記録に失敗したため、取り込みを取り消しました。'
+  );
+});
+
+test('buildMedicationInfoTemplateCsvImportErrorMessage appends rollback failure note when rollback failed', () => {
+  const message = buildMedicationInfoTemplateCsvImportErrorMessage(
+    new Error('監査ログ記録に失敗したため、取り込みを取り消しました。'),
+    {
+      rolledBack: false,
+      rollbackErrorCount: 2,
+      rollbackNote: '作成・更新の取り消しに失敗しました（2件の復元エラー）。'
+    }
+  );
+  assert.strictEqual(
+    message,
+    '薬情テンプレCSVを取り込めませんでした: 監査ログ記録に失敗したため、取り込みを取り消しました。 作成・更新の取り消しに失敗しました（2件の復元エラー）。'
   );
 });
 
@@ -100,4 +127,40 @@ test('rollbackMedicationInfoTemplateWrites detects bulkUpsert error result and m
     result.rollbackNote,
     '作成・更新の取り消しに失敗しました（1件の復元エラー）。'
   );
+});
+
+test('rollbackMedicationInfoTemplateWrites chunks previous templates in batches of 500 and aggregates errors across chunks', async () => {
+  const chunksReceived: PatientMedicationInfoTemplate[][] = [];
+  const mockCollection: MedicationInfoTemplateCollectionLike = {
+    bulkUpsert: async (docs) => {
+      chunksReceived.push(docs);
+      if (chunksReceived.length === 2) {
+        return {
+          error: [{ documentId: docs[0]?.templateId || 'err-chunk2', status: 500, message: 'second chunk error' }],
+          success: []
+        };
+      }
+      return { error: [], success: docs };
+    },
+    findOne: () => ({
+      exec: async () => null
+    })
+  };
+
+  const previousMap = new Map<string, PatientMedicationInfoTemplate | undefined>();
+  const attemptedIds: string[] = [];
+  for (let i = 0; i < 505; i++) {
+    const id = `tmpl-${i.toString().padStart(4, '0')}`;
+    previousMap.set(id, { ...sampleTemplate, templateId: id });
+    attemptedIds.push(id);
+  }
+
+  const result = await rollbackMedicationInfoTemplateWrites(mockCollection, previousMap, attemptedIds);
+
+  assert.strictEqual(chunksReceived.length, 2);
+  assert.strictEqual(chunksReceived[0].length, 500);
+  assert.strictEqual(chunksReceived[1].length, 5);
+  assert.strictEqual(result.rolledBack, false);
+  assert.strictEqual(result.rollbackErrorCount, 1);
+  assert.strictEqual(result.rollbackNote, '作成・更新の取り消しに失敗しました（1件の復元エラー）。');
 });
