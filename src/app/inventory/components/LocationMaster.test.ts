@@ -11,6 +11,8 @@ import {
   buildBulkLocationDocs,
   executeBulkLocationInsert,
   resolveBulkLocationCreateOutcome,
+  executeBulkLocationDelete,
+  resolveBulkLocationDeleteOutcome,
   LocationMaster
 } from './LocationMaster';
 
@@ -243,3 +245,58 @@ test('LocationMaster component renders static markup with form inputs', () => {
   assert.ok(html.includes('A-01'));
   assert.ok(html.includes('一括作成'));
 });
+
+test('executeBulkLocationDelete handles empty list safely', async () => {
+  const result = await executeBulkLocationDelete([]);
+  assert.deepStrictEqual(result, { successCount: 0, errorCount: 0 });
+});
+
+test('executeBulkLocationDelete tracks full success and partial failure via Promise.allSettled', async () => {
+  const docsSuccess = [
+    { remove: async () => true },
+    { remove: async () => true },
+    { remove: async () => true }
+  ];
+  const fullSuccess = await executeBulkLocationDelete(docsSuccess);
+  assert.strictEqual(fullSuccess.successCount, 3);
+  assert.strictEqual(fullSuccess.errorCount, 0);
+
+  const docsPartial = [
+    { remove: async () => true },
+    { remove: async () => { throw new Error('Lock error'); } },
+    { remove: async () => true }
+  ];
+  const partialResult = await executeBulkLocationDelete(docsPartial);
+  assert.strictEqual(partialResult.successCount, 2);
+  assert.strictEqual(partialResult.errorCount, 1);
+
+  const docsAllFailed = [
+    { remove: async () => { throw new Error('Disk full'); } },
+    { remove: async () => { throw new Error('DB closed'); } }
+  ];
+  const allFailedResult = await executeBulkLocationDelete(docsAllFailed);
+  assert.strictEqual(allFailedResult.successCount, 0);
+  assert.strictEqual(allFailedResult.errorCount, 2);
+});
+
+test('resolveBulkLocationDeleteOutcome formats outcome message correctly', () => {
+  const successOutcome = resolveBulkLocationDeleteOutcome({ successCount: 4, errorCount: 0 });
+  assert.strictEqual(successOutcome.alertMessage, null);
+  assert.strictEqual(successOutcome.successCount, 4);
+  assert.strictEqual(successOutcome.errorCount, 0);
+
+  const partialOutcome = resolveBulkLocationDeleteOutcome({ successCount: 2, errorCount: 1 });
+  assert.strictEqual(partialOutcome.successCount, 2);
+  assert.strictEqual(partialOutcome.errorCount, 1);
+  assert.match(partialOutcome.alertMessage || '', /一部の棚番の削除に失敗しました/);
+  assert.match(partialOutcome.alertMessage || '', /成功: 2件/);
+  assert.match(partialOutcome.alertMessage || '', /失敗: 1件/);
+  assert.match(partialOutcome.alertMessage || '', /1件の棚番が残っています/);
+
+  const fullFailOutcome = resolveBulkLocationDeleteOutcome({ successCount: 0, errorCount: 3 });
+  assert.strictEqual(fullFailOutcome.successCount, 0);
+  assert.strictEqual(fullFailOutcome.errorCount, 3);
+  assert.match(fullFailOutcome.alertMessage || '', /未使用棚番の削除に失敗しました/);
+  assert.match(fullFailOutcome.alertMessage || '', /3件すべて削除できず残っています/);
+});
+

@@ -82,6 +82,53 @@ export function resolveBulkLocationCreateOutcome(
     };
 }
 
+export interface BulkLocationDeleteResult {
+    successCount: number;
+    errorCount: number;
+}
+
+export interface BulkLocationDeleteOutcome {
+    alertMessage: string | null;
+    successCount: number;
+    errorCount: number;
+}
+
+export function resolveBulkLocationDeleteOutcome(
+    result: BulkLocationDeleteResult
+): BulkLocationDeleteOutcome {
+    if (result.errorCount === 0) {
+        return {
+            alertMessage: null,
+            successCount: result.successCount,
+            errorCount: 0
+        };
+    }
+    if (result.successCount === 0) {
+        return {
+            alertMessage: `未使用棚番の削除に失敗しました（${result.errorCount}件すべて削除できず残っています）。`,
+            successCount: 0,
+            errorCount: result.errorCount
+        };
+    }
+    return {
+        alertMessage: `一部の棚番の削除に失敗しました（成功: ${result.successCount}件、失敗: ${result.errorCount}件。${result.errorCount}件の棚番が残っています）。`,
+        successCount: result.successCount,
+        errorCount: result.errorCount
+    };
+}
+
+export async function executeBulkLocationDelete(
+    docs: Array<{ remove: () => Promise<unknown> }>
+): Promise<BulkLocationDeleteResult> {
+    if (docs.length === 0) {
+        return { successCount: 0, errorCount: 0 };
+    }
+    const results = await Promise.allSettled(docs.map((d) => d.remove()));
+    const successCount = results.filter((r) => r.status === 'fulfilled').length;
+    const errorCount = results.filter((r) => r.status === 'rejected').length;
+    return { successCount, errorCount };
+}
+
 export async function executeBulkLocationInsert(
     locationsCollection: BulkLocationCollectionLike | null | undefined,
     docs: Location[]
@@ -241,10 +288,15 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
             try {
                 const ids = unusedLocations.map((l) => l.id);
                 const docs = await db.locations.find({ selector: { id: { $in: ids } } }).exec();
-                await Promise.all(docs.map((d: any) => d.remove()));
-            } catch (err: any) {
+                const result = await executeBulkLocationDelete(docs);
+                const outcome = resolveBulkLocationDeleteOutcome(result);
+                if (outcome.alertMessage) {
+                    alert(outcome.alertMessage);
+                }
+            } catch (err: unknown) {
                 console.error('Failed to delete unused locations', err);
-                alert('未使用棚番の削除に失敗しました。');
+                const message = err instanceof Error ? err.message : String(err || '');
+                alert(`未使用棚番の削除に失敗しました: ${message}`);
             }
         }
     };
