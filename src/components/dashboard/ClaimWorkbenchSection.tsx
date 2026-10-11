@@ -59,13 +59,14 @@ import {
 import { EmptyState } from './DashboardCards';
 import { ClaimWorkbenchRow } from './DashboardRows';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
+import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient, Drug } from '@/db/types';
 import { resolveDrugPrice } from '@/lib/drug_price_history';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
 import { applyReversiblePatches, plainCopy, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
 
 export interface ClaimWorkbenchSectionProps {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   claimWorkItems: DashboardClaimWorkItem[];
   counts: DashboardCounts;
   isLoading: boolean;
@@ -108,21 +109,21 @@ export function ClaimWorkbenchSection({
     }
 
     const visitRows = visitDocs
-      .map((doc: any) => ({ doc, visit: toPlain<any>(doc) }))
+      .map((doc) => ({ doc, visit: toPlain<Visit>(doc) }))
       // 念のための防御: デモ受付が請求対象に紛れても、UKEへは絶対に載せない
-      .filter((row: any) => !isDemoVisit(row.visit))
-      .sort((left: any, right: any) => {
+      .filter((row) => !isDemoVisit(row.visit))
+      .sort((left, right) => {
         const leftDate = left.visit.dispensingDate || left.visit.prescriptionDate || left.visit.issueDate || '';
         const rightDate = right.visit.dispensingDate || right.visit.prescriptionDate || right.visit.issueDate || '';
         return leftDate.localeCompare(rightDate) || String(left.visit.visitId).localeCompare(String(right.visit.visitId));
       });
-    const visits = visitRows.map((row: any) => row.visit);
-    const orderedVisitDocs = visitRows.map((row: any) => row.doc);
-    const patientIds = Array.from(new Set(visits.map((visit: any) => visit.patientId).filter(Boolean)));
+    const visits = visitRows.map((row) => row.visit);
+    const orderedVisitDocs = visitRows.map((row) => row.doc);
+    const patientIds = Array.from(new Set(visits.map((visit) => visit.patientId).filter(Boolean)));
     const prescriptionDocs = targetVisitIds.length > 0
       ? await db.prescription_items.find({ selector: { visitId: { $in: targetVisitIds } } }).exec()
       : [];
-    const prescriptionItems = prescriptionDocs.map((doc: any) => toPlain<any>(doc));
+    const prescriptionItems = prescriptionDocs.map((doc) => toPlain<PrescriptionItem>(doc));
     const drugIds = new Set<string>();
     for (const item of prescriptionItems) {
       if (item.drugId) drugIds.add(item.drugId);
@@ -134,8 +135,8 @@ export function ClaimWorkbenchSection({
       drugIds.size > 0 ? db.drugs.findByIds(Array.from(drugIds)).exec() : Promise.resolve(new Map()),
       targetVisitIds.length > 0 ? db.interventions.find({ selector: { visitId: { $in: targetVisitIds } } }).exec() : Promise.resolve([])
     ]);
-    const interventions = interventionDocs.map((doc: any) => toPlain<any>(doc));
-    const interventionsByVisitId = new Map<string, any[]>();
+    const interventions = interventionDocs.map((doc) => toPlain<Intervention>(doc));
+    const interventionsByVisitId = new Map<string, Intervention[]>();
     for (const intervention of interventions) {
       const list = interventionsByVisitId.get(intervention.visitId) || [];
       list.push(intervention);
@@ -146,12 +147,12 @@ export function ClaimWorkbenchSection({
     const missingMessages: string[] = [];
 
     for (const visit of visits) {
-      const patient = toPlain<any>(patientMap.get(visit.patientId));
+      const patient = toPlain<Patient>(patientMap.get(visit.patientId));
       if (!patient) {
         missingMessages.push(`患者ID ${visit.patientId} (受付 ${visit.visitId}) の患者情報が見つかりません。`);
         continue;
       }
-      const rawItems = prescriptionItems.filter((item: any) => item.visitId === visit.visitId);
+      const rawItems = prescriptionItems.filter((item) => item.visitId === visit.visitId);
       if (rawItems.length === 0) {
         missingMessages.push(`受付 ${visit.visitId} (${patient.name || '氏名未設定'}) の処方明細が見つかりません。`);
         continue;
@@ -161,8 +162,8 @@ export function ClaimWorkbenchSection({
       // 薬価改定後の再請求で過去分の点数が動いてしまう。
       const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
 
-      const items = rawItems.map((item: any) => {
-        const drug = toPlain<any>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
+      const items = rawItems.map((item) => {
+        const drug = toPlain<Drug>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
         return {
           ...item,
           drugName: drug?.name || item.dispensedDrug || item.drugId,
@@ -255,9 +256,10 @@ export function ClaimWorkbenchSection({
       } else {
         toast.warning(`公式提出準備に確認事項があります（${preflightReport.officialReadinessSummary.errorCount}件 / CSV: ${fileName}）。`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to export monthly official readiness CSV:', err);
-      toast.error(`公式提出準備チェックに失敗しました: ${err.message || err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`公式提出準備チェックに失敗しました: ${message}`);
     } finally {
       setIsCheckingOfficialReadiness(false);
     }
@@ -308,9 +310,10 @@ export function ClaimWorkbenchSection({
       } else {
         alert(`請求前に算定ルールの確認が必要です。\n\n${formatClaimRuleAttentionForScreen(report, cases)}\n\n患者情報なしCSV: ${fileName}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to export claim rule review CSV:', err);
-      toast.error(`算定ルール確認に失敗しました: ${err.message || err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`算定ルール確認に失敗しました: ${message}`);
     } finally {
       setIsCheckingRules(false);
     }
@@ -439,10 +442,11 @@ export function ClaimWorkbenchSection({
       URL.revokeObjectURL(url);
       toast.success(`公式UKEを出力しました（${cases.length}件・${officialFileName}）。`);
       onRefresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to export official UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      toast.error(`公式UKEの出力に失敗しました: ${err.message || err}${undoNote}`);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`公式UKEの出力に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsExportingOfficialUke(false);
     }
@@ -557,10 +561,11 @@ export function ClaimWorkbenchSection({
       URL.revokeObjectURL(url);
       toast.success(`月次一括UKEを作成しました（${cases.length}件・${ukeFileName}）。`);
       onRefresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to export UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      toast.error(`UKEの出力に失敗しました: ${err.message || err}${undoNote}`);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`UKEの出力に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsExportingUke(false);
     }
@@ -622,10 +627,11 @@ export function ClaimWorkbenchSection({
       }
       toast.success(`受付済み請求 ${closedCount}件を請求完了として締めました`);
       onRefresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to close accepted claims:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      toast.error(`請求完了の更新に失敗しました: ${err.message || err}${undoNote}`);
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`請求完了の更新に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsClosingAccepted(false);
     }
@@ -645,8 +651,8 @@ export function ClaimWorkbenchSection({
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv,.txt,.dat';
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0];
+    input.onchange = async () => {
+      const file = input.files?.[0];
       if (!file) return;
       setIsImportingAcceptance(true);
       try {
@@ -658,7 +664,7 @@ export function ClaimWorkbenchSection({
         }
 
         const visits = await db.visits.find().exec();
-        const plainVisits = visits.map((v: any) => toPlain(v));
+        const plainVisits = visits.map((v) => toPlain<Visit>(v));
         const reconcileResult = reconcileOnlineClaimAcceptanceResults({
           rows: parseResult.rows,
           visits: plainVisits,
@@ -666,7 +672,7 @@ export function ClaimWorkbenchSection({
           importedBy: operator.name || '管理者'
         });
 
-        const matchedItems = reconcileResult.items.filter((item: any) => item.visit && item.nextLifecycle);
+        const matchedItems = reconcileResult.items.filter((item) => item.visit && item.nextLifecycle);
         if (matchedItems.length === 0) {
           alert(`一致する受付が見つかりませんでした。\nフォーマット: ${formatOnlineClaimAcceptanceSourceFormat(parseResult.sourceFormat)}`);
           return;
@@ -675,7 +681,7 @@ export function ClaimWorkbenchSection({
         // 途中の受付で書き込みに失敗したら、そこまでの更新を戻す(一部の受付だけ更新された状態を残さない)
         const importPatches: ReversiblePatch[] = [];
         for (const matched of matchedItems) {
-          const doc = visits.find((v: any) => v.visitId === matched.row.visitId);
+          const doc = visits.find((v) => v.visitId === matched.row.visitId);
           if (doc && matched.nextLifecycle) {
             importPatches.push({
               doc,
@@ -697,9 +703,10 @@ export function ClaimWorkbenchSection({
         );
         toast.success(`受付結果を取り込みました（${matchedItems.length}件更新・取込形式: ${formatOnlineClaimAcceptanceSourceFormat(parseResult.sourceFormat)}）。`);
         onRefresh();
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to import acceptance results:', err);
-        toast.error(`審査結果の取込に失敗しました: ${err.message || err}`);
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`審査結果の取込に失敗しました: ${message}`);
       } finally {
         setIsImportingAcceptance(false);
       }
