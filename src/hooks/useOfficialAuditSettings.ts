@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { PharmacyDatabase } from '@/db/types';
+import type { PharmacyDatabase, Visit, Patient, PrescriptionItem, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import {
   DISPENSING_UKE_RECORD_SPEC_SOURCE,
@@ -47,8 +47,22 @@ import {
   type DosageCategoryConflictReview
 } from '@/lib/dosage_category_conflict';
 import { calculateDispensingFees, getTotalPoints } from '@/lib/calculator';
-import { resolveClaimItemPricing } from '@/lib/claim_item_pricing';
+import { resolveClaimItemPricing, type ClaimItemPricingDrug } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
+
+function toClaimItemPricingDrug(drugDoc?: { toJSON: () => Partial<Drug> } | Partial<Drug> | null): ClaimItemPricingDrug | undefined {
+  if (!drugDoc) return undefined;
+  const d: Partial<Drug> = 'toJSON' in drugDoc && typeof drugDoc.toJSON === 'function'
+    ? drugDoc.toJSON()
+    : (drugDoc as Partial<Drug>);
+  return {
+    price: d.price,
+    priceHistory: d.priceHistory ? Array.from(d.priceHistory) : undefined,
+    yjCode: d.yjCode,
+    isGeneric: d.isGeneric,
+    isHighRisk: d.isHighRisk
+  };
+}
 
 interface UseOfficialAuditSettingsProps {
   db: PharmacyDatabase | null;
@@ -290,7 +304,7 @@ export function useOfficialAuditSettings({
 
       const inputs: ClaimPointsDriftInput[] = [];
       for (const visitDoc of visits) {
-        const visit: any = visitDoc.toJSON();
+        const visit = visitDoc.toJSON() as Visit;
         const snapshot = visit.claimLifecycle?.exportSnapshot;
         if (!snapshot || !Number.isFinite(snapshot.totalPoints)) continue;
 
@@ -298,7 +312,7 @@ export function useOfficialAuditSettings({
           db.patients.findOne(visit.patientId).exec(),
           db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
         ]);
-        const patient: any = patientDoc ? patientDoc.toJSON() : null;
+        const patient = patientDoc ? (patientDoc.toJSON() as Patient) : null;
 
         // 薬価は調剤日時点で引く。印刷画面と同じ関数を通さないと薬剤料が算定されず、
         // ずれていない請求まで「点数が減った」と出てしまう。
@@ -309,13 +323,13 @@ export function useOfficialAuditSettings({
           if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
         }
         const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
-        const items = itemDocs.map((doc: any) => ({
+        const items = itemDocs.map((doc) => ({
           ...doc.toJSON(),
           ...resolveClaimItemPricing(
-            doc,
+            doc.toJSON(),
             {
-              prescribed: drugsMap.get(doc.drugId) as any,
-              dispensed: doc.dispensedDrugCode ? (drugsMap.get(doc.dispensedDrugCode) as any) : undefined
+              prescribed: toClaimItemPricingDrug(drugsMap.get(doc.drugId)),
+              dispensed: toClaimItemPricingDrug(doc.dispensedDrugCode ? drugsMap.get(doc.dispensedDrugCode) : undefined)
             },
             dispensingDateForPrice
           )
@@ -350,9 +364,10 @@ export function useOfficialAuditSettings({
       );
       if (refreshAuditEvidence) await refreshAuditEvidence();
       toast.success(formatClaimPointsDriftSummary(review));
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to review claim points drift:', error);
-      toast.error(`請求点数の変動点検に失敗しました: ${error?.message || error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`請求点数の変動点検に失敗しました: ${message}`);
     } finally {
       setIsReviewingClaimPointsDrift(false);
     }
@@ -386,16 +401,19 @@ export function useOfficialAuditSettings({
       ]);
       const settings = settingsDoc ? settingsDoc.toJSON() : null;
 
-      const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc: any) => ({
-        visitId: doc.visitId,
-        rpNumber: doc.rpNumber,
-        itemId: doc.itemId || doc.id,
-        drugName: doc.drugName,
-        dispensedDrug: doc.dispensedDrug,
-        usage: doc.usage,
-        dosageCategory: doc.dosageCategory,
-        dosageCategorySource: doc.dosageCategorySource
-      }));
+      const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc) => {
+        const item = doc.toJSON();
+        return {
+          visitId: item.visitId,
+          rpNumber: item.rpNumber,
+          itemId: item.itemId,
+          drugName: item.dispensedDrug || item.drugId,
+          dispensedDrug: item.dispensedDrug,
+          usage: item.usage,
+          dosageCategory: item.dosageCategory,
+          dosageCategorySource: item.dosageCategorySource
+        };
+      });
 
       // 一旦食い違いを特定し、食い違いを含む受付IDのみ点数計算の対象とする
       const provisionalReview = buildDosageCategoryConflictReview(inputs);
@@ -403,14 +421,14 @@ export function useOfficialAuditSettings({
 
       const pointsList: DosageCategoryConflictPoints[] = [];
       if (settings && conflictVisitIds.size > 0) {
-        const targetVisits = visits.filter((v: any) => conflictVisitIds.has(v.visitId));
+        const targetVisits = visits.filter((v) => conflictVisitIds.has(v.visitId));
         for (const visitDoc of targetVisits) {
-          const visit: any = visitDoc.toJSON();
+          const visit = visitDoc.toJSON() as Visit;
           const [patientDoc, itemDocs] = await Promise.all([
             db.patients.findOne(visit.patientId).exec(),
             db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
           ]);
-          const patient: any = patientDoc ? patientDoc.toJSON() : null;
+          const patient = patientDoc ? (patientDoc.toJSON() as Patient) : null;
           if (!patient) continue;
 
           const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
@@ -420,13 +438,13 @@ export function useOfficialAuditSettings({
             if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
           }
           const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
-          const items = itemDocs.map((doc: any) => ({
+          const items = itemDocs.map((doc) => ({
             ...doc.toJSON(),
             ...resolveClaimItemPricing(
-              doc,
+              doc.toJSON(),
               {
-                prescribed: drugsMap.get(doc.drugId) as any,
-                dispensed: doc.dispensedDrugCode ? (drugsMap.get(doc.dispensedDrugCode) as any) : undefined
+                prescribed: toClaimItemPricingDrug(drugsMap.get(doc.drugId)),
+                dispensed: toClaimItemPricingDrug(doc.dispensedDrugCode ? drugsMap.get(doc.dispensedDrugCode) : undefined)
               },
               dispensingDateForPrice
             )
@@ -468,9 +486,10 @@ export function useOfficialAuditSettings({
       );
       if (refreshAuditEvidence) await refreshAuditEvidence();
       toast.success(formatDosageCategoryConflictSummary(review));
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to review dosage category conflicts:', error);
-      toast.error(`剤形判定の食い違い点検に失敗しました: ${error?.message || error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`剤形判定の食い違い点検に失敗しました: ${message}`);
     } finally {
       setIsReviewingDosageCategoryConflict(false);
     }
