@@ -389,7 +389,7 @@ export function useOfficialAuditSettings({
       const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc: any) => ({
         visitId: doc.visitId,
         rpNumber: doc.rpNumber,
-        itemId: doc.id,
+        itemId: doc.itemId || doc.id,
         drugName: doc.drugName,
         dispensedDrug: doc.dispensedDrug,
         usage: doc.usage,
