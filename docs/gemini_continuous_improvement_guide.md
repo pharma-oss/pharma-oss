@@ -1,6 +1,7 @@
 # Gemini 向け 継続改善ガイド
 
-- **作成**: 2026-10-11（実測の基準コミット: `898fa43`、`main`、作業ツリーはクリーン）
+- **作成**: 2026-10-11（初版の実測基準: `898fa43`）
+- **改訂**: 2026-10-11（第1〜6サイクルの検証結果を反映。基準コミット: `396d27a`、作業ツリーはクリーン）。SW-G・SW-H の追加（SW-G は完了）、§2.1・§2.2・§2.6・§4.2・§4.3・§5・§6・§7・§8.1・§10・§11 の追記。第5〜6サイクルの検証を受けて、報告の出力は保存ファイルから引くこと、ベースラインは毎サイクル別ディレクトリで実行すること、型と重複とテスト名の規則を追加
 - **性質**: 単発の計画書ではなく、**毎回の起動で最初に読ませる常設の運用書**。改善テーマは起動プロンプトで指定されるか、§4 の掃引メニューから選ぶ。
 - **上位文書（矛盾したらこちらが優先）**: `.agents/AGENTS.md` → `.agents/skills/honest-verification/SKILL.md` → `docs/golden_rules_and_roadmap.md` 第Ⅰ部（十箇条）と第Ⅳ部（実装方針）。
 - **この文書を編集しない**。気づいた改善点は報告に書く。
@@ -13,7 +14,7 @@
 
 1. 次の 4 つを、この順に読む: `.agents/AGENTS.md`、`.agents/skills/honest-verification/SKILL.md`、金科玉条 第Ⅰ部、本書。
 2. `git status --short` を実行する。**本書自身（`docs/gemini_continuous_improvement_guide.md`）以外の行が 1 つでもあれば止まる。** 他の人（利用者や別のエージェント）の未コミット変更の可能性があり、上書きしてはならない。何が変更されているかだけを報告して終わる。
-3. §5 のゲートを**変更を加える前に**実行し、ベースラインを取る。本書の値とずれていたら、そのこと自体を最初に報告する（直さない）。
+3. §5 のゲートを**変更を加える前に、自分で**実行し、ベースラインを取る（`TAG=baseline`）。**「前サイクルの緑から着手」は認めない**（前サイクルの後に誰かがツリーを変えている可能性がある）。本書の値とずれていたら、そのこと自体を最初に報告する（直さない）。
 4. §4 でテーマを決める。起動プロンプトにテーマの指定があればそれに従う。
 
 **1 回の起動 = 1 テーマ = 1 コミット。** 報告を出したら止まる。起動プロンプトが複数テーマを明示したときだけ複数コミットにしてよいが、テーマごとに §5 のゲートを回し、前のテーマのゲートが赤なら次へ進まない。
@@ -55,8 +56,11 @@
 
 - 各ゲートの出力は**ファイルに保存**する（§5 のコマンドをそのまま使う）。報告の数字・テスト名・grep 結果は、**そのファイルから引く**。手で打ち直さない。
 - 出力を貼れないものは「実行できなかった」と書く。**推測で「通るはず」と書かない。**
+- **報告に貼る `tsc`・`lint`・`npm test`・`build` の出力は、保存ファイルを `cat` / `tail` した結果に限る。** 別途、直接実行した出力を貼らない。貼った出力が保存ファイルと一致しないこと（例: 保存ファイルに無い警告ブロックが貼られている、`duration_ms` の数字が違う）は、証拠の不整合として扱う。
+- **保存に `tee` を使わない。** `exit` の行が落ち、`tsc` のように出力が空になるゲートが、成功か失敗か保存ファイルから判別できなくなる。§5 のコマンドをそのまま使う。
 - 報告に書くテスト名は `grep -n "test('" <ファイル>` で実在を確認してから書く。
 - 報告に書く grep 結果は、報告を書く時点で**もう一度実行**した出力を使う。
+- 報告に書く**行番号**（変異の位置など）は、最後の編集の後に `grep -n` で取り直す。編集で 1 行ずれた古い番号を書かない（実際に 68 行目と書いて 69 行目だった例がある）。
 
 ### 2.2 偽カバレッジの禁止
 
@@ -64,6 +68,7 @@
 - 「テストを追加した」と書く前に、そのテストファイルが対象のモジュールを import していることを `grep -n "^import" <テスト>` で確認する。
 - `typeof X === 'function'` だけのテストを「描画を検証した」と呼ばない（現在 0 件。増やさない）。
 - 「全体で N 件通った」は、そのモジュールの正しさの根拠にならない。
+- **テスト名は、実際に検証していること以上を名乗らない。** 「集計する」「すべて」「各」と名乗るなら、足し算と代入、1 件と全件を**区別できるフィクスチャ**にする（例: チャンクごとの失敗を集計すると名乗るテストは、失敗するチャンクを 2 つ以上にする。失敗が 1 チャンクだけだと、`+=` を `=` に変えても通ってしまった）。
 
 ### 2.3 変異を実測する。ただし「指定した変異が全部落ちた」は十分の証明ではない
 
@@ -81,6 +86,9 @@
 
 - 宣言した「触るファイル」以外を変更しない。気づいた問題は**報告に書くだけ**にして、直さない。
 - `refactor:` を名乗るコミットに挙動変更を混ぜない。
+- **触るファイルの `any` を増やさない。** 新しく書く関数の引数・戻り値に `any` を使わず、必要な最小の構造的な型（使うメソッドだけを持つ `interface`）を定義する。`: any` の全体件数は §4.2 の SW-E のコマンドで前後を取り、増えていたら報告に理由を書く（第1サイクルは 294 → 295 に増えた）。
+- **型の宣言に `X | unknown` を書かない。** `unknown` に潰れて何も強制せず、戻り値を `as` キャストで読むことになる（第3・第5サイクルで 2 回出た）。戻り値の形を使うなら `Promise<BulkRemoveResultLike>` のように具体的な型にし、キャストで読まない。
+- **同じ問いに答える関数を 2 つ書かない（金科玉条 第八条）。** 接頭辞や文言だけが違うなら、引数にして 1 つにする（第6サイクルで、接頭辞以外同一のメッセージ組み立て関数が 2 つできた）。
 - **ドキュメントに「対応完了」と書くのは、コード・`tsc` 0 件・本物のテスト通過・（画面があれば）実画面確認がそろった後だけ。**
 - `docs/golden_rules_and_roadmap.md` は編集しない（第Ⅱ部の実測値が古くなっているのは把握済みで、更新はレビュアーが行う）。
 
@@ -141,12 +149,16 @@
 
 過去の監査で「画面は成功と言うが実際は失敗していた」型のバグが繰り返し見つかっている。**同じ型の取りこぼしを、機械的に探して潰す**のが継続改善の主軸である。
 
-**探すコマンドは、この直後のコードブロックをそのままコピーして使う**（表の中に書き写さない）。件数は `898fa43` での実測。テーマを選ぶ前に自分で再実行して一致を確認する。
+**探すコマンドは、この直後のコードブロックをそのままコピーして使う**（表の中に書き写さない）。件数は `396d27a` での実測（SW-G の完了後）。テーマを選ぶ前に自分で再実行して一致を確認する。
 
 ```bash
 # 共通: テスト除外は grep -v '\.test\.'
 echo "SW-B bulkInsert の呼び出し:"
 grep -rnE 'bulkInsert\(' src --include='*.ts' --include='*.tsx' | grep -v '\.test\.'
+echo "SW-G 取り消し・復旧の経路で書き込みの戻り値を見ているか（bulkRemove / bulkUpsert）:"
+grep -rnE 'bulkRemove\(|bulkUpsert\(' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test\.|_e2e_seed'
+echo "SW-H 一括削除で部分失敗を区別しない箇所:"
+grep -rnE 'Promise\.all\(.*\.remove\(\)' src --include='*.ts' --include='*.tsx' | grep -v '\.test\.'
 echo "SW-D UTC で日付を切る箇所:"
 grep -rnE 'toISOString\(\)\.slice\(0, *10\)' src --include='*.ts' --include='*.tsx' | grep -v '\.test\.'
 echo "SW-A 12px 未満の生 font-size（印刷ページ除外）:"
@@ -158,11 +170,13 @@ grep -rnE 'as any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test
 
 | ID | 探すもの | 実測 | 直し方・注意 |
 |---|---|---|---|
-| **SW-B** | `bulkInsert` の戻り値を見ない書き込み。RxDB の `bulkInsert` は個別の失敗を**例外にせず** `{ success, error }` を返すので、一部が欠けても画面は成功と言う | 呼び出し 6 件のうち **1 件**: `src/app/inventory/components/LocationMaster.tsx:92`（棚番の一括作成。戻り値を捨てたまま入力欄をリセットする）。他の 5 件は検査済み（`src/db/index.ts` の `assertBulkWriteSuccess` は同ファイル内の関数で未 export） | `result.error` を検査し、失敗なら**欠けた件数を利用者に伝える**（`alert` は同ファイル内の既存の流儀）。成功した分を戻すかは宣言に書く。実 RxDB の挙動で確かめるテストを書く（`RxLikeStore` は §7） |
+| **SW-B**（完了） | `bulkInsert` の戻り値を見ない書き込み | `72a9f57` で `LocationMaster.tsx` の 1 件を修正済み。他の 5 件は検査済み。**このクラスの新規の呼び出しを足すときの確認観点として残す**（`bulkInsert` は個別の失敗を例外にしない） | ロールバック自体の戻り値の検査は **SW-G** で補完済み（`b133f65`） |
+| **SW-G**（完了） | 取り消し・復旧（ロールバック）の経路で、書き込みの戻り値を見ない箇所。`bulkRemove` / `bulkUpsert` も `bulkInsert` と同じく個別の失敗を**例外にせず** `{ success, error }` を返す | **5 か所すべて修正・検証済み**: `LocationMaster.tsx`（`72a9f57`・`b133f65`）、`prescription_registration.ts`（`00f0421`）、`backup.ts`（`be6a658`）、`useMedicationInfoTemplateSettings.ts` の単体保存（`5014bc1`）と CSV インポート（`396d27a`）。上のコマンドが出す 11 行（取り消しの共通関数に集約されたため、テンプレのフックの呼び出しは 3 か所）は、すべて戻り値の `error` を検査している | **このクラスの新しい `bulkRemove` / `bulkUpsert` を足すときの確認観点として残す**（取り消しの戻り値を見ない、取り消せなかったのに「取り消しました」と言う）。手本のテスト: `LocationMaster.test.ts` の `bulkRemove` が 409 を返すテスト（§7 のコード） |
+| **SW-H** | 一括削除で、どれが消えてどれが消えなかったかを利用者に伝えない箇所 | **1 か所**（利用者向け）: `src/app/inventory/components/LocationMaster.tsx:244`（`handleDeleteUnused`。`Promise.all(docs.map((d) => d.remove()))` の失敗は、固定文の `alert` だけ）。`src/db/index.ts:203` はデモユーザーの掃除で対象外 | 失敗した件数と、残っている件数を伝える（`Promise.allSettled` で結果を集める）。SW-G の LocationMaster 分と**同じコミットにしない** |
 | **SW-D** | UTC の日付で「今日」「受付日」を作る | 9 件。うち 8 件は往復検証（実在日付の確認）か開発用スクリプト・説明コメントで**正しい**。残り 1 件が `src/app/print/helpers.ts:140` の `toDateOnly`（UTC で日付を切る。`src/` の非テストコードに**呼び出しが無い**。`src/app/print/[visitId]/page.tsx:112` で import されているだけ） | 呼び出し 0 件を `grep -rn "toDateOnly" src` で再確認 → 関数・未使用 import・それだけを検査するテスト（`helpers.test.ts`、`PrintPickingFlow.test.ts` の該当 assert）を削除。**削除したテスト・assert の数を報告に明記**。他ファイルの同名関数（`dead_stock.ts`、`drug_price_history.ts`）は別物なので触らない |
 | **SW-A** | 12px 未満の生の `font-size`（`--fs-2xs` の 12px が下限） | **14 件／3 ファイル**: `emr/components/SoapComponents.tsx` 4、`ocr/page.tsx` 7、`inventory/inventory.css` 3（`0.65`〜`0.74rem`） | `var(--fs-2xs)` へ。**見た目が変わる**ので §8 の実画面確認（1280/768/375px）が条件。`SoapComponents.tsx` と `ocr/page.tsx` の CSS は `<style jsx>` で、同一ファイル内の別コンポーネントには当たらない（無言で無スタイルになる）。**0.75rem 以上 1rem 未満の生値 49 件は別テーマ**（トークンに寄せると見た目が動く）。1rem 以上（見出し）と印刷ページ（`print.css`、`print/[visitId]`）は対象外 |
-| **SW-C** | 失敗が利用者に伝わらない `catch` | 付録 A のスクリプトで**候補 182 件**（通知・再 throw・エラー状態のセット等が無い `catch`。`src/lib` 51、`src/lib/sync` 24、`src/hooks` 19、`src/db` 10、…） | **182 件を一括で直さない。** 精度は高くない（localStorage の失敗の無視、取り消し失敗の二次ログ、再試行の経路など、意図的なものが多い）。1 テーマ 3〜5 件に絞り、各件を次の 3 つに分類してから動く: **(a) 利用者の操作による書き込み・書き出しの失敗**→ 通知必須（これだけ直す）／**(b) 読み込み失敗**→ 空表示と区別がつかないなら通知／**(c) 二次的なログ**→ 直さない。分類結果は報告の表にする |
-| **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 294 件、`as any` 41 件 | **1 ファイル（または 1 フック）単位**。型を足した結果 `tsc` が本当の不整合を出したら、**それを直すのは別コミット（`fix:`）で、報告に「型で暴かれた不整合」として書く**。`refactor:` に混ぜない。型を緩めて通すのは禁止 |
+| **SW-C** | 失敗が利用者に伝わらない `catch` | 付録 A のスクリプトで**候補 183 件**（通知・再 throw・エラー状態のセット等が無い `catch`。`72a9f57` で +1（取り消し失敗の二次ログ。分類 (c)）。`b133f65` では増減なし。`src/lib` 51、`src/lib/sync` 24、`src/hooks` 19、`src/db` 10、…） | **182 件を一括で直さない。** 精度は高くない（localStorage の失敗の無視、取り消し失敗の二次ログ、再試行の経路など、意図的なものが多い）。1 テーマ 3〜5 件に絞り、各件を次の 3 つに分類してから動く: **(a) 利用者の操作による書き込み・書き出しの失敗**→ 通知必須（これだけ直す）／**(b) 読み込み失敗**→ 空表示と区別がつかないなら通知／**(c) 二次的なログ**→ 直さない。分類結果は報告の表にする |
+| **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 290 件、`as any` 41 件（`72a9f57` で +1、`b133f65` で −3、`5014bc1`・`396d27a` で各 −1） | **1 ファイル（または 1 フック）単位**。型を足した結果 `tsc` が本当の不整合を出したら、**それを直すのは別コミット（`fix:`）で、報告に「型で暴かれた不整合」として書く**。`refactor:` に混ぜない。型を緩めて通すのは禁止 |
 | **SW-F** | **回帰ガード（減らす対象ではなく、悪化させない対象）** | 下のコードブロックの 5 つの数字 | **どのテーマの前後でも実行し、報告に書く。** 1 つでも悪化したら、そのコミットは認めない |
 
 SW-F は次のコードブロックをそのまま実行する。基準値は 3 / 4 / 5 / 0 / 0（この順に出力される）。
@@ -180,11 +194,13 @@ echo "@ts-ignore / @ts-expect-error / @ts-nocheck (基準 0):"
 grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test\.' | wc -l
 ```
 
-### 4.3 初回サイクルの推奨順
+### 4.3 サイクルの推奨順
 
-1. **SW-B**（1 ファイル・データの欠落が見えない型・影響が最小）
-2. **SW-D**（死コード削除。挙動変更なし）
-3. **SW-A**（実画面確認が要る。1 画面ずつ別コミットにしてよい）
+第1〜6サイクル（SW-B、SW-G の 5 か所）は検証済みで、**SW-G は完了**。次は次の順にする。
+
+1. **SW-D**（死コード削除。挙動変更なし）
+2. **SW-A**（実画面確認が要る。1 画面ずつ別コミットにしてよい）
+3. **SW-H**（1 か所。画面ハンドラを変えるので §8.1 が必須）
 4. **SW-C**（分類が要る。(a) のみ）
 5. **SW-E**（1 ファイルずつ）
 
@@ -206,10 +222,11 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 ## 5. ゲート
 
-**必ず次のコマンドをそのまま使う**（出力が `$OUT` に残り、報告はそこから引く）。ゲートは直列に実行し、`npm run build` の実行中にソースを触らない。
+**必ず次のコマンドをそのまま使う**（出力が `$OUT` に残り、報告はそこから引く。`tee` に置き換えない — §2.1）。ゲートは直列に実行し、`npm run build` の実行中にソースを触らない。**ベースラインと最終は別のディレクトリ**に保存し、赤だった出力は上書きせず残す（再実行は別の名前で保存する）。
 
 ```bash
-OUT=/tmp/pharma-improvement/$(date +%Y%m%d-%H%M); mkdir -p "$OUT"
+TAG=baseline   # 変更の前は baseline、変更の後は final。再実行は final-rerun のように別の名前にする（上書きしない）
+OUT=/tmp/pharma-improvement/$(date +%Y%m%d-%H%M)-$TAG; mkdir -p "$OUT"
 npx tsc --noEmit        > "$OUT/tsc.txt"   2>&1; echo "exit $?" >> "$OUT/tsc.txt"
 npm run lint            > "$OUT/lint.txt"  2>&1; echo "exit $?" >> "$OUT/lint.txt"
 npm test                > "$OUT/test.txt"  2>&1; echo "exit $?" >> "$OUT/test.txt"
@@ -217,19 +234,20 @@ npm run build           > "$OUT/build.txt" 2>&1; echo "exit $?" >> "$OUT/build.t
 tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 ```
 
-ベースライン（`898fa43`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**）:
+ベースライン（`396d27a`、2026-10-11 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`b133f65` は 2181）:
 
 | 検証 | コマンド | ベースライン |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | 出力なし、exit 0 |
 | Lint | `npm run lint` | 問題行なし、exit 0（警告 0 件） |
-| テスト | `npm test` | `ℹ tests 2171` / `ℹ suites 106` / `ℹ pass 2171` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 68 秒 |
+| テスト | `npm test` | `ℹ tests 2190` / `ℹ suites 106` / `ℹ pass 2190` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 60〜110 秒（負荷で変わる） |
 | ビルド | `npm run build` | exit 0、静的ページ 28 本（`Generating static pages … (n/28)`）。複数 lockfile によるルート推定の警告と Node.js SQLite の実験機能警告は既知 |
 
 注意:
 
 - **`npx tsx --test` は型検査をしない**（esbuild の変換のみ）。テストが通っても型は保証されない。`tsc` を**単独で**実行する。
 - `npm test` は `TZ=Asia/Tokyo`・`--test-concurrency=1` 固定（`package.json`）。この条件を変えない。
+- **サンドボックス内だと、ローカル通信を使う 3 本が `fetch failed` で落ちて `npm test` が exit 1 になる**（`scheduled audit log S3 WORM retention job writes and posts failure notices`、`scheduled backup external transfer job posts failure notices to webhook monitoring`、`scheduled ops drill posts a no-patient-data webhook and writes a receipt`）。コードの問題ではない。サンドボックスの外で再実行して緑になることを確認する。**初回が赤だったことと、その理由・再実行の経緯は、報告に必ず書く**（§10）。
 - 特定のテストだけ回すとき: `TZ=Asia/Tokyo npx tsx --test <ファイル>`。
 - テストが 1 本でも失敗したら、`ℹ fail` の数字ではなく、**失敗したテスト名**を報告する。
 
@@ -250,6 +268,8 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 
 - 変異が**当たらない軸**を自分で 1 つ以上挙げ、その軸でテストが緑のまま壊れうるかを検討して報告に書く
 - 判定に複数の分岐（列挙値）があるなら、**各分岐に 1 件ずつ**フィクスチャを入れる
+- **取り消し・ロールバック・復旧を書いたら、「取り消し自体が失敗したら」を 1 軸として必ず入れる。** 失敗の再現は、例外を投げさせるだけでなく、RxDB が実際に返す形（`{ success, error }`）でも行う（§7 のコード）。「例外が投げられる」と仮定した `try/catch` だけでは、RxDB の主な失敗の形を捕まえられない（`72a9f57` はこの前提で書かれ、検証で見つかった）。
+- **画面のハンドラの配線を 1 軸として必ず入れる。** `handleXxx` が判定結果を受けて `alert` して `return` する、成功時だけ入力欄をリセットする、といった分岐は、ハンドラ内の `if (false)` や `return;` の削除で壊し、**テストが落ちるか**を確かめる（`72a9f57` では、画面側の失敗分岐を丸ごと無効化しても 7 件全通過だった）。この repo には DOM を動かすテスト基盤が無く（`renderToStaticMarkup` と Puppeteer だけ）、ハンドラは単体で呼べない。したがって次の 2 つをセットにする: (1) ハンドラの分岐の判定を**純粋関数に出し**（例: `{ alertMessage: string | null; resetForm: boolean }` を返す関数）、ハンドラは戻り値に従うだけにして、その関数を本物のテストで検証する。(2) 配線（戻り値を無視していないか）は**実画面で失敗経路を再現して確認**し、報告の「実画面確認」に書く（§8.1。描画できただけは確認に数えない）。どうしても落とせない変異は、落とせないと報告する。
 
 ---
 
@@ -262,9 +282,22 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 - **同じインスタンスで `patch()` を 2 回呼ぶと必ず `CONFLICT`**。「書いて、監査が残らなければ同じ doc で戻す」取り消しは、実 RxDB では全部失敗していた。**取り消しは `src/lib/rxdb_restore.ts` の `restoreFields`（incrementalPatch）か `restoreWith`**。通常の書き込みは `patch()` のまま（他端末の変更を CONFLICT で検出するため）。
 - **`patch()` は「無い項目」を消さない。** 統合などで項目が補われた記録を元に戻すときは `doc.incrementalModify(() => ({ ...record }))`（`undefined` を書くとキーが残る）。
 - **複数文書の一括書き込み**は `applyReversiblePatches`（失敗したら前半を戻す）と `undoAppliedPatchesNote`（戻せなかったら警告文）。
-- **`bulkInsert` は個別の失敗を例外にしない**。`{ success, error }` を検査する。戻すのは `success` に入った ID だけ。
+- **`bulkInsert` / `bulkRemove` / `bulkUpsert` は個別の失敗を例外にしない**（`rx-collection.js` の `bulkRemove` は、ストレージの `bulkWrite` の結果から `{ success, error }` を組み立てて返す）。**書いた側の `{ success, error }` を検査し、取り消しの側の戻り値も検査する**。戻すのは `success` に入った ID だけ。取り消しに失敗したら、取り消せたと言わず、残っている件数を利用者に伝える。
+- **失敗の再現（テスト用）**: ストレージ層で 409 を返させると、RxDB が実際に返す形で失敗を作れる（`rx-collection-bulk-remove` は検証済み。`bulkUpsert` / `bulkInsert` の文脈名は `node_modules/rxdb/dist/esm/rx-collection.js` の `storageInstance.bulkWrite(` の第 2 引数で確認する）。
+
+  ```ts
+  const storage = db.locations.storageInstance;
+  const orig = storage.bulkWrite.bind(storage);
+  storage.bulkWrite = async (rows: any[], context: string) =>
+    context === 'rx-collection-bulk-remove'
+      ? { error: rows.map((r) => ({ status: 409, isError: true, documentId: r.document.id, writeRow: r, documentInDb: r.previous })) }
+      : orig(rows, context);
+  ```
+
+  `documentId` の `r.document.id` は主キー名に合わせる。他のコレクションの失敗の再現に使い回してよい。
 - **`upsert` / `bulkUpsert` は文書を丸ごと置き換える。** 書き戻す項目を列挙してコピーすると、列挙し忘れた項目が更新のたびに消える（納品書取込が `priceHistory`・発注点などを消していた）。全体を書き戻すなら `drugRecordFromDocument`（`src/lib/drug_record.ts`）、在庫数だけなら `patch`。
 - **`doc.claimLifecycle` のような入れ子の値は、開発ビルドで `structuredClone` できず `DOC24` で失敗**する。複製は `doc.toJSON().field` か `plainCopy`（`rxdb_restore.ts`）。Node のメモリストレージでは再現しない（再現は `rxdb_plain_copy.test.ts` の dev-mode プラグインか実ブラウザ）。
+- **戻り値の形（`{ success, error }`）を手書きのモックで作ったテストだけで、「取り消しを検証した」としない。** 少なくとも 1 件は、実 RxDB（メモリストレージ）に上のストレージ層の差し替えで失敗を起こさせ、DB に実際に何が残るかまで確認する。モックのテストは、件数の集計・分割・メッセージ組み立ての確認として併用してよい。
 - **取り消し・復元のテストは `src/lib/test_support/rxdb_like_doc.ts` の `RxLikeStore` で書く。** 偽ドキュメント（`patch: async (v) => Object.assign(state, v)`）は版の性質を持たず、壊れた取り消しがテストを通る。書いた後は `restoreFields` を `patch` に戻して**テストが落ちること**を確かめる。
 - **スキーマにプロパティを足したら `version` を +1**（ただし §3 で「提案して止まる」）。上げ忘れてもテストは緑で、壊れるのは既存ユーザーの DB だけ。
 
@@ -327,6 +360,26 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
   - スクリプトはプロジェクト直下に置かないと `node_modules` を解決できない。**終わったら消す。**
 - 書き込み失敗の再現: `crypto.subtle.digest` を reject させると「監査ログが残らない」状況を作れる。ただし `page.goto` のたびに元に戻るので、遷移した後に入れ直す。`db.<collection>.bulkInsert` を差し替えれば、一括書き込みの部分失敗を再現できる。利用者に何も出ない失敗は、`alert` と `[data-sonner-toast]` と pageerror を見て確かめる。
 
+### 8.1 画面のハンドラを変えたときの確認（失敗経路の再現は必須）
+
+**描画できた・ボタンを押せた、だけは確認に数えない。** 画面の書き込みハンドラ（保存・一括作成・取り消しなど）を変えたテーマは、**失敗の経路を再現して、利用者に見えるものを記録する**。単体テストではハンドラ本体を呼べない（この repo には DOM を動かすテスト基盤が無い）ので、ここが配線の唯一の守りになる。
+
+1. **失敗の再現**（`db.<collection>` の書き込みを差し替える）と、**成功の対照**（差し替えを外す）の両方を実行する。
+2. シナリオごとに、(a) `alert` / トーストの**文言そのまま**、(b) 入力欄・画面の状態（保たれたか、リセットされたか）、(c) データの状態（件数など）を記録する。
+3. **ハンドラの分岐に変異を 1 件当てて**（例: `if (outcome.resetForm)` → `if (true)`、`if (outcome.alertMessage)` → `if (false)`）、同じ確認の結果が**変わる**ことを確かめる。変わらなければ、その確認は配線を守っていない。確認後は `git checkout -- <ファイル>` で戻す。
+
+手順（動作確認済みのやり方）:
+
+- `npm run dev` を起動し、`/` と対象ページを一度開いて温める。Puppeteer の Chrome は `PUPPETEER_EXECUTABLE_PATH` で指す。
+- `/` の `button[data-testid="pre-login-tour-start-guest-demo"]`（または `.btn-resume-demo`）でデモを始め、対象ページへ遷移し、タブは `page.$eval(sel, (el) => el.click())` で開く（`page.click` は下方の要素でハングする）。
+- **db の取り出し**: 対象セクションの DOM 要素の `__reactFiber$…` から子孫をたどり、`memoizedProps.db.<collection>` を持つ fiber を探して `window.__db` に置く。
+- **失敗の差し替え**: `window.__db.<collection>.bulkInsert = async () => ({ success: [], error: [{ documentId: 'x', status: 409 }] })`。部分失敗なら `success` に `{ id: 'a' }` などを入れ、取り消しの失敗は `bulkRemove` も `{ error: [...] }` を返すよう差し替える。戻すときは `delete window.__db.<collection>.bulkInsert`。
+- **入力**: `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 値)` のあと `el.dispatchEvent(new Event('input', { bubbles: true }))`（React の `onChange` が動く）。`aria-label` で要素を探す。
+- **alert の取得**: `page.on('dialog', (d) => { messages.push(d.message()); d.accept(); })`。
+- スクリプトはプロジェクト直下に置く（`node_modules` を解決するため）。**終わったら削除する。** macOS には `timeout` コマンドが無い。`evaluateOnNewDocument` で `localStorage` を触ると `about:blank` で `SecurityError` が pageerror に出るが、アプリの不具合ではない。
+- 終わったら dev サーバを止める。
+
+
 ---
 
 ## 9. コミット
@@ -349,7 +402,8 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 - 変更ファイル: <`git show --stat <hash>` の出力>
 - 宣言した「触るファイル」との差: <無ければ「なし」>
 
-### ゲート（出力ファイル: /tmp/pharma-improvement/<stamp>/）
+### ゲート（出力ファイル: /tmp/pharma-improvement/<stamp>-baseline/ と <stamp>-final/）
+- ベースライン（このサイクルで自分で実行した結果）: <緑ならその旨と tests 件数。**赤だった場合は、失敗したテスト名・原因・再実行の経緯を書く**。赤の出力は別のディレクトリに残す>
 - npx tsc --noEmit: <tsc.txt の中身をそのまま>
 - npm run lint: <lint.txt の末尾をそのまま>
 - npm test: <test.txt の `ℹ tests` 〜 `ℹ duration_ms` をそのまま>
@@ -360,13 +414,19 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 | # | 変異（ファイル:行 と置換内容） | 落ちたテスト名（実在を grep 確認済み） | 落ちた件数 | 戻した後 |
 |---|---|---|---|---|
 
-- 変異が当たらない軸と、その検討: <書く>
+- 変異が当たらない軸と、その検討: <書く。**取り消し自体の失敗**と**画面ハンドラの配線**に当たる場合は、必ずそれぞれ書く（§6）>
+- 変異表の行番号は、最後の編集の後に `grep -n` で取り直した値であること
 
 ### SW-F 回帰ガード（前 → 後）
 <5 つの数字>
 
-### 実画面確認（画面を変えた場合のみ）
-<操作 → 見たもの。幅ごと。確認していなければ「未確認」>
+### 実画面確認（画面・ハンドラを変えた場合のみ。§8.1）
+| シナリオ（再現方法） | alert・通知の文言（そのまま） | 入力欄・画面の状態 | データの状態 |
+|---|---|---|---|
+（**失敗の経路**と**成功の対照**の両方を書く。描画できた・押せた、だけは確認に数えない。見た目を変えたテーマは幅 1280 / 768 / 375px も書く）
+
+- 実画面での変異: <ハンドラのどの行をどう壊し、確認結果がどう変わったか。実施できなかったときは「実施できなかった」と理由>
+- 確認していなければ「未確認」
 
 ### 触らなかったが気づいた点
 <ファイル・行・再現手順・なぜ問題か。無ければ「なし」>
@@ -385,11 +445,12 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 提出物は、あなたの報告を信じずに次の手順で検証される。**報告を書く前に自分でも同じことをしておく**と、差し戻されない。
 
 1. `git log` で実コミットを確認し、`tsc` / `lint` / `npm test` / `npm run build` を**最初から自分で再実行**する。報告の数字は転記しない。
-2. 報告に貼られたコマンド出力の真偽: パッケージ名・バージョン、`npm test` の実スクリプト文字列との一致、`suites` 数と `duration_ms` が実測レンジ（約 106 suites・約 68 秒）に収まるか、出力に出てくるファイル名が `find` で実在するか。
+2. 報告に貼られたコマンド出力の真偽: パッケージ名・バージョン、`npm test` の実スクリプト文字列との一致、`suites` 数と `duration_ms` が実測レンジ（約 106 suites・約 60〜110 秒。負荷で変わる）に収まるか、**保存ファイルの内容と一致するか**、出力に出てくるファイル名が `find` で実在するか。
 3. 変異表の「落ちたテスト名」を `grep -n "test('" <ファイル>` の実在文字列と照合する。
 4. 報告が貼った grep 出力・ファイルパスを、当該コミットの親（`git grep <語> <hash>^`）から取り直して突き合わせる。
-5. 変異を 2〜3 件、独自に注入してテストが落ちるかを確認する（変異が当たらない軸も探す）。
-6. diff を読み、型の緩和・期待値の書き換え・assert の削除・宣言外のファイルが無いか確認する。
+5. 変異を 2〜3 件、独自に注入してテストが落ちるかを確認する。**報告が挙げた「当たらない軸」の前提が正しいかも確認する**（例: 「例外が投げられる場合」と書かれていれば、実際の失敗の形が例外か戻り値かを RxDB のソースで確かめる）。報告が挙げなかった軸、**取り消し自体の失敗**と**画面ハンドラの配線**は、必ず自分で当てる。
+6. 画面・ハンドラを変えたテーマは、**報告の「実画面確認」が失敗経路を再現しているか**を見る（描画とクリックだけなら未確認として扱う）。自分でも失敗の差し替えとハンドラへの変異を当てて、確認結果が変わるかを確かめる。
+7. diff を読み、型の緩和・期待値の書き換え・assert の削除・宣言外のファイルが無いか確認する。
 
 **1 本の報告が正確でも、他の報告が正確とは見なされない。** 毎回、同じ検証が行われる。
 
@@ -397,7 +458,7 @@ tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 
 ## 付録 A: 握りつぶし `catch` の候補を出すスクリプト（SW-C 用）
 
-`catch` ブロックを波括弧で切り出し、**利用者への通知・再 throw・エラー状態のセット等が一切無い**ものを列挙する。**候補を出すだけで、判定はしない。** 実測: 182 件（精度は高くない。分類は §4.2 SW-C）。
+`catch` ブロックを波括弧で切り出し、**利用者への通知・再 throw・エラー状態のセット等が一切無い**ものを列挙する。**候補を出すだけで、判定はしない。** 実測: 183 件（精度は高くない。分類は §4.2 SW-C）。
 
 ```bash
 python3 -I - <<'PY'
@@ -424,7 +485,7 @@ PY
 ## 付録 B: 起動プロンプトの例（人が使う）
 
 ```bash
-gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。テーマは SW-B です。完了したら §10 の報告を出力して停止してください。"
+gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。テーマは SW-D（src/app/print/helpers.ts の呼び出しのない toDateOnly の削除）だけです。完了したら §10 の報告を出力して停止してください。"
 ```
 
 戻ってきた報告は §11 の手順で検証してから取り込む。
