@@ -138,7 +138,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
           display: inline-flex;
           align-items: center;
           gap: 0.25rem;
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
           color: #b45309;
           background: #fef3c7;
@@ -150,7 +150,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
           display: inline-flex;
           align-items: center;
           gap: 0.25rem;
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
           color: #15803d;
           background: #dcfce7;
@@ -161,7 +161,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
         .legacy-badge {
           display: inline-flex;
           align-items: center;
-          font-size: 0.68rem;
+          font-size: var(--fs-2xs);
           font-weight: 600;
           color: var(--text-ghost);
           background: var(--bg-subtle);
@@ -229,7 +229,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
           display: flex;
           align-items: center;
           gap: 0.35rem;
-          font-size: 0.72rem;
+          font-size: var(--fs-2xs);
           color: #d97706;
           margin-top: 0.35rem;
           font-weight: 600;
