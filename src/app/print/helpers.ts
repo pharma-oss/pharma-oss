@@ -133,13 +133,6 @@ export function formatPrescriptionAuditIssues(issues: PrescriptionInputAuditIssu
     .join('\n');
 }
 
-export function toDateOnly(value: unknown): string {
-  const text = String(value || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
-}
-
 export { calculatePatientAge } from '@/lib/patient_age';
 
 export function getPatientIdentityMark(patientIdOrId: string, visitId: string): PatientIdentityMark {

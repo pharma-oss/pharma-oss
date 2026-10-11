@@ -595,7 +595,6 @@ test('emr page blocks locked claims before prescription, picking, soap, and stoc
 test('print helper pure functions execute deterministically', async () => {
   const {
     stableHashText,
-    toDateOnly,
     calculatePatientAge,
     getPatientIdentityMark,
     formatPrescriptionAuditIssues
@@ -603,7 +602,6 @@ test('print helper pure functions execute deterministically', async () => {
   const { PATIENT_IDENTITY_MARKS } = await import('./types');
 
   assert.equal(stableHashText('a'), stableHashText('a'));
-  assert.equal(toDateOnly('2026-08-23T10:00:00Z'), '2026-08-23');
   assert.ok(typeof calculatePatientAge('1990-01-01') === 'number');
   assert.ok(PATIENT_IDENTITY_MARKS.includes(getPatientIdentityMark('p1', 'v1')));
   assert.ok(formatPrescriptionAuditIssues([{ title: 't', message: 'm' } as any]).includes('・t: m'));

@@ -109,7 +109,6 @@ import {
 import {
   formatUkeValidationIssues,
   formatClaimValidationIssues,
-  toDateOnly,
   calculatePatientAge,
   getPatientIdentityMark,
   getDisplayDrugName,

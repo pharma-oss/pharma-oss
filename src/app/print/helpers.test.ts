@@ -6,7 +6,6 @@ import { MedicineBagPrint } from './components/MedicineBagPrint';
 import {
   getClaimItemFlagValue,
   calculatePatientAge,
-  toDateOnly,
   stableHashText,
   getPatientIdentityMark,
   getDisplayDrugName,
@@ -84,11 +83,6 @@ test('calculatePatientAge returns undefined for missing or invalid input', () =>
   assert.equal(calculatePatientAge(undefined), undefined);
   assert.equal(calculatePatientAge(''), undefined);
   assert.equal(calculatePatientAge('not-a-date'), undefined);
-});
-
-test('toDateOnly extracts the date part and rejects unusable input', () => {
-  assert.equal(toDateOnly('2026-08-26T12:34:56.000Z'), '2026-08-26');
-  assert.equal(toDateOnly('2026-08-26'), '2026-08-26');
 });
 
 test('stableHashText is deterministic and non-negative', () => {
