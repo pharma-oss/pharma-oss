@@ -6,6 +6,7 @@ import {
   buildTransferAuditDetail,
   buildTransferDocumentHtml,
   isTransferAuditDetail,
+  openTransferDocumentPrintWindow,
   parseTransferAuditDetail,
   STOCK_TRANSFER_AUDIT_FAILED,
   type StockTransferRecord
@@ -112,7 +113,7 @@ function createFakeStockDb(options: { stockQuantity?: number; lots?: FakeLot[]; 
   };
   (options.lots ?? []).forEach(addLot);
   const db = {
-    drugs: { findOne: () => ({ exec: async () => drugStore.open() }) },
+    drugs: { findOne: (code?: string) => ({ exec: async () => (!code || code === 'D-001') ? drugStore.open() : null }) },
     drug_stocks: {
       find: () => ({ exec: async () => [...lotStores.values()].filter((store) => !store.removed).map((store) => store.open()) }),
       findOne: (id: string) => ({ exec: async () => { const store = lotStores.get(id); return store && !store.removed ? store.open() : null; } }),
@@ -252,4 +253,118 @@ test('applyStockTransferIn removes the new lot when the stock update fails', asy
   await assert.rejects(() => applyStockTransferIn(db, inInput, { logAudit: async () => true }), /write failed/);
 
   assert.deepStrictEqual(snapshot(), before);
+});
+
+test('applyStockTransferOut draws from specified lotId and rejects if lot not found or insufficient', async () => {
+  const { db, drug, lots } = createFakeStockDb({ lots: twoLots });
+  const details: string[] = [];
+
+  // lot_late has 60, expiry 2028-06-30 (later than lot_soon 2027-01-31)
+  const record = await applyStockTransferOut(
+    db,
+    { ...outInput, quantity: 50, lotId: 'lot_late' },
+    { logAudit: async (_db, detail) => { details.push(detail); return true; } }
+  );
+
+  assert.strictEqual(drug.stockQuantity, 50);
+  assert.strictEqual(lots.find((l) => l.id === 'lot_late')!.quantity, 10);
+  assert.strictEqual(lots.find((l) => l.id === 'lot_soon')!.quantity, 40, 'lot_soon was untouched because lot_late was specified');
+  assert.strictEqual(record.lotNumber, 'LATE');
+  assert.strictEqual(record.expirationDate, '2028-06-30');
+
+  // Lot not found
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, quantity: 10, lotId: 'non_existent' }),
+    /指定されたロットが見つかりません/
+  );
+
+  // Lot insufficient
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, quantity: 20, lotId: 'lot_late' }),
+    /指定ロットの在庫が不足しています/
+  );
+});
+
+test('applyStockTransferOut and applyStockTransferIn validate required inputs', async () => {
+  const { db } = createFakeStockDb({ lots: twoLots });
+  const deps = { logAudit: async () => true };
+
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, quantity: 0 }, deps),
+    /数量は0より大きい値を入力してください/
+  );
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, quantity: -1 }, deps),
+    /数量は0より大きい値を入力してください/
+  );
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, partnerName: '   ' }, deps),
+    /分譲先\(相手方の名称\)を入力してください/
+  );
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, drugCode: 'D-UNKNOWN' }, deps),
+    /薬品が見つかりません/
+  );
+  await assert.rejects(
+    () => applyStockTransferOut(db, { ...outInput, quantity: 999 }, deps),
+    /在庫が不足しています/
+  );
+
+  await assert.rejects(
+    () => applyStockTransferIn(db, { ...inInput, quantity: 0 }, deps),
+    /数量は0より大きい値を入力してください/
+  );
+  await assert.rejects(
+    () => applyStockTransferIn(db, { ...inInput, partnerName: '' }, deps),
+    /分譲元\(相手方の名称\)を入力してください/
+  );
+  await assert.rejects(
+    () => applyStockTransferIn(db, { ...inInput, drugCode: 'D-UNKNOWN' }, deps),
+    /薬品が見つかりません/
+  );
+});
+
+test('openTransferDocumentPrintWindow handles window environment and popup lifecycle', () => {
+  const docInput = {
+    record: outRecord,
+    pharmacyName: 'テスト薬局'
+  };
+
+  // 1. Non-browser environment (no window)
+  assert.strictEqual(openTransferDocumentPrintWindow(docInput), false);
+
+  // 2. Browser environment where window.open is blocked (returns null)
+  const originalWindow = (globalThis as any).window;
+  try {
+    (globalThis as any).window = {
+      open: () => null
+    };
+    assert.strictEqual(openTransferDocumentPrintWindow(docInput), false);
+
+    // 3. Browser environment with window.open succeeding
+    let writtenHtml = '';
+    let opened = false;
+    let closed = false;
+    (globalThis as any).window = {
+      open: () => ({
+        document: {
+          open: () => { opened = true; },
+          write: (html: string) => { writtenHtml += html; },
+          close: () => { closed = true; }
+        }
+      })
+    };
+    const result = openTransferDocumentPrintWindow(docInput);
+    assert.strictEqual(result, true);
+    assert.strictEqual(opened, true);
+    assert.strictEqual(closed, true);
+    assert.match(writtenHtml, /医薬品 譲渡記録書/);
+    assert.match(writtenHtml, /テスト薬局/);
+  } finally {
+    if (originalWindow !== undefined) {
+      (globalThis as any).window = originalWindow;
+    } else {
+      delete (globalThis as any).window;
+    }
+  }
 });
