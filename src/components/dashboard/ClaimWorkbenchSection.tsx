@@ -50,6 +50,7 @@ import {
 } from '@/lib/online_claim_acceptance';
 import {
   toPlain,
+  buildClaimCalculationItems,
   readTextFile,
   downloadUtf8Csv,
   toClaimWorkbenchExportItem,
@@ -59,8 +60,7 @@ import {
 import { EmptyState } from './DashboardCards';
 import { ClaimWorkbenchRow } from './DashboardRows';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
-import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient, Drug } from '@/db/types';
-import { resolveDrugPrice } from '@/lib/drug_price_history';
+import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient } from '@/db/types';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
 import { applyReversiblePatches, plainCopy, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
@@ -162,17 +162,7 @@ export function ClaimWorkbenchSection({
       // 薬価改定後の再請求で過去分の点数が動いてしまう。
       const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
 
-      const items = rawItems.map((item) => {
-        const drug = toPlain<Drug>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
-        return {
-          ...item,
-          drugName: drug?.name || item.dispensedDrug || item.drugId,
-          price: resolveDrugPrice(drug ?? {}, dispensingDateForPrice).price ?? 0,
-          yjCode: drug?.yjCode,
-          genericName: drug?.genericName,
-          isHighRisk: !!drug?.isHighRisk
-        };
-      });
+      const items = buildClaimCalculationItems(rawItems, drugMap, dispensingDateForPrice);
 
       const calculatedFees = calculateDispensingFees(
         settingsData,

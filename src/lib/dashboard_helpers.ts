@@ -1,16 +1,38 @@
-import type { AuditLog } from '@/db/types';
+import type { AuditLog, Drug } from '@/db/types';
 import type { DashboardClaimWorkItem } from '@/hooks/useDashboardTasks';
 import {
   buildClaimOfficialRuleBatchReview,
   type ClaimOfficialRuleBatchReviewReport
 } from '@/lib/claim_rule_review';
 import { validateDispensingClaim } from '@/lib/claim_validation';
+import { resolveDrugPrice } from '@/lib/drug_price_history';
 import type { MonthlyClaimUkeCase } from '@/lib/monthly_claim_uke';
 
 export function toPlain<T>(value: T | { toJSON: () => T }): T {
   return value && typeof (value as { toJSON?: () => T }).toJSON === 'function'
     ? (value as { toJSON: () => T }).toJSON()
     : (value as T);
+}
+
+// 月次請求・公式UKEの算定に渡す明細を作る。薬品名・薬価・YJコード・一般名・ハイリスクは、
+// 処方明細ではなく薬品マスターから引く（処方明細にこれらの項目は無い）。
+// 薬価は「調剤日時点」で引く。現在のマスター薬価で組むと、薬価改定後の再請求で過去分の点数が動く。
+export function buildClaimCalculationItems<TItem extends { drugId: string; dispensedDrugCode?: string; dispensedDrug?: string }>(
+  rawItems: TItem[],
+  drugMap: { get: (key: string) => Drug | { toJSON: () => Drug } | undefined },
+  dispensingDate: string
+) {
+  return rawItems.map((item) => {
+    const drug = toPlain<Drug | undefined>(drugMap.get(item.dispensedDrugCode || item.drugId) || drugMap.get(item.drugId));
+    return {
+      ...item,
+      drugName: drug?.name || item.dispensedDrug || item.drugId,
+      price: resolveDrugPrice(drug ?? {}, dispensingDate).price ?? 0,
+      yjCode: drug?.yjCode,
+      genericName: drug?.genericName,
+      isHighRisk: !!drug?.isHighRisk
+    };
+  });
 }
 
 export function readTextFile(file: File, encoding = 'Shift_JIS'): Promise<string> {

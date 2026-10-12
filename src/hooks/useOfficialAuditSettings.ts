@@ -47,10 +47,10 @@ import {
   type DosageCategoryConflictReview
 } from '@/lib/dosage_category_conflict';
 import { calculateDispensingFees, getTotalPoints } from '@/lib/calculator';
-import { resolveClaimItemPricing, type ClaimItemPricingDrug } from '@/lib/claim_item_pricing';
+import { resolveClaimItemPricing, type ClaimItemPricingDrug, type ClaimItemPricingItem } from '@/lib/claim_item_pricing';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
 
-function toClaimItemPricingDrug(drugDoc?: { toJSON: () => Partial<Drug> } | Partial<Drug> | null): ClaimItemPricingDrug | undefined {
+export function toClaimItemPricingDrug(drugDoc?: { toJSON: () => Partial<Drug> } | Partial<Drug> | null): ClaimItemPricingDrug | undefined {
   if (!drugDoc) return undefined;
   const d: Partial<Drug> = 'toJSON' in drugDoc && typeof drugDoc.toJSON === 'function'
     ? drugDoc.toJSON()
@@ -62,6 +62,42 @@ function toClaimItemPricingDrug(drugDoc?: { toJSON: () => Partial<Drug> } | Part
     isGeneric: d.isGeneric,
     isHighRisk: d.isHighRisk
   };
+}
+
+// 剤形判定の食い違い点検に渡す入力。処方明細の主キーは itemId（id ではない）。
+// 薬品名は処方明細に項目が無いので、調剤した薬品名、無ければ薬品コードを渡す。
+export function toDosageCategoryConflictInput(
+  item: Pick<PrescriptionItem, 'visitId' | 'rpNumber' | 'itemId' | 'drugId' | 'dispensedDrug' | 'usage' | 'dosageCategory' | 'dosageCategorySource'>
+): DosageCategoryConflictInput {
+  return {
+    visitId: item.visitId,
+    rpNumber: item.rpNumber,
+    itemId: item.itemId,
+    drugName: item.dispensedDrug || item.drugId,
+    dispensedDrug: item.dispensedDrug,
+    usage: item.usage,
+    dosageCategory: item.dosageCategory,
+    dosageCategorySource: item.dosageCategorySource
+  };
+}
+
+// 処方明細に調剤日時点の薬価を当てる（点数の変動点検と剤形の食い違い点検で共通）。
+export function buildPricedClaimItems<TItem extends ClaimItemPricingItem>(
+  itemDocs: Array<{ drugId: string; dispensedDrugCode?: string; toJSON: () => TItem }>,
+  drugsMap: { get: (id: string) => Parameters<typeof toClaimItemPricingDrug>[0] },
+  dispensingDate: string
+) {
+  return itemDocs.map((doc) => ({
+    ...doc.toJSON(),
+    ...resolveClaimItemPricing(
+      doc.toJSON(),
+      {
+        prescribed: toClaimItemPricingDrug(drugsMap.get(doc.drugId)),
+        dispensed: toClaimItemPricingDrug(doc.dispensedDrugCode ? drugsMap.get(doc.dispensedDrugCode) : undefined)
+      },
+      dispensingDate
+    )
+  }));
 }
 
 interface UseOfficialAuditSettingsProps {
@@ -323,17 +359,7 @@ export function useOfficialAuditSettings({
           if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
         }
         const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
-        const items = itemDocs.map((doc) => ({
-          ...doc.toJSON(),
-          ...resolveClaimItemPricing(
-            doc.toJSON(),
-            {
-              prescribed: toClaimItemPricingDrug(drugsMap.get(doc.drugId)),
-              dispensed: toClaimItemPricingDrug(doc.dispensedDrugCode ? drugsMap.get(doc.dispensedDrugCode) : undefined)
-            },
-            dispensingDateForPrice
-          )
-        }));
+        const items = buildPricedClaimItems(itemDocs, drugsMap, dispensingDateForPrice);
 
         // 施設設定か患者が引けない受付は計算し直せない。落とさずに「再計算できず」で出す。
         let currentPoints: number | undefined;
@@ -401,19 +427,7 @@ export function useOfficialAuditSettings({
       ]);
       const settings = settingsDoc ? settingsDoc.toJSON() : null;
 
-      const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc) => {
-        const item = doc.toJSON();
-        return {
-          visitId: item.visitId,
-          rpNumber: item.rpNumber,
-          itemId: item.itemId,
-          drugName: item.dispensedDrug || item.drugId,
-          dispensedDrug: item.dispensedDrug,
-          usage: item.usage,
-          dosageCategory: item.dosageCategory,
-          dosageCategorySource: item.dosageCategorySource
-        };
-      });
+      const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc) => toDosageCategoryConflictInput(doc.toJSON()));
 
       // 一旦食い違いを特定し、食い違いを含む受付IDのみ点数計算の対象とする
       const provisionalReview = buildDosageCategoryConflictReview(inputs);
@@ -438,17 +452,7 @@ export function useOfficialAuditSettings({
             if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
           }
           const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
-          const items = itemDocs.map((doc) => ({
-            ...doc.toJSON(),
-            ...resolveClaimItemPricing(
-              doc.toJSON(),
-              {
-                prescribed: toClaimItemPricingDrug(drugsMap.get(doc.drugId)),
-                dispensed: toClaimItemPricingDrug(doc.dispensedDrugCode ? drugsMap.get(doc.dispensedDrugCode) : undefined)
-              },
-              dispensingDateForPrice
-            )
-          }));
+          const items = buildPricedClaimItems(itemDocs, drugsMap, dispensingDateForPrice);
 
           const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';
           const claimOptions = readClaimOptionsState(visit.claimOptions);
