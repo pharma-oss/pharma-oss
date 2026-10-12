@@ -1,4 +1,4 @@
-import type { Visit } from '@/db/types';
+import type { Alert, Drug, DrugStock, FacilitySettings, Patient, PrescriptionItem, Visit } from '@/db/types';
 import { calculateDispensingFees, getTotalPoints, type ItemWithPrice } from './calculator';
 import { isActivePatientAlert } from './patient_alerts';
 import { validateDispensingClaim, type ClaimValidationItem } from './claim_validation';
@@ -237,7 +237,7 @@ export const FOLLOW_UP_OUTCOME_LABELS: Record<FollowUpContactOutcome, string> = 
 };
 
 export function formatFollowUpContactLabel(
-  attempt: NonNullable<NonNullable<Visit['followUp']>['contactAttempts']>[number]
+  attempt: { at: string; by?: string; method: RecordFollowUpInput['contactMethod']; outcome: FollowUpContactOutcome; note?: string; [key: string]: unknown }
 ): string {
   const date = new Date(attempt.at);
   const dateLabel = Number.isNaN(date.getTime())
@@ -334,11 +334,11 @@ export interface CalculateInventoryRisksParams {
     shortageAmount: number;
     pickingShortageAmount?: number;
   }>;
-  drugMap: Map<string, any>;
-  stocksByDrugId: Map<string, any[]>;
+  drugMap: Map<string, Partial<Drug>>;
+  stocksByDrugId: Map<string, Array<Partial<DrugStock>>>;
   requiredVisitIdsByStockDrugId: Map<string, Set<string>>;
-  activeVisitById: Map<string, any>;
-  patientMap: Map<string, any>;
+  activeVisitById: Map<string, Pick<Visit, 'patientId'>>;
+  patientMap: Map<string, { name?: string }>;
 }
 
 export function calculateDashboardInventoryRisks({
@@ -472,13 +472,49 @@ export function calculateDashboardInventoryRisks({
   return inventoryRiskData;
 }
 
+export interface DashboardAlertLike extends Partial<Alert> {
+  alertId?: string;
+  patientId?: string;
+  text?: string;
+  category?: string;
+  isActive?: boolean;
+}
+
+export interface DashboardPatientLike {
+  id?: string;
+  patientId?: string;
+  name?: string;
+  birthDate?: string;
+  insuranceInfo?: {
+    provider?: string;
+    number?: string;
+    relationship?: string;
+    burdenRatio?: number;
+    eligibilityStatus?: string;
+    eligibilityCheckedAt?: string;
+    validFrom?: string;
+    validTo?: string;
+    [key: string]: unknown;
+  };
+  publicInsurances?: Array<{
+    provider?: string;
+    recipient?: string;
+    burdenRatio?: number;
+    startDate?: string;
+    endDate?: string;
+    monthlyLimitYen?: number;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
 export interface CalculateClaimRisksParams {
-  claimReadyVisits: any[];
-  patientMap: Map<string, any>;
-  itemsByVisitId: Map<string, any[]>;
-  drugMap: Map<string, any>;
-  settingsData: any;
-  alertsByPatientId: Map<string, any[]>;
+  claimReadyVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'> & { claimOptions?: Visit['claimOptions'] }>;
+  patientMap: Map<string, DashboardPatientLike | Patient>;
+  itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string }>>;
+  drugMap: Map<string, Partial<Drug>>;
+  settingsData?: Partial<FacilitySettings> | Record<string, unknown> | null;
+  alertsByPatientId: Map<string, DashboardAlertLike[]>;
 }
 
 export function calculateDashboardClaimRisks({
@@ -510,15 +546,15 @@ export function calculateDashboardClaimRisks({
       const billingDrug = dispensedDrug || prescribedDrug;
       claimItems[j] = {
         itemId: item.itemId,
-        visitId: item.visitId,
+        visitId: item.visitId || visit.visitId,
         rpNumber: item.rpNumber,
         drugId: item.drugId,
         dispensedDrug: item.dispensedDrug,
         dispensedDrugCode: item.dispensedDrugCode,
         changeReason: item.changeReason,
-        amount: item.amount,
+        amount: item.amount ?? 1,
         usage: item.usage,
-        days: item.days,
+        days: item.days ?? 1,
         rpComment: item.rpComment,
         isIppoka: !!item.isIppoka,
         isCrushed: !!item.isCrushed,
@@ -542,9 +578,9 @@ export function calculateDashboardClaimRisks({
     if (settingsData && patientDoc && claimItems.length > 0) {
       try {
         calculatedFees = calculateDispensingFees(
-          settingsData,
+          settingsData as FacilitySettings,
           claimItems,
-          patientDoc,
+          patientDoc as Patient,
           visit.issueDate,
           visit.claimOptions
         );
@@ -555,12 +591,12 @@ export function calculateDashboardClaimRisks({
     }
 
     const claimValidationIssues = validateDispensingClaim({
-      settings: settingsData || null,
-      patient: patientDoc || null,
+      settings: (settingsData as FacilitySettings) || null,
+      patient: (patientDoc as Patient) || null,
       items: claimItems,
       calculatedFees,
       claimOptions: visit.claimOptions,
-      patientAlerts: alertsByPatientId.get(visit.patientId) || [],
+      patientAlerts: (alertsByPatientId.get(visit.patientId) as Alert[]) || [],
       totalPoints
     });
     const claimSummary = buildClaimRiskSummary({
@@ -584,7 +620,7 @@ export function calculateDashboardClaimRisks({
     claimRiskData.push({
       visitId: visit.visitId,
       patientId: visit.patientId,
-      name: patientDoc ? patientDoc.name : '患者名未登録',
+      name: patientDoc?.name || '患者名未登録',
       time,
       prescriptionCount: items.length,
       totalPoints,
@@ -623,9 +659,27 @@ export function calculateDashboardClaimRisks({
 }
 
 export interface CalculateClaimWorkItemsParams {
-  monthlyClaimVisits: any[];
-  patientMap: Map<string, any>;
-  itemsByVisitId: Map<string, any[]>;
+  monthlyClaimVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'> & {
+    claimLifecycle?: {
+      status?: string;
+      exportedAt?: string;
+      exportedFileName?: string;
+      totalPoints?: number;
+      returnReason?: string;
+      rebillingReason?: string;
+      acceptedAt?: string;
+      returnedAt?: string;
+      rebillingAt?: string;
+      history?: Array<{
+        type: string;
+        at: string;
+        [key: string]: unknown;
+      }>;
+      [key: string]: unknown;
+    };
+  }>;
+  patientMap: Map<string, DashboardPatientLike | Patient>;
+  itemsByVisitId: Map<string, Array<unknown>>;
   basisDate?: Date;
 }
 
@@ -647,15 +701,16 @@ export function calculateDashboardClaimWorkItems({
   for (let i = 0; i < monthlyClaimVisits.length; i++) {
     const visit = monthlyClaimVisits[i];
     const lifecycle = visit.claimLifecycle;
-    const status = getClaimLifecycleStatus(lifecycle);
-    if (status !== 'exported' && status !== 'accepted' && status !== 'returned' && status !== 'rebilling') {
+    const rawStatus = getClaimLifecycleStatus(lifecycle as Parameters<typeof getClaimLifecycleStatus>[0]);
+    if (rawStatus !== 'exported' && rawStatus !== 'accepted' && rawStatus !== 'returned' && rawStatus !== 'rebilling') {
       continue;
     }
+    const status: ClaimWorkbenchStatus = rawStatus;
 
     if (status === 'returned') returnedClaimCount++;
     if (status === 'rebilling') rebillingClaimCount++;
 
-    const latestEvent = getClaimLifecycleLatestEvent(lifecycle);
+    const latestEvent = getClaimLifecycleLatestEvent(lifecycle as Parameters<typeof getClaimLifecycleLatestEvent>[0]);
     const latestEventAt =
       latestEvent?.at ||
       lifecycle?.rebillingAt ||
@@ -671,7 +726,7 @@ export function calculateDashboardClaimWorkItems({
     let eligibilityWarning: DashboardClaimWorkItem['eligibilityWarning'] | undefined;
     if (patientDoc) {
       const issues = evaluateInsuranceEligibility({
-        patient: patientDoc,
+        patient: (patientDoc as Patient),
         serviceDate: visit.issueDate
       });
       const topError = issues.find((i) => i.severity === 'error');
@@ -707,7 +762,7 @@ export function calculateDashboardClaimWorkItems({
     claimWorkData.push({
       visitId: visit.visitId,
       patientId: visit.patientId,
-      name: patientDoc ? patientDoc.name : '患者名未登録',
+      name: patientDoc?.name || '患者名未登録',
       issueDateLabel: formatClaimWorkbenchDate(visit.issueDate),
       monthLabel: formatClaimWorkbenchMonth(lifecycle?.exportedAt || visit.issueDate),
       status,
@@ -756,12 +811,34 @@ export function calculateDashboardClaimWorkItems({
 }
 
 export interface CalculateFollowUpCandidatesParams {
-  completedVisits: any[];
-  itemsByVisitId: Map<string, any[]>;
-  alertsByPatientId: Map<string, any[]>;
-  drugMap: Map<string, any>;
+  completedVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'> & {
+    followUp?: {
+      status?: string;
+      reasonFlags?: string[];
+      summary?: string;
+      dueDate?: string;
+      contactMethod?: 'phone' | 'sms' | 'visit' | 'other';
+      nextAction?: string;
+      riskScore?: number;
+      reminderAt?: string;
+      reminderReason?: string;
+      completedNote?: string;
+      contactAttempts?: Array<{
+        at: string;
+        by?: string;
+        method: 'phone' | 'sms' | 'visit' | 'other';
+        outcome: FollowUpContactOutcome;
+        note?: string;
+        nextAction?: string;
+        dueDate?: string;
+      }>;
+    };
+  }>;
+  itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { drugId: string; dispensedDrugCode?: string; days?: number }>>;
+  alertsByPatientId: Map<string, DashboardAlertLike[]>;
+  drugMap: Map<string, Partial<Drug>>;
   interventionVisitIds: Set<string>;
-  patientMap: Map<string, any>;
+  patientMap: Map<string, { name?: string }>;
   basisDate?: Date;
 }
 
@@ -860,7 +937,7 @@ export function calculateDashboardFollowUpCandidates({
       followUpCandidateData.push({
         visitId: visit.visitId,
         patientId: visit.patientId,
-        name: patientDoc ? patientDoc.name : '患者名未登録',
+        name: patientDoc?.name || '患者名未登録',
         time,
         prescriptionCount: items.length,
         priority,
@@ -903,12 +980,12 @@ export function calculateDashboardFollowUpCandidates({
 }
 
 export interface CalculateProcessingTasksParams {
-  processingVisits: any[];
-  patientMap: Map<string, any>;
-  itemsByVisitId: Map<string, any[]>;
-  drugMap: Map<string, any>;
+  processingVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'>>;
+  patientMap: Map<string, { name?: string; birthDate?: string }>;
+  itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string }>>;
+  drugMap: Map<string, Partial<Drug>>;
   shortageDrugIds: Set<string>;
-  alertsByPatientId: Map<string, any[]>;
+  alertsByPatientId: Map<string, DashboardAlertLike[]>;
   basisDate?: Date;
 }
 
@@ -999,7 +1076,7 @@ export function calculateDashboardProcessingTasks({
 
     const patientAlertsForVisit = alertsByPatientId.get(visit.patientId) || [];
     const prescriptionAudit = buildPrescriptionInputAudit(prescriptionAuditItems, {
-      patientAlerts: patientAlertsForVisit
+      patientAlerts: patientAlertsForVisit as Alert[]
     });
     const patientAlertMatchCount = prescriptionAudit.issues.filter(
       (issue) => issue.code === 'patient_allergy_match' || issue.code === 'patient_side_effect_match'
@@ -1021,7 +1098,7 @@ export function calculateDashboardProcessingTasks({
 
     taskData[i] = {
       visitId: visit.visitId,
-      name: patientDoc ? patientDoc.name : '患者名未登録',
+      name: patientDoc?.name || '患者名未登録',
       age,
       status: prescriptionAudit.errorCount > 0
         ? '要修正'
@@ -1107,17 +1184,31 @@ export function buildFollowUpRecordPayload(params: {
   };
 }
 
-export function classifyDashboardVisits(params: {
-  allVisits: any[];
+export function classifyDashboardVisits<TVisit extends {
+  status: string;
+  issueDate: string;
+  patientId?: string | null;
+  claimLifecycle?: { status?: string; exportedAt?: string; [key: string]: unknown };
+  isDemo?: boolean;
+}>(params: {
+  allVisits: TVisit[];
   basisDate: Date;
-}) {
+}): {
+  todayReceptionCount: number;
+  waitingCount: number;
+  completedCount: number;
+  processingVisits: TVisit[];
+  activeVisits: TVisit[];
+  completedVisits: TVisit[];
+  monthlyClaimVisits: TVisit[];
+} {
   let todayReceptionCount = 0;
   let waitingCount = 0;
   let completedCount = 0;
-  const processingVisits: any[] = [];
-  const activeVisits: any[] = [];
-  const completedVisits = [] as any[];
-  const monthlyClaimVisits: any[] = [];
+  const processingVisits: TVisit[] = [];
+  const activeVisits: TVisit[] = [];
+  const completedVisits: TVisit[] = [];
+  const monthlyClaimVisits: TVisit[] = [];
 
   for (let i = 0; i < params.allVisits.length; i++) {
     const visit = params.allVisits[i];
@@ -1125,7 +1216,7 @@ export function classifyDashboardVisits(params: {
       visit.status === 'completed' &&
       !isDemoVisit(visit) &&
       shouldIncludeInMonthlyClaimWorkbench({
-        lifecycle: visit.claimLifecycle,
+        lifecycle: visit.claimLifecycle as Parameters<typeof shouldIncludeInMonthlyClaimWorkbench>[0]['lifecycle'],
         issueDate: visit.issueDate,
         basisDate: params.basisDate
       })
@@ -1159,12 +1250,28 @@ export function classifyDashboardVisits(params: {
   };
 }
 
-export function aggregatePrescriptionItemRequirements(params: {
-  prescriptionItems: any[];
+export function aggregatePrescriptionItemRequirements<TItem extends {
+  visitId: string;
+  drugId: string;
+  dispensedDrugCode?: string;
+  amount: number;
+  days?: number;
+  shortageQuantity?: number;
+  isDiagnosticTest?: boolean;
+  isPicked?: boolean;
+}>(params: {
+  prescriptionItems: TItem[];
   activeVisitIdSet: Set<string>;
   processingVisitIds: Set<string>;
-}) {
-  const itemsByVisitId = new Map<string, any[]>();
+}): {
+  itemsByVisitId: Map<string, TItem[]>;
+  drugIdSetForItems: Set<string>;
+  requiredByStockDrugId: Map<string, number>;
+  requiredVisitIdsByStockDrugId: Map<string, Set<string>>;
+  pickingShortageByStockDrugId: Map<string, number>;
+  pickingPendingCount: number;
+} {
+  const itemsByVisitId = new Map<string, TItem[]>();
   const drugIdSetForItems = new Set<string>();
   const requiredByStockDrugId = new Map<string, number>();
   const requiredVisitIdsByStockDrugId = new Map<string, Set<string>>();
@@ -1266,8 +1373,8 @@ export function getEffectiveAvailableStock(
 export function calculateDashboardStockShortages(params: {
   requiredByStockDrugId: Map<string, number>;
   pickingShortageByStockDrugId: Map<string, number>;
-  drugMap: Map<string, any>;
-  stocksByDrugId: Map<string, any[]>;
+  drugMap: Map<string, Partial<Drug>>;
+  stocksByDrugId: Map<string, Array<Partial<DrugStock>>>;
   now?: Date;
 }) {
   let inventoryShortageCount = 0;
