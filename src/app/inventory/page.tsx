@@ -49,7 +49,8 @@ import {
   type ReceivingDraft,
   defaultReceivingDraft,
   todayDateKey,
-  toHalfWidth
+  toHalfWidth,
+  toInventoryDrugRow
 } from './types';
 import { LocationMaster } from './components/LocationMaster';
 import { StockTransferPanel } from './components/StockTransferPanel';
@@ -227,22 +228,7 @@ export default function InventoryPage() {
         for (let i = 0; i < data.length; i++) {
             const d = data[i];
             if (isGeneralNameDrugRecord(d)) continue;
-            mappedDrugs.push({
-                code: d.code,
-                name: d.name,
-                yjCode: d.yjCode,
-                isGeneric: d.isGeneric,
-                genericName: d.genericName,
-                isAbolished: d.isAbolished,
-                price: d.price,
-                location: d.location,
-                stockQuantity: d.stockQuantity,
-                // ⚡ Bolt: Cache the document instance to avoid redundant lookups during updates
-                doc: d,
-                // ⚡ Bolt: Pre-compute lowercase strings for search to avoid allocations on every keystroke
-                searchNameLower: (d.name || '').toLowerCase(),
-                searchYjCodeLower: (d.yjCode || '').toLowerCase()
-            });
+            mappedDrugs.push(toInventoryDrugRow(d));
         }
         return mappedDrugs;
     };
