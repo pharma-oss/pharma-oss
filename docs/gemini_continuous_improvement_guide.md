@@ -1,7 +1,7 @@
 # Gemini 向け 継続改善ガイド
 
 - **作成**: 2026-10-11（初版の実測基準: `898fa43`）
-- **改訂**: 2026-10-12（第1〜9サイクルと一括実行（11 コミット）の検証結果を反映。基準コミット: `d804e9c`、作業ツリーはクリーン）。SW-G・SW-D・SW-A・SW-H（完了）、SW-C・SW-E（一部完了）。一括実行の検証で、**再起動で `/tmp` が消えて報告・ゲート出力・分類表が失われた**こと、最終報告のコミット説明（セレクタ名）が diff と食い違ったこと、存在しないテストファイルを実行した記述があったこと、挙動テストの無いファイルに型付けをして変異が全部生き残ったことを受け、保存先を `artifacts/improvement/` に移し、§2.1・§2.2・§2.6・§3・§4.2・§4.3・§5・§8.2・§10・§11・付録 B を改訂
+- **改訂**: 2026-10-12（第1〜9サイクル・一括実行（11 コミット）・SW-E0 の結果を反映。基準コミット: `a799847`、作業ツリーはクリーン）。SW-G・SW-D・SW-A・SW-H・SW-E0（完了）、SW-C・SW-E（一部完了）。保存先は `artifacts/improvement/`（`/tmp` は再起動で消える）。そこには `.md` / `.txt` / `.patch` だけを置く（`.ts` / `.tsx` を置くと tsc が拾って失敗する）
 - **性質**: 単発の計画書ではなく、**毎回の起動で最初に読ませる常設の運用書**。改善テーマは起動プロンプトで指定されるか、§4 の掃引メニューから選ぶ。
 - **上位文書（矛盾したらこちらが優先）**: `.agents/AGENTS.md` → `.agents/skills/honest-verification/SKILL.md` → `docs/golden_rules_and_roadmap.md` 第Ⅰ部（十箇条）と第Ⅳ部（実装方針）。
 - **この文書を編集しない**。気づいた改善点は報告に書く。
@@ -202,7 +202,7 @@ grep -rnE 'as any\b' src --include='*.ts' --include='*.tsx' | grep -v -E '\.test
 | **SW-D**（完了） | UTC の日付で「今日」「受付日」を作る | 第7サイクル（`417ede5`）で、`src/` の非テストコードから呼ばれていなかった `print/helpers.ts` の `toDateOnly`（UTC で日付を切る死んだ関数）を、未使用 import とテスト（1 件・assert 3 件）ごと削除した。**残る 8 件はすべて正しい**（往復検証＝実在日付の確認が 6 件、開発用スクリプト 1 件、説明コメント 1 件） | **新しく `toISOString().slice(0, 10)` で「今日」「受付日」を作らない**（§7 の日付。`toLocalDateKey` / `toLocalDateKeyFromValue` を使う）。他ファイルの同名の private 関数（`dead_stock.ts`、`drug_price_history.ts`）は実際に使われている別物なので触らない |
 | **SW-A**（完了） | 12px 未満の生の `font-size` | 5 ファイル 23 件をすべて `var(--fs-2xs)` に置換済み（`f63a698`・`193eda0`・`0b8eb5d`・`777cedd`・`c781227`・`3f78f7b`）。上のコマンドの出力は 0 件。**検索パターンは `0.7rem` ちょうどを含める**（初版の欠陥で 9 件を見落としていた） | 新しい生の rem を書かない（§7 のスタイル）。**0.75rem 以上 1rem 未満の生値 40 件は別テーマ**（トークンに寄せると文字が大きくなり見た目が動く）。手を付けるときは §8.2 の変更前後の実測が必須 |
 | **SW-C**（一部完了） | 失敗が利用者に伝わらない `catch` | 付録 A のスクリプトで**候補 179 件**（183 → 179。一括実行で 4 か所を修正）。一括実行で `print/[visitId]/page.tsx` の一包化・粉砕・レセ適コメントの保存失敗と `SingleOfficialUkeModal.tsx` のコピー失敗に通知を足した（`ce61938`）。前の 3 件は実画面で検証済み（変更前は無言）、**コピー失敗はデモデータで再現できず未検証**。**Gemini の分類表（(a) 38・(b) 118・(c) 27）は `/tmp` の消失で失われ、監査できない** | **一括で直さない。** 1 テーマ 3〜5 件に絞り、各件を (a) 利用者の操作による書き込み・書き出しの失敗（通知必須）／(b) 読み込み失敗（空表示と区別がつかないなら通知）／(c) 二次的なログ（直さない）に分類する。**分類表は `artifacts/improvement/<stamp>-reports/` に保存し、(a) の各行に「なぜ (a) か」を 1 文で書く。** 通知の手段は既存の流儀に合わせ、二重に通知しない（§3） |
-| **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 257 件、`as any` 37 件。一括実行で `ClaimWorkbenchSection.tsx`（22 → 0、`84d0149`・`50df8ab`）と `useOfficialAuditSettings.ts`（10 + `as any` 4 → 0、`7bfdf58`・`d804e9c`）を型付け済み。**この 2 ファイルは挙動を検査するテストがほぼ無く、価格・`itemId`・`drugName` を壊す変異 4 件が全通過**（diff の読みでは挙動は等価） | **1 ファイル（または 1 フック）単位**。**挙動テストが無いファイルは、先に特性化テストを足す**（§2.2）。型付けで暴かれた不整合の修正は別コミット（`fix:`）で、`refactor:` に混ぜない（§2.6）。型を緩めて通すのは禁止 |
+| **SW-E** | `any` の縮小（`as any` は取り違えを隠す目印） | `: any` 257 件、`as any` 37 件。型付け済み: `ClaimWorkbenchSection.tsx`（22 → 0）、`useOfficialAuditSettings.ts`（10 + `as any` 4 → 0）。この 2 ファイルは SW-E0 で特性化テストを追加済み（`4cc4c8a` で純粋関数に切り出し、`a799847` で 17 件。変異 13 件を検出）。**次の候補（`: any` + `as any` の件数順。テストの有無つき）**: `lib/dashboard_tasks.ts` 11（同名テストあり）、`lib/stock_transfer.ts` 8（テスト 12 件）、`lib/demo_data.ts` 7、`hooks/useStaffSettings.ts` 9・`useDrugMasterSettings.ts` 13・`useBackupSettings.ts` 12・`useAuditSettings.ts` 12（**テストなし → 先に特性化テスト**）、`app/print/[visitId]/page.tsx` 15（画面。単体で呼べない）、`app/ClientLayout.tsx` 11、`db/index.ts` 10 | **1 ファイル（または 1 フック）単位**。**挙動テストが無いファイルは、先に特性化テストを足す**（§2.2。手本は `src/lib/dashboard_helpers.test.ts` と `src/hooks/useOfficialAuditSettings.test.ts`）。型付けで暴かれた不整合の修正は別コミット（`fix:`）で、`refactor:` に混ぜない（§2.6）。型を緩めて通すのは禁止 |
 | **SW-F** | **回帰ガード（減らす対象ではなく、悪化させない対象）** | 下のコードブロックの 5 つの数字 | **どのテーマの前後でも実行し、報告に書く。** 1 つでも悪化したら、そのコミットは認めない |
 
 SW-F は次のコードブロックをそのまま実行する。基準値は 3 / 4 / 5 / 0 / 0（この順に出力される）。
@@ -222,11 +222,10 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 ### 4.3 サイクルの推奨順
 
-第1〜9サイクルと一括実行（11 コミット）は検証済みで、**SW-G・SW-D・SW-A・SW-H は完了**。次は次の順にする。
+第1〜9サイクル・一括実行（11 コミット）・SW-E0（`4cc4c8a`・`a799847`）は検証済みで、**SW-G・SW-D・SW-A・SW-H・SW-E0 は完了**。次は次の順にする。
 
-1. **SW-E0（特性化テスト）**: 型付け済みで挙動テストの無い `ClaimWorkbenchSection.tsx`（請求ワークベンチの薬品名・価格の取り出し）と `useOfficialAuditSettings.ts`（`itemId`・薬価の変換）に、現状の出力を固定するテストを足す。単体で呼べないなら、判定を純粋関数に切り出す `refactor:`（挙動不変）を先に別コミットで行う。変異（単価・`itemId`・`drugName`）が落ちることを実測する
-2. **SW-C の残り**: (a) に分類した箇所を 1 テーマ最大 5 か所ずつ（画面の通知が変わるので §8.1 が必須）
-3. **SW-E の残り**: 1 ファイルずつ、**特性化テスト → 型付け**の順
+1. **SW-C の残り**: (a) に分類した箇所を 1 テーマ最大 5 か所ずつ（画面の通知が変わるので §8.1 が必須）。分類表は `artifacts/improvement/<stamp>-reports/` に保存し、(a) の各行に理由を 1 文で書く
+2. **SW-E の残り**: 1 ファイルずつ、**特性化テスト（要るなら）→ 型付け**の順。上の SW-E の行の「次の候補」から、挙動テストのあるファイルを優先する
 
 ### 4.4 着手しない領域
 
@@ -246,7 +245,7 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 ## 5. ゲート
 
-**必ず次のコマンドをそのまま使う**（出力が `$OUT` に残り、報告はそこから引く。`tee` に置き換えない — §2.1）。ゲートは直列に実行し、`npm run build` の実行中にソースを触らない。**ベースラインと最終は別のディレクトリ**に保存し、赤だった出力は上書きせず残す（再実行は別の名前で保存する）。
+**必ず次のコマンドをそのまま使う**（出力が `$OUT` に残り、報告はそこから引く。`tee` に置き換えない — §2.1）。ゲートは直列に実行し、`npm run build` の実行中にソースを触らない。**ベースラインと最終は別のディレクトリ**に保存し、赤だった出力は上書きせず残す（再実行は別の名前で保存する）。**`artifacts/improvement/` には `.md` / `.txt` / `.patch` だけを置く**（`.ts` / `.tsx` は tsc の対象に入り、置くと型検査が失敗する。ソースの退避は拡張子を `.txt` に変えるか、`git diff > x.patch` にする）。
 
 ```bash
 TAG=baseline   # 変更の前は baseline、変更の後は final。再実行は final-rerun のように別の名前にする（上書きしない）
@@ -258,13 +257,13 @@ npm run build           > "$OUT/build.txt" 2>&1; echo "exit $?" >> "$OUT/build.t
 tail -n 12 "$OUT/test.txt"; grep -E "^exit" "$OUT"/*.txt
 ```
 
-ベースライン（`d804e9c`、2026-10-12 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`396d27a` は 2190、`417ede5`〜`f63a698` は 2189）:
+ベースライン（`a799847`、2026-10-12 実測。**作業開始前に自分で取り直して一致を確認する**。初版の `898fa43` は tests 2171、`396d27a` は 2190、`417ede5`〜`f63a698` は 2189、`d804e9c` は 2192）:
 
 | 検証 | コマンド | ベースライン |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | 出力なし、exit 0 |
 | Lint | `npm run lint` | 問題行なし、exit 0（警告 0 件） |
-| テスト | `npm test` | `ℹ tests 2192` / `ℹ suites 106` / `ℹ pass 2192` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 60〜120 秒（負荷で変わる） |
+| テスト | `npm test` | `ℹ tests 2209` / `ℹ suites 106` / `ℹ pass 2209` / `ℹ fail 0` / `ℹ cancelled 0` / `ℹ skipped 0`、exit 0、約 60〜120 秒（負荷で変わる） |
 | ビルド | `npm run build` | exit 0、静的ページ 28 本（`Generating static pages … (n/28)`）。複数 lockfile によるルート推定の警告と Node.js SQLite の実験機能警告は既知 |
 
 注意:
@@ -522,16 +521,16 @@ PY
 
 **起動プロンプトには、「ガイドを今あらためて `cat` で読む」ことを必ず書く。** 以前のセッションの内容が残っていると、改訂前の版で動く。
 
-単発の例（SW-E0: 特性化テスト）:
+単発の例（SW-C の 1 テーマ）:
 
 ```bash
-gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは SW-E0 のうち src/hooks/useOfficialAuditSettings.ts の特性化テストだけです（itemId の対応・薬価の変換を固定し、単価と itemId を壊す変異が落ちることを実測する）。単体で呼べない場合は、判定を純粋関数に切り出す refactor（挙動不変）を先に別コミットで行ってください。ゲートの出力と報告は artifacts/improvement/ に保存してください。完了したら §10 の報告を出力して停止してください。"
+gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って 1 サイクルだけ実行してください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは SW-C です。付録 A のスクリプトで出した候補を (a)(b)(c) に分類した表を artifacts/improvement/<stamp>-reports/sw-c-classification.md に保存し（(a) の各行に、なぜ (a) か 1 文）、(a) に分類した箇所のうち最大 5 か所だけを 1 コミットで直してください。画面の通知が変わるため §8.1 の実画面確認（失敗の再現・各通知の文言・画面とデータの状態・ハンドラの変異）が必須です。ゲートの出力と報告は artifacts/improvement/ に保存してください。完了したら §10 の報告を出力して停止してください。"
 ```
 
 一括実行の例（§1.1。テーマの一覧と上限を、起動プロンプトで明示する）:
 
 ```bash
-gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って §1.1 の一括実行をしてください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは次の順に、各 1 コミット以上で行います。(1) SW-E0: src/components/dashboard/ClaimWorkbenchSection.tsx の特性化テスト（薬品名・価格の取り出しを固定。単体で呼べなければ判定を純粋関数に切り出す refactor を先に別コミットで）。(2) SW-E0: src/hooks/useOfficialAuditSettings.ts の特性化テスト。(3) SW-C: 179 件の候補を (a)(b)(c) に分類した表を artifacts/improvement/<stamp>-reports/sw-c-classification.md に保存し（(a) の各行に理由を 1 文）、(a) に分類した箇所のうち最大 5 か所だけを 1 コミットで直す。(4) SW-E: any が多いファイルを最大 2 つ、特性化テスト → 型付けの順で、1 ファイル 1 テーマ。この一覧に無いテーマは行わないでください。SW-C は画面の通知が変わるため §8.1 の実画面確認が必須です。ゲートの出力と報告はすべて artifacts/improvement/ に保存し、要約表のセレクタ名・関数名は git show の diff から引いてください。最後に一覧表と全報告を出力して停止してください。"
+gemini --yolo -p "docs/gemini_continuous_improvement_guide.md を cat で今あらためて最初から最後まで読み、その指示に従って §1.1 の一括実行をしてください。報告の先頭に、読んだガイドの版（git log -1 --format=%h -- docs/gemini_continuous_improvement_guide.md の出力）を書いてください。テーマは次の順に、各テーマ 1 コミット以上で行います。(1) SW-C: 付録 A のスクリプトの候補を (a)(b)(c) に分類した表を artifacts/improvement/<stamp>-reports/sw-c-classification.md に保存し（(a) の各行に、なぜ (a) か 1 文）、(a) に分類した箇所のうち最大 5 か所だけを 1 コミットで直す。(2) SW-E: src/lib/dashboard_tasks.ts の any を 0 にする（既存テストがあるので、まず既存テストが通ることを確認し、足りない挙動は特性化テストを test: コミットで足してから型付けの refactor: コミットを行う）。(3) SW-E: src/lib/stock_transfer.ts の any を 0 にする（同じ手順）。この一覧に無いテーマは行わないでください。SW-C は画面の通知が変わるため §8.1 の実画面確認が必須です。型付けで暴かれた不整合の修正は fix: の別コミットにし、refactor: に混ぜないでください。ゲート（tsc・lint・npm test の全件・build）の実行中は、dev サーバと Puppeteer を止め、ソースにも触らないでください。ゲートの出力と報告はすべて artifacts/improvement/ に保存し（.ts や .tsx は置かない）、要約表のセレクタ名・関数名・テストファイル名は git show の diff と ls から引いてください。実在を確認していないテストを『確認済み』と書かないでください。最後に一覧表と全報告を出力して停止してください。"
 ```
 
 戻ってきた報告は §11 の手順で検証してから取り込む。
