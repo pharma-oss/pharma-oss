@@ -101,6 +101,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
         }
       } catch (err) {
         console.error('Pre-closing check failed:', err);
+        toast.error('日次締めの事前点検に失敗しました。');
       } finally {
         if (!cancelled) setIsChecking(false);
       }

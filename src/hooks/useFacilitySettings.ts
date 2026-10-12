@@ -100,6 +100,7 @@ export function useFacilitySettings({
         }
       } catch (error) {
         console.error('Failed to load facility settings securely:', error);
+        toast.error('施設基準設定の読み込みに失敗しました。');
       }
     }
     loadSettings();

@@ -126,6 +126,7 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditIntegrity(report);
     } catch (e) {
       console.error('Failed to fetch audit logs:', e);
+      toast.error('監査ログの読み込みに失敗しました。');
     } finally {
       setIsCheckingAuditIntegrity(false);
     }
