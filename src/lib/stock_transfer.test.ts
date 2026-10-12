@@ -368,3 +368,120 @@ test('openTransferDocumentPrintWindow handles window environment and popup lifec
     }
   }
 });
+
+test('applyStockTransferOut and applyStockTransferIn fail and roll back when db lacks pharmacy audit capabilities under default logAudit', async () => {
+  // 1. applyStockTransferOut with default logAudit (no deps) on db lacking token & audit_logs
+  const { db: outDb, snapshot: outSnapshot } = createFakeStockDb({ lots: twoLots });
+  const beforeOut = outSnapshot();
+  const errors: unknown[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args); };
+
+  try {
+    await assert.rejects(
+      () => applyStockTransferOut(outDb, outInput),
+      (error: unknown) => {
+        assert.ok(error instanceof AuditLogFailedError);
+        assert.strictEqual(error.message, STOCK_TRANSFER_AUDIT_FAILED);
+        assert.strictEqual(error.rollbackFailed, false);
+        return true;
+      }
+    );
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.deepStrictEqual(outSnapshot(), beforeOut, 'stock and lots are rolled back completely');
+  assert.strictEqual(errors.length, 0, 'defaultLogAudit does not attempt logAuditAction when db is not a pharmacy database');
+
+  // 2. applyStockTransferIn with default logAudit (no deps) on db lacking token & audit_logs
+  const { db: inDb, snapshot: inSnapshot } = createFakeStockDb({ lots: twoLots });
+  const beforeIn = inSnapshot();
+  const inErrors: unknown[] = [];
+  console.error = (...args: unknown[]) => { inErrors.push(args); };
+
+  try {
+    await assert.rejects(
+      () => applyStockTransferIn(inDb, inInput),
+      (error: unknown) => {
+        assert.ok(error instanceof AuditLogFailedError);
+        assert.strictEqual(error.message, STOCK_TRANSFER_AUDIT_FAILED);
+        assert.strictEqual(error.rollbackFailed, false);
+        return true;
+      }
+    );
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.deepStrictEqual(inSnapshot(), beforeIn, 'stock and newly created lot are rolled back completely');
+  assert.strictEqual(inErrors.length, 0, 'defaultLogAudit does not attempt logAuditAction when db is not a pharmacy database');
+});
+
+test('applyStockTransferOut and applyStockTransferIn route through logAuditAction when db is a pharmacy database', async () => {
+  // Minimal stub observing audit_logs calls
+  const insertedAuditLogs: any[] = [];
+  let findCalled = 0;
+  const auditLogsStub = {
+    find: () => {
+      findCalled++;
+      return {
+        exec: async () => []
+      };
+    },
+    insert: async (doc: any) => {
+      insertedAuditLogs.push(doc);
+      return doc;
+    }
+  };
+
+  const { db: fakeStockDb, drug, lots } = createFakeStockDb({ lots: twoLots });
+  const pharmacyDb = {
+    ...fakeStockDb,
+    token: 'pharmacy-test-token-12345',
+    audit_logs: auditLogsStub
+  };
+
+  // 1. applyStockTransferOut without deps (uses defaultLogAudit)
+  const outRecordResult = await applyStockTransferOut(pharmacyDb, outInput);
+
+  assert.strictEqual(findCalled >= 1, true, 'previous signed log search was invoked');
+  assert.strictEqual(insertedAuditLogs.length, 1, 'audit_logs.insert was called once for out transfer');
+  assert.strictEqual(insertedAuditLogs[0].actionType, 'stock_update');
+  assert.strictEqual(insertedAuditLogs[0].details, buildTransferAuditDetail(outRecordResult));
+  assert.strictEqual(drug.stockQuantity, 50);
+  assert.strictEqual(lots.find((l) => l.id === 'lot_soon')!.quantity, 0);
+  assert.strictEqual(lots.find((l) => l.id === 'lot_late')!.quantity, 50);
+
+  // 2. applyStockTransferIn without deps (uses defaultLogAudit)
+  const inRecordResult = await applyStockTransferIn(pharmacyDb, inInput);
+
+  assert.strictEqual(insertedAuditLogs.length, 2, 'audit_logs.insert was called once for in transfer');
+  assert.strictEqual(insertedAuditLogs[1].actionType, 'stock_update');
+  assert.strictEqual(insertedAuditLogs[1].details, buildTransferAuditDetail(inRecordResult));
+  assert.strictEqual(drug.stockQuantity, 70);
+  assert.strictEqual(lots.length, 3);
+  assert.ok(lots.some((l) => l.lotNumber === 'NEW' && l.quantity === 20));
+});
+
+test('applyStockTransferOut allows drawing exact lot quantity when lotId is specified and leaves 0 in lot stock', async () => {
+  const { db, drug, lots } = createFakeStockDb({ lots: twoLots });
+  const details: string[] = [];
+
+  // lot_late has quantity: 60, total drug stock is 100
+  // When drawing exactly 60 from lot_late (boundary: input.quantity === lotQuantity):
+  const record = await applyStockTransferOut(
+    db,
+    { ...outInput, quantity: 60, lotId: 'lot_late' },
+    { logAudit: async (_db, detail) => { details.push(detail); return true; } }
+  );
+
+  assert.strictEqual(drug.stockQuantity, 40, 'drug stock decreased by exact lot quantity');
+  const lateLot = lots.find((l) => l.id === 'lot_late');
+  assert.ok(lateLot);
+  assert.strictEqual(lateLot.quantity, 0, 'specified lot quantity becomes exactly 0 at boundary');
+  assert.strictEqual(lots.find((l) => l.id === 'lot_soon')!.quantity, 40, 'unspecified lot was untouched');
+  assert.strictEqual(record.quantity, 60);
+  assert.strictEqual(record.lotNumber, 'LATE');
+  assert.deepStrictEqual(details, [buildTransferAuditDetail(record)]);
+});
