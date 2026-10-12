@@ -12,6 +12,7 @@ import {
   formatDailyControlledDrugDiff,
   getDailyControlledDrugCheckSummary,
   getDailyControlledDrugDiff,
+  buildDailyCheckSaveNoticeMessage,
   getDailyControlledDrugDifferenceReasonLabel,
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
@@ -51,6 +52,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
   const [dailyCheckKindFilter, setDailyCheckKindFilter] = useState<DailyCheckKindFilter>('all');
   const [dailyCheckStatusFilter, setDailyCheckStatusFilter] = useState<DailyCheckStatusFilter>('all');
   const [isSavingInventory, setIsSavingInventory] = useState(false);
+  const [snapshotWarning, setSnapshotWarning] = useState<string | null>(null);
 
   const deferredDailyCheckQuery = useDeferredValue(dailyCheckQuery);
   const dailyCountInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -72,8 +74,14 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
     const results: DrugWithSearchCache[] = [];
     for (let i = 0; i < drugs.length; i++) {
         const drug = drugs[i];
-        if (drug.isNarcotic || drug.isPsychotropic) {
-            results.push(drug);
+        const isNarcotic = Boolean(drug.isNarcotic || drug.doc?.isNarcotic);
+        const isPsychotropic = Boolean(drug.isPsychotropic || drug.doc?.isPsychotropic);
+        if (isNarcotic || isPsychotropic) {
+            results.push({
+                ...drug,
+                isNarcotic,
+                isPsychotropic
+            });
         }
     }
     return results.sort((a, b) => {
@@ -158,7 +166,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
     return getDailyControlledDrugCheckSummary(filteredDailyCheckRows);
   }, [filteredDailyCheckRows]);
 
-  const persistDailyCheckSnapshot = (rows: DailyControlledDrugCheckRow[]) => {
+  const persistDailyCheckSnapshot = (rows: DailyControlledDrugCheckRow[]): boolean => {
       const checkedAt = new Date().toISOString();
       const checkedBy = getCurrentUser().name || '未ログイン';
       const snapshot = mergeDailyControlledDrugCheckSnapshot(
@@ -169,14 +177,18 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
       );
 
       setPreviousDailyCheckSnapshot(snapshot);
-      if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined') return true;
       try {
           window.localStorage.setItem(
               DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY,
               JSON.stringify(snapshot)
           );
+          setSnapshotWarning(null);
+          return true;
       } catch (error) {
           console.warn('Failed to persist controlled drug daily check snapshot:', error);
+          setSnapshotWarning('端末ストレージへのスナップショット保存に失敗しました。');
+          return false;
       }
   };
 
@@ -215,8 +227,8 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
               return;
           }
 
-          persistDailyCheckSnapshot(dailyCheckRows);
-          alert('日次棚卸し結果を保存し、監査ログに記録しました。');
+          const snapshotPersisted = persistDailyCheckSnapshot(dailyCheckRows);
+          alert(buildDailyCheckSaveNoticeMessage(snapshotPersisted));
       } catch (error) {
           console.error('Failed to save daily check inventory:', error);
           alert('日次棚卸し結果の保存に失敗しました。');

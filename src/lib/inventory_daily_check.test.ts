@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import {
+  buildDailyCheckSaveNoticeMessage,
   buildDailyControlledDrugCheckAuditDetail,
   buildDailyControlledDrugCheckCsv,
   formatDailyControlledDrugDiff,
@@ -182,4 +183,15 @@ test('daily controlled drug check audit detail records mismatch reasons', () => 
   const noDifferenceDetail = buildDailyControlledDrugCheckAuditDetail([sampleRows[0]], 3);
   assert.match(noDifferenceDetail, /棚卸確認: 麻薬・向精神薬の実地棚卸で 1\/3件を確認/);
   assert.match(noDifferenceDetail, /在庫補正はありませんでした/);
+});
+
+test('daily controlled drug check save notice message distinguishes storage success and failure', () => {
+  assert.strictEqual(
+    buildDailyCheckSaveNoticeMessage(true),
+    '日次棚卸し結果を保存し、監査ログに記録しました。'
+  );
+  assert.strictEqual(
+    buildDailyCheckSaveNoticeMessage(false),
+    '日次棚卸し結果を監査ログに記録しましたが、端末スナップショットの保存に失敗しました。'
+  );
 });

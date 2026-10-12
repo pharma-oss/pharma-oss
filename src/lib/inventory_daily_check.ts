@@ -245,3 +245,9 @@ export function buildDailyControlledDrugCheckCsv(rows: DailyControlledDrugCheckR
     .map((row) => row.map(csvCell).join(','))
     .join('\n');
 }
+
+export function buildDailyCheckSaveNoticeMessage(snapshotPersisted: boolean): string {
+  return snapshotPersisted
+    ? '日次棚卸し結果を保存し、監査ログに記録しました。'
+    : '日次棚卸し結果を監査ログに記録しましたが、端末スナップショットの保存に失敗しました。';
+}
