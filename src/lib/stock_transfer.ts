@@ -9,6 +9,60 @@ import { logAuditAction } from '@/lib/audit';
 import { runWithAuditRollback } from '@/lib/audit_guard';
 import { compareStockLotsByExpiration } from '@/lib/stock';
 import { restoreFields } from '@/lib/rxdb_restore';
+import type { DrugStock, PharmacyDatabase } from '@/db/types';
+
+export interface StockTransferDrugDocLike {
+  name?: unknown;
+  stockQuantity?: unknown;
+  patch: (values: Record<string, unknown>) => Promise<unknown>;
+  incrementalPatch?: (values: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface StockTransferLotDocLike {
+  id?: unknown;
+  drugCode?: unknown;
+  quantity?: unknown;
+  lotNumber?: unknown;
+  expirationDate?: unknown;
+  arrivalDate?: unknown;
+  patch: (values: Record<string, unknown>) => Promise<unknown>;
+  incrementalPatch?: (values: Record<string, unknown>) => Promise<unknown>;
+  remove?: () => Promise<unknown>;
+}
+
+export interface StockTransferLotInsertDoc {
+  id: string;
+  drugCode: string;
+  quantity: number;
+  lotNumber: string;
+  expirationDate: string;
+  janCode?: string;
+  arrivalDate?: string;
+  supplier?: string;
+}
+
+export interface StockTransferDatabaseLike {
+  drugs: {
+    findOne: (code?: string) => {
+      exec: () => Promise<StockTransferDrugDocLike | null>;
+    };
+  };
+  drug_stocks: {
+    find: (query?: { selector?: { drugCode: string } }) => {
+      exec: () => Promise<StockTransferLotDocLike[]>;
+    };
+    findOne: (id: string) => {
+      exec: () => Promise<StockTransferLotDocLike | null>;
+    };
+    insert: (doc: StockTransferLotInsertDoc) => Promise<unknown>;
+  };
+}
+
+export type StockTransferDatabase = PharmacyDatabase | StockTransferDatabaseLike;
+
+function isPharmacyDatabase(db: StockTransferDatabase): db is PharmacyDatabase {
+  return 'token' in db && 'audit_logs' in db;
+}
 
 export type StockTransferDirection = 'out' | 'in';
 
@@ -93,10 +147,15 @@ export const STOCK_TRANSFER_AUDIT_FAILED =
 
 export interface StockTransferDeps {
   // 法定記録の書き込み。既定は監査ログ(テストでは差し替える)。残せなければ false。
-  logAudit?: (db: any, detail: string) => Promise<boolean>;
+  logAudit?: (db: StockTransferDatabase, detail: string) => Promise<boolean>;
 }
 
-const defaultLogAudit = (db: any, detail: string): Promise<boolean> => logAuditAction(db, 'stock_update', detail);
+const defaultLogAudit = (db: StockTransferDatabase, detail: string): Promise<boolean> => {
+  if (isPharmacyDatabase(db)) {
+    return logAuditAction(db, 'stock_update', detail);
+  }
+  return Promise.resolve(false);
+};
 
 interface UndoableWrite {
   apply: () => Promise<void>;
@@ -139,7 +198,7 @@ interface TransferWritten {
 
 // 書き込み -> 法定記録(監査ログ)。記録が残らなければ在庫の増減を戻して失敗にする。
 function applyTransfer(
-  db: any,
+  db: StockTransferDatabase,
   deps: StockTransferDeps | undefined,
   record: StockTransferRecord,
   writes: UndoableWrite[]
@@ -153,13 +212,22 @@ function applyTransfer(
   }).then(({ record: written }) => written);
 }
 
-const patchQuantity = (doc: any, field: 'quantity' | 'stockQuantity', before: number, after: number): UndoableWrite => ({
-  apply: () => doc.patch({ [field]: after }),
-  undo: () => restoreFields(doc, { [field]: before })
+interface PatchableQuantityDoc {
+  patch: (values: Record<string, unknown>) => Promise<unknown>;
+  incrementalPatch?: (values: Record<string, unknown>) => Promise<unknown>;
+}
+
+const patchQuantity = (doc: PatchableQuantityDoc, field: 'quantity' | 'stockQuantity', before: number, after: number): UndoableWrite => ({
+  apply: async () => {
+    await doc.patch({ [field]: after });
+  },
+  undo: async () => {
+    await restoreFields(doc, { [field]: before });
+  }
 });
 
 // 分譲出庫: ロット在庫と薬品マスタ在庫数を引き落とし、法定記録(監査ログ)へ記録する
-export async function applyStockTransferOut(db: any, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
+export async function applyStockTransferOut(db: StockTransferDatabase, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
   if (!db) throw new Error('データベースが未接続です。');
   if (!(input.quantity > 0)) throw new Error('数量は0より大きい値を入力してください。');
   if (!input.partnerName.trim()) throw new Error('分譲先(相手方の名称)を入力してください。');
@@ -168,7 +236,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput, 
   if (!drugDoc) throw new Error('薬品が見つかりません。');
 
   const lotDocs = await db.drug_stocks.find({ selector: { drugCode: input.drugCode } }).exec();
-  const currentTotal = drugDoc.stockQuantity || 0;
+  const currentTotal = typeof drugDoc.stockQuantity === 'number' ? drugDoc.stockQuantity : 0;
   if (input.quantity > currentTotal) {
     throw new Error(`在庫が不足しています(現在庫 ${currentTotal})。`);
   }
@@ -179,27 +247,42 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput, 
   const writes: UndoableWrite[] = [];
 
   if (input.lotId) {
-    const lotDoc = lotDocs.find((doc: any) => doc.id === input.lotId);
+    const lotDoc = lotDocs.find((doc) => doc.id === input.lotId);
     if (!lotDoc) throw new Error('指定されたロットが見つかりません。');
-    if (input.quantity > lotDoc.quantity) {
-      throw new Error(`指定ロットの在庫が不足しています(ロット在庫 ${lotDoc.quantity})。`);
+    const lotQuantity = typeof lotDoc.quantity === 'number' ? lotDoc.quantity : 0;
+    if (input.quantity > lotQuantity) {
+      throw new Error(`指定ロットの在庫が不足しています(ロット在庫 ${lotQuantity})。`);
     }
-    lotNumber = lotDoc.lotNumber || '';
-    expirationDate = lotDoc.expirationDate || '';
-    writes.push(patchQuantity(lotDoc, 'quantity', lotDoc.quantity, roundQuantity(lotDoc.quantity - input.quantity)));
+    lotNumber = typeof lotDoc.lotNumber === 'string' ? lotDoc.lotNumber : '';
+    expirationDate = typeof lotDoc.expirationDate === 'string' ? lotDoc.expirationDate : '';
+    writes.push(patchQuantity(lotDoc, 'quantity', lotQuantity, roundQuantity(lotQuantity - input.quantity)));
   } else if (lotDocs.length > 0) {
     // ロット未指定: 期限の近い順に引き落とす
-    const sorted = lotDocs.slice().sort((a: any, b: any) => compareStockLotsByExpiration(a, b));
+    const sorted = lotDocs.slice().sort((a, b) => compareStockLotsByExpiration(
+      {
+        id: typeof a.id === 'string' ? a.id : undefined,
+        expirationDate: typeof a.expirationDate === 'string' ? a.expirationDate : undefined,
+        arrivalDate: typeof a.arrivalDate === 'string' ? a.arrivalDate : undefined
+      },
+      {
+        id: typeof b.id === 'string' ? b.id : undefined,
+        expirationDate: typeof b.expirationDate === 'string' ? b.expirationDate : undefined,
+        arrivalDate: typeof b.arrivalDate === 'string' ? b.arrivalDate : undefined
+      }
+    ));
     let remaining = input.quantity;
     const usedLots: string[] = [];
     for (const lotDoc of sorted) {
       if (remaining <= 0) break;
-      const take = Math.min(lotDoc.quantity, remaining);
+      const lotQuantity = typeof lotDoc.quantity === 'number' ? lotDoc.quantity : 0;
+      const take = Math.min(lotQuantity, remaining);
       if (take <= 0) continue;
-      writes.push(patchQuantity(lotDoc, 'quantity', lotDoc.quantity, roundQuantity(lotDoc.quantity - take)));
+      writes.push(patchQuantity(lotDoc, 'quantity', lotQuantity, roundQuantity(lotQuantity - take)));
       remaining = roundQuantity(remaining - take);
-      if (lotDoc.lotNumber) usedLots.push(lotDoc.lotNumber);
-      if (!expirationDate && lotDoc.expirationDate) expirationDate = lotDoc.expirationDate;
+      if (typeof lotDoc.lotNumber === 'string' && lotDoc.lotNumber) usedLots.push(lotDoc.lotNumber);
+      if (!expirationDate && typeof lotDoc.expirationDate === 'string' && lotDoc.expirationDate) {
+        expirationDate = lotDoc.expirationDate;
+      }
     }
     if (remaining > 0) {
       throw new Error('ロット在庫の合計が数量に足りません。棚卸で在庫を確認してください。');
@@ -212,7 +295,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput, 
   const record: StockTransferRecord = {
     direction: 'out',
     drugCode: input.drugCode,
-    drugName: drugDoc.name,
+    drugName: typeof drugDoc.name === 'string' ? drugDoc.name : '',
     quantity: input.quantity,
     lotNumber: lotNumber || undefined,
     expirationDate: expirationDate || undefined,
@@ -225,7 +308,7 @@ export async function applyStockTransferOut(db: any, input: StockTransferInput, 
 }
 
 // 分譲入庫: 新規ロットを登録し、薬品マスタ在庫数へ加算、法定記録(監査ログ)へ記録する
-export async function applyStockTransferIn(db: any, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
+export async function applyStockTransferIn(db: StockTransferDatabase, input: StockTransferInput, deps?: StockTransferDeps): Promise<StockTransferRecord> {
   if (!db) throw new Error('データベースが未接続です。');
   if (!(input.quantity > 0)) throw new Error('数量は0より大きい値を入力してください。');
   if (!input.partnerName.trim()) throw new Error('分譲元(相手方の名称)を入力してください。');
@@ -237,23 +320,25 @@ export async function applyStockTransferIn(db: any, input: StockTransferInput, d
   const now = new Date();
   const arrivalDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const lotId = `stock_transfer_${now.getTime()}_${Math.random().toString(36).slice(2, 8)}`;
-  const currentTotal = drugDoc.stockQuantity || 0;
+  const currentTotal = typeof drugDoc.stockQuantity === 'number' ? drugDoc.stockQuantity : 0;
 
   const writes: UndoableWrite[] = [
     {
-      apply: () => db.drug_stocks.insert({
-        id: lotId,
-        drugCode: input.drugCode,
-        janCode: input.janCode?.trim() || '',
-        lotNumber: input.lotNumber?.trim() || '',
-        expirationDate: input.expirationDate || '',
-        quantity: input.quantity,
-        arrivalDate,
-        supplier: `分譲: ${input.partnerName.trim()}`
-      }),
+      apply: async () => {
+        await db.drug_stocks.insert({
+          id: lotId,
+          drugCode: input.drugCode,
+          janCode: input.janCode?.trim() || '',
+          lotNumber: input.lotNumber?.trim() || '',
+          expirationDate: input.expirationDate || '',
+          quantity: input.quantity,
+          arrivalDate,
+          supplier: `分譲: ${input.partnerName.trim()}`
+        });
+      },
       undo: async () => {
         const lotDoc = await db.drug_stocks.findOne(lotId).exec();
-        if (lotDoc) await lotDoc.remove();
+        if (lotDoc && typeof lotDoc.remove === 'function') await lotDoc.remove();
       }
     },
     patchQuantity(drugDoc, 'stockQuantity', currentTotal, roundQuantity(currentTotal + input.quantity))
@@ -262,7 +347,7 @@ export async function applyStockTransferIn(db: any, input: StockTransferInput, d
   const record: StockTransferRecord = {
     direction: 'in',
     drugCode: input.drugCode,
-    drugName: drugDoc.name,
+    drugName: typeof drugDoc.name === 'string' ? drugDoc.name : '',
     quantity: input.quantity,
     lotNumber: input.lotNumber?.trim() || undefined,
     expirationDate: input.expirationDate || undefined,
