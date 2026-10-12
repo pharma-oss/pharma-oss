@@ -20,6 +20,7 @@ import {
   calculateDashboardStockShortages,
   getEffectiveAvailableStock,
   buildClaimPublicInsuranceSummary,
+  hasActualDispensedDrug,
   EMPTY_COUNTS
 } from './dashboard_tasks';
 
@@ -550,6 +551,152 @@ describe('dashboard_tasks pure functions', () => {
       // Priority remains normal
       assert.equal(item.priority, 'normal');
       assert.equal(item.priorityLabel, '通常');
+    });
+  });
+
+  describe('hasActualDispensedDrug', () => {
+    it('distinguishes real dispensed drug from empty and no-substitution labels', () => {
+      assert.equal(hasActualDispensedDrug('アムロジピン錠5mg'), true);
+      assert.equal(hasActualDispensedDrug('変更なし'), false);
+      assert.equal(hasActualDispensedDrug('変更調剤なし'), false);
+      assert.equal(hasActualDispensedDrug(''), false);
+      assert.equal(hasActualDispensedDrug(null), false);
+      assert.equal(hasActualDispensedDrug(undefined), false);
+    });
+  });
+
+  describe('calculateDashboardClaimRisks', () => {
+    it('calculates claim risk scores, counts, and sorts high priority claims first', () => {
+      const claimReadyVisits = [
+        { visitId: 'v_risk1', patientId: 'p_risk1', issueDate: '2026-08-23T10:00:00' },
+        { visitId: 'v_risk2', patientId: 'p_risk2', issueDate: '2026-08-23T11:00:00' }
+      ];
+      const patientMap = new Map([
+        ['p_risk1', {
+          id: 'p_risk1',
+          name: '高リスク患者',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 30,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-10'
+          }
+        }],
+        ['p_risk2', {
+          id: 'p_risk2',
+          name: '保険未設定患者'
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_risk1', [
+          { itemId: 'item_1', visitId: 'v_risk1', drugId: 'd_high', amount: 1, days: 7, isPicked: true }
+        ]],
+        ['v_risk2', [
+          { itemId: 'item_2', visitId: 'v_risk2', drugId: 'd_normal', amount: 1, days: 14, isPicked: true }
+        ]]
+      ]);
+      const drugMap = new Map([
+        ['d_high', { id: 'd_high', name: 'ハイリスク薬', price: 150, yjCode: '111111111111', isHighRisk: true }],
+        ['d_normal', { id: 'd_normal', name: '通常薬', price: 50, yjCode: '222222222222' }]
+      ]);
+      const settingsData = {
+        facility: { code: '1312345678' }
+      };
+      const alertsByPatientId = new Map([
+        ['p_risk1', [
+          { alertId: 'a1', patientId: 'p_risk1', text: '副作用歴あり', category: 'side_effect', isActive: true }
+        ]]
+      ]);
+
+      const result = calculateDashboardClaimRisks({
+        claimReadyVisits,
+        patientMap,
+        itemsByVisitId,
+        drugMap,
+        settingsData,
+        alertsByPatientId
+      });
+
+      assert.equal(result.claimRisks.length >= 1, true);
+      assert.equal(result.claimRiskCount, result.claimRisks.length);
+      if (result.claimRisks.length > 1) {
+        assert.equal(result.claimRisks[0].priority, 'high');
+      }
+    });
+  });
+
+  describe('calculateDashboardFollowUpCandidates', () => {
+    it('identifies overdue and priority follow-up candidates while excluding completed visits', () => {
+      const completedVisits = [
+        {
+          visitId: 'v_follow_urgent',
+          patientId: 'p_urgent',
+          issueDate: '2026-08-20T10:00:00',
+          followUp: {
+            status: 'open',
+            dueDate: '2026-08-21'
+          }
+        },
+        {
+          visitId: 'v_follow_med',
+          patientId: 'p_med',
+          issueDate: '2026-08-23T11:00:00'
+        },
+        {
+          visitId: 'v_follow_done',
+          patientId: 'p_done',
+          issueDate: '2026-08-23T11:30:00',
+          followUp: {
+            status: 'completed',
+            completedNote: '対応完了'
+          }
+        }
+      ];
+      const patientMap = new Map([
+        ['p_urgent', { id: 'p_urgent', name: '期限超過患者' }],
+        ['p_med', { id: 'p_med', name: '長期処方患者' }],
+        ['p_done', { id: 'p_done', name: '完了患者' }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_follow_urgent', [
+          { itemId: 'i_urg', drugId: 'd1', amount: 1, days: 7 }
+        ]],
+        ['v_follow_med', [
+          { itemId: 'i_long', drugId: 'd2', amount: 1, days: 30 }
+        ]],
+        ['v_follow_done', [
+          { itemId: 'i_done', drugId: 'd1', amount: 1, days: 7 }
+        ]]
+      ]);
+      const alertsByPatientId = new Map();
+      const drugMap = new Map([
+        ['d1', { id: 'd1', name: '薬1' }],
+        ['d2', { id: 'd2', name: '長期薬' }]
+      ]);
+      const interventionVisitIds = new Set<string>();
+
+      const result = calculateDashboardFollowUpCandidates({
+        completedVisits,
+        itemsByVisitId,
+        alertsByPatientId,
+        drugMap,
+        interventionVisitIds,
+        patientMap,
+        basisDate: new Date('2026-08-23')
+      });
+
+      assert.equal(result.followUpCandidates.some((c) => c.visitId === 'v_follow_done'), false);
+      const urgentCandidate = result.followUpCandidates.find((c) => c.visitId === 'v_follow_urgent');
+      assert.ok(urgentCandidate);
+      assert.equal(urgentCandidate.priority, 'high');
+      assert.equal(urgentCandidate.isOverdue, true);
+      assert.equal(urgentCandidate.dueLabel, '期限超過');
+      const medCandidate = result.followUpCandidates.find((c) => c.visitId === 'v_follow_med');
+      assert.ok(medCandidate);
+      assert.ok(medCandidate.reasonFlags.includes('長期処方'));
+      assert.equal(result.followUpDueCount, 2);
     });
   });
 
