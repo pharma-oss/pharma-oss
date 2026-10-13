@@ -64,3 +64,13 @@ export async function restoreDrugMasterFromRollback(
 
   return { restoredCount: payload.restoreRows.length, deletedCount, undo };
 }
+
+export function buildDrugMasterPartialImportErrorMessage(
+  failedCount: number,
+  rollbackSucceeded: boolean
+): string {
+  if (rollbackSucceeded) {
+    return `${failedCount}件の薬品マスタ更新に失敗しました。取り込み前の状態へ戻しました。`;
+  }
+  return `${failedCount}件の薬品マスタ更新に失敗し、取り込み前の状態への復元にも失敗しました。薬品マスタの内容を確認してください。`;
+}

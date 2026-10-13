@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import type { Drug } from '../db/types.ts';
-import { restoreDrugMasterFromRollback } from './drug_master_rollback.ts';
+import { restoreDrugMasterFromRollback, buildDrugMasterPartialImportErrorMessage } from './drug_master_rollback.ts';
 
 const drug = (code: string, overrides: Partial<Drug> = {}): Drug => ({
   code, name: `薬${code}`, yjCode: '', isGeneric: false, isAbolished: false, price: 10, stockQuantity: 0, ...overrides
@@ -92,4 +92,14 @@ test('restoreDrugMasterFromRollback with an empty payload touches nothing', asyn
   assert.deepStrictEqual(snapshot(), before);
   await result.undo();
   assert.deepStrictEqual(snapshot(), before);
+});
+
+test('buildDrugMasterPartialImportErrorMessage formats message for successful rollback', () => {
+  const msg = buildDrugMasterPartialImportErrorMessage(3, true);
+  assert.strictEqual(msg, '3件の薬品マスタ更新に失敗しました。取り込み前の状態へ戻しました。');
+});
+
+test('buildDrugMasterPartialImportErrorMessage formats message for failed rollback prompting manual check', () => {
+  const msg = buildDrugMasterPartialImportErrorMessage(3, false);
+  assert.strictEqual(msg, '3件の薬品マスタ更新に失敗し、取り込み前の状態への復元にも失敗しました。薬品マスタの内容を確認してください。');
 });

@@ -78,7 +78,7 @@ import {
 import { downloadTextFile } from '@/lib/blob_download';
 import { AuditLogFailedError, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { drugRecordFromDocument } from '@/lib/drug_record';
-import { restoreDrugMasterFromRollback, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
+import { restoreDrugMasterFromRollback, buildDrugMasterPartialImportErrorMessage, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
 import { drugMasterCandidateKindLabel } from '@/lib/drug_master_update_ui';
 import { toLocalDateKey } from '@/lib/local_date';
 
@@ -484,12 +484,14 @@ export function useDrugMasterSettings({
           if (upsertResult.error.length > 0) {
             console.error('Failed to upsert some drug master records:', upsertResult.error);
             // 一部だけ書き込まれた状態を残さない
+            let rollbackSucceeded = false;
             try {
               await restoreDrugMasterFromRollback(db, artifacts.rollback);
+              rollbackSucceeded = true;
             } catch (restoreError) {
               console.error('Failed to undo a partial drug master update:', restoreError);
             }
-            throw new Error(`${upsertResult.error.length}件の薬品マスタ更新に失敗しました。取り込み前の状態へ戻しました。`);
+            throw new Error(buildDrugMasterPartialImportErrorMessage(upsertResult.error.length, rollbackSucceeded));
           }
         },
         logAudit: () => logAuditAction(
