@@ -46,6 +46,19 @@ export function getClosingCheckDisplayState(
   };
 }
 
+export const CLOSING_CHECK_FAILED_CONFIRM_MESSAGE =
+  '事前点検に失敗したため、本日の受付件数と薬歴未完了件数を確認できていません。\nこのまま暗号化バックアップと閉局を実行しますか？';
+
+// 事前点検が失敗していても閉局は止めない(緊急時のバックアップを妨げない)。
+// ただし件数を確認できないまま進むことになるため、実行の前に利用者へ確認する。
+export function canProceedWithClosing(
+  state: ClosingCheckDisplayState,
+  confirm: (message: string) => boolean
+): boolean {
+  if (state.status !== 'error') return true;
+  return confirm(CLOSING_CHECK_FAILED_CONFIRM_MESSAGE);
+}
+
 export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyClosingWizardModalProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -142,6 +155,8 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const displayState = getClosingCheckDisplayState(isChecking, hasCheckError, checkSummary);
 
   const handleRunBackupAndClosing = async () => {
     const operator = getCurrentUser();
@@ -246,7 +261,6 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
             <div className="closing-stats-box">
               <p className="closing-stats-title">【本日のデータ実測状況】</p>
               {(() => {
-                const displayState = getClosingCheckDisplayState(isChecking, hasCheckError, checkSummary);
                 if (displayState.status === 'checking') {
                   return <p className="closing-stats-loading">データベースを計測中…</p>;
                 }
@@ -313,6 +327,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                 type="button"
                 disabled={isChecking || isProcessing}
                 onClick={() => {
+                  if (!canProceedWithClosing(displayState, (message) => window.confirm(message))) return;
                   setStep(2);
                   handleRunBackupAndClosing();
                 }}
