@@ -152,3 +152,19 @@ export function formatPatientAlertLabel(alert: Alert): string {
       return content;
   }
 }
+
+export interface PatientDataFetchErrorWarning {
+  type: 'usage';
+  severity: 'warning';
+  drug: string;
+  message: string;
+}
+
+export function createPatientDataFetchErrorWarning(): PatientDataFetchErrorWarning {
+  return {
+    type: 'usage',
+    severity: 'warning',
+    drug: '（患者情報）',
+    message: '患者情報（アレルギー・副作用歴・年齢）の取得に失敗したため、警告を判定できませんでした。患者情報を確認してください。'
+  };
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { findPatientAlertDrugWarnings, formatPatientAlertLabel, tokenizePatientAlertContent } from './patient_alerts.ts';
+import { findPatientAlertDrugWarnings, formatPatientAlertLabel, tokenizePatientAlertContent, createPatientDataFetchErrorWarning } from './patient_alerts.ts';
 import type { Alert } from '../db/types.ts';
 
 const allergyAlert: Alert = {
@@ -84,4 +84,12 @@ test('findPatientAlertDrugWarnings matches on genericName too', () => {
   assert.strictEqual(warnings.length, 1);
   assert.strictEqual(warnings[0].severity, 'danger');
   assert.strictEqual(warnings[0].matchedText, 'ロキソプロフェン');
+});
+
+test('createPatientDataFetchErrorWarning returns warning object for patient data retrieval failure', () => {
+  const warning = createPatientDataFetchErrorWarning();
+  assert.strictEqual(warning.type, 'usage');
+  assert.strictEqual(warning.severity, 'warning');
+  assert.strictEqual(warning.drug, '（患者情報）');
+  assert.strictEqual(warning.message, '患者情報（アレルギー・副作用歴・年齢）の取得に失敗したため、警告を判定できませんでした。患者情報を確認してください。');
 });

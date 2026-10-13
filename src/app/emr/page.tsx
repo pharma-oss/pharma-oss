@@ -9,7 +9,7 @@ import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, FacilitySettings, InsuranceEligibilityStatus, PrescriptionItem, PublicInsurance, SoapRecord as DbSoapRecord, SoapStructuredAssessment, TracingReportStatus, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport, VisitTracingReport } from '@/db/types';
 import { evaluateUsageWarning, evaluateUsageWarningCondition } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
-import { findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
+import { createPatientDataFetchErrorWarning, findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
@@ -1120,6 +1120,7 @@ useEffect(() => {
 
         let patientAge: number | undefined;
         let activePatientAlertsArr: Alert[] = [];
+        let hasPatientDataFetchError = false;
         try {
             const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
             const patient = patients[0];
@@ -1132,6 +1133,7 @@ useEffect(() => {
             setPatientAlerts(activePatientAlertsArr);
         } catch (e) {
             console.error("Failed to fetch patient data for warnings", e);
+            hasPatientDataFetchError = true;
         }
 
         const contraindicatedConditionPatientTexts = buildContraindicatedConditionPatientTexts({
@@ -1290,6 +1292,10 @@ useEffect(() => {
               drug: '（患者情報）',
               message: '生年月日が未登録または不正なため、年齢に基づく警告を判定できませんでした。患者情報を確認してください。'
            });
+        }
+
+        if (hasPatientDataFetchError) {
+           newWarnings.push(createPatientDataFetchErrorWarning());
         }
 
         setWarnings(newWarnings);
