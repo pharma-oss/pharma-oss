@@ -13,11 +13,37 @@ interface DailyClosingWizardModalProps {
   onComplete: () => void;
 }
 
-interface ClosingCheckSummary {
+export interface ClosingCheckSummary {
   todayVisitsCount: number;
   uncompletedEmrCount: number;
   unsentClaimCount: number;
   canProceed: boolean;
+}
+
+export type ClosingCheckDisplayState =
+  | { status: 'checking' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; todayVisitsCount: number; uncompletedEmrCount: number };
+
+export function getClosingCheckDisplayState(
+  isChecking: boolean,
+  hasCheckError: boolean,
+  checkSummary: ClosingCheckSummary | null
+): ClosingCheckDisplayState {
+  if (isChecking) {
+    return { status: 'checking' };
+  }
+  if (hasCheckError || !checkSummary) {
+    return {
+      status: 'error',
+      message: '事前点検に失敗したため、本日の受付件数および薬歴未完了件数を確認できませんでした。',
+    };
+  }
+  return {
+    status: 'ready',
+    todayVisitsCount: checkSummary.todayVisitsCount,
+    uncompletedEmrCount: checkSummary.uncompletedEmrCount,
+  };
 }
 
 export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyClosingWizardModalProps) {
@@ -27,6 +53,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
   const [password, setPassword] = useState<string>('');
   const [checkSummary, setCheckSummary] = useState<ClosingCheckSummary | null>(null);
   const [isChecking, setIsChecking] = useState<boolean>(true);
+  const [hasCheckError, setHasCheckError] = useState<boolean>(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   // 初期化・権限チェック & リアルタイム整合性実測
@@ -42,6 +69,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
     setSaveStatus('');
     setIsProcessing(false);
     setCheckSummary(null);
+    setHasCheckError(false);
 
     const operator = getCurrentUser();
     if (!canUserPerform(operator, 'manage_backups')) {
@@ -53,6 +81,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
     let cancelled = false;
     async function runPreClosingCheck() {
       setIsChecking(true);
+      setHasCheckError(false);
       try {
         const { getDatabase } = await import('@/db');
         const db = await getDatabase();
@@ -102,6 +131,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
       } catch (err) {
         console.error('Pre-closing check failed:', err);
         toast.error('日次締めの事前点検に失敗しました。');
+        if (!cancelled) setHasCheckError(true);
       } finally {
         if (!cancelled) setIsChecking(false);
       }
@@ -215,28 +245,46 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
 
             <div className="closing-stats-box">
               <p className="closing-stats-title">【本日のデータ実測状況】</p>
-              {isChecking ? (
-                <p className="closing-stats-loading">データベースを計測中…</p>
-              ) : (
-                <>
-                  <div className="closing-stat-row">
-                    <CheckCircle2 size={15} className="icon-success" />
-                    <span>本日受付件数: <strong>{checkSummary?.todayVisitsCount || 0}</strong> 件</span>
-                  </div>
-                  <div className="closing-stat-row">
-                    {checkSummary?.uncompletedEmrCount === 0 ? (
+              {(() => {
+                const displayState = getClosingCheckDisplayState(isChecking, hasCheckError, checkSummary);
+                if (displayState.status === 'checking') {
+                  return <p className="closing-stats-loading">データベースを計測中…</p>;
+                }
+                if (displayState.status === 'error') {
+                  return (
+                    <>
+                      <div className="closing-stat-row">
+                        <AlertTriangle size={15} className="icon-warning" />
+                        <span className="closing-stat-error">{displayState.message}</span>
+                      </div>
+                      <div className="closing-stat-row">
+                        <HardDrive size={15} className="icon-info" />
+                        <span>外部保存方式: {isFileSystemAccessSupported() ? '1クリックフォルダ保存 (File System Access)' : '暗号化JSON保存'}</span>
+                      </div>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <div className="closing-stat-row">
                       <CheckCircle2 size={15} className="icon-success" />
-                    ) : (
-                      <AlertTriangle size={15} className="icon-warning" />
-                    )}
-                    <span>薬歴未完了件数: <strong>{checkSummary?.uncompletedEmrCount || 0}</strong> 件</span>
-                  </div>
-                  <div className="closing-stat-row">
-                    <HardDrive size={15} className="icon-info" />
-                    <span>外部保存方式: {isFileSystemAccessSupported() ? '1クリックフォルダ保存 (File System Access)' : '暗号化JSON保存'}</span>
-                  </div>
-                </>
-              )}
+                      <span>本日受付件数: <strong>{displayState.todayVisitsCount}</strong> 件</span>
+                    </div>
+                    <div className="closing-stat-row">
+                      {displayState.uncompletedEmrCount === 0 ? (
+                        <CheckCircle2 size={15} className="icon-success" />
+                      ) : (
+                        <AlertTriangle size={15} className="icon-warning" />
+                      )}
+                      <span>薬歴未完了件数: <strong>{displayState.uncompletedEmrCount}</strong> 件</span>
+                    </div>
+                    <div className="closing-stat-row">
+                      <HardDrive size={15} className="icon-info" />
+                      <span>外部保存方式: {isFileSystemAccessSupported() ? '1クリックフォルダ保存 (File System Access)' : '暗号化JSON保存'}</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             <div className="closing-field-group">
@@ -398,6 +446,10 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
         }
         .closing-stats-loading {
           color: #64748b;
+        }
+        .closing-stat-error {
+          color: #b91c1c;
+          font-weight: 500;
         }
         .closing-stat-row {
           display: flex;
