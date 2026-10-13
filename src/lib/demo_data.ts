@@ -154,9 +154,15 @@ interface DemoPastRoundSpec {
   };
 }
 
+export interface DemoPastRoundDatabaseLike {
+  visits: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
+  prescription_items: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
+  soap_records: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
+}
+
 // 過去の完了来局(受付・処方明細・薬歴)を1回分投入する共通処理。
 // 3回分の来局を同じ形で並べ、日付だけ変えて「経過」タブの変遷を見せる。
-async function seedDemoPastRound(db: any, spec: DemoPastRoundSpec): Promise<void> {
+async function seedDemoPastRound(db: DemoPastRoundDatabaseLike, spec: DemoPastRoundSpec): Promise<void> {
   const visitDate = daysAgo(spec.daysAgoCount);
   const visitDateValue = toDateInputValue(visitDate);
 
@@ -495,9 +501,21 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
 
 const ALL_DEMO_PATIENT_IDS = [DEMO_PATIENT_ID, ...DEMO_EXTRA_PATIENT_IDS];
 
+export interface HasTutorialDemoCollectionLike {
+  find(query?: { selector?: unknown }): {
+    exec(): Promise<unknown[]>;
+  };
+}
+
+export interface HasTutorialDemoDatabaseLike {
+  patients: HasTutorialDemoCollectionLike;
+  visits: HasTutorialDemoCollectionLike;
+  drugs: HasTutorialDemoCollectionLike;
+}
+
 // デモデータが残っているかの判定。ダッシュボードの片づけ促しバナーに使う。
 // 患者・受付・薬品マスタのいずれかにデモ固定IDが残っていれば true。
-export async function hasTutorialDemoData(db: any): Promise<boolean> {
+export async function hasTutorialDemoData(db: HasTutorialDemoDatabaseLike | null | undefined): Promise<boolean> {
   if (!db) return false;
   const demoPatients = await db.patients.find({ selector: { patientId: { $in: ALL_DEMO_PATIENT_IDS } } }).exec();
   if (demoPatients.length > 0) return true;
@@ -518,11 +536,20 @@ export interface CleanupTutorialDemoDataResult {
   removedPatients: number;
 }
 
-const getDocValue = (doc: any, key: string): any => (
+export interface DemoDocLike {
+  get?: (key: string) => unknown;
+  [key: string]: unknown;
+}
+
+const getDocValue = (doc: DemoDocLike | null | undefined, key: string): unknown => (
   typeof doc?.get === 'function' ? doc.get(key) : doc?.[key]
 );
 
-async function removeDocs(docs: any[]): Promise<number> {
+export interface RemovableDoc {
+  remove: () => Promise<unknown>;
+}
+
+async function removeDocs(docs: readonly RemovableDoc[]): Promise<number> {
   let removed = 0;
   for (const doc of docs) {
     await doc.remove();
@@ -537,7 +564,7 @@ export async function cleanupTutorialDemoData(db: any): Promise<CleanupTutorialD
   if (!db) throw new Error('データベースが未接続です。');
 
   const demoVisits = await db.visits.find({ selector: { patientId: DEMO_PATIENT_ID } }).exec();
-  const demoVisitIds = demoVisits.map((doc: any) => getDocValue(doc, 'visitId')).filter(Boolean);
+  const demoVisitIds = demoVisits.map((doc: DemoDocLike) => getDocValue(doc, 'visitId')).filter(Boolean);
 
   const [itemDocs, soapDocs, interventionDocs] = await Promise.all([
     demoVisitIds.length > 0
