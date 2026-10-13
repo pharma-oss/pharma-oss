@@ -18,8 +18,8 @@ export class PrescriptionRegistrationError extends Error {
 }
 
 interface PatientDocument {
-  patch: (values: any) => Promise<unknown>;
-  incrementalPatch?: (values: any) => Promise<unknown>;
+  patch: (values: Record<string, unknown>) => Promise<unknown>;
+  incrementalPatch?: (values: Record<string, unknown>) => Promise<unknown>;
   toJSON: () => Record<string, unknown>;
 }
 
@@ -39,7 +39,7 @@ interface RegistrationDb {
   };
   prescription_items: {
     bulkInsert: (docs: any[]) => Promise<{ success?: Array<{ primary?: string; itemId?: string }>; error?: Array<{ documentId?: string }> }>;
-    bulkRemove: (ids: string[]) => Promise<BulkRemoveResultLike | unknown>;
+    bulkRemove: (ids: string[]) => Promise<BulkRemoveResultLike | undefined>;
   };
 }
 
@@ -78,7 +78,7 @@ export async function registerPrescriptionAtomically(params: {
     const insertedIds = (result?.success ?? []).map((doc) => doc.primary ?? doc.itemId).filter((id): id is string => !!id);
     if (insertedIds.length > 0) {
       undoSteps.push(async () => {
-        const removeResult = (await db.prescription_items.bulkRemove(insertedIds)) as BulkRemoveResultLike | undefined;
+        const removeResult = await db.prescription_items.bulkRemove(insertedIds);
         const removeErrors = Array.isArray(removeResult?.error) ? removeResult.error : [];
         if (removeErrors.length > 0) {
           throw new Error(`処方明細の取り消しに失敗しました（${removeErrors.length}件）。`);
