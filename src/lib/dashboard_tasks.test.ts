@@ -625,6 +625,62 @@ describe('dashboard_tasks pure functions', () => {
         assert.equal(result.claimRisks[0].priority, 'high');
       }
     });
+
+    it('surfaces invalid amount and invalid days errors instead of defaulting missing values to 1', () => {
+      const claimReadyVisits = [
+        { visitId: 'v_missing_amount', patientId: 'p_valid', issueDate: '2026-08-23T10:00:00' },
+        { visitId: 'v_missing_days', patientId: 'p_valid', issueDate: '2026-08-23T11:00:00' }
+      ];
+      const patientMap = new Map([
+        ['p_valid', {
+          id: 'p_valid',
+          name: '正常保険患者',
+          birthDate: '1980-04-01',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 30,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-20'
+          }
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_missing_amount', [
+          JSON.parse('{"itemId":"item_no_amount","visitId":"v_missing_amount","drugId":"d_normal","usage":"内服 1日1回朝食後","days":7,"isPicked":true}')
+        ]],
+        ['v_missing_days', [
+          JSON.parse('{"itemId":"item_no_days","visitId":"v_missing_days","drugId":"d_normal","amount":1,"usage":"内服 1日1回朝食後","isPicked":true}')
+        ]]
+      ]);
+      const drugMap = new Map([
+        ['d_normal', { id: 'd_normal', code: '620000001', name: '通常薬', price: 100, yjCode: '2149001F1020', isHighRisk: false }]
+      ]);
+      const settingsData = {
+        id: 'default',
+        baseFeeCategory: 'basic_1' as const,
+        pharmacyCode: '1312345678',
+        pharmacyName: 'テスト薬局'
+      };
+
+      const result = calculateDashboardClaimRisks({
+        claimReadyVisits,
+        patientMap,
+        itemsByVisitId,
+        drugMap,
+        settingsData,
+        alertsByPatientId: new Map()
+      });
+
+      const missingAmountRisk = result.claimRisks.find((r) => r.visitId === 'v_missing_amount');
+      assert.ok(missingAmountRisk, 'Visit with missing amount must be flagged as claim risk');
+      assert.ok(missingAmountRisk.topIssueTitles.includes('通常薬 の分量が不正です'));
+
+      const missingDaysRisk = result.claimRisks.find((r) => r.visitId === 'v_missing_days');
+      assert.ok(missingDaysRisk, 'Visit with missing days must be flagged as claim risk');
+      assert.ok(missingDaysRisk.topIssueTitles.includes('通常薬 の日数が不正です'));
+    });
   });
 
   describe('calculateDashboardFollowUpCandidates', () => {

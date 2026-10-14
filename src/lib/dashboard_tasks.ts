@@ -511,7 +511,7 @@ export interface DashboardPatientLike {
 export interface CalculateClaimRisksParams {
   claimReadyVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'> & { claimOptions?: Visit['claimOptions'] }>;
   patientMap: Map<string, DashboardPatientLike | Patient>;
-  itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string }>>;
+  itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string; amount: number; days: number }>>;
   drugMap: Map<string, Partial<Drug>>;
   settingsData?: Partial<FacilitySettings> | Record<string, unknown> | null;
   alertsByPatientId: Map<string, DashboardAlertLike[]>;
@@ -552,9 +552,9 @@ export function calculateDashboardClaimRisks({
         dispensedDrug: item.dispensedDrug,
         dispensedDrugCode: item.dispensedDrugCode,
         changeReason: item.changeReason,
-        amount: item.amount ?? 1,
+        amount: item.amount,
         usage: item.usage,
-        days: item.days ?? 1,
+        days: item.days,
         rpComment: item.rpComment,
         isIppoka: !!item.isIppoka,
         isCrushed: !!item.isCrushed,
