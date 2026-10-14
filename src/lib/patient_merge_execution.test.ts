@@ -182,7 +182,8 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   const makeDoc = (id: string) => ({
     patch: async (value: unknown) => { calls.push(`patch:${id}:${JSON.stringify(value)}`); },
     // 患者本体は文書全体を差し替える(patch だと統合前に無かった項目が取り消しで消えない)
-    incrementalModify: async (mutate: (data: Patient) => Patient) => { calls.push(`replace:${id}:${JSON.stringify(mutate({ patientId: id, name: '', kana: '', birthDate: '' }))}`); },
+    // 保存済みの文書には gender がある(統合後の内容には無い)。全体を差し替えるなら gender は消える
+    incrementalModify: async (mutate: (data: Patient) => Patient) => { calls.push(`replace:${id}:${JSON.stringify(mutate({ patientId: id, name: '', kana: '', birthDate: '', gender: 'female' }))}`); },
     remove: async () => { calls.push(`remove:${id}`); }
   });
   const collection = (docs: Record<string, ReturnType<typeof makeDoc>>) => ({
@@ -210,6 +211,13 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   assert.ok(calls.includes('remove:pt_existing'));
   assert.ok(calls.some((call) => call.startsWith('patch:v1')));
   assert.ok(calls.some((call) => call.startsWith('patch:a1')));
+  // 中身も確かめる: 受付とアラートは指定した患者へ付け替わる / 患者本体は全体の差し替え(保存済みの gender が残らない)
+  assert.ok(calls.includes('patch:v1:{"patientId":"pt_existing"}'), 'the visit is moved to the given patient');
+  assert.ok(calls.includes('patch:a1:{"patientId":"pt_existing"}'), 'the alert is moved to the given patient');
+  assert.ok(
+    calls.includes(`replace:pt_existing:${JSON.stringify({ patientId: 'pt_existing', name: '既存', kana: '', birthDate: '' })}`),
+    'the kept patient is replaced as a whole: a field only the stored document had is not left behind'
+  );
 });
 
 // ---- 監査ログが残らなければ統合を取り消す ----
