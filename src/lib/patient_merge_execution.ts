@@ -41,13 +41,41 @@ export class PatientMergeExecutionError extends Error {
   }
 }
 
+export interface PatientMergeDocLike {
+  incrementalModify(mutationFunction: (doc: Patient) => Patient | Promise<Patient>): Promise<unknown>;
+  remove(): Promise<unknown>;
+}
+
+export interface PatientMergeQueryLike<T> {
+  exec(): Promise<T | null>;
+}
+
+export interface PatientMergePatientsCollectionLike {
+  findOne(id: string): PatientMergeQueryLike<PatientMergeDocLike>;
+  insert(patient: Patient): Promise<unknown>;
+}
+
+export interface PatientMergeVisitDocLike {
+  patch(data: { patientId: string }): Promise<unknown>;
+}
+
+export interface PatientMergeAlertDocLike {
+  patch(data: { patientId: string }): Promise<unknown>;
+}
+
+export interface PatientMergeDatabaseLike {
+  patients: PatientMergePatientsCollectionLike;
+  visits: {
+    findOne(id: string): PatientMergeQueryLike<PatientMergeVisitDocLike>;
+  };
+  alerts: {
+    findOne(id: string): PatientMergeQueryLike<PatientMergeAlertDocLike>;
+  };
+}
+
 // RxDBコレクションを PatientMergeExecutionStore として扱う共通ファクトリ。
 // 受付画面(OCR)と設定の患者重複点検の両方から同じ実行経路を使う。
-export function createRxdbPatientMergeExecutionStore(db: {
-  patients: any;
-  visits: any;
-  alerts: any;
-}): PatientMergeExecutionStore {
+export function createRxdbPatientMergeExecutionStore(db: PatientMergeDatabaseLike): PatientMergeExecutionStore {
   return {
     async upsertPatient(patient) {
       const patientDoc = await db.patients.findOne(patient.patientId).exec();

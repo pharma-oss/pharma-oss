@@ -182,12 +182,12 @@ test('createRxdbPatientMergeExecutionStore patches and removes RxDB documents', 
   const makeDoc = (id: string) => ({
     patch: async (value: unknown) => { calls.push(`patch:${id}:${JSON.stringify(value)}`); },
     // 患者本体は文書全体を差し替える(patch だと統合前に無かった項目が取り消しで消えない)
-    incrementalModify: async (mutate: (data: unknown) => unknown) => { calls.push(`replace:${id}:${JSON.stringify(mutate({}))}`); },
+    incrementalModify: async (mutate: (data: Patient) => Patient) => { calls.push(`replace:${id}:${JSON.stringify(mutate({ patientId: id, name: '', kana: '', birthDate: '' }))}`); },
     remove: async () => { calls.push(`remove:${id}`); }
   });
   const collection = (docs: Record<string, ReturnType<typeof makeDoc>>) => ({
     findOne: (id: string) => ({ exec: async () => docs[id] || null }),
-    insert: async (value: { patientId?: string }) => { calls.push(`insert:${value.patientId}`); }
+    insert: async (value: Patient) => { calls.push(`insert:${value.patientId}`); }
   });
   const db = {
     patients: collection({ pt_existing: makeDoc('pt_existing') }),
