@@ -41,6 +41,45 @@ export interface PatientBannerProps {
   onOpenPicking: () => void;
 }
 
+export const PATIENT_BANNER_LOAD_ERROR_TITLE = '患者情報の取得に失敗しました';
+export const PATIENT_BANNER_LOAD_ERROR_SUBTITLE =
+  '患者基本情報を読み込めませんでした。再読み込みまたは患者確認を行ってください。';
+
+export function buildPatientBannerSummaryDisplay(
+  patientData: { name?: string; birthDate?: string; gender?: string } | null | undefined,
+  calcAge: number | null | undefined,
+  hasLoadError: boolean
+): {
+  patientTitle: string;
+  calcBirthDate: string;
+  patientInitials: string;
+} {
+  if (hasLoadError) {
+    return {
+      patientTitle: PATIENT_BANNER_LOAD_ERROR_TITLE,
+      calcBirthDate: PATIENT_BANNER_LOAD_ERROR_SUBTITLE,
+      patientInitials: '!'
+    };
+  }
+  const calcBirthDate = patientData?.birthDate ? patientData.birthDate.replace(/-/g, '/') + '生' : '生年月日未登録';
+  const patientName = patientData?.name || '患者未選択';
+  const patientGender = patientData?.gender === 'female' ? '女性' : patientData?.gender === 'male' ? '男性' : '';
+  const patientTitle = patientData
+    ? `${patientName} (${[calcAge != null ? `${calcAge}歳` : '年齢不明', patientGender].filter(Boolean).join(' / ')})`
+    : patientName;
+  const patientInitials = patientName
+    .split(/\s|　/)
+    .filter(Boolean)
+    .map((part: string) => part[0])
+    .join('')
+    .slice(0, 2) || 'PT';
+  return {
+    patientTitle,
+    calcBirthDate,
+    patientInitials
+  };
+}
+
 export const PatientBanner = React.memo(function PatientBanner({
   patientAlerts,
   targetVisitId,
@@ -48,10 +87,12 @@ export const PatientBanner = React.memo(function PatientBanner({
 }: PatientBannerProps) {
   const db = useDatabase();
   const [patientData, setPatientData] = useState<any>(null);
+  const [hasPatientLoadError, setHasPatientLoadError] = useState(false);
 
   useEffect(() => {
     async function fetchPatientData() {
       if (!db) return;
+      setHasPatientLoadError(false);
       try {
         const visit = targetVisitId
           ? await db.visits.findOne(targetVisitId).exec()
@@ -68,8 +109,12 @@ export const PatientBanner = React.memo(function PatientBanner({
         } else {
           setPatientData(null);
         }
+        setHasPatientLoadError(false);
       } catch (e) {
         console.error(e);
+        setPatientData(null);
+        setHasPatientLoadError(true);
+        toast.error('患者基本情報の読み込みに失敗しました。');
       }
     }
     fetchPatientData();
@@ -79,18 +124,12 @@ export const PatientBanner = React.memo(function PatientBanner({
     return calculatePatientAge(patientData?.birthDate);
   }, [patientData?.birthDate]);
 
-  const calcBirthDate = patientData?.birthDate ? patientData.birthDate.replace(/-/g, '/') + '生' : '生年月日未登録';
   const patientName = patientData?.name || '患者未選択';
-  const patientGender = patientData?.gender === 'female' ? '女性' : patientData?.gender === 'male' ? '男性' : '';
-  const patientTitle = patientData
-    ? `${patientName} (${[calcAge != null ? `${calcAge}歳` : '年齢不明', patientGender].filter(Boolean).join(' / ')})`
-    : patientName;
-  const patientInitials = patientName
-    .split(/\s|　/)
-    .filter(Boolean)
-    .map((part: string) => part[0])
-    .join('')
-    .slice(0, 2) || 'PT';
+  const { patientTitle, calcBirthDate, patientInitials } = buildPatientBannerSummaryDisplay(
+    patientData,
+    calcAge,
+    hasPatientLoadError
+  );
   const activePatientAlerts = patientAlerts.filter(isActivePatientAlert).slice(0, 4);
 
   const [isReading, setIsReading] = useState(false);

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PatientBanner } from './PatientBanner';
+import {
+  PatientBanner,
+  buildPatientBannerSummaryDisplay,
+  PATIENT_BANNER_LOAD_ERROR_SUBTITLE,
+  PATIENT_BANNER_LOAD_ERROR_TITLE
+} from './PatientBanner';
 import {
   buildPublicInsuranceBadgeList,
   toEditablePublicInsurances,
@@ -90,4 +95,35 @@ test('public insurance editor state preserves up to 4 items and discards empty s
   assert.strictEqual(saved[0].provider, '51136018');
   assert.strictEqual(saved[1].provider, '21136018');
   assert.strictEqual(saved[1].monthlyLimitYen, 5000);
+});
+
+test('buildPatientBannerSummaryDisplay returns error display when hasLoadError is true instead of unselected patient', () => {
+  assert.deepStrictEqual(buildPatientBannerSummaryDisplay(null, null, true), {
+    patientTitle: PATIENT_BANNER_LOAD_ERROR_TITLE,
+    calcBirthDate: PATIENT_BANNER_LOAD_ERROR_SUBTITLE,
+    patientInitials: '!'
+  });
+});
+
+test('buildPatientBannerSummaryDisplay returns unselected state when patientData is null and hasLoadError is false', () => {
+  assert.deepStrictEqual(buildPatientBannerSummaryDisplay(null, null, false), {
+    patientTitle: '患者未選択',
+    calcBirthDate: '生年月日未登録',
+    patientInitials: '患'
+  });
+});
+
+test('buildPatientBannerSummaryDisplay formats patient name, age, gender, and birthDate when patientData is present', () => {
+  assert.deepStrictEqual(
+    buildPatientBannerSummaryDisplay(
+      { name: '佐藤 花子', birthDate: '1980-05-12', gender: 'female' },
+      46,
+      false
+    ),
+    {
+      patientTitle: '佐藤 花子 (46歳 / 女性)',
+      calcBirthDate: '1980/05/12生',
+      patientInitials: '佐花'
+    }
+  );
 });
