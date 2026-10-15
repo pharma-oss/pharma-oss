@@ -59,6 +59,138 @@ export function canProceedWithClosing(
   return confirm(CLOSING_CHECK_FAILED_CONFIRM_MESSAGE);
 }
 
+export const BACKUP_PASSWORD_TOO_SHORT_MESSAGE =
+  'バックアップ専用の暗号化パスワード(8文字以上)を入力してください。';
+
+export type DailyClosingSubmissionValidation =
+  | { ok: true; backupPassword: string }
+  | { ok: false; errorMessage: string };
+
+export function validateDailyClosingSubmission(
+  operator: Parameters<typeof canUserPerform>[0],
+  password: string
+): DailyClosingSubmissionValidation {
+  if (!canUserPerform(operator, 'manage_backups')) {
+    return {
+      ok: false,
+      errorMessage: getPermissionDeniedMessage(operator, 'manage_backups'),
+    };
+  }
+  const backupPassword = password.trim();
+  if (!backupPassword || backupPassword.length < 8) {
+    return {
+      ok: false,
+      errorMessage: BACKUP_PASSWORD_TOO_SHORT_MESSAGE,
+    };
+  }
+  return {
+    ok: true,
+    backupPassword,
+  };
+}
+
+export interface DailyClosingBackupExecutionDeps<TDb = Parameters<typeof buildDatabaseBackup>[0]> {
+  operator: Parameters<typeof canUserPerform>[0];
+  password: string;
+  checkSummary: ClosingCheckSummary | null;
+  setStep: (step: 1 | 2 | 3) => void;
+  setIsProcessing: (processing: boolean) => void;
+  setSaveStatus: (status: string) => void;
+  toastError?: (message: string) => void;
+  toastSuccess?: (message: string) => void;
+  getDatabaseFn?: () => Promise<TDb | null>;
+  buildDatabaseBackupFn?: (db: TDb) => ReturnType<typeof buildDatabaseBackup>;
+  encryptBackupPayloadFn?: typeof encryptBackupPayload;
+  makeBackupFileNameFn?: typeof makeBackupFileName;
+  saveBackupToDirectoryFn?: typeof saveBackupToDirectory;
+  logAuditActionFn?: (
+    db: TDb,
+    action: Parameters<typeof logAuditAction>[1],
+    details: string
+  ) => Promise<boolean>;
+}
+
+export async function runDailyClosingBackupAndAudit<TDb = Parameters<typeof buildDatabaseBackup>[0]>({
+  operator,
+  password,
+  checkSummary,
+  setStep,
+  setIsProcessing,
+  setSaveStatus,
+  toastError = (msg) => toast.error(msg),
+  toastSuccess = (msg) => toast.success(msg),
+  getDatabaseFn = async () => {
+    const { getDatabase } = await import('@/db');
+    return (await getDatabase()) as TDb | null;
+  },
+  buildDatabaseBackupFn = buildDatabaseBackup as unknown as (db: TDb) => ReturnType<typeof buildDatabaseBackup>,
+  encryptBackupPayloadFn = encryptBackupPayload,
+  makeBackupFileNameFn = makeBackupFileName,
+  saveBackupToDirectoryFn = saveBackupToDirectory,
+  logAuditActionFn = logAuditAction as unknown as (
+    db: TDb,
+    action: Parameters<typeof logAuditAction>[1],
+    details: string
+  ) => Promise<boolean>,
+}: DailyClosingBackupExecutionDeps<TDb>): Promise<void> {
+  const validation = validateDailyClosingSubmission(operator, password);
+  if (!validation.ok) {
+    toastError(validation.errorMessage);
+    return;
+  }
+  const { backupPassword } = validation;
+
+  setStep(2);
+  setIsProcessing(true);
+  setSaveStatus('暗号化バックアップデータを生成中…');
+
+  try {
+    const db = await getDatabaseFn();
+    if (!db) {
+      toastError('データベースに接続できませんでした。');
+      setIsProcessing(false);
+      setStep(1);
+      return;
+    }
+
+    const backupPayload = await buildDatabaseBackupFn(db);
+
+    setSaveStatus('AES-256 暗号化を適用中…');
+    const encryptedPayload = encryptBackupPayloadFn(backupPayload, backupPassword);
+    const fileName = makeBackupFileNameFn();
+    const content = JSON.stringify(encryptedPayload, null, 2);
+
+    setSaveStatus('外部保存先（NAS / USB）へ書き出し中…');
+    const result = await saveBackupToDirectoryFn(fileName, content);
+
+    if (!result.success) {
+      toastError(result.errorMessage || '外部保存に失敗しました。締め処理を中止します。');
+      setIsProcessing(false);
+      setStep(1);
+      return;
+    }
+
+    setSaveStatus('日次締め監査ログを記録中…');
+    const auditDetails = `日次締め・閉局外部暗号化保存完了: ファイル名 ${fileName} / 保存先 ${result.pathOrName} / 受付件数 ${checkSummary?.todayVisitsCount || 0}件 / 未完了薬歴 ${checkSummary?.uncompletedEmrCount || 0}件`;
+    const auditOk = await logAuditActionFn(db, 'backup_export', auditDetails);
+    if (!auditOk) {
+      toastError('監査ログの記録に失敗したため、締め処理を完了できませんでした。');
+      setIsProcessing(false);
+      setStep(1);
+      return;
+    }
+
+    toastSuccess(`日次締め・暗号化バックアップ外部保存を記録しました (${result.pathOrName})`);
+    setStep(3);
+  } catch (err: any) {
+    console.error('Failed to run daily closing backup:', err);
+    toastError(`日次締めの実行中にエラーが発生しました: ${err.message || err}`);
+    setStep(1);
+  } finally {
+    setIsProcessing(false);
+  }
+}
+
 export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyClosingWizardModalProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -159,69 +291,14 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
   const displayState = getClosingCheckDisplayState(isChecking, hasCheckError, checkSummary);
 
   const handleRunBackupAndClosing = async () => {
-    const operator = getCurrentUser();
-    if (!canUserPerform(operator, 'manage_backups')) {
-      toast.error(getPermissionDeniedMessage(operator, 'manage_backups'));
-      return;
-    }
-
-    // バックアップ独立の個別パスワード入力を必須化（ライブDB鍵の無断自動流用を防止）
-    const backupPassword = password.trim();
-    if (!backupPassword || backupPassword.length < 8) {
-      toast.error('バックアップ専用の暗号化パスワード(8文字以上)を入力してください。');
-      return;
-    }
-
-    setIsProcessing(true);
-    setSaveStatus('暗号化バックアップデータを生成中…');
-
-    try {
-      const { getDatabase } = await import('@/db');
-      const db = await getDatabase();
-      if (!db) {
-        toast.error('データベースに接続できませんでした。');
-        setIsProcessing(false);
-        return;
-      }
-
-      // レコード収集(バックアップ機能本体と同じ BACKUP_COLLECTIONS / localSettings 定義を再利用し、
-      // 対象コレクションが将来増減してもここで個別に追従する必要がないようにする)
-      const backupPayload = await buildDatabaseBackup(db);
-
-      // 真正な暗号化の適用
-      setSaveStatus('AES-256 暗号化を適用中…');
-      const encryptedPayload = encryptBackupPayload(backupPayload, backupPassword);
-      const fileName = makeBackupFileName();
-      const content = JSON.stringify(encryptedPayload, null, 2);
-
-      // 外部保存実行
-      setSaveStatus('外部保存先（NAS / USB）へ書き出し中…');
-      const result = await saveBackupToDirectory(fileName, content);
-
-      if (!result.success) {
-        toast.error(result.errorMessage || '外部保存に失敗しました。締め処理を中止します。');
-        setIsProcessing(false);
-        return;
-      }
-
-      // 監査ログの実質記録
-      setSaveStatus('日次締め監査ログを記録中…');
-      const auditDetails = `日次締め・閉局外部暗号化保存完了: ファイル名 ${fileName} / 保存先 ${result.pathOrName} / 受付件数 ${checkSummary?.todayVisitsCount || 0}件 / 未完了薬歴 ${checkSummary?.uncompletedEmrCount || 0}件`;
-      const auditOk = await logAuditAction(db, 'backup_export', auditDetails);
-      if (!auditOk) {
-        toast.error('監査ログの記録に失敗したため、締め処理を完了できませんでした。');
-        setIsProcessing(false);
-        return;
-      }
-
-      toast.success(`日次締め・暗号化バックアップ外部保存を記録しました (${result.pathOrName})`);
-      setStep(3);
-    } catch (err: any) {
-      console.error('Failed to run daily closing backup:', err);
-      toast.error(`日次締めの実行中にエラーが発生しました: ${err.message || err}`);
-    } finally {
-      setIsProcessing(false);
-    }
+    await runDailyClosingBackupAndAudit({
+      operator: getCurrentUser(),
+      password,
+      checkSummary,
+      setStep,
+      setIsProcessing,
+      setSaveStatus,
+    });
   };
 
   return (
@@ -328,7 +405,6 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
                 disabled={isChecking || isProcessing}
                 onClick={() => {
                   if (!canProceedWithClosing(displayState, (message) => window.confirm(message))) return;
-                  setStep(2);
                   handleRunBackupAndClosing();
                 }}
                 className="btn-closing-submit"
