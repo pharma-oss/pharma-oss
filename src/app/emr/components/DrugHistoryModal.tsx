@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Pill, Stethoscope, CalendarDays, FileText, Loader2, History } from 'lucide-react';
+import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import {
   buildDrugMedicationHistory,
@@ -10,6 +11,33 @@ import {
   type MedHistorySoapRecord,
   type MedHistoryVisit
 } from '@/lib/drug_medication_history';
+
+export const DRUG_HISTORY_LOAD_ERROR_MESSAGE =
+  '処方履歴の取得に失敗したため、過去の処方を確認できませんでした。';
+export const DRUG_HISTORY_EMPTY_MESSAGE = 'この患者の処方履歴がまだありません。';
+
+export type DrugHistoryModalBodyState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'empty'; message: string }
+  | { status: 'ready' };
+
+export function getDrugHistoryModalBodyState(
+  loading: boolean,
+  hasLoadError: boolean,
+  drugCount: number
+): DrugHistoryModalBodyState {
+  if (loading) {
+    return { status: 'loading' };
+  }
+  if (hasLoadError) {
+    return { status: 'error', message: DRUG_HISTORY_LOAD_ERROR_MESSAGE };
+  }
+  if (drugCount === 0) {
+    return { status: 'empty', message: DRUG_HISTORY_EMPTY_MESSAGE };
+  }
+  return { status: 'ready' };
+}
 
 // 処方明細は薬品名を持たない(drugId=レセ電コードのみ)ため、
 // 表示名と変更調剤判定用に薬品マスターから名前を引いて渡す。
@@ -47,6 +75,7 @@ export default function DrugHistoryModal({
 }) {
   const db = useDatabase();
   const [loading, setLoading] = useState(false);
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [visits, setVisits] = useState<MedHistoryVisit[]>([]);
   const [items, setItems] = useState<MedHistoryPrescriptionItem[]>([]);
   const [soaps, setSoaps] = useState<MedHistorySoapRecord[]>([]);
@@ -64,6 +93,7 @@ export default function DrugHistoryModal({
     if (!open || !db) return;
     let cancelled = false;
     setLoading(true);
+    setHasLoadError(false);
     setSelectedDrugId(null);
     (async () => {
       try {
@@ -78,6 +108,7 @@ export default function DrugHistoryModal({
         if (cancelled) return;
         if (!patientId) {
           setVisits([]); setItems([]); setSoaps([]); setDrugNamesById(new Map());
+          setHasLoadError(false);
           return;
         }
         const visitDocs = await db.visits.find({ selector: { patientId } }).exec();
@@ -94,8 +125,17 @@ export default function DrugHistoryModal({
         setItems(itemList);
         setSoaps(soapDocs.map((d: any) => d.toJSON()));
         setDrugNamesById(drugNames);
+        setHasLoadError(false);
       } catch (err) {
         console.error('Failed to load drug medication history:', err);
+        if (!cancelled) {
+          setVisits([]);
+          setItems([]);
+          setSoaps([]);
+          setDrugNamesById(new Map());
+          setHasLoadError(true);
+          toast.error('処方履歴の読み込みに失敗しました。');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -128,6 +168,8 @@ export default function DrugHistoryModal({
 
   if (!open) return null;
 
+  const bodyState = getDrugHistoryModalBodyState(loading, hasLoadError, drugs.length);
+
   return (
     <div className="dh-overlay" onClick={onClose} role="presentation">
       <div className="dh-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="薬剤履歴">
@@ -142,10 +184,12 @@ export default function DrugHistoryModal({
           <button className="dh-close" onClick={onClose} aria-label="閉じる"><X size={18} /></button>
         </div>
 
-        {loading ? (
+        {bodyState.status === 'loading' ? (
           <div className="dh-empty"><Loader2 size={20} className="spin" aria-hidden="true" /> 読み込み中...</div>
-        ) : drugs.length === 0 ? (
-          <div className="dh-empty">この患者の処方履歴がまだありません。</div>
+        ) : bodyState.status === 'error' ? (
+          <div className="dh-empty">{bodyState.message}</div>
+        ) : bodyState.status === 'empty' ? (
+          <div className="dh-empty">{bodyState.message}</div>
         ) : (
           <div className="dh-body">
             <aside className="dh-druglist" aria-label="薬剤を選択">
