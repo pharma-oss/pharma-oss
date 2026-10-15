@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { findPatientAlertDrugWarnings, formatPatientAlertLabel, tokenizePatientAlertContent, createPatientDataFetchErrorWarning } from './patient_alerts.ts';
+import { findPatientAlertDrugWarnings, formatPatientAlertLabel, tokenizePatientAlertContent, createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning } from './patient_alerts.ts';
 import type { Alert } from '../db/types.ts';
 
 const allergyAlert: Alert = {
@@ -92,4 +92,12 @@ test('createPatientDataFetchErrorWarning returns warning object for patient data
   assert.strictEqual(warning.severity, 'warning');
   assert.strictEqual(warning.drug, '（患者情報）');
   assert.strictEqual(warning.message, '患者情報（アレルギー・副作用歴・年齢）の取得に失敗したため、警告を判定できませんでした。患者情報を確認してください。');
+});
+
+test('createWarningsCalculationErrorWarning returns warning object when warning calculation fails', () => {
+  const warning = createWarningsCalculationErrorWarning();
+  assert.strictEqual(warning.type, 'usage');
+  assert.strictEqual(warning.severity, 'warning');
+  assert.strictEqual(warning.drug, '（処方監査）');
+  assert.strictEqual(warning.message, '処方と患者情報に基づく警告の算出に失敗したため、警告を判定できませんでした。処方内容と患者情報を確認してください。');
 });

@@ -168,3 +168,12 @@ export function createPatientDataFetchErrorWarning(): PatientDataFetchErrorWarni
     message: '患者情報（アレルギー・副作用歴・年齢）の取得に失敗したため、警告を判定できませんでした。患者情報を確認してください。'
   };
 }
+
+export function createWarningsCalculationErrorWarning(): PatientDataFetchErrorWarning {
+  return {
+    type: 'usage',
+    severity: 'warning',
+    drug: '（処方監査）',
+    message: '処方と患者情報に基づく警告の算出に失敗したため、警告を判定できませんでした。処方内容と患者情報を確認してください。'
+  };
+}

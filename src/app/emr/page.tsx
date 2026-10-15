@@ -9,7 +9,7 @@ import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, FacilitySettings, InsuranceEligibilityStatus, PrescriptionItem, PublicInsurance, SoapRecord as DbSoapRecord, SoapStructuredAssessment, TracingReportStatus, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport, VisitTracingReport } from '@/db/types';
 import { evaluateUsageWarning, evaluateUsageWarningCondition } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
-import { createPatientDataFetchErrorWarning, findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
+import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
@@ -1301,6 +1301,7 @@ useEffect(() => {
         setWarnings(newWarnings);
       } catch (err) {
         console.error('Failed to fetch warnings', err);
+        setWarnings([createWarningsCalculationErrorWarning()]);
       } finally {
         setIsWarningsLoading(false);
       }
