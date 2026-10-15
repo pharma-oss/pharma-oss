@@ -19,6 +19,46 @@ export interface MedicationGuidanceModalProps {
   } | null | undefined;
   db?: any;
   initialEntries?: MedicationGuidanceEntry[];
+  initialLoadError?: boolean;
+}
+
+export const MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE =
+  '服薬指導記録の読み込みに失敗しました。既存の記録を上書きしないよう保存を停止しています。モーダルを閉じて再度開いてください。';
+
+export interface MedicationGuidanceModalViewState {
+  status: 'loading' | 'error' | 'ready';
+  errorMessage: string | null;
+  isSaveDisabled: boolean;
+  saveDisabledTitle: string;
+}
+
+export function getMedicationGuidanceModalViewState(
+  isLoading: boolean,
+  hasLoadError: boolean,
+  isSaving: boolean
+): MedicationGuidanceModalViewState {
+  if (isLoading) {
+    return {
+      status: 'loading',
+      errorMessage: null,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込み中...'
+    };
+  }
+  if (hasLoadError) {
+    return {
+      status: 'error',
+      errorMessage: MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込みに失敗したため保存できません'
+    };
+  }
+  return {
+    status: 'ready',
+    errorMessage: null,
+    isSaveDisabled: isSaving,
+    saveDisabledTitle: isSaving ? '保存中...' : ''
+  };
 }
 
 export function normalizeGuidanceEntries(
@@ -35,13 +75,15 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
   onClose,
   drug,
   db,
-  initialEntries = []
+  initialEntries = [],
+  initialLoadError = false
 }) => {
   const [entries, setEntries] = useState<{ id: string; type: string; text: string }[]>(
     () => initialEntries.map((e) => ({ ...e, id: e.id || uuidv4() }))
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadError, setHasLoadError] = useState(Boolean(initialLoadError));
   const [docId, setDocId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,6 +91,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
     async function fetchGuidance() {
       if (!isOpen || !drug || !db) return;
       setIsLoading(true);
+      setHasLoadError(false);
       try {
         if (!db.medication_guidances) {
           throw new Error('medication_guidances collection not found');
@@ -64,11 +107,14 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           setEntries([]);
           setDocId(null);
         }
+        setHasLoadError(false);
       } catch (e) {
         console.error('Failed to fetch guidance:', e);
         if (isMounted) {
           setEntries([]);
           setDocId(null);
+          setHasLoadError(true);
+          toast.error('服薬指導記録の読み込みに失敗しました。');
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -93,7 +139,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
   };
 
   const handleSave = async () => {
-    if (!db || !drug) return;
+    if (!db || !drug || hasLoadError || isLoading) return;
     setIsSaving(true);
     try {
       const cleanEntries = normalizeGuidanceEntries(entries);
@@ -126,6 +172,8 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
 
   if (!isOpen) return null;
 
+  const viewState = getMedicationGuidanceModalViewState(isLoading, hasLoadError, isSaving);
+
   return (
     <div className="modal-overlay">
       <div className="modal-content modal-md">
@@ -136,10 +184,14 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           </button>
         </div>
         <div className="modal-body">
-          {isLoading ? (
+          {viewState.status === 'loading' ? (
             <div className="flex-center loading-container">
               <Loader2 className="spin" size={24} />
             </div>
+          ) : viewState.status === 'error' ? (
+            <p className="guidance-load-error" role="alert">
+              {viewState.errorMessage}
+            </p>
           ) : (
             <>
               <p className="guidance-desc">
@@ -194,10 +246,10 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           </button>
           <span
             className="btn-tooltip-wrapper"
-            data-disabled={isSaving}
-            title={isSaving ? '保存中...' : ''}
+            data-disabled={viewState.isSaveDisabled}
+            title={viewState.saveDisabledTitle}
           >
-            <button className="btn-primary" onClick={handleSave} disabled={isSaving}>
+            <button className="btn-primary" onClick={handleSave} disabled={viewState.isSaveDisabled}>
               {isSaving ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
               保存
             </button>
@@ -219,6 +271,12 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           font-size: var(--fs-md);
           color: var(--text-ghost);
           margin-bottom: var(--space-4);
+        }
+        .guidance-load-error {
+          font-size: var(--fs-md);
+          color: var(--status-red, #dc2626);
+          margin-bottom: var(--space-4);
+          font-weight: 600;
         }
         .guidance-entry-list {
           display: flex;

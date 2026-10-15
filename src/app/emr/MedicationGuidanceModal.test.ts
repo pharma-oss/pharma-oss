@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   MedicationGuidanceModal,
   normalizeGuidanceEntries,
+  getMedicationGuidanceModalViewState,
+  MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE,
   type MedicationGuidanceEntry
 } from './components/MedicationGuidanceModal';
 
@@ -41,6 +43,41 @@ describe('normalizeGuidanceEntries pure function contracts', () => {
     assert.equal(normalized[0].text, '');
     assert.equal(normalized[1].type, 'X');
     assert.equal(normalized[1].text, '備考メモ');
+  });
+});
+
+describe('getMedicationGuidanceModalViewState pure function contracts', () => {
+  it('returns error state and disables save when hasLoadError is true', () => {
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(false, true, false), {
+      status: 'error',
+      errorMessage: MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込みに失敗したため保存できません'
+    });
+  });
+
+  it('returns loading state and disables save while loading', () => {
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(true, false, false), {
+      status: 'loading',
+      errorMessage: null,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込み中...'
+    });
+  });
+
+  it('returns ready state and reflects isSaving in save button disabled state', () => {
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(false, false, false), {
+      status: 'ready',
+      errorMessage: null,
+      isSaveDisabled: false,
+      saveDisabledTitle: ''
+    });
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(false, false, true), {
+      status: 'ready',
+      errorMessage: null,
+      isSaveDisabled: true,
+      saveDisabledTitle: '保存中...'
+    });
   });
 });
 
@@ -130,5 +167,21 @@ describe('MedicationGuidanceModal renderToStaticMarkup contracts', () => {
     );
     assert.ok(html.includes('服薬指導補助マニュアル:'), 'Should render header safely without throwing');
     assert.ok(html.includes('class="guidance-add-bar"'), 'Should still render add bar');
+  });
+
+  it('renders error alert and disables save button when initialLoadError is true', () => {
+    const rawHtml = renderToStaticMarkup(
+      React.createElement(MedicationGuidanceModal, {
+        isOpen: true,
+        onClose: () => {},
+        drug: { code: 'D001', name: 'アムロジピン錠5mg' },
+        initialLoadError: true
+      })
+    );
+    const html = rawHtml.replace(/<style[\s\S]*?<\/style>/g, '');
+    assert.ok(html.includes(MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE), 'Should render load error message');
+    assert.ok(!html.includes('class="guidance-add-bar"'), 'Should not render add bar when load failed');
+    assert.ok(html.includes('data-disabled="true"'), 'Tooltip wrapper should reflect disabled state');
+    assert.ok(html.includes('disabled=""'), 'Save button should be disabled when load failed');
   });
 });
