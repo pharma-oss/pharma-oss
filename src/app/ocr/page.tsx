@@ -315,6 +315,7 @@ export default function OcrPage() {
     setPatientMergeMessage,
     activePatientAlerts,
     setActivePatientAlerts,
+    hasPatientAlertsFetchError,
     isReadingMyna,
     mynaMessage,
     setMynaMessage,
@@ -419,8 +420,11 @@ export default function OcrPage() {
         rpNumber: groupIndex !== undefined ? groupIndex + 1 : undefined
       };
     });
-    return buildPrescriptionInputAudit(auditItems, { patientAlerts: activePatientAlerts });
-  }, [activePatientAlerts, prescriptions, prescriptionGroups]);
+    return buildPrescriptionInputAudit(auditItems, {
+      patientAlerts: activePatientAlerts,
+      hasPatientAlertsFetchError
+    });
+  }, [activePatientAlerts, hasPatientAlertsFetchError, prescriptions, prescriptionGroups]);
   const ocrConfidenceReport = useMemo(() => buildOcrConfidenceReport({
     ocrText: ocrResult,
     patientName,
@@ -482,8 +486,10 @@ export default function OcrPage() {
     return buildHighCostCopaymentBadges(selectedPatient.insuranceInfo);
   }, [selectedPatient]);
   const selectedPatientReceptionAlerts = useMemo(() => {
-    return filterReceptionEligibilityAlerts(selectedPatientEligibilityIssues);
-  }, [selectedPatientEligibilityIssues]);
+    return filterReceptionEligibilityAlerts(selectedPatientEligibilityIssues, {
+      hasPatientAlertsFetchError
+    });
+  }, [hasPatientAlertsFetchError, selectedPatientEligibilityIssues]);
   const candidatePublicSummaryByPatientId = useMemo(() => {
     const map = new Map<string, ReturnType<typeof buildCandidatePublicInsuranceSummary>>();
     for (const patient of patientCandidates) {

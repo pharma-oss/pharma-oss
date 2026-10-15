@@ -134,5 +134,16 @@ describe('OCR Reception Public Insurance & Eligibility helpers', () => {
       ];
       assert.deepEqual(filterReceptionEligibilityAlerts(issues), []);
     });
+
+    it('appends warning when patient alerts fetch failed', () => {
+      const surfaced = filterReceptionEligibilityAlerts([], { hasPatientAlertsFetchError: true });
+      assert.equal(surfaced.length, 1);
+      assert.deepEqual(surfaced[0], {
+        code: 'patient_alerts_fetch_failed',
+        severity: 'warning',
+        title: '患者アラート取得失敗',
+        message: 'アレルギー・副作用歴等の取得に失敗したため確認できません。患者情報を確認してください。'
+      });
+    });
   });
 });

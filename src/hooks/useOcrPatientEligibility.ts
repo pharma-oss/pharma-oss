@@ -55,6 +55,7 @@ export function useOcrPatientEligibility({
   const [isApplyingPatientMerge, setIsApplyingPatientMerge] = useState(false);
   const [patientMergeMessage, setPatientMergeMessage] = useState('');
   const [activePatientAlerts, setActivePatientAlerts] = useState<Alert[]>([]);
+  const [hasPatientAlertsFetchError, setHasPatientAlertsFetchError] = useState(false);
   const [isReadingMyna, setIsReadingMyna] = useState(false);
   const [mynaMessage, setMynaMessage] = useState('');
   const [eligibilityStatus, setEligibilityStatus] = useState<EligibilityStatus>('unchecked');
@@ -110,9 +111,11 @@ export function useOcrPatientEligibility({
     const loadPatientAlerts = async () => {
       if (!db || !selectedPatientId) {
         setActivePatientAlerts([]);
+        setHasPatientAlertsFetchError(false);
         return;
       }
 
+      setHasPatientAlertsFetchError(false);
       try {
         const alertDocs = await db.alerts.find({ selector: { patientId: selectedPatientId } }).exec();
         if (!isMounted) return;
@@ -121,9 +124,14 @@ export function useOcrPatientEligibility({
             .map((alertDoc: any) => alertDoc.toJSON() as Alert)
             .filter((alert: Alert) => alert.status !== 'resolved')
         );
+        setHasPatientAlertsFetchError(false);
       } catch (error) {
         console.error('Failed to load patient alerts:', error);
-        if (isMounted) setActivePatientAlerts([]);
+        if (isMounted) {
+          setActivePatientAlerts([]);
+          setHasPatientAlertsFetchError(true);
+          toast.error('患者アラート情報の読み込みに失敗しました。');
+        }
       }
     };
 
@@ -214,6 +222,8 @@ export function useOcrPatientEligibility({
     setPatientMergeMessage,
     activePatientAlerts,
     setActivePatientAlerts,
+    hasPatientAlertsFetchError,
+    setHasPatientAlertsFetchError,
     isReadingMyna,
     mynaMessage,
     setMynaMessage,

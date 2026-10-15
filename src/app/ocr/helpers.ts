@@ -253,9 +253,10 @@ export function buildPrescriptionFromElectronicItem(
  * 選択中患者の公費・保険適合性判定結果から、受付画面で表面化すべき警告（公費全般および保険期限切れ・資格不備）を抽出する純粋関数
  */
 export function filterReceptionEligibilityAlerts(
-  issues: ReadonlyArray<InsuranceEligibilityIssue>
+  issues: ReadonlyArray<InsuranceEligibilityIssue>,
+  options: { hasPatientAlertsFetchError?: boolean } = {}
 ): InsuranceEligibilityIssue[] {
-  return issues.filter((issue) => {
+  const filtered = issues.filter((issue) => {
     // 公費関連のエラー・警告はすべて表面化
     if (issue.code.startsWith('public_insurance_')) return true;
     // 保険資格切れ・開始日前・資格確認未完了などの重大警告も表面化
@@ -271,6 +272,17 @@ export function filterReceptionEligibilityAlerts(
     }
     return false;
   });
+
+  if (options.hasPatientAlertsFetchError) {
+    filtered.push({
+      code: 'patient_alerts_fetch_failed' as InsuranceEligibilityIssue['code'],
+      severity: 'warning',
+      title: '患者アラート取得失敗',
+      message: 'アレルギー・副作用歴等の取得に失敗したため確認できません。患者情報を確認してください。'
+    });
+  }
+
+  return filtered;
 }
 
 /**

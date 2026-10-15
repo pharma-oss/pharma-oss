@@ -503,3 +503,30 @@ test('products without a drug code are told apart by name when they share a gene
   assert.ok(codes.includes('similar_therapy_detected'));
 });
 
+test('adds warning issue when patient alerts fetch failed', () => {
+  const audit = buildPrescriptionInputAudit(
+    [
+      {
+        id: 'item-1',
+        rpId: 'rp1',
+        drugCode: '1149019F1560',
+        drugName: 'ロキソニン錠60mg',
+        amount: '3',
+        usage: '1日3回 毎食後',
+        days: '5',
+        stockQuantity: 100
+      }
+    ],
+    { hasPatientAlertsFetchError: true }
+  );
+
+  const issue = audit.issues.find((i) => i.code === 'patient_alerts_fetch_failed');
+  assert.ok(issue);
+  assert.strictEqual(issue.severity, 'warning');
+  assert.strictEqual(issue.title, '患者アラート（アレルギー・副作用歴）を取得できませんでした');
+  assert.strictEqual(
+    issue.message,
+    '患者のアレルギー・副作用歴の取得に失敗したため、禁忌・注意の照合ができていません。患者情報を確認してください。'
+  );
+});
+

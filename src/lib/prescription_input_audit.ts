@@ -110,10 +110,11 @@ const addIssue = (issues: PrescriptionInputAuditIssue[], issue: PrescriptionInpu
 
 export function buildPrescriptionInputAudit(
   items: PrescriptionInputAuditItem[],
-  options: { noSubstitutionLabels?: Set<string>; patientAlerts?: Alert[] } = {}
+  options: { noSubstitutionLabels?: Set<string>; patientAlerts?: Alert[]; hasPatientAlertsFetchError?: boolean } = {}
 ): PrescriptionInputAuditResult {
   const noSubstitutionLabels = options.noSubstitutionLabels || DEFAULT_NO_SUBSTITUTION_LABELS;
   const patientAlerts = options.patientAlerts || [];
+  const hasPatientAlertsFetchError = options.hasPatientAlertsFetchError || false;
   const issues: PrescriptionInputAuditIssue[] = [];
   const drugGroups = new Map<string, PrescriptionInputAuditItem[]>();
   const yjCategoryGroups = new Map<string, PrescriptionInputAuditItem[]>();
@@ -491,6 +492,15 @@ export function buildPrescriptionInputAudit(
       title: warning.title,
       message: warning.message,
       itemIds: warning.itemId ? [warning.itemId] : undefined
+    });
+  }
+
+  if (hasPatientAlertsFetchError) {
+    addIssue(issues, {
+      severity: 'warning',
+      code: 'patient_alerts_fetch_failed',
+      title: '患者アラート（アレルギー・副作用歴）を取得できませんでした',
+      message: '患者のアレルギー・副作用歴の取得に失敗したため、禁忌・注意の照合ができていません。患者情報を確認してください。'
     });
   }
 
