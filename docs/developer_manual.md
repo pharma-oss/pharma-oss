@@ -140,10 +140,11 @@ npm run electronic-prescription:field-readiness
 
 *   **役割**: 各端末の環境変数 `PHARMACY_SYNC_ROLE=hub|satellite|standalone`(既定 standalone=従来どおり単独動作)。
 *   **メイン端末(hub)**: Next.jsサーバー内の `node:sqlite`(Node 22.13以上)に正本を保持します(`src/lib/sync/hub_store.ts`、AES-256-GCMで暗号化)。`PHARMACY_SYNC_HUB_ENCRYPTION_KEY`(16進64文字)が必須、`PHARMACY_SYNC_HUB_DB_PATH`の既定は `./data/sync_hub.sqlite`。メイン端末のブラウザは従来どおり暗号化IndexedDBの全量レプリカを持ち、既存バックアップ導線がそのまま全端末分を含みます。
-*   **サテライト端末**: ブラウザはRxDBメモリストレージのみで患者データをディスクへ書きません。`PHARMACY_SYNC_HUB_ENDPOINT`(localhostはHTTP可、施設内LANはHTTPS必須。HTTPしか使えないLANでは`PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm`と共有鍵`PHARMACY_SYNC_TRANSPORT_KEY`でペイロードを暗号化)、メイン端末の設定>端末同期で発行した`PHARMACY_SYNC_TERMINAL_ID`/`PHARMACY_SYNC_TERMINAL_TOKEN`を設定します。トークンはサーバー側envにのみ置かれ、ブラウザへは渡りません。
+*   **同期ゲートウェイ(メイン端末)**: 施設内LANへ公開するのはゲートウェイだけです。アプリ本体は`npm run start:local`(ループバック専用)で起動し、`npm run sync:gateway`でゲートウェイ(既定 `0.0.0.0:3443`)を起動します。ゲートウェイは`GET /api/sync/remote/pull`と`POST /api/sync/remote/push`だけを本体へ転送し、それ以外は404/405にします。LANへ公開するには`PHARMACY_SYNC_GATEWAY_TLS_CERT`/`PHARMACY_SYNC_GATEWAY_TLS_KEY`(HTTPS)か、`PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm`のどちらかが必須です。本体がLAN側アドレスでも待ち受けていると、ゲートウェイは起動を拒否します。証明書は施設内の認証局または自己署名で用意し(例: `openssl req -x509 -newkey rsa:2048 -nodes -keyout hub-key.pem -out hub-cert.pem -days 825 -subj "/CN=<メイン端末のIP>" -addext "subjectAltName=IP:<メイン端末のIP>"`)、自己署名の場合は各サテライトの本体を起動する環境に`NODE_EXTRA_CA_CERTS=<hub-cert.pemのパス>`を設定します。サテライトの本体も`npm run start:local`で起動します。
+*   **サテライト端末**: ブラウザはRxDBメモリストレージのみで患者データをディスクへ書きません。`PHARMACY_SYNC_HUB_ENDPOINT`(ゲートウェイのURL。localhostはHTTP可、施設内LANはHTTPS必須。HTTPしか使えないLANでは`PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm`と共有鍵`PHARMACY_SYNC_TRANSPORT_KEY`でペイロードを暗号化)、メイン端末の設定>端末同期で発行した`PHARMACY_SYNC_TERMINAL_ID`/`PHARMACY_SYNC_TERMINAL_TOKEN`を設定します。トークンはサーバー側envにのみ置かれ、ブラウザへは渡りません。
 *   **同期**: RxDB open-coreの`replicateRxCollection`でブラウザ⇔自機`/api/sync/pull|push`を双方向同期します(サテライトの`audit_logs`はpush専用)。サテライトの自機サーバーは`/api/sync/remote/*`へBearerトークン付きで中継します。競合はハブ優先で、負けた書き込みは設定>端末同期の競合レビューに記録されます。
 *   **監査ログ**: ハッシュチェーンは端末ごとに独立します(`AuditLog.terminalId`、メイン端末は`hub-local`)。`verifyAuditLogIntegrity`は端末別にチェーンを検証し、terminalIdなしの既存ログはレガシーチェーンとして従来どおり検証します。
-*   **E2E**: `npm run build` 後に `npm run test:e2e:sync` で、ハブ起動→端末登録→サテライト経由push/pull→競合記録→トークン失効拒否を2プロセスで検証します。
+*   **E2E**: `npm run build` 後に `npm run test:e2e:sync` で、ハブ起動→端末登録→サテライト経由push/pull→ゲートウェイの許可リスト(許可した2つの口だけが通り、それ以外は遮断)と露出検知→競合記録→トークン失効拒否を検証します。
 
 ```bash
 YAKUREKI_PHARMACY_DEVICE_CONNECTOR_READINESS=<接続準備診断JSON> \

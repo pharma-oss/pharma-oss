@@ -105,6 +105,18 @@ RxDB 17.1.0 open-core は同時にオープンできるコレクションを14�
 - 端末トークンはメイン端末の設定画面で発行し、サテライトの `.env` にだけ保存する（ブラウザへは渡さない）。ハブ側はハッシュのみ保存する。
 - URL・トークン・通信本文は監査ログ・画面・成果物へ生値を出さない（既存コネクタと同じ扱い）。
 
+### LAN への公開範囲（同期ゲートウェイ）
+
+施設内 LAN に公開するのは、サテライトがハブへ接続する 2 つの口（`GET /api/sync/remote/pull`、`POST /api/sync/remote/push`）だけにする。
+
+- アプリ本体（Next.js）は `npm run start:local`（`next start -H 127.0.0.1`）でループバック専用に起動する。画面、自機のブラウザ向け API（`/api/sync/pull|push|config|status|terminals|conflicts`）、各種コネクタ向け API は、同じ端末の中だけで使う。
+- メイン端末では、`npm run sync:gateway`（`scripts/runSyncGateway.ts`、実装は `src/lib/sync/sync_gateway.ts`）を併せて起動する。ゲートウェイは LAN 側の待受（既定 `0.0.0.0:3443`）で、許可した 2 つの (メソッド, パス) だけを `127.0.0.1` の Next へ転送し、それ以外は 404 / 405 を返す。パスは正規化せず文字列で完全一致を判定する。
+- 転送するヘッダーは `Authorization`・`Content-Type`・`Accept`・端末 ID のみ。サテライトの認証（Bearer トークン + 端末 ID）は従来どおり Next 側のルートが行う。ゲートウェイのログはメソッド・パス（クエリなし）・ステータス・接続元だけで、トークンと本文は出さない。
+- 通信の暗号化はゲートウェイが担う。`PHARMACY_SYNC_GATEWAY_TLS_CERT` / `_KEY` を設定すると HTTPS で待ち受ける（外部のリバースプロキシは不要）。HTTPS を使わない場合は `PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm` が必須で、どちらも無いままループバック以外で待ち受ける設定は起動時に拒否する。
+- 起動時の自己点検: ゲートウェイは、Next の待受ポートにこの端末の LAN 側 IPv4 アドレスから接続できる場合（`-H 127.0.0.1` を付けずに Next が起動されている場合）、起動を拒否する。検出できるのは起動時点の状態だけで、その後に Next が起動し直されたときは再点検しない。
+- サテライト端末の Next も `npm run start:local` で起動する（自機の `/api/sync/*` が端末トークンを使ってハブへ中継するため、LAN に開けない）。
+- 検証: `src/lib/sync/sync_gateway.test.ts`（許可リスト、設定検証、中継、上限、露出検知）と、`npm run test:e2e:sync`（実際の Next 2 台 + ゲートウェイ）。
+
 ### 環境変数（案）
 
 ```bash
@@ -112,10 +124,14 @@ RxDB 17.1.0 open-core は同時にオープンできるコレクションを14�
 PHARMACY_SYNC_ROLE=hub
 PHARMACY_SYNC_HUB_ENCRYPTION_KEY=<32byte hex>       # ハブストアの at-rest 暗号鍵
 PHARMACY_SYNC_HUB_DB_PATH=./data/sync_hub.sqlite    # 既定値あり
+# ゲートウェイ（npm run sync:gateway）。LAN へ公開するにはどちらかが必須
+PHARMACY_SYNC_GATEWAY_TLS_CERT=<証明書のパス>       # HTTPS で公開する場合（TLS_KEY と対）
+PHARMACY_SYNC_GATEWAY_TLS_KEY=<秘密鍵のパス>
+# 任意: PHARMACY_SYNC_GATEWAY_HOST（既定 0.0.0.0）、_PORT（既定 3443）、_UPSTREAM（既定 http://127.0.0.1:3000）
 
 # サテライト端末
 PHARMACY_SYNC_ROLE=satellite
-PHARMACY_SYNC_HUB_ENDPOINT=https://<メイン端末>:3000
+PHARMACY_SYNC_HUB_ENDPOINT=https://<メイン端末>:3443   # ゲートウェイのURL
 PHARMACY_SYNC_TERMINAL_ID=<メイン端末で発行>
 PHARMACY_SYNC_TERMINAL_TOKEN=<メイン端末で発行>
 PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm          # LAN が HTTP の場合のみ必須
