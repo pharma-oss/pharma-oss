@@ -109,13 +109,13 @@ RxDB 17.1.0 open-core は同時にオープンできるコレクションを14�
 
 施設内 LAN に公開するのは、サテライトがハブへ接続する 2 つの口（`GET /api/sync/remote/pull`、`POST /api/sync/remote/push`）だけにする。
 
-- アプリ本体（Next.js）は `npm run start:local`（`next start -H 127.0.0.1`）でループバック専用に起動する。画面、自機のブラウザ向け API（`/api/sync/pull|push|config|status|terminals|conflicts`）、各種コネクタ向け API は、同じ端末の中だけで使う。
+- アプリ本体（Next.js）は `npm run start` で起動する。`PHARMACY_SYNC_ROLE` が `hub` / `satellite` の端末では、起動用スクリプト（`scripts/startApp.ts`、判定は `src/lib/sync/start_policy.ts`）が自動で `next start -H 127.0.0.1`（ループバック専用）にする。`-H` に 127.0.0.1 以外を指定すると起動を拒否し、役割の値が不正なときも安全側（ループバック専用）にする。単独動作（standalone）の起動引数は変えない。`npm run start:local` は役割にかかわらず常にループバック専用。画面、自機のブラウザ向け API（`/api/sync/pull|push|config|status|terminals|conflicts`）、各種コネクタ向け API は、同じ端末の中だけで使う。
 - メイン端末では、`npm run sync:gateway`（`scripts/runSyncGateway.ts`、実装は `src/lib/sync/sync_gateway.ts`）を併せて起動する。ゲートウェイは LAN 側の待受（既定 `0.0.0.0:3443`）で、許可した 2 つの (メソッド, パス) だけを `127.0.0.1` の Next へ転送し、それ以外は 404 / 405 を返す。パスは正規化せず文字列で完全一致を判定する。
 - 転送するヘッダーは `Authorization`・`Content-Type`・`Accept`・端末 ID のみ。サテライトの認証（Bearer トークン + 端末 ID）は従来どおり Next 側のルートが行う。ゲートウェイのログはメソッド・パス（クエリなし）・ステータス・接続元だけで、トークンと本文は出さない。
 - 通信の暗号化はゲートウェイが担う。`PHARMACY_SYNC_GATEWAY_TLS_CERT` / `_KEY` を設定すると HTTPS で待ち受ける（外部のリバースプロキシは不要）。HTTPS を使わない場合は `PHARMACY_SYNC_TRANSPORT_ENCRYPTION=aes-gcm` が必須で、どちらも無いままループバック以外で待ち受ける設定は起動時に拒否する。
 - 起動時の自己点検: ゲートウェイは、Next の待受ポートにこの端末の LAN 側 IPv4 アドレスから接続できる場合（`-H 127.0.0.1` を付けずに Next が起動されている場合）、起動を拒否する。検出できるのは起動時点の状態だけで、その後に Next が起動し直されたときは再点検しない。
-- サテライト端末の Next も `npm run start:local` で起動する（自機の `/api/sync/*` が端末トークンを使ってハブへ中継するため、LAN に開けない）。
-- 検証: `src/lib/sync/sync_gateway.test.ts`（許可リスト、設定検証、中継、上限、露出検知）と、`npm run test:e2e:sync`（実際の Next 2 台 + ゲートウェイ）。
+- サテライト端末の Next も同じ起動用スクリプトでループバック専用になる（自機の `/api/sync/*` が端末トークンを使ってハブへ中継するため、LAN に開けない）。`next start` を直接起動した場合は、この保護は働かない（メイン端末のゲートウェイだけが起動時に検知する）。
+- 検証: `src/lib/sync/sync_gateway.test.ts`（許可リスト、設定検証、中継、上限、露出検知）、`src/lib/sync/start_policy.test.ts`（役割ごとの起動引数、起動用スクリプトの配線）と、`npm run test:e2e:sync`（実際の Next 2 台 + ゲートウェイ）。
 
 ### 環境変数（案）
 

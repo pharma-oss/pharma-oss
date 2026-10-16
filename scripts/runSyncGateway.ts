@@ -1,9 +1,9 @@
 // メイン端末(hub)の同期ゲートウェイを起動する。
-//   1. Next を `npm run start:local`(ループバック専用)で起動しておく
+//   1. Next を `npm run start`(hub は自動でループバック専用)で起動しておく
 //   2. このスクリプトを `npm run sync:gateway` で起動する
 // サテライト端末の接続先(PHARMACY_SYNC_HUB_ENDPOINT)は、このゲートウェイのURLにする。
 // 参照: docs/satellite_terminal_sync_plan.md、src/lib/sync/sync_gateway.ts
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import {
@@ -12,6 +12,7 @@ import {
   resolveSyncGatewayConfig,
   waitForUpstream
 } from '../src/lib/sync/sync_gateway.ts';
+import { loadEnvFiles } from './lib/env_files.ts';
 
 const UPSTREAM_WAIT_TIMEOUT_MS = 120_000;
 
@@ -22,14 +23,6 @@ function fail(message: string): never {
 
 function log(line: string) {
   console.log(`[sync-gateway] ${new Date().toISOString()} ${line}`);
-}
-
-// `next start` と同じ順序で .env ファイルを読む。loadEnvFile は設定済みの値を上書きしないので、
-// OSの環境変数 > .env.production.local > .env.local > .env.production > .env の優先になる。
-function loadEnvFiles() {
-  for (const file of ['.env.production.local', '.env.local', '.env.production', '.env']) {
-    if (existsSync(file)) process.loadEnvFile(file);
-  }
 }
 
 async function main() {
@@ -59,7 +52,7 @@ async function main() {
   log(`Nextの起動を待っています(${config.upstreamHost}:${config.upstreamPort})。`);
   const upstreamReady = await waitForUpstream(config.upstreamHost, config.upstreamPort, { timeoutMs: UPSTREAM_WAIT_TIMEOUT_MS });
   if (!upstreamReady) {
-    fail(`${UPSTREAM_WAIT_TIMEOUT_MS / 1000}秒以内にNextへ接続できませんでした。先に \`npm run start:local\` を起動してください。`);
+    fail(`${UPSTREAM_WAIT_TIMEOUT_MS / 1000}秒以内にNextへ接続できませんでした。先に \`npm run start\` を起動してください。`);
   }
 
   // Next がLAN側のアドレスでも待ち受けていると、ゲートウェイを通らずに届いてしまう。起動を止める。
@@ -67,7 +60,7 @@ async function main() {
   if (exposed.length > 0) {
     fail(
       `Nextがこの端末のLAN側アドレス(${exposed.join(', ')})でも待ち受けています。`
-      + '\`npm run start:local\`(ループバック専用)でNextを起動し直してから、ゲートウェイを起動してください。'
+      + '\`npm run start\`(hub は自動でループバック専用)でNextを起動し直してから、ゲートウェイを起動してください。`next start` を直接使っていないか確認してください。'
     );
   }
 

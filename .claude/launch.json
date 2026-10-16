@@ -11,13 +11,13 @@
     {
       "name": "yakureki-hub",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "PHARMACY_SYNC_ROLE=hub PHARMACY_SYNC_HUB_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef PHARMACY_SYNC_HUB_DB_PATH=/tmp/yakureki-hub-preview.sqlite npx next start -p 3400"],
+      "runtimeArgs": ["-c", "PHARMACY_SYNC_ROLE=hub PHARMACY_SYNC_HUB_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef PHARMACY_SYNC_HUB_DB_PATH=/tmp/yakureki-hub-preview.sqlite npx next start -H 127.0.0.1 -p 3400"],
       "port": 3400
     },
     {
       "name": "yakureki-satellite",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "PHARMACY_SYNC_ROLE=satellite PHARMACY_SYNC_HUB_ENDPOINT=http://127.0.0.1:3400 PHARMACY_SYNC_TERMINAL_ID=preview-sat-2 PHARMACY_SYNC_TERMINAL_TOKEN=$(cat /tmp/yakureki-sat-token) npx next start -p 3402"],
+      "runtimeArgs": ["-c", "PHARMACY_SYNC_ROLE=satellite PHARMACY_SYNC_HUB_ENDPOINT=http://127.0.0.1:3400 PHARMACY_SYNC_TERMINAL_ID=preview-sat-2 PHARMACY_SYNC_TERMINAL_TOKEN=$(cat /tmp/yakureki-sat-token) npx next start -H 127.0.0.1 -p 3402"],
       "port": 3402
     }
   ]

@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "tsx scripts/startApp.ts",
     "start:local": "next start -H 127.0.0.1",
     "sync:gateway": "tsx scripts/runSyncGateway.ts",
     "lint": "eslint src",
