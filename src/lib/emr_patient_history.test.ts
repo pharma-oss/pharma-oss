@@ -4,7 +4,10 @@ import {
   buildPastProblemSuggestions,
   buildPrescriptionTimeline,
   buildSoapHistoryTimeline,
-  normalizeSoapProblemTitle
+  getEmrHistoryViewState,
+  normalizeSoapProblemTitle,
+  PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE,
+  SOAP_HISTORY_LOAD_ERROR_MESSAGE
 } from './emr_patient_history.ts';
 import type { PrescriptionItem, SoapRecord, Visit } from '../db/types.ts';
 
@@ -138,4 +141,34 @@ test('buildSoapHistoryTimeline shows past SOAP content and excludes the current 
   assert.strictEqual(history[0].problems[0].title, '高血圧');
   assert.deepStrictEqual(history[0].problems[0].snippets.map((snippet) => snippet.type), ['S', 'P']);
   assert.strictEqual(history[1].problems.length, 1, 'empty SOAP problems are hidden');
+});
+
+test('getEmrHistoryViewState returns error message when hasError is true instead of empty state for soap and prescription timelines', () => {
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: true, entryCount: 0, kind: 'soap' }),
+    { status: 'error', message: SOAP_HISTORY_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: true, entryCount: 0, kind: 'prescription' }),
+    { status: 'error', message: PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE }
+  );
+});
+
+test('getEmrHistoryViewState distinguishes loading, empty, and ready states when hasError is false', () => {
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: true, hasError: false, entryCount: 0, kind: 'soap' }),
+    { status: 'loading', message: '過去の薬歴を確認しています' }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 0, kind: 'soap' }),
+    { status: 'empty', message: 'この患者の過去薬歴はまだありません' }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 0, kind: 'prescription' }),
+    { status: 'empty', message: 'この患者の処方遍歴はまだありません' }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 2, kind: 'prescription' }),
+    { status: 'ready', message: null }
+  );
 });

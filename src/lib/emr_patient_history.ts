@@ -217,3 +217,45 @@ export function buildSoapHistoryTimeline(params: {
     })
     .slice(0, maxEntries);
 }
+
+export const SOAP_HISTORY_LOAD_ERROR_MESSAGE =
+  '過去の薬歴の読み込みに失敗しました。再読み込みして確認してください。';
+export const PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE =
+  '処方遍歴の読み込みに失敗しました。再読み込みして確認してください。';
+
+export type EmrHistoryViewState =
+  | { status: 'loading'; message: string }
+  | { status: 'error'; message: string }
+  | { status: 'empty'; message: string }
+  | { status: 'ready'; message: null };
+
+export function getEmrHistoryViewState(params: {
+  isLoading: boolean;
+  hasError?: boolean;
+  entryCount: number;
+  kind: 'soap' | 'prescription';
+}): EmrHistoryViewState {
+  const isSoap = params.kind === 'soap';
+  if (params.isLoading) {
+    return {
+      status: 'loading',
+      message: isSoap ? '過去の薬歴を確認しています' : '処方遍歴を確認しています'
+    };
+  }
+  if (params.hasError) {
+    return {
+      status: 'error',
+      message: isSoap ? SOAP_HISTORY_LOAD_ERROR_MESSAGE : PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE
+    };
+  }
+  if (params.entryCount === 0) {
+    return {
+      status: 'empty',
+      message: isSoap ? 'この患者の過去薬歴はまだありません' : 'この患者の処方遍歴はまだありません'
+    };
+  }
+  return {
+    status: 'ready',
+    message: null
+  };
+}

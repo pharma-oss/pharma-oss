@@ -36,6 +36,7 @@ import {
   buildPastProblemSuggestions,
   buildPrescriptionTimeline,
   buildSoapHistoryTimeline,
+  getEmrHistoryViewState,
   type PrescriptionTimelineEntry,
   type SoapHistoryTimelineEntry
 } from '@/lib/emr_patient_history';
@@ -142,6 +143,7 @@ export default function EmrPage() {
   const [patientPrescriptionTimeline, setPatientPrescriptionTimeline] = useState<PrescriptionTimelineEntry[]>([]);
   const [soapHistoryTimeline, setSoapHistoryTimeline] = useState<SoapHistoryTimelineEntry[]>([]);
   const [isPatientHistoryLoading, setIsPatientHistoryLoading] = useState(false);
+  const [hasPatientHistoryError, setHasPatientHistoryError] = useState(false);
   const [facilitySettings, setFacilitySettings] = useState<FacilitySettings | null>(null);
   const [targetVisitId, setTargetVisitId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -459,16 +461,19 @@ export default function EmrPage() {
       if (!db) {
         setPatientPrescriptionTimeline([]);
         setSoapHistoryTimeline([]);
+        setHasPatientHistoryError(false);
         return;
       }
 
       setIsPatientHistoryLoading(true);
+      setHasPatientHistoryError(false);
       try {
         const activeVisitDoc = await findActiveVisit();
         if (!activeVisitDoc) {
           if (!isCancelled) {
             setPatientPrescriptionTimeline([]);
             setSoapHistoryTimeline([]);
+            setHasPatientHistoryError(false);
           }
           return;
         }
@@ -515,12 +520,15 @@ export default function EmrPage() {
             currentVisitId: activeVisit.visitId,
             maxEntries: 6
           }));
+          setHasPatientHistoryError(false);
         }
       } catch (error) {
         console.error('Failed to load patient history:', error);
         if (!isCancelled) {
           setPatientPrescriptionTimeline([]);
           setSoapHistoryTimeline([]);
+          setHasPatientHistoryError(true);
+          toast.error('過去薬歴タイムラインの読み込みに失敗しました。');
         }
       } finally {
         if (!isCancelled) setIsPatientHistoryLoading(false);
@@ -1600,6 +1608,7 @@ useEffect(() => {
           <SoapHistoryPanel
             entries={soapHistoryTimeline}
             isLoading={isPatientHistoryLoading}
+            hasError={hasPatientHistoryError}
             hidden={activeEmrSection !== 'history'}
           />
 
@@ -1658,6 +1667,7 @@ useEffect(() => {
           <SoapHistoryQuickCard
             entries={soapHistoryTimeline}
             isLoading={isPatientHistoryLoading}
+            hasError={hasPatientHistoryError}
             onOpenFullHistory={() => setActiveEmrSection('history')}
           />
           {allSoapAiDraftSuggestions.length > soapAiDraftSuggestions.length && (
@@ -1858,12 +1868,17 @@ useEffect(() => {
             <h3>処方遍歴 / Timeline</h3>
           </div>
           <div className="timeline-list">
-            {isPatientHistoryLoading ? (
-              <div className="timeline-empty">処方遍歴を確認しています</div>
-            ) : patientPrescriptionTimeline.length === 0 ? (
-              <div className="timeline-empty">この患者の処方遍歴はまだありません</div>
-            ) : (
-              patientPrescriptionTimeline.map((entry) => (
+            {(() => {
+              const prescriptionTimelineState = getEmrHistoryViewState({
+                isLoading: isPatientHistoryLoading,
+                hasError: hasPatientHistoryError,
+                entryCount: patientPrescriptionTimeline.length,
+                kind: 'prescription'
+              });
+              if (prescriptionTimelineState.status !== 'ready') {
+                return <div className="timeline-empty">{prescriptionTimelineState.message}</div>;
+              }
+              return patientPrescriptionTimeline.map((entry) => (
                 <TimelineItem
                   key={entry.id}
                   date={entry.dateLabel}
@@ -1872,8 +1887,8 @@ useEffect(() => {
                   change={entry.change}
                   active={entry.active}
                 />
-              ))
-            )}
+              ));
+            })()}
           </div>
         </aside>
       </div>

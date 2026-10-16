@@ -1,7 +1,7 @@
 import { AlertCircle, CheckCircle2, ClipboardList, History, Sparkles, X } from 'lucide-react';
 import React from 'react';
 import type { SoapStructuredAssessment } from '@/db/types';
-import type { SoapHistoryTimelineEntry } from '@/lib/emr_patient_history';
+import { getEmrHistoryViewState, type SoapHistoryTimelineEntry } from '@/lib/emr_patient_history';
 import {
   normalizeSoapStructuredAssessment,
   soapStructuredAssessmentControls
@@ -243,13 +243,21 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
 export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
   entries,
   isLoading,
+  hasError = false,
   onOpenFullHistory
 }: {
   entries: SoapHistoryTimelineEntry[];
   isLoading: boolean;
+  hasError?: boolean;
   onOpenFullHistory: () => void;
 }) {
   const visibleEntries = entries.slice(0, 2);
+  const viewState = getEmrHistoryViewState({
+    isLoading,
+    hasError,
+    entryCount: visibleEntries.length,
+    kind: 'soap'
+  });
 
   return (
     <div className="insight-card soap-history-quick">
@@ -257,10 +265,8 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
         <History size={18} className="icon-history" />
         <h3>前回までの薬歴</h3>
       </div>
-      {isLoading ? (
-        <p className="quick-empty">過去の薬歴を確認しています</p>
-      ) : visibleEntries.length === 0 ? (
-        <p className="quick-empty">この患者の過去薬歴はまだありません</p>
+      {viewState.status !== 'ready' ? (
+        <p className="quick-empty">{viewState.message}</p>
       ) : (
         <div className="quick-list">
           {visibleEntries.map((entry, entryIndex) => (
@@ -424,12 +430,21 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
   entries,
   isLoading,
+  hasError = false,
   hidden = false
 }: {
   entries: SoapHistoryTimelineEntry[];
   isLoading: boolean;
+  hasError?: boolean;
   hidden?: boolean;
 }) {
+  const viewState = getEmrHistoryViewState({
+    isLoading,
+    hasError,
+    entryCount: entries.length,
+    kind: 'soap'
+  });
+
   return (
     <div
       className="soap-history-panel"
@@ -438,10 +453,8 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
       aria-labelledby="tab-history"
       hidden={hidden}
     >
-      {isLoading ? (
-        <div className="soap-history-empty">過去の薬歴を確認しています</div>
-      ) : entries.length === 0 ? (
-        <div className="soap-history-empty">この患者の過去薬歴はまだありません</div>
+      {viewState.status !== 'ready' ? (
+        <div className="soap-history-empty">{viewState.message}</div>
       ) : (
         <div className="soap-history-list">
           {entries.map((entry) => (
