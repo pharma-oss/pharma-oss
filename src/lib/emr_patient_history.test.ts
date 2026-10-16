@@ -5,7 +5,9 @@ import {
   buildPrescriptionTimeline,
   buildSoapHistoryTimeline,
   getEmrHistoryViewState,
+  getPastProblemTriggerState,
   normalizeSoapProblemTitle,
+  PAST_PROBLEM_LOAD_ERROR_MESSAGE,
   PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE,
   SOAP_HISTORY_LOAD_ERROR_MESSAGE
 } from './emr_patient_history.ts';
@@ -160,6 +162,10 @@ test('getEmrHistoryViewState distinguishes loading, empty, and ready states when
     { status: 'loading', message: '過去の薬歴を確認しています' }
   );
   assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: true, hasError: false, entryCount: 0, kind: 'prescription' }),
+    { status: 'loading', message: '処方遍歴を確認しています' }
+  );
+  assert.deepStrictEqual(
     getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 0, kind: 'soap' }),
     { status: 'empty', message: 'この患者の過去薬歴はまだありません' }
   );
@@ -170,5 +176,27 @@ test('getEmrHistoryViewState distinguishes loading, empty, and ready states when
   assert.deepStrictEqual(
     getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 2, kind: 'prescription' }),
     { status: 'ready', message: null }
+  );
+});
+
+test('getEmrHistoryViewState keeps showing loading while a reload runs even if the previous load failed', () => {
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: true, hasError: true, entryCount: 0, kind: 'soap' }),
+    { status: 'loading', message: '過去の薬歴を確認しています' }
+  );
+});
+
+test('getPastProblemTriggerState tells a failed load apart from having no past problems', () => {
+  assert.deepStrictEqual(
+    getPastProblemTriggerState({ hasError: true, suggestionCount: 0 }),
+    { disabled: true, title: PAST_PROBLEM_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getPastProblemTriggerState({ hasError: false, suggestionCount: 0 }),
+    { disabled: true, title: 'この患者の過去プロブレムはまだありません' }
+  );
+  assert.deepStrictEqual(
+    getPastProblemTriggerState({ hasError: false, suggestionCount: 3 }),
+    { disabled: false, title: '' }
   );
 });

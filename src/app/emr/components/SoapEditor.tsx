@@ -20,7 +20,7 @@ import {
   normalizeSoapStructuredAssessment,
   getMissingSoapStructuredAssessmentFields
 } from '@/lib/soap_structured_assessment';
-import { buildPastProblemSuggestions } from '@/lib/emr_patient_history';
+import { buildPastProblemSuggestions, getPastProblemTriggerState } from '@/lib/emr_patient_history';
 
 export interface SoapEditorProps {
   targetVisitId: string | null;
@@ -51,6 +51,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
 
   const [activeProblemId, setActiveProblemId] = useState<string | null>(null);
   const [pastProblemSuggestions, setPastProblemSuggestions] = useState<string[]>([]);
+  const [hasPastProblemSuggestionsError, setHasPastProblemSuggestionsError] = useState(false);
   const [structuredAssessment, setStructuredAssessment] = useState<SoapStructuredAssessment>(() => createDefaultSoapStructuredAssessment());
   const [saveStatus, setSaveStatus] = useState<SoapSaveStatus>('loading');
   const [lastSavedAt, setLastSavedAt] = useState('');
@@ -129,6 +130,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
     let cancelled = false;
 
     async function loadPastProblemSuggestions() {
+      setHasPastProblemSuggestionsError(false);
       if (!db) {
         setPastProblemSuggestions([]);
         return;
@@ -168,7 +170,11 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
         }
       } catch (error) {
         console.error('Failed to load past problem suggestions:', error);
-        if (!cancelled) setPastProblemSuggestions([]);
+        if (!cancelled) {
+          setPastProblemSuggestions([]);
+          setHasPastProblemSuggestionsError(true);
+          toast.error('過去プロブレム候補の読み込みに失敗しました。');
+        }
       }
     }
 
@@ -435,6 +441,10 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
 
   const [isPastMenuOpen, setIsPastMenuOpen] = useState(false);
   const pastMenuRef = useRef<HTMLDivElement | null>(null);
+  const pastProblemTriggerState = getPastProblemTriggerState({
+    hasError: hasPastProblemSuggestionsError,
+    suggestionCount: pastProblemSuggestions.length
+  });
 
   useEffect(() => {
     if (!isPastMenuOpen) return;
@@ -573,8 +583,8 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
             className="past-problem-trigger"
             aria-haspopup="menu"
             aria-expanded={isPastMenuOpen}
-            disabled={pastProblemSuggestions.length === 0}
-            title={pastProblemSuggestions.length === 0 ? 'この患者の過去プロブレムはまだありません' : ''}
+            disabled={pastProblemTriggerState.disabled}
+            title={pastProblemTriggerState.title}
             onClick={() => setIsPastMenuOpen(open => !open)}
           >
             <History size={14} aria-hidden="true" />

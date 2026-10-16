@@ -223,6 +223,22 @@ export const SOAP_HISTORY_LOAD_ERROR_MESSAGE =
 export const PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE =
   '処方遍歴の読み込みに失敗しました。再読み込みして確認してください。';
 
+export const PAST_PROBLEM_LOAD_ERROR_MESSAGE =
+  '過去プロブレム候補の読み込みに失敗しました。再読み込みして確認してください。';
+
+export function getPastProblemTriggerState(params: {
+  hasError: boolean;
+  suggestionCount: number;
+}): { disabled: boolean; title: string } {
+  if (params.hasError) {
+    return { disabled: true, title: PAST_PROBLEM_LOAD_ERROR_MESSAGE };
+  }
+  if (params.suggestionCount === 0) {
+    return { disabled: true, title: 'この患者の過去プロブレムはまだありません' };
+  }
+  return { disabled: false, title: '' };
+}
+
 export type EmrHistoryViewState =
   | { status: 'loading'; message: string }
   | { status: 'error'; message: string }
@@ -231,7 +247,7 @@ export type EmrHistoryViewState =
 
 export function getEmrHistoryViewState(params: {
   isLoading: boolean;
-  hasError?: boolean;
+  hasError: boolean;
   entryCount: number;
   kind: 'soap' | 'prescription';
 }): EmrHistoryViewState {

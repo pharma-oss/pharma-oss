@@ -243,12 +243,12 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
 export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
   entries,
   isLoading,
-  hasError = false,
+  hasError,
   onOpenFullHistory
 }: {
   entries: SoapHistoryTimelineEntry[];
   isLoading: boolean;
-  hasError?: boolean;
+  hasError: boolean;
   onOpenFullHistory: () => void;
 }) {
   const visibleEntries = entries.slice(0, 2);
@@ -430,12 +430,12 @@ export const SoapHistoryQuickCard = React.memo(function SoapHistoryQuickCard({
 export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
   entries,
   isLoading,
-  hasError = false,
+  hasError,
   hidden = false
 }: {
   entries: SoapHistoryTimelineEntry[];
   isLoading: boolean;
-  hasError?: boolean;
+  hasError: boolean;
   hidden?: boolean;
 }) {
   const viewState = getEmrHistoryViewState({
