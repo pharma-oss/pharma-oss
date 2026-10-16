@@ -73,6 +73,7 @@ import {
   toPatientEligibilityStatus,
   filterReceptionEligibilityAlerts,
   buildCandidatePublicInsuranceSummary,
+  getPatientCandidatePanelViewState,
   getDrugAuditMeta,
   getDispensedDrugAuditMeta,
   clearDispensedDrugAuditMeta,
@@ -303,6 +304,7 @@ export default function OcrPage() {
   const {
     patientCandidates,
     setPatientCandidates,
+    hasPatientCandidatesFetchError,
     selectedPatientId,
     setSelectedPatientId,
     patientMergeReview,
@@ -512,6 +514,12 @@ export default function OcrPage() {
   const patientCandidateMatchById = useMemo(() => (
     new Map(patientCandidateMatches.map((match) => [match.patient.patientId, match]))
   ), [patientCandidateMatches]);
+  const patientCandidatePanelViewState = useMemo(() => (
+    getPatientCandidatePanelViewState({
+      candidateCount: patientCandidates.length,
+      hasFetchError: hasPatientCandidatesFetchError
+    })
+  ), [hasPatientCandidatesFetchError, patientCandidates.length]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1888,7 +1896,13 @@ export default function OcrPage() {
 
               <div className="patient-selection-panel">
                 <div className="panel-title">患者選択</div>
-                {patientCandidates.length > 0 ? (
+                {patientCandidatePanelViewState.errorBannerMessage && (
+                  <div className="patient-candidate-fetch-error" role="alert">
+                    <AlertTriangle size={16} aria-hidden="true" />
+                    <span>{patientCandidatePanelViewState.errorBannerMessage}</span>
+                  </div>
+                )}
+                {patientCandidatePanelViewState.showCandidates && (
                   <div className="patient-candidate-list">
                     {patientCandidates.map((patient) => {
                       const match = patientCandidateMatchById.get(patient.patientId);
@@ -1945,10 +1959,11 @@ export default function OcrPage() {
                       );
                     })}
                   </div>
-                ) : (
+                )}
+                {patientCandidatePanelViewState.emptyNoteMessage && (
                   <div className="temporary-registration-note">
                     <Plus size={16} aria-hidden="true" />
-                    <span>一致する患者がいない場合は、名前・生年月日・保険者番号だけで簡易登録して取り揃えを開始します。</span>
+                    <span>{patientCandidatePanelViewState.emptyNoteMessage}</span>
                   </div>
                 )}
                 {selectedPatient && (
@@ -2890,6 +2905,20 @@ export default function OcrPage() {
         .temporary-registration-note {
           color: var(--text-muted);
           font-size: 0.78rem;
+          line-height: 1.45;
+        }
+
+        .patient-candidate-fetch-error {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--space-1-5);
+          padding: var(--space-2) var(--space-2-5);
+          border-radius: var(--radius-sm);
+          background: #fee2e2;
+          border: 1px solid #f87171;
+          color: #b91c1c;
+          font-size: var(--fs-xs);
+          font-weight: 600;
           line-height: 1.45;
         }
 

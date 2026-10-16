@@ -49,6 +49,7 @@ export function useOcrPatientEligibility({
   setBurdenRatio
 }: UseOcrPatientEligibilityOptions) {
   const [patientCandidates, setPatientCandidates] = useState<PatientCandidate[]>([]);
+  const [hasPatientCandidatesFetchError, setHasPatientCandidatesFetchError] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientMergeReview, setPatientMergeReview] = useState<PatientMergeReview | null>(null);
   const [isLoadingPatientMergeReview, setIsLoadingPatientMergeReview] = useState(false);
@@ -69,9 +70,11 @@ export function useOcrPatientEligibility({
       if (!db || (!patientName && !patientBirthDate && !insuranceNumber)) {
         setPatientCandidates([]);
         setSelectedPatientId(null);
+        setHasPatientCandidatesFetchError(false);
         return;
       }
 
+      setHasPatientCandidatesFetchError(false);
       try {
         const patientDocs = await db.patients.find().exec();
         const candidates = patientDocs.map((patientDoc: any) => ({
@@ -96,8 +99,13 @@ export function useOcrPatientEligibility({
           if (current && filtered.some((patient: PatientCandidate) => patient.patientId === current)) return current;
           return directMatch?.patient.patientId || null;
         });
+        setHasPatientCandidatesFetchError(false);
       } catch (error) {
         console.error('Failed to load patient candidates:', error);
+        if (isMounted) {
+          setHasPatientCandidatesFetchError(true);
+          toast.error('患者候補の検索に失敗しました。');
+        }
       }
     };
 
@@ -210,6 +218,8 @@ export function useOcrPatientEligibility({
   return {
     patientCandidates,
     setPatientCandidates,
+    hasPatientCandidatesFetchError,
+    setHasPatientCandidatesFetchError,
     selectedPatientId,
     setSelectedPatientId,
     patientMergeReview,

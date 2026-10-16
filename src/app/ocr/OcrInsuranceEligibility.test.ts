@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
 import {
   filterReceptionEligibilityAlerts,
-  buildCandidatePublicInsuranceSummary
+  buildCandidatePublicInsuranceSummary,
+  getPatientCandidatePanelViewState,
+  PATIENT_CANDIDATES_EMPTY_NOTE,
+  PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE,
+  PATIENT_CANDIDATES_STALE_FETCH_ERROR_MESSAGE
 } from './helpers';
 
 describe('OCR Reception Public Insurance & Eligibility helpers', () => {
@@ -146,4 +150,55 @@ describe('OCR Reception Public Insurance & Eligibility helpers', () => {
       });
     });
   });
+
+  describe('getPatientCandidatePanelViewState', () => {
+    it('returns empty note when candidateCount is 0 and hasFetchError is false', () => {
+      assert.deepEqual(
+        getPatientCandidatePanelViewState({ candidateCount: 0, hasFetchError: false }),
+        {
+          status: 'empty',
+          showCandidates: false,
+          errorBannerMessage: null,
+          emptyNoteMessage: PATIENT_CANDIDATES_EMPTY_NOTE
+        }
+      );
+    });
+
+    it('returns candidates state when candidateCount > 0 and hasFetchError is false', () => {
+      assert.deepEqual(
+        getPatientCandidatePanelViewState({ candidateCount: 2, hasFetchError: false }),
+        {
+          status: 'candidates',
+          showCandidates: true,
+          errorBannerMessage: null,
+          emptyNoteMessage: null
+        }
+      );
+    });
+
+    it('replaces temporary registration note with fetch error message when candidateCount is 0 and hasFetchError is true', () => {
+      assert.deepEqual(
+        getPatientCandidatePanelViewState({ candidateCount: 0, hasFetchError: true }),
+        {
+          status: 'error_empty',
+          showCandidates: false,
+          errorBannerMessage: PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE,
+          emptyNoteMessage: null
+        }
+      );
+    });
+
+    it('shows stale candidates warning banner above candidate list when candidateCount > 0 and hasFetchError is true', () => {
+      assert.deepEqual(
+        getPatientCandidatePanelViewState({ candidateCount: 2, hasFetchError: true }),
+        {
+          status: 'error_with_stale_candidates',
+          showCandidates: true,
+          errorBannerMessage: PATIENT_CANDIDATES_STALE_FETCH_ERROR_MESSAGE,
+          emptyNoteMessage: null
+        }
+      );
+    });
+  });
 });
+

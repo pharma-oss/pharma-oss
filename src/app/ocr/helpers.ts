@@ -315,3 +315,57 @@ export function buildCandidatePublicInsuranceSummary(
     hasWarning
   };
 }
+
+export const PATIENT_CANDIDATES_EMPTY_NOTE =
+  '一致する患者がいない場合は、名前・生年月日・保険者番号だけで簡易登録して取り揃えを開始します。';
+
+export const PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE =
+  '患者候補の検索に失敗したため、既存患者との照合ができていません。再読み込みして確認してください。';
+
+export const PATIENT_CANDIDATES_STALE_FETCH_ERROR_MESSAGE =
+  '患者候補の検索に失敗したため、既存患者との照合ができていません。表示中の候補は最新の入力の結果でない可能性があります。再読み込みして確認してください。';
+
+export interface PatientCandidatePanelViewState {
+  status: 'candidates' | 'empty' | 'error_empty' | 'error_with_stale_candidates';
+  showCandidates: boolean;
+  errorBannerMessage: string | null;
+  emptyNoteMessage: string | null;
+}
+
+export function getPatientCandidatePanelViewState(params: {
+  candidateCount: number;
+  hasFetchError: boolean;
+}): PatientCandidatePanelViewState {
+  const hasCandidates = params.candidateCount > 0;
+  if (params.hasFetchError) {
+    if (hasCandidates) {
+      return {
+        status: 'error_with_stale_candidates',
+        showCandidates: true,
+        errorBannerMessage: PATIENT_CANDIDATES_STALE_FETCH_ERROR_MESSAGE,
+        emptyNoteMessage: null
+      };
+    }
+    return {
+      status: 'error_empty',
+      showCandidates: false,
+      errorBannerMessage: PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE,
+      emptyNoteMessage: null
+    };
+  }
+  if (hasCandidates) {
+    return {
+      status: 'candidates',
+      showCandidates: true,
+      errorBannerMessage: null,
+      emptyNoteMessage: null
+    };
+  }
+  return {
+    status: 'empty',
+    showCandidates: false,
+    errorBannerMessage: null,
+    emptyNoteMessage: PATIENT_CANDIDATES_EMPTY_NOTE
+  };
+}
+
