@@ -1,8 +1,13 @@
-import { describe, it } from 'node:test';
+import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PickingSupportModal, type PickingSupportModalProps } from './components/PickingSupportModal';
+import {
+  PickingSupportModal,
+  getPickingLoadErrorBannerMessage,
+  PICKING_LOAD_ERROR_MESSAGE,
+  type PickingSupportModalProps
+} from './components/PickingSupportModal';
 import type { PickingItem } from '@/lib/emr_helpers';
 
 function createMockPickingSupportModalProps(
@@ -33,6 +38,7 @@ function createMockPickingSupportModalProps(
     isOpen: true,
     onClose: () => {},
     items: [dummyItemA, dummyItemB],
+    hasLoadError: false,
     patientName: '患者 太郎',
     prescriptionId: 'rx-20261007-001',
     userId: 'user-ph-01',
@@ -113,4 +119,27 @@ describe('PickingSupportModal renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('全調剤完了'), 'Should render all-picked badge when all items are picked');
     assert.ok(html.includes('進捗: <strong>1</strong> / 1 調剤完了'), 'Should render 1/1 completed count');
   });
+});
+
+test('getPickingLoadErrorBannerMessage returns error message when hasLoadError is true and null when false', () => {
+  assert.equal(getPickingLoadErrorBannerMessage(false), null);
+  assert.equal(getPickingLoadErrorBannerMessage(true), PICKING_LOAD_ERROR_MESSAGE);
+});
+
+test('PickingSupportModal renders load error banner above picking list when hasLoadError is true and hides it when false', () => {
+  const withoutErrorHtml = renderToStaticMarkup(
+    React.createElement(PickingSupportModal, createMockPickingSupportModalProps({ hasLoadError: false }))
+  ).replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.ok(!withoutErrorHtml.includes(PICKING_LOAD_ERROR_MESSAGE));
+  assert.ok(!withoutErrorHtml.includes('picking-load-error'));
+
+  const withErrorHtml = renderToStaticMarkup(
+    React.createElement(PickingSupportModal, createMockPickingSupportModalProps({ hasLoadError: true }))
+  ).replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.ok(withErrorHtml.includes(PICKING_LOAD_ERROR_MESSAGE));
+  assert.ok(withErrorHtml.includes('picking-load-error'));
+  assert.ok(
+    withErrorHtml.indexOf('picking-load-error') < withErrorHtml.indexOf('picking-list'),
+    'Should render load error banner above picking-list'
+  );
 });

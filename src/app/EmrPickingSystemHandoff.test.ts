@@ -49,6 +49,7 @@ test('PickingSupportModal is properly exported as React component and renders st
       isOpen: false,
       onClose: () => {},
       items: [],
+      hasLoadError: false,
       patientName: 'テスト患者',
       prescriptionId: 'rx-001',
       onScanGs1: async () => ({ success: true, message: '' }),

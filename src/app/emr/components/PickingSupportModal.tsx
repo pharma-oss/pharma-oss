@@ -15,10 +15,18 @@ import {
 import type { PickingItem } from '@/lib/emr_helpers';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 
+export const PICKING_LOAD_ERROR_MESSAGE =
+  'ピッキング対象の読み込みに失敗しました。表示中の一覧は最新でない可能性があります。再読み込みして確認してください。';
+
+export function getPickingLoadErrorBannerMessage(hasLoadError: boolean): string | null {
+  return hasLoadError ? PICKING_LOAD_ERROR_MESSAGE : null;
+}
+
 export interface PickingSupportModalProps {
   isOpen: boolean;
   onClose: () => void;
   items: PickingItem[];
+  hasLoadError: boolean;
   patientName: string;
   prescriptionId: string;
   userId?: string;
@@ -34,6 +42,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   isOpen,
   onClose,
   items,
+  hasLoadError,
   patientName,
   prescriptionId,
   userId,
@@ -73,6 +82,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   const totalItems = items.length;
   const pickedItems = items.filter((item) => item.isPicked).length;
   const isAllPicked = totalItems > 0 && pickedItems === totalItems;
+  const loadErrorMessage = getPickingLoadErrorBannerMessage(hasLoadError);
 
   const handleScanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,6 +191,13 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
             </div>
           )}
         </div>
+
+        {loadErrorMessage && (
+          <div className="picking-load-error" role="alert">
+            <AlertTriangle size={16} />
+            <span>{loadErrorMessage}</span>
+          </div>
+        )}
 
         <div className="picking-list">
           {items.map((item) => (
@@ -417,6 +434,17 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           display: flex;
           align-items: center;
           gap: var(--space-1-5);
+        }
+        .picking-load-error {
+          display: flex;
+          align-items: center;
+          gap: var(--space-1-5);
+          padding: var(--space-2) var(--space-3);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--danger);
+          color: var(--danger);
+          font-size: var(--fs-sm);
+          font-weight: 600;
         }
         .picking-list {
           display: flex;

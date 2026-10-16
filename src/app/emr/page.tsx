@@ -135,6 +135,7 @@ export default function EmrPage() {
 
   // States for Picking Support Mode
   const [pickingItems, setPickingItems] = useState<any[]>([]);
+  const [hasPickingLoadError, setHasPickingLoadError] = useState(false);
   const [isPickingModalOpen, setIsPickingModalOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
     return new URLSearchParams(window.location.search).get('openPicking') === '1';
@@ -549,17 +550,24 @@ export default function EmrPage() {
 
   useEffect(() => {
     const activeDb = db;
-    if (!activeDb) return;
+    if (!activeDb) {
+      setHasPickingLoadError(false);
+      return;
+    }
 
     let prescriptionSub: any;
     let isCancelled = false;
 
     async function setupSubscriptions() {
       if (!activeDb) return;
+      setHasPickingLoadError(false);
       try {
         const visit = await findActiveVisit();
         if (!visit) {
-          if (!isCancelled) setPickingItems([]);
+          if (!isCancelled) {
+            setPickingItems([]);
+            setHasPickingLoadError(false);
+          }
           return;
         }
         const visitId = visit.visitId;
@@ -571,117 +579,130 @@ export default function EmrPage() {
         const updateJoinedItems = async () => {
           if (isCancelled || !activeDb) return;
           if (currentItems.length === 0) {
-
             setPickingItems([]);
+            setHasPickingLoadError(false);
             return;
           }
 
-          // Fetch prescribed and dispensed drug codes so picking follows the actual dispensed product.
-          const drugIdSet = new Set<string>();
-          const stockDrugIdSet = new Set<string>();
-          for (let i = 0; i < currentItems.length; i++) {
-            const item = currentItems[i];
-            const stockDrugId = getStockDrugId(item);
-            if (item.drugId) drugIdSet.add(item.drugId);
-            if (stockDrugId) {
-              drugIdSet.add(stockDrugId);
-              stockDrugIdSet.add(stockDrugId);
+          try {
+            // Fetch prescribed and dispensed drug codes so picking follows the actual dispensed product.
+            const drugIdSet = new Set<string>();
+            const stockDrugIdSet = new Set<string>();
+            for (let i = 0; i < currentItems.length; i++) {
+              const item = currentItems[i];
+              const stockDrugId = getStockDrugId(item);
+              if (item.drugId) drugIdSet.add(item.drugId);
+              if (stockDrugId) {
+                drugIdSet.add(stockDrugId);
+                stockDrugIdSet.add(stockDrugId);
+              }
             }
-          }
-          const drugIds = Array.from(drugIdSet);
-          const stockDrugIds = Array.from(stockDrugIdSet);
-          const drugsMap = await activeDb.drugs.findByIds(drugIds).exec();
-          const stockLots = stockDrugIds.length > 0
-            ? await activeDb.drug_stocks.find({ selector: { drugCode: { $in: stockDrugIds } } }).exec()
-            : [];
+            const drugIds = Array.from(drugIdSet);
+            const stockDrugIds = Array.from(stockDrugIdSet);
+            const drugsMap = await activeDb.drugs.findByIds(drugIds).exec();
+            const stockLots = stockDrugIds.length > 0
+              ? await activeDb.drug_stocks.find({ selector: { drugCode: { $in: stockDrugIds } } }).exec()
+              : [];
 
-          const janCodesByDrugId = new Map<string, string[]>();
-          const stockLotsByDrugId = new Map<string, Array<{
-            id: string;
-            janCode?: string;
-            lotNumber?: string;
-            expirationDate?: string;
-            arrivalDate?: string;
-            quantity: number;
-          }>>();
-          for (let i = 0; i < stockLots.length; i++) {
-            const lot = stockLots[i];
-            const stockLot = {
-              id: lot.id,
-              janCode: lot.janCode,
-              lotNumber: lot.lotNumber,
-              expirationDate: lot.expirationDate,
-              arrivalDate: lot.arrivalDate,
-              quantity: lot.quantity
-            };
-            const lots = stockLotsByDrugId.get(lot.drugCode) || [];
-            lots.push(stockLot);
-            stockLotsByDrugId.set(lot.drugCode, lots);
+            const janCodesByDrugId = new Map<string, string[]>();
+            const stockLotsByDrugId = new Map<string, Array<{
+              id: string;
+              janCode?: string;
+              lotNumber?: string;
+              expirationDate?: string;
+              arrivalDate?: string;
+              quantity: number;
+            }>>();
+            for (let i = 0; i < stockLots.length; i++) {
+              const lot = stockLots[i];
+              const stockLot = {
+                id: lot.id,
+                janCode: lot.janCode,
+                lotNumber: lot.lotNumber,
+                expirationDate: lot.expirationDate,
+                arrivalDate: lot.arrivalDate,
+                quantity: lot.quantity
+              };
+              const lots = stockLotsByDrugId.get(lot.drugCode) || [];
+              lots.push(stockLot);
+              stockLotsByDrugId.set(lot.drugCode, lots);
 
-            if (!lot.janCode) continue;
-            const codes = janCodesByDrugId.get(lot.drugCode) || [];
-            if (!codes.includes(lot.janCode)) codes.push(lot.janCode);
-            janCodesByDrugId.set(lot.drugCode, codes);
-          }
+              if (!lot.janCode) continue;
+              const codes = janCodesByDrugId.get(lot.drugCode) || [];
+              if (!codes.includes(lot.janCode)) codes.push(lot.janCode);
+              janCodesByDrugId.set(lot.drugCode, codes);
+            }
 
-          for (const lots of stockLotsByDrugId.values()) {
-            lots.sort(compareStockLotsByExpiration);
-          }
+            for (const lots of stockLotsByDrugId.values()) {
+              lots.sort(compareStockLotsByExpiration);
+            }
 
-          const joined = currentItems.map(item => {
-            const stockDrugId = getStockDrugId(item);
-            const drug = drugsMap.get(stockDrugId) || drugsMap.get(item.drugId);
-            return {
-              itemId: item.itemId,
-              visitId: item.visitId,
-              drugId: item.drugId,
-              stockDrugId,
-              drugName: item.dispensedDrug || drug?.name || '不明',
-              prescribedDrugName: drugsMap.get(item.drugId)?.name || item.drugId,
-              yjCode: drug?.yjCode,
-              janCodes: janCodesByDrugId.get(stockDrugId) || [],
-              location: drug?.location || '',
-              amount: item.amount,
-              usage: item.usage || '',
-              days: item.days,
-              totalQuantity: calculateRequiredStockAmount({
-                drugId: stockDrugId,
+            const joined = currentItems.map(item => {
+              const stockDrugId = getStockDrugId(item);
+              const drug = drugsMap.get(stockDrugId) || drugsMap.get(item.drugId);
+              return {
+                itemId: item.itemId,
+                visitId: item.visitId,
+                drugId: item.drugId,
+                stockDrugId,
+                drugName: item.dispensedDrug || drug?.name || '不明',
+                prescribedDrugName: drugsMap.get(item.drugId)?.name || item.drugId,
+                yjCode: drug?.yjCode,
+                janCodes: janCodesByDrugId.get(stockDrugId) || [],
+                location: drug?.location || '',
                 amount: item.amount,
-                days: item.days
-              }),
-              isPicked: !!item.isPicked,
-              pickedAt: item.pickedAt,
-              pickedGs1Code: item.pickedGs1Code,
-              pickedGtin: item.pickedGtin,
-              pickedLotNumber: item.pickedLotNumber,
-              pickedExpirationDate: item.pickedExpirationDate,
-              pickedStockId: item.pickedStockId,
-              shortageQuantity: item.shortageQuantity || 0,
-              shortageNote: item.shortageNote || '',
-              stockLots: stockLotsByDrugId.get(stockDrugId) || []
-            };
-          });
+                usage: item.usage || '',
+                days: item.days,
+                totalQuantity: calculateRequiredStockAmount({
+                  drugId: stockDrugId,
+                  amount: item.amount,
+                  days: item.days
+                }),
+                isPicked: !!item.isPicked,
+                pickedAt: item.pickedAt,
+                pickedGs1Code: item.pickedGs1Code,
+                pickedGtin: item.pickedGtin,
+                pickedLotNumber: item.pickedLotNumber,
+                pickedExpirationDate: item.pickedExpirationDate,
+                pickedStockId: item.pickedStockId,
+                shortageQuantity: item.shortageQuantity || 0,
+                shortageNote: item.shortageNote || '',
+                stockLots: stockLotsByDrugId.get(stockDrugId) || []
+              };
+            });
 
-          // Sort by shelf location (empty locations go to the bottom)
-          joined.sort((a, b) => {
-            if (!a.location && !b.location) return 0;
-            if (!a.location) return 1;
-            if (!b.location) return -1;
-            return a.location.localeCompare(b.location, 'ja');
-          });
+            // Sort by shelf location (empty locations go to the bottom)
+            joined.sort((a, b) => {
+              if (!a.location && !b.location) return 0;
+              if (!a.location) return 1;
+              if (!b.location) return -1;
+              return a.location.localeCompare(b.location, 'ja');
+            });
 
-          if (!isCancelled) {
-            setPickingItems(joined);
+            if (!isCancelled) {
+              setPickingItems(joined);
+              setHasPickingLoadError(false);
+            }
+          } catch (err) {
+            console.error('Failed to load picking items:', err);
+            if (!isCancelled) {
+              setHasPickingLoadError(true);
+              toast.error('ピッキング対象の読み込みに失敗しました。');
+            }
           }
         };
 
         prescriptionSub = presQuery.$.subscribe((items) => {
           currentItems = items;
-          updateJoinedItems();
+          void updateJoinedItems();
         });
 
       } catch (err) {
         console.error('Failed to setup picking subscriptions:', err);
+        if (!isCancelled) {
+          setHasPickingLoadError(true);
+          toast.error('ピッキング対象の読み込みに失敗しました。');
+        }
       }
     }
 
@@ -2014,6 +2035,7 @@ useEffect(() => {
         isOpen={isPickingModalOpen}
         onClose={() => setIsPickingModalOpen(false)}
         items={pickingItems}
+        hasLoadError={hasPickingLoadError}
         patientName={currentPatientName}
         prescriptionId={targetVisitId || ''}
         onScanGs1={async (scannedCode) => {
