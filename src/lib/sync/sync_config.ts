@@ -65,7 +65,7 @@ export function getPharmacySyncEnv(env?: PharmacySyncEnv): PharmacySyncEnv {
   };
 }
 
-function parseRole(value: string | undefined): PharmacySyncRole | null {
+export function parseRole(value: string | undefined): PharmacySyncRole | null {
   const role = String(value || 'standalone').trim().toLowerCase();
   return role === 'hub' || role === 'satellite' || role === 'standalone' ? role : null;
 }
@@ -98,7 +98,7 @@ export function isAllowedHubEndpoint(endpoint: string, transportEncryption: Phar
   }
 }
 
-function parseTransportEncryption(value: string | undefined): PharmacySyncTransportEncryption {
+export function parseTransportEncryption(value: string | undefined): PharmacySyncTransportEncryption {
   return String(value || 'none').trim().toLowerCase() === 'aes-gcm' ? 'aes-gcm' : 'none';
 }
 

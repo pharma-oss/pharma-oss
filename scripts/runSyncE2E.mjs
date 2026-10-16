@@ -4,22 +4,30 @@
 //   2. サテライトサーバーを起動し、自機API経由でハブへ push/pull できることを確認する
 //   3. 競合(古い状態を前提にした更新)がハブ優先で記録されることを確認する
 //   4. トークン失効後にサテライトが拒否されることを確認する
+//   5. 同期ゲートウェイ(サテライトに公開する唯一の口)が、/api/sync/remote/* だけを通し、
+//      それ以外を遮断すること、Nextがループバック専用でなければ起動を拒否することを確認する
 // 参照: docs/satellite_terminal_sync_plan.md
 
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { tmpdir } from 'node:os';
+import net from 'node:net';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
+const TSX_BIN = join(__dirname, '..', 'node_modules', '.bin', 'tsx');
+const GATEWAY_SCRIPT = join(__dirname, 'runSyncGateway.ts');
 
 const HUB_PORT = Number(process.env.YAKUREKI_SYNC_E2E_HUB_PORT || 3401);
 const SATELLITE_PORT = Number(process.env.YAKUREKI_SYNC_E2E_SATELLITE_PORT || 3402);
+const GATEWAY_PORT = Number(process.env.YAKUREKI_SYNC_E2E_GATEWAY_PORT || 3403);
+const REFUSAL_GATEWAY_PORT = Number(process.env.YAKUREKI_SYNC_E2E_REFUSAL_GATEWAY_PORT || 3404);
 const HUB_URL = `http://127.0.0.1:${HUB_PORT}`;
 const SATELLITE_URL = `http://127.0.0.1:${SATELLITE_PORT}`;
+const GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
 const SERVER_READY_TIMEOUT_MS = 120_000;
 // mainの各ステップが正常に失敗/成功しても、プロセスツリーの残骸(next startが
 // forkするnext-serverワーカー等)でイベントループが生き続けてスクリプトが
@@ -37,14 +45,14 @@ async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function startServer(name, port, env) {
+function startProcess(name, command, args, env) {
   // npx経由だとspawnした子は"npx"自体になり、実際にHTTPを待ち受ける
   // next-serverはさらにその子(孫プロセス)になる。child.kill()は直接の
   // 子にしかシグナルを送らないため、npxだけ死んでnext-serverが残る
   // (実際にCIでオーファン化して25分のジョブタイムアウトまでハングした)。
   // next バイナリを直接spawnし、かつ detached: true で新しいプロセスグループの
   // リーダーにすることで、停止時に -pid でグループ全体へシグナルを送れるようにする。
-  const child = spawn(NEXT_BIN, ['start', '-p', String(port)], {
+  const child = spawn(command, args, {
     env: { ...process.env, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true
@@ -57,6 +65,49 @@ function startServer(name, port, env) {
     child,
     getOutput: () => output
   };
+}
+
+// Next は運用の推奨どおりループバック専用(-H 127.0.0.1)で起動する。
+function startServer(name, port, env) {
+  return startProcess(name, NEXT_BIN, ['start', '-H', '127.0.0.1', '-p', String(port)], env);
+}
+
+function startGateway(name, port, upstreamPort, env = {}) {
+  return startProcess(name, TSX_BIN, [GATEWAY_SCRIPT], {
+    PHARMACY_SYNC_ROLE: 'hub',
+    PHARMACY_SYNC_GATEWAY_HOST: '127.0.0.1',
+    PHARMACY_SYNC_GATEWAY_PORT: String(port),
+    PHARMACY_SYNC_GATEWAY_UPSTREAM: `http://127.0.0.1:${upstreamPort}`,
+    ...env
+  });
+}
+
+async function waitForGateway(baseUrl, server) {
+  const deadline = Date.now() + SERVER_READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      // 許可リスト外のパスは常に404。応答が返ればゲートウェイは待受中。
+      const response = await fetch(`${baseUrl}/ready-check`);
+      if (response.status === 404) return;
+    } catch {
+      // まだ起動していない
+    }
+    await wait(500);
+  }
+  throw new Error(`${server.name} が時間内に起動しませんでした。\n--- output ---\n${server.getOutput().slice(-4000)}`);
+}
+
+async function waitForExit(server, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (server.child.exitCode !== null) return server.child.exitCode;
+    await wait(250);
+  }
+  return null;
+}
+
+function hasLanIPv4Address() {
+  return Object.values(networkInterfaces()).some((entries) => (entries || []).some((entry) => entry.family === 'IPv4' && !entry.internal));
 }
 
 async function waitForRole(baseUrl, expectedRole, server) {
@@ -115,6 +166,9 @@ async function main() {
 
   let hubServer;
   let satelliteServer;
+  let gatewayServer;
+  let refusalGateway;
+  let exposedListener;
   try {
     hubServer = startServer('hub', HUB_PORT, hubEnv);
     await waitForRole(HUB_URL, 'hub', hubServer);
@@ -163,6 +217,53 @@ async function main() {
     const satellitePull = await (await fetch(`${SATELLITE_URL}/api/sync/pull?collection=patients&checkpoint=0`)).json();
     assertOk(satellitePull.documents.length === 1, 'サテライト経由のpullで患者を取得できません。');
     console.log('[sync-e2e] satellite pull (via hub) OK');
+
+    // 同期ゲートウェイ: サテライトに公開する口は /api/sync/remote/{pull,push} だけ
+    gatewayServer = startGateway('gateway', GATEWAY_PORT, HUB_PORT);
+    await waitForGateway(GATEWAY_URL, gatewayServer);
+    const viaGateway = await fetch(`${GATEWAY_URL}/api/sync/remote/pull?collection=patients&checkpoint=0&batchSize=10`, {
+      headers: { Authorization: `Bearer ${token}`, 'x-yakureki-terminal-id': 'satellite-e2e' }
+    });
+    assertOk(viaGateway.status === 200, `ゲートウェイ経由のpullに失敗: HTTP ${viaGateway.status}`);
+    assertOk((await viaGateway.json()).documents.length === 1, 'ゲートウェイ経由で患者を取得できません。');
+    const viaGatewayWithoutToken = await fetch(`${GATEWAY_URL}/api/sync/remote/pull?collection=patients&checkpoint=0`);
+    assertOk(viaGatewayWithoutToken.status === 401, `トークンなしのpullが通りました: HTTP ${viaGatewayWithoutToken.status}`);
+    for (const [method, path] of [
+      ['GET', '/api/sync/pull?collection=patients&checkpoint=0'],
+      ['POST', '/api/sync/push'],
+      ['GET', '/api/sync/config'],
+      ['GET', '/api/sync/terminals'],
+      ['POST', '/api/sync/terminals'],
+      ['GET', '/api/sync/conflicts'],
+      ['GET', '/']
+    ]) {
+      const blocked = await fetch(`${GATEWAY_URL}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: method === 'POST' ? JSON.stringify({ terminalId: 'gateway-probe', label: 'x' }) : undefined
+      });
+      assertOk(blocked.status === 404, `ゲートウェイが許可リスト外を遮断していません: ${method} ${path} -> HTTP ${blocked.status}`);
+    }
+    const terminalsAfterProbe = await (await fetch(`${HUB_URL}/api/sync/terminals`)).json();
+    assertOk(
+      !JSON.stringify(terminalsAfterProbe).includes('gateway-probe'),
+      'ゲートウェイ経由で端末が登録されました。'
+    );
+    console.log('[sync-e2e] gateway forwards /api/sync/remote/* only OK');
+
+    // Nextがループバック専用でない(LAN側アドレスでも待受)場合、ゲートウェイは起動を拒否する
+    if (hasLanIPv4Address()) {
+      exposedListener = net.createServer();
+      await new Promise((resolve) => exposedListener.listen(0, '0.0.0.0', resolve));
+      const exposedPort = exposedListener.address().port;
+      refusalGateway = startGateway('refusal-gateway', REFUSAL_GATEWAY_PORT, exposedPort);
+      const exitCode = await waitForExit(refusalGateway, 30_000);
+      assertOk(exitCode === 1, `Nextが全インターフェースで待受でもゲートウェイが起動しました(exit ${exitCode})。`);
+      assertOk(refusalGateway.getOutput().includes('LAN側アドレス'), 'ゲートウェイの拒否理由が出力されていません。');
+      console.log('[sync-e2e] gateway refuses to start when upstream is exposed to LAN OK');
+    } else {
+      console.log('[sync-e2e] LAN側IPv4アドレスが無いため、露出検知の確認はスキップしました');
+    }
 
     // 競合: 古い状態を前提にした更新はハブ優先で拒否・記録される
     const currentState = hubPull.documents[0];
@@ -218,6 +319,9 @@ async function main() {
 
     console.log('[sync-e2e] all checks passed');
   } finally {
+    if (exposedListener) exposedListener.close();
+    await stopServer(refusalGateway);
+    await stopServer(gatewayServer);
     await stopServer(satelliteServer);
     await stopServer(hubServer);
     await rm(workDir, { recursive: true, force: true });

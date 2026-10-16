@@ -11,6 +11,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:local": "next start -H 127.0.0.1",
+    "sync:gateway": "tsx scripts/runSyncGateway.ts",
     "lint": "eslint src",
     "test": "TZ=Asia/Tokyo tsx --test --test-concurrency=1 $(find src -name \"*.test.ts\")",
     "typecheck": "tsc --noEmit",
