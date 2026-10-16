@@ -144,6 +144,7 @@ export default function EmrPage() {
   const [soapHistoryTimeline, setSoapHistoryTimeline] = useState<SoapHistoryTimelineEntry[]>([]);
   const [isPatientHistoryLoading, setIsPatientHistoryLoading] = useState(false);
   const [hasPatientHistoryError, setHasPatientHistoryError] = useState(false);
+  const [hasInterventionsError, setHasInterventionsError] = useState(false);
   const [facilitySettings, setFacilitySettings] = useState<FacilitySettings | null>(null);
   const [targetVisitId, setTargetVisitId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -427,7 +428,11 @@ export default function EmrPage() {
 
   useEffect(() => {
     async function fetchInterventions() {
-      if (!db) return;
+      if (!db) {
+        setHasInterventionsError(false);
+        return;
+      }
+      setHasInterventionsError(false);
       try {
         const visit = await findActiveVisit();
         if (visit) {
@@ -443,8 +448,11 @@ export default function EmrPage() {
           setInitialQuestionnaire(null);
           setMynaClinicalImports([]);
         }
+        setHasInterventionsError(false);
       } catch (err) {
         console.error('Failed to load interventions:', err);
+        setHasInterventionsError(true);
+        toast.error('疑義照会記録の読み込みに失敗しました。');
       }
     }
     fetchInterventions();
@@ -1799,10 +1807,17 @@ useEffect(() => {
               </button>
             </div>
             <div className="intervention-list">
-              {interventions.length === 0 ? (
-                <span className="text-muted aside-empty-text">記録されている履歴はありません。</span>
-              ) : (
-                interventions.map((inv) => (
+              {(() => {
+                const interventionViewState = getEmrHistoryViewState({
+                  isLoading: false,
+                  hasError: hasInterventionsError,
+                  entryCount: interventions.length,
+                  kind: 'intervention'
+                });
+                if (interventionViewState.status !== 'ready') {
+                  return <span className="text-muted aside-empty-text">{interventionViewState.message}</span>;
+                }
+                return interventions.map((inv) => (
                   <div key={inv.interventionId} className="glass intervention-item-card">
                     <div className="intervention-item-header">
                       <div className="intervention-header-left">
@@ -1826,8 +1841,8 @@ useEffect(() => {
                       {inv.responseDueDate ? ` / 期限 ${inv.responseDueDate}` : ''}
                     </div>
                   </div>
-                ))
-              )}
+                ));
+              })()}
             </div>
           </div>
 

@@ -222,6 +222,8 @@ export const SOAP_HISTORY_LOAD_ERROR_MESSAGE =
   '過去の薬歴の読み込みに失敗しました。再読み込みして確認してください。';
 export const PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE =
   '処方遍歴の読み込みに失敗しました。再読み込みして確認してください。';
+export const INTERVENTION_HISTORY_LOAD_ERROR_MESSAGE =
+  '疑義照会記録の読み込みに失敗しました。再読み込みして確認してください。';
 
 export const PAST_PROBLEM_LOAD_ERROR_MESSAGE =
   '過去プロブレム候補の読み込みに失敗しました。再読み込みして確認してください。';
@@ -249,25 +251,39 @@ export function getEmrHistoryViewState(params: {
   isLoading: boolean;
   hasError: boolean;
   entryCount: number;
-  kind: 'soap' | 'prescription';
+  kind: 'soap' | 'prescription' | 'intervention';
 }): EmrHistoryViewState {
-  const isSoap = params.kind === 'soap';
   if (params.isLoading) {
     return {
       status: 'loading',
-      message: isSoap ? '過去の薬歴を確認しています' : '処方遍歴を確認しています'
+      message:
+        params.kind === 'soap'
+          ? '過去の薬歴を確認しています'
+          : params.kind === 'prescription'
+            ? '処方遍歴を確認しています'
+            : '疑義照会記録を確認しています'
     };
   }
   if (params.hasError) {
     return {
       status: 'error',
-      message: isSoap ? SOAP_HISTORY_LOAD_ERROR_MESSAGE : PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE
+      message:
+        params.kind === 'soap'
+          ? SOAP_HISTORY_LOAD_ERROR_MESSAGE
+          : params.kind === 'prescription'
+            ? PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE
+            : INTERVENTION_HISTORY_LOAD_ERROR_MESSAGE
     };
   }
   if (params.entryCount === 0) {
     return {
       status: 'empty',
-      message: isSoap ? 'この患者の過去薬歴はまだありません' : 'この患者の処方遍歴はまだありません'
+      message:
+        params.kind === 'soap'
+          ? 'この患者の過去薬歴はまだありません'
+          : params.kind === 'prescription'
+            ? 'この患者の処方遍歴はまだありません'
+            : '記録されている履歴はありません。'
     };
   }
   return {

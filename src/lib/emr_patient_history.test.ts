@@ -6,6 +6,7 @@ import {
   buildSoapHistoryTimeline,
   getEmrHistoryViewState,
   getPastProblemTriggerState,
+  INTERVENTION_HISTORY_LOAD_ERROR_MESSAGE,
   normalizeSoapProblemTitle,
   PAST_PROBLEM_LOAD_ERROR_MESSAGE,
   PRESCRIPTION_TIMELINE_LOAD_ERROR_MESSAGE,
@@ -198,5 +199,28 @@ test('getPastProblemTriggerState tells a failed load apart from having no past p
   assert.deepStrictEqual(
     getPastProblemTriggerState({ hasError: false, suggestionCount: 3 }),
     { disabled: false, title: '' }
+  );
+});
+
+test('getEmrHistoryViewState handles intervention history loading, error (including stale entries), empty, and ready states', () => {
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: true, hasError: false, entryCount: 0, kind: 'intervention' }),
+    { status: 'loading', message: '疑義照会記録を確認しています' }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: true, entryCount: 0, kind: 'intervention' }),
+    { status: 'error', message: INTERVENTION_HISTORY_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: true, entryCount: 2, kind: 'intervention' }),
+    { status: 'error', message: INTERVENTION_HISTORY_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 0, kind: 'intervention' }),
+    { status: 'empty', message: '記録されている履歴はありません。' }
+  );
+  assert.deepStrictEqual(
+    getEmrHistoryViewState({ isLoading: false, hasError: false, entryCount: 1, kind: 'intervention' }),
+    { status: 'ready', message: null }
   );
 });
