@@ -1352,6 +1352,16 @@
     background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: var(--fs-xs); font-weight: 800;
 }
 .dead-stock-flag.expiry { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+.dead-stock-load-error {
+    margin: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: var(--danger-soft, #fef2f2);
+    color: var(--destructive, #dc2626);
+    font-size: var(--fs-md);
+    font-weight: 700;
+}
 
 /* 棚番管理（LocationMaster） */
 .add-location {

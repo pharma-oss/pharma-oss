@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { buildDeadStockCsv, buildDeadStockReport } from './dead_stock.ts';
+import {
+  DEAD_STOCK_EMPTY_MESSAGE,
+  DEAD_STOCK_LOADING_MESSAGE,
+  DEAD_STOCK_LOAD_ERROR_MESSAGE,
+  buildDeadStockCsv,
+  buildDeadStockReport,
+  getDeadStockPanelBodyState
+} from './dead_stock.ts';
 
 const NOW = new Date('2026-07-06T09:00:00');
 
@@ -94,3 +101,27 @@ test('buildDeadStockReport dates a visit by the local day it was registered, not
   const ointment = entries.find((entry) => entry.drugCode === 'D-002')!;
   assert.strictEqual(ointment.lastDispensedAt, '2026-07-01');
 });
+
+test('getDeadStockPanelBodyState prioritizes error over loading/empty/ready and distinguishes loading, empty, and ready states', () => {
+  assert.deepStrictEqual(
+    getDeadStockPanelBodyState({ hasMovementSources: false, hasLoadError: false, entryCount: 0 }),
+    { status: 'loading', message: DEAD_STOCK_LOADING_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getDeadStockPanelBodyState({ hasMovementSources: false, hasLoadError: true, entryCount: 0 }),
+    { status: 'error', message: DEAD_STOCK_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getDeadStockPanelBodyState({ hasMovementSources: true, hasLoadError: true, entryCount: 2 }),
+    { status: 'error', message: DEAD_STOCK_LOAD_ERROR_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getDeadStockPanelBodyState({ hasMovementSources: true, hasLoadError: false, entryCount: 0 }),
+    { status: 'empty', message: DEAD_STOCK_EMPTY_MESSAGE }
+  );
+  assert.deepStrictEqual(
+    getDeadStockPanelBodyState({ hasMovementSources: true, hasLoadError: false, entryCount: 1 }),
+    { status: 'ready', message: null }
+  );
+});
+

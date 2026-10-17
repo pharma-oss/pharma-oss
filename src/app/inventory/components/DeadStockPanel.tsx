@@ -2,8 +2,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Download } from 'lucide-react';
+import { toast } from 'sonner';
 import { DrugStock } from '@/db/types';
-import { buildDeadStockCsv, buildDeadStockReport, type DeadStockEntry } from '@/lib/dead_stock';
+import {
+    buildDeadStockCsv,
+    buildDeadStockReport,
+    getDeadStockPanelBodyState,
+    type DeadStockEntry
+} from '@/lib/dead_stock';
 import type { DrugWithSearchCache } from '../types';
 import { toLocalDateKey } from '@/lib/local_date';
 
@@ -17,11 +23,18 @@ export interface DeadStockPanelProps {
 export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadStockPanelProps) {
     const [thresholdDays, setThresholdDays] = useState(90);
     const [movementSources, setMovementSources] = useState<{ items: any[]; visits: any[] } | null>(null);
+    const [hasLoadError, setHasLoadError] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
         const loadMovementSources = async () => {
-            if (!db) return;
+            if (!db) {
+                setMovementSources(null);
+                setHasLoadError(false);
+                return;
+            }
+            setMovementSources(null);
+            setHasLoadError(false);
             try {
                 const [itemDocs, visitDocs] = await Promise.all([
                     db.prescription_items.find().exec(),
@@ -32,8 +45,14 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
                     items: itemDocs.map((doc: any) => ({ visitId: doc.visitId, drugId: doc.drugId, dispensedDrugCode: doc.dispensedDrugCode })),
                     visits: visitDocs.map((doc: any) => ({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status }))
                 });
+                setHasLoadError(false);
             } catch (error) {
                 console.error('Failed to load movement sources for dead stock:', error);
+                if (isMounted) {
+                    setMovementSources(null);
+                    setHasLoadError(true);
+                    toast.error('不動在庫の出庫記録の読み込みに失敗しました。');
+                }
             }
         };
         loadMovementSources();
@@ -41,7 +60,7 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
     }, [db]);
 
     const entries: DeadStockEntry[] = useMemo(() => {
-        if (!movementSources) return [];
+        if (!movementSources || hasLoadError) return [];
         return buildDeadStockReport({
             drugs,
             stockLots,
@@ -49,12 +68,18 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
             visits: movementSources.visits,
             thresholdDays
         });
-    }, [drugs, stockLots, movementSources, thresholdDays]);
+    }, [drugs, stockLots, movementSources, hasLoadError, thresholdDays]);
 
     const totalValue = useMemo(
         () => Math.round(entries.reduce((sum, entry) => sum + entry.stockValue, 0) * 100) / 100,
         [entries]
     );
+
+    const bodyState = getDeadStockPanelBodyState({
+        hasMovementSources: movementSources !== null,
+        hasLoadError,
+        entryCount: entries.length
+    });
 
     const handleExportCsv = () => {
         if (entries.length === 0) return;
@@ -100,10 +125,12 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
                     <span>在庫金額(薬価) <strong>{totalValue.toLocaleString()}</strong> 円</span>
                 </div>
 
-                {!movementSources ? (
-                    <p className="text-muted">入出庫の記録を確認しています...</p>
-                ) : entries.length === 0 ? (
-                    <p className="text-muted">条件に該当する不動在庫はありません。</p>
+                {bodyState.status === 'loading' ? (
+                    <p className="text-muted">{bodyState.message}</p>
+                ) : bodyState.status === 'error' ? (
+                    <p className="dead-stock-load-error" role="alert">{bodyState.message}</p>
+                ) : bodyState.status === 'empty' ? (
+                    <p className="text-muted">{bodyState.message}</p>
                 ) : (
                     <div className="dead-stock-table-wrap">
                         <table className="dead-stock-table">

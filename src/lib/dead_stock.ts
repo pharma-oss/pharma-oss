@@ -181,3 +181,32 @@ export function buildDeadStockCsv(entries: DeadStockEntry[]): string {
   ]);
   return [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
 }
+
+export const DEAD_STOCK_LOADING_MESSAGE = '入出庫の記録を確認しています...';
+export const DEAD_STOCK_LOAD_ERROR_MESSAGE =
+  '出庫記録の読み込みに失敗したため、不動在庫を判定できません。再読み込みして確認してください。';
+export const DEAD_STOCK_EMPTY_MESSAGE = '条件に該当する不動在庫はありません。';
+
+export type DeadStockPanelBodyState =
+  | { status: 'loading'; message: string }
+  | { status: 'error'; message: string }
+  | { status: 'empty'; message: string }
+  | { status: 'ready'; message: null };
+
+export function getDeadStockPanelBodyState(params: {
+  hasMovementSources: boolean;
+  hasLoadError: boolean;
+  entryCount: number;
+}): DeadStockPanelBodyState {
+  if (params.hasLoadError) {
+    return { status: 'error', message: DEAD_STOCK_LOAD_ERROR_MESSAGE };
+  }
+  if (!params.hasMovementSources) {
+    return { status: 'loading', message: DEAD_STOCK_LOADING_MESSAGE };
+  }
+  if (params.entryCount === 0) {
+    return { status: 'empty', message: DEAD_STOCK_EMPTY_MESSAGE };
+  }
+  return { status: 'ready', message: null };
+}
+
