@@ -144,6 +144,7 @@ export function useOcrPreviousPrescriptions({
   const [hasPreviousPrescriptionsError, setHasPreviousPrescriptionsError] = useState(false);
   const [previousDoSnapshot, setPreviousDoSnapshot] = useState<PreviousDoSnapshot | null>(null);
   const [isLoadingPreviousDo, setIsLoadingPreviousDo] = useState(false);
+  const [hasPreviousDoError, setHasPreviousDoError] = useState(false);
 
   // 過去2回分の処方履歴スナップショット取得
   useEffect(() => {
@@ -215,10 +216,12 @@ export function useOcrPreviousPrescriptions({
       if (!db || !selectedPatientId) {
         setPreviousDoSnapshot(null);
         setIsLoadingPreviousDo(false);
+        setHasPreviousDoError(false);
         return;
       }
 
       setIsLoadingPreviousDo(true);
+      setHasPreviousDoError(false);
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
         const latestCompletedVisit = selectLatestCompletedVisit(
@@ -226,7 +229,10 @@ export function useOcrPreviousPrescriptions({
         );
 
         if (!latestCompletedVisit) {
-          if (isMounted) setPreviousDoSnapshot(null);
+          if (isMounted) {
+            setPreviousDoSnapshot(null);
+            setHasPreviousDoError(false);
+          }
           return;
         }
 
@@ -236,7 +242,10 @@ export function useOcrPreviousPrescriptions({
         const items = itemDocs.map((itemDoc: any) => itemDoc.toJSON() as PrescriptionItem);
 
         if (items.length === 0) {
-          if (isMounted) setPreviousDoSnapshot(null);
+          if (isMounted) {
+            setPreviousDoSnapshot(null);
+            setHasPreviousDoError(false);
+          }
           return;
         }
 
@@ -252,10 +261,15 @@ export function useOcrPreviousPrescriptions({
             visit: latestCompletedVisit,
             items: doItems
           });
+          setHasPreviousDoError(false);
         }
       } catch (error) {
         console.error('Failed to load previous DO prescription:', error);
-        if (isMounted) setPreviousDoSnapshot(null);
+        if (isMounted) {
+          setPreviousDoSnapshot(null);
+          setHasPreviousDoError(true);
+          toast.error('前回Do処方の読み込みに失敗しました。');
+        }
       } finally {
         if (isMounted) setIsLoadingPreviousDo(false);
       }
@@ -284,6 +298,8 @@ export function useOcrPreviousPrescriptions({
     previousDoSnapshot,
     setPreviousDoSnapshot,
     isLoadingPreviousDo,
+    hasPreviousDoError,
+    setHasPreviousDoError,
     previousPrescriptionTimeline
   };
 }

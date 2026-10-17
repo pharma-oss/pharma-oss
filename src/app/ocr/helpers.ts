@@ -5,6 +5,7 @@ import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category'
 import type { ElectronicPrescriptionItem } from '@/lib/electronic_prescription';
 import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
 import { getPublicInsuranceCategoryName } from '@/lib/patient_public_insurance';
+import type { PreviousDoSnapshot } from '@/lib/previous_prescription_do';
 import type { Prescription, PrescriptionGroup } from './types';
 
 export type EligibilityStatus = 'unchecked' | 'checking' | 'confirmed' | 'warning' | 'unavailable';
@@ -366,6 +367,44 @@ export function getPatientCandidatePanelViewState(params: {
     showCandidates: false,
     errorBannerMessage: null,
     emptyNoteMessage: PATIENT_CANDIDATES_EMPTY_NOTE
+  };
+}
+
+export const PREVIOUS_DO_LOAD_ERROR_DISABLED_REASON =
+  '前回処方の読み込みに失敗したため投入できません。再読み込みして確認してください。';
+export const PREVIOUS_DO_LOAD_ERROR_SUMMARY = '確認失敗';
+
+export interface PreviousDoViewState {
+  disabledReason: string;
+  summary: string;
+}
+
+export function getPreviousDoViewState(params: {
+  selectedPatientId: string | null;
+  isLoadingPreviousDo: boolean;
+  hasPreviousDoError: boolean;
+  previousDoSnapshot: PreviousDoSnapshot | null;
+}): PreviousDoViewState {
+  const disabledReason = (() => {
+    if (!params.selectedPatientId) return '患者選択後に利用できます';
+    if (params.isLoadingPreviousDo) return '前回処方を確認しています';
+    if (params.hasPreviousDoError) return PREVIOUS_DO_LOAD_ERROR_DISABLED_REASON;
+    if (!params.previousDoSnapshot || params.previousDoSnapshot.items.length === 0) {
+      return '直近完了受付の処方がありません';
+    }
+    return '';
+  })();
+
+  const summary = (() => {
+    if (params.isLoadingPreviousDo) return '確認中';
+    if (params.hasPreviousDoError) return PREVIOUS_DO_LOAD_ERROR_SUMMARY;
+    if (!params.previousDoSnapshot) return '前回なし';
+    return `${formatVisitDateLabel(params.previousDoSnapshot.visit)} / ${params.previousDoSnapshot.items.length}薬品`;
+  })();
+
+  return {
+    disabledReason,
+    summary
   };
 }
 

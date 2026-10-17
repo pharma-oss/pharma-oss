@@ -74,6 +74,7 @@ import {
   filterReceptionEligibilityAlerts,
   buildCandidatePublicInsuranceSummary,
   getPatientCandidatePanelViewState,
+  getPreviousDoViewState,
   getDrugAuditMeta,
   getDispensedDrugAuditMeta,
   clearDispensedDrugAuditMeta,
@@ -350,6 +351,7 @@ export default function OcrPage() {
     previousDoSnapshot,
     setPreviousDoSnapshot,
     isLoadingPreviousDo,
+    hasPreviousDoError,
     previousPrescriptionTimeline
   } = useOcrPreviousPrescriptions({
     db,
@@ -441,17 +443,17 @@ export default function OcrPage() {
   const hasCurrentPrescriptionInput = useMemo(() => (
     prescriptions.some((prescription) => prescription.drugCode || prescription.drugName.trim())
   ), [prescriptions]);
-  const previousDoDisabledReason = useMemo(() => {
-    if (!selectedPatientId) return '患者選択後に利用できます';
-    if (isLoadingPreviousDo) return '前回処方を確認しています';
-    if (!previousDoSnapshot || previousDoSnapshot.items.length === 0) return '直近完了受付の処方がありません';
-    return '';
-  }, [isLoadingPreviousDo, previousDoSnapshot, selectedPatientId]);
-  const previousDoSummary = useMemo(() => {
-    if (isLoadingPreviousDo) return '確認中';
-    if (!previousDoSnapshot) return '前回なし';
-    return `${formatVisitDateLabel(previousDoSnapshot.visit)} / ${previousDoSnapshot.items.length}薬品`;
-  }, [isLoadingPreviousDo, previousDoSnapshot]);
+  const {
+    disabledReason: previousDoDisabledReason,
+    summary: previousDoSummary
+  } = useMemo(() => (
+    getPreviousDoViewState({
+      selectedPatientId,
+      isLoadingPreviousDo,
+      hasPreviousDoError,
+      previousDoSnapshot
+    })
+  ), [hasPreviousDoError, isLoadingPreviousDo, previousDoSnapshot, selectedPatientId]);
   const handleApplyPreviousDo = useCallback(() => {
     if (!previousDoSnapshot || previousDoSnapshot.items.length === 0) {
       toast.warning('直近完了受付の処方がありません。');
