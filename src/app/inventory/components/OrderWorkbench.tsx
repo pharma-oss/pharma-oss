@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Clipboard, Download, CheckCircle2, PackageCheck, AlertTriangle, ArrowRightLeft, Layers, CalendarClock } from 'lucide-react';
-import { type InventoryOrderRisk } from '@/lib/inventory_order';
+import { type InventoryOrderRisk, getOrderWorkbenchRestoreErrorBannerMessage } from '@/lib/inventory_order';
 import { type EnhancedInventoryOrderRisk, type OrderRiskReason } from '@/lib/inventory_reorder_support';
 import {
   type ReceivingDraft,
@@ -15,6 +15,7 @@ export type OrderWorkbenchCandidate = EnhancedInventoryOrderRisk | InventoryOrde
 export interface OrderWorkbenchProps {
     candidates: OrderWorkbenchCandidate[];
     orderedDrugIds: Set<string>;
+    hasRestoreError: boolean;
     receivingDrafts: Record<string, ReceivingDraft>;
     receivingDrugId: string;
     onRequestTransfer: (candidate: OrderWorkbenchCandidate) => void;
@@ -37,6 +38,7 @@ function isEnhancedCandidate(candidate: OrderWorkbenchCandidate): candidate is E
 export function OrderWorkbench({
     candidates,
     orderedDrugIds,
+    hasRestoreError,
     receivingDrafts,
     receivingDrugId,
     onRequestTransfer,
@@ -117,6 +119,8 @@ export function OrderWorkbench({
         });
     };
 
+    const restoreErrorMessage = getOrderWorkbenchRestoreErrorBannerMessage(hasRestoreError);
+
     return (
         <div className="order-workbench">
             <div className="order-workbench-card">
@@ -144,6 +148,13 @@ export function OrderWorkbench({
                         </button>
                     </div>
                 </div>
+
+                {restoreErrorMessage && (
+                    <div className="order-workbench-restore-error" role="alert">
+                        <AlertTriangle size={18} aria-hidden="true" />
+                        <span>{restoreErrorMessage}</span>
+                    </div>
+                )}
 
                 <div className="order-summary-grid" aria-label="発注候補サマリー">
                     <div className="order-summary-item">

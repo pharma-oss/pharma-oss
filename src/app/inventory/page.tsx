@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
 import './inventory.css';
+import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { Drug, Location, DrugStock } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
@@ -90,6 +91,7 @@ export default function InventoryPage() {
   const [receivingDrafts, setReceivingDrafts] = useState<Record<string, ReceivingDraft>>({});
   const [receivingDrugId, setReceivingDrugId] = useState('');
   const [hasLoadedOrderState, setHasLoadedOrderState] = useState(false);
+  const [hasOrderWorkbenchRestoreError, setHasOrderWorkbenchRestoreError] = useState(false);
   const [transferPrefill, setTransferPrefill] = useState<TransferPrefill | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -199,15 +201,18 @@ export default function InventoryPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    setHasOrderWorkbenchRestoreError(false);
     try {
         const saved = window.localStorage.getItem(orderWorkbenchStorageKey);
         const parsed = saved ? JSON.parse(saved) : [];
         setOrderedDrugIds(new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []));
+        setHasLoadedOrderState(true);
     } catch (error) {
         console.warn('Failed to restore inventory order workbench state:', error);
+        setHasOrderWorkbenchRestoreError(true);
+        toast.error('発注ワークベンチの状態の復元に失敗しました。');
         setOrderedDrugIds(new Set());
-    } finally {
-        setHasLoadedOrderState(true);
+        setHasLoadedOrderState(false);
     }
   }, [orderWorkbenchStorageKey]);
 
@@ -681,6 +686,7 @@ export default function InventoryPage() {
             <OrderWorkbench
                 candidates={orderCandidates}
                 orderedDrugIds={orderedDrugIds}
+                hasRestoreError={hasOrderWorkbenchRestoreError}
                 receivingDrafts={receivingDrafts}
                 receivingDrugId={receivingDrugId}
                 onRequestTransfer={(candidate) => openTransferWith({

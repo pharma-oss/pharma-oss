@@ -237,3 +237,8 @@ export function buildInventoryReceivingChecklistMemo(
   ];
   return lines.join('\n');
 }
+
+export function getOrderWorkbenchRestoreErrorBannerMessage(hasRestoreError: boolean): string | null {
+  if (!hasRestoreError) return null;
+  return '発注ワークベンチの状態の復元に失敗したため、発注済み状態を正常に反映できていない可能性があります。再読み込みして確認してください。';
+}

@@ -11,6 +11,7 @@ import {
   formatDateForFileName,
   getInventoryOrderActionLabel,
   getInventoryOrderPriority,
+  getOrderWorkbenchRestoreErrorBannerMessage,
   type InventoryOrderRisk
 } from './inventory_order.ts';
 
@@ -162,4 +163,12 @@ test('order outputs surface picking shortage reports for on-shelf discrepancies'
 
   const memo = buildInventoryOrderMemo([riskWithPickingShortage]);
   assert.match(memo, /棚不足報告 1/);
+});
+
+test('getOrderWorkbenchRestoreErrorBannerMessage returns error message when hasRestoreError is true and null when false', () => {
+  assert.strictEqual(getOrderWorkbenchRestoreErrorBannerMessage(false), null);
+  assert.strictEqual(
+    getOrderWorkbenchRestoreErrorBannerMessage(true),
+    '発注ワークベンチの状態の復元に失敗したため、発注済み状態を正常に反映できていない可能性があります。再読み込みして確認してください。'
+  );
 });
