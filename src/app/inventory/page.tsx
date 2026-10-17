@@ -206,13 +206,14 @@ export default function InventoryPage() {
         const saved = window.localStorage.getItem(orderWorkbenchStorageKey);
         const parsed = saved ? JSON.parse(saved) : [];
         setOrderedDrugIds(new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []));
-        setHasLoadedOrderState(true);
     } catch (error) {
         console.warn('Failed to restore inventory order workbench state:', error);
         setHasOrderWorkbenchRestoreError(true);
         toast.error('発注ワークベンチの状態の復元に失敗しました。');
         setOrderedDrugIds(new Set());
-        setHasLoadedOrderState(false);
+    } finally {
+        // 復元に失敗しても保存を再開する。読めない値は空の状態で上書きされ、再読み込みで自己修復する
+        setHasLoadedOrderState(true);
     }
   }, [orderWorkbenchStorageKey]);
 
