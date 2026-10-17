@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { comparePrescriptionHistory, comparePrescriptionHistoryTimeline } from './prescription_history_compare.ts';
+import {
+  PrescriptionHistoryComparePanel,
+  getPrescriptionHistoryCompareViewState,
+  PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE,
+  PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE
+} from '@/app/ocr/components/PrescriptionHistoryComparePanel';
 
 test('comparePrescriptionHistory detects added, stopped, changed, and unchanged drugs', () => {
   const comparison = comparePrescriptionHistory(
@@ -133,3 +141,77 @@ test('comparePrescriptionHistoryTimeline compares the current input against the 
   assert.strictEqual(timeline[1].snapshot.visitId, 'v_second');
   assert.strictEqual(timeline[1].comparison.unchangedCount, 1);
 });
+
+test('getPrescriptionHistoryCompareViewState handles loading, error, empty, and ready states', () => {
+  assert.deepStrictEqual(
+    getPrescriptionHistoryCompareViewState({ isLoading: true, hasError: true, entryCount: 0 }),
+    {
+      status: 'loading',
+      title: '読み込み中',
+      bodyMessage: '過去2回分の処方を確認しています'
+    }
+  );
+  assert.deepStrictEqual(
+    getPrescriptionHistoryCompareViewState({ isLoading: false, hasError: true, entryCount: 0 }),
+    {
+      status: 'error',
+      title: PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE,
+      bodyMessage: PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE
+    }
+  );
+  assert.deepStrictEqual(
+    getPrescriptionHistoryCompareViewState({ isLoading: false, hasError: true, entryCount: 2 }),
+    {
+      status: 'error',
+      title: PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE,
+      bodyMessage: PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE
+    }
+  );
+  assert.deepStrictEqual(
+    getPrescriptionHistoryCompareViewState({ isLoading: false, hasError: false, entryCount: 0 }),
+    {
+      status: 'empty',
+      title: '過去処方なし',
+      bodyMessage: 'この患者の過去処方はまだありません'
+    }
+  );
+  assert.deepStrictEqual(
+    getPrescriptionHistoryCompareViewState({ isLoading: false, hasError: false, entryCount: 2 }),
+    {
+      status: 'ready',
+      title: '過去2回分を確認',
+      bodyMessage: null
+    }
+  );
+});
+
+test('PrescriptionHistoryComparePanel renders error title and body when hasError is true instead of empty state', () => {
+  const emptyHtml = renderToStaticMarkup(
+    React.createElement(PrescriptionHistoryComparePanel, {
+      timeline: [],
+      isLoading: false,
+      hasError: false,
+      hasPatientContext: true,
+      hasCurrentInput: true
+    })
+  ).replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.ok(emptyHtml.includes('過去処方なし'));
+  assert.ok(emptyHtml.includes('この患者の過去処方はまだありません'));
+  assert.ok(!emptyHtml.includes(PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE));
+
+  const errorHtml = renderToStaticMarkup(
+    React.createElement(PrescriptionHistoryComparePanel, {
+      timeline: [],
+      isLoading: false,
+      hasError: true,
+      hasPatientContext: true,
+      hasCurrentInput: true
+    })
+  ).replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.ok(errorHtml.includes(PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE));
+  assert.ok(errorHtml.includes(PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE));
+  assert.ok(errorHtml.includes('history-error'));
+  assert.ok(!errorHtml.includes('過去処方なし'));
+  assert.ok(!errorHtml.includes('この患者の過去処方はまだありません'));
+});
+

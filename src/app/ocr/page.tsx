@@ -346,6 +346,7 @@ export default function OcrPage() {
     previousPrescriptions,
     setPreviousPrescriptions,
     isLoadingPreviousPrescription,
+    hasPreviousPrescriptionsError,
     previousDoSnapshot,
     setPreviousDoSnapshot,
     isLoadingPreviousDo,
@@ -2274,6 +2275,7 @@ export default function OcrPage() {
                   <PrescriptionHistoryComparePanel
                     timeline={previousPrescriptionTimeline}
                     isLoading={isLoadingPreviousPrescription}
+                    hasError={hasPreviousPrescriptionsError}
                     hasPatientContext={!!selectedPatientId}
                     hasCurrentInput={hasCurrentPrescriptionInput}
                   />

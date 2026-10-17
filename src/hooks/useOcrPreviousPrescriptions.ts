@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import type { Visit, PrescriptionItem } from '@/db/types';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { formatVisitDateLabel, getVisitSortTime } from '@/app/ocr/helpers';
@@ -140,6 +141,7 @@ export function useOcrPreviousPrescriptions({
 }: UseOcrPreviousPrescriptionsOptions) {
   const [previousPrescriptions, setPreviousPrescriptions] = useState<PrescriptionHistorySnapshot[]>([]);
   const [isLoadingPreviousPrescription, setIsLoadingPreviousPrescription] = useState(false);
+  const [hasPreviousPrescriptionsError, setHasPreviousPrescriptionsError] = useState(false);
   const [previousDoSnapshot, setPreviousDoSnapshot] = useState<PreviousDoSnapshot | null>(null);
   const [isLoadingPreviousDo, setIsLoadingPreviousDo] = useState(false);
 
@@ -150,10 +152,12 @@ export function useOcrPreviousPrescriptions({
       if (!db || !selectedPatientId) {
         setPreviousPrescriptions([]);
         setIsLoadingPreviousPrescription(false);
+        setHasPreviousPrescriptionsError(false);
         return;
       }
 
       setIsLoadingPreviousPrescription(true);
+      setHasPreviousPrescriptionsError(false);
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
         const historyVisits = selectRecentVisits(
@@ -162,7 +166,10 @@ export function useOcrPreviousPrescriptions({
         );
 
         if (historyVisits.length === 0) {
-          if (isMounted) setPreviousPrescriptions([]);
+          if (isMounted) {
+            setPreviousPrescriptions([]);
+            setHasPreviousPrescriptionsError(false);
+          }
           return;
         }
 
@@ -183,10 +190,15 @@ export function useOcrPreviousPrescriptions({
 
         if (isMounted) {
           setPreviousPrescriptions(snapshots);
+          setHasPreviousPrescriptionsError(false);
         }
       } catch (error) {
         console.error('Failed to load previous prescription:', error);
-        if (isMounted) setPreviousPrescriptions([]);
+        if (isMounted) {
+          setPreviousPrescriptions([]);
+          setHasPreviousPrescriptionsError(true);
+          toast.error('過去処方箋の読み込みに失敗しました。');
+        }
       } finally {
         if (isMounted) setIsLoadingPreviousPrescription(false);
       }
@@ -267,6 +279,8 @@ export function useOcrPreviousPrescriptions({
     previousPrescriptions,
     setPreviousPrescriptions,
     isLoadingPreviousPrescription,
+    hasPreviousPrescriptionsError,
+    setHasPreviousPrescriptionsError,
     previousDoSnapshot,
     setPreviousDoSnapshot,
     isLoadingPreviousDo,

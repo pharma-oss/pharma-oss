@@ -3,9 +3,53 @@ import { History } from 'lucide-react';
 import type { PrescriptionHistoryTimelineEntry } from '@/lib/prescription_history_compare';
 import { historyChangeLabel } from '../helpers';
 
+export const PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE = '読み込み失敗';
+export const PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE =
+  '過去処方箋の読み込みに失敗したため、過去処方との比較ができていません。再読み込みして確認してください。';
+
+export interface PrescriptionHistoryCompareViewState {
+  status: 'loading' | 'error' | 'empty' | 'ready';
+  title: string;
+  bodyMessage: string | null;
+}
+
+export function getPrescriptionHistoryCompareViewState(params: {
+  isLoading: boolean;
+  hasError: boolean;
+  entryCount: number;
+}): PrescriptionHistoryCompareViewState {
+  if (params.isLoading) {
+    return {
+      status: 'loading',
+      title: '読み込み中',
+      bodyMessage: '過去2回分の処方を確認しています'
+    };
+  }
+  if (params.hasError) {
+    return {
+      status: 'error',
+      title: PRESCRIPTION_HISTORY_LOAD_ERROR_TITLE,
+      bodyMessage: PRESCRIPTION_HISTORY_LOAD_ERROR_MESSAGE
+    };
+  }
+  if (params.entryCount > 0) {
+    return {
+      status: 'ready',
+      title: `過去${params.entryCount}回分を確認`,
+      bodyMessage: null
+    };
+  }
+  return {
+    status: 'empty',
+    title: '過去処方なし',
+    bodyMessage: 'この患者の過去処方はまだありません'
+  };
+}
+
 export interface PrescriptionHistoryComparePanelProps {
   timeline: PrescriptionHistoryTimelineEntry[];
   isLoading: boolean;
+  hasError: boolean;
   hasPatientContext: boolean;
   hasCurrentInput: boolean;
 }
@@ -13,10 +57,17 @@ export interface PrescriptionHistoryComparePanelProps {
 export const PrescriptionHistoryComparePanel = React.memo(({
   timeline,
   isLoading,
+  hasError,
   hasPatientContext,
   hasCurrentInput
 }: PrescriptionHistoryComparePanelProps) => {
   if (!hasPatientContext || !hasCurrentInput) return null;
+
+  const viewState = getPrescriptionHistoryCompareViewState({
+    isLoading,
+    hasError,
+    entryCount: timeline.length
+  });
 
   const tone = timeline.some(({ comparison }) => (
     comparison.addedCount + comparison.stoppedCount + comparison.changedCount
@@ -31,21 +82,18 @@ export const PrescriptionHistoryComparePanel = React.memo(({
           <span className="history-icon" aria-hidden="true"><History size={17} /></span>
           <div>
             <span className="section-kicker">過去処方比較</span>
-            <strong>
-              {isLoading
-                ? '読み込み中'
-                : timeline.length > 0
-                  ? `過去${timeline.length}回分を確認`
-                  : '過去処方なし'}
-            </strong>
+            <strong>{viewState.title}</strong>
           </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="history-empty">過去2回分の処方を確認しています</div>
-      ) : timeline.length === 0 ? (
-        <div className="history-empty">この患者の過去処方はまだありません</div>
+      {viewState.status !== 'ready' ? (
+        <div
+          className={viewState.status === 'error' ? 'history-empty history-error' : 'history-empty'}
+          role={viewState.status === 'error' ? 'alert' : undefined}
+        >
+          {viewState.bodyMessage}
+        </div>
       ) : (
         <div className="history-snapshot-list">
           {timeline.map(({ snapshot, comparison }, snapshotIndex) => {
@@ -272,6 +320,10 @@ export const PrescriptionHistoryComparePanel = React.memo(({
 
         .history-empty {
           margin-top: 0.55rem;
+        }
+
+        .history-empty.history-error {
+          color: #b91c1c;
         }
 
         .history-field-list {
