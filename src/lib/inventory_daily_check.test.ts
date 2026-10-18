@@ -4,7 +4,10 @@ import {
   buildDailyCheckSaveNoticeMessage,
   buildDailyControlledDrugCheckAuditDetail,
   buildDailyControlledDrugCheckCsv,
+  DAILY_CHECK_PREVIOUS_LOAD_ERROR,
+  DAILY_CHECK_PREVIOUS_NONE,
   formatDailyControlledDrugDiff,
+  getDailyCheckPreviousSummary,
   getDailyControlledDrugDifferenceReasonLabel,
   getDailyControlledDrugCheckStatusLabel,
   getDailyControlledDrugCheckSummary,
@@ -12,6 +15,7 @@ import {
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
   parseDailyControlledDrugCheckSnapshot,
+  restoreDailyControlledDrugCheckSnapshot,
   type DailyControlledDrugCheckRow,
   type DailyControlledDrugCheckSnapshot
 } from './inventory_daily_check.ts';
@@ -195,3 +199,72 @@ test('daily controlled drug check save notice message distinguishes storage succ
     '日次棚卸し結果を監査ログに記録しましたが、端末スナップショットの保存に失敗しました。'
   );
 });
+
+test('restoreDailyControlledDrugCheckSnapshot returns not_found when snapshot is missing', () => {
+  const result = restoreDailyControlledDrugCheckSnapshot('key', () => null);
+  assert.deepStrictEqual(result, { status: 'not_found', snapshot: null });
+});
+
+test('restoreDailyControlledDrugCheckSnapshot restores valid snapshot', () => {
+  const validSnapshot: DailyControlledDrugCheckSnapshot = {
+    version: 1,
+    updatedAt: '2026-10-18T09:00:00.000Z',
+    entries: {
+      'N-001': {
+        actualCount: 10,
+        diff: 0,
+        differenceReason: undefined,
+        checkedAt: '2026-10-18T09:00:00.000Z',
+        checkedBy: 'テスト薬剤師'
+      }
+    }
+  };
+  const result = restoreDailyControlledDrugCheckSnapshot('key', () => JSON.stringify(validSnapshot));
+  assert.deepStrictEqual(result, { status: 'restored', snapshot: validSnapshot });
+});
+
+
+test('restoreDailyControlledDrugCheckSnapshot returns load_error when JSON is broken', () => {
+  const result = restoreDailyControlledDrugCheckSnapshot('key', () => '{"broken_json":');
+  assert.deepStrictEqual(result, { status: 'load_error', snapshot: null });
+});
+
+test('restoreDailyControlledDrugCheckSnapshot returns load_error when version differs', () => {
+  const result = restoreDailyControlledDrugCheckSnapshot('key', () => JSON.stringify({ version: 2, updatedAt: '2026-10-18T09:00:00.000Z', entries: {} }));
+  assert.deepStrictEqual(result, { status: 'load_error', snapshot: null });
+});
+
+test('restoreDailyControlledDrugCheckSnapshot returns load_error when getItem throws', () => {
+  const result = restoreDailyControlledDrugCheckSnapshot('key', () => {
+    throw new Error('Storage access denied');
+  });
+  assert.deepStrictEqual(result, { status: 'load_error', snapshot: null });
+});
+
+test('getDailyCheckPreviousSummary distinguishes restore failure from empty state and formatted summary', () => {
+  const rowWithDiff = sampleRows[1];
+  const rowMatched = sampleRows[0];
+  const rowEmpty = sampleRows[2];
+
+  assert.strictEqual(
+    getDailyCheckPreviousSummary(rowWithDiff, true),
+    DAILY_CHECK_PREVIOUS_LOAD_ERROR
+  );
+  assert.strictEqual(
+    getDailyCheckPreviousSummary(rowEmpty, true),
+    DAILY_CHECK_PREVIOUS_LOAD_ERROR
+  );
+  assert.strictEqual(
+    getDailyCheckPreviousSummary(rowEmpty, false),
+    DAILY_CHECK_PREVIOUS_NONE
+  );
+  assert.match(
+    getDailyCheckPreviousSummary(rowWithDiff, false),
+    /前回差異 -1 \(その他・調査中\)/
+  );
+  assert.match(
+    getDailyCheckPreviousSummary(rowMatched, false),
+    /前回一致/
+  );
+});
+

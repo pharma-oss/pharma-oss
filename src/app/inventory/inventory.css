@@ -359,6 +359,26 @@
     color: #b45309;
 }
 
+.daily-previous-check.error {
+    color: var(--destructive, #dc2626);
+    font-weight: 700;
+}
+
+.daily-check-restore-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    margin-bottom: 1rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-md, 8px);
+    background: var(--danger-soft, #fef2f2);
+    color: var(--destructive, #dc2626);
+    font-size: var(--fs-md);
+    font-weight: 700;
+}
+
+
 .daily-check-table tbody tr.unentered-row {
     background: #fffdf5;
 }

@@ -251,3 +251,67 @@ export function buildDailyCheckSaveNoticeMessage(snapshotPersisted: boolean): st
     ? '日次棚卸し結果を保存し、監査ログに記録しました。'
     : '日次棚卸し結果を監査ログに記録しましたが、端末スナップショットの保存に失敗しました。';
 }
+
+export const DAILY_CHECK_RESTORE_ERROR_TOAST = '前回の点検結果を読み込めませんでした。';
+export const DAILY_CHECK_RESTORE_ERROR_BANNER =
+  '前回の点検結果を読み込めなかったため、前回との照合ができていません。前回の記録を確認してください。';
+export const DAILY_CHECK_PREVIOUS_LOAD_ERROR = '前回の記録を読み込めません';
+export const DAILY_CHECK_PREVIOUS_NONE = '前回なし';
+
+export type DailyControlledDrugSnapshotRestoreResult =
+  | { status: 'not_found'; snapshot: null }
+  | { status: 'restored'; snapshot: DailyControlledDrugCheckSnapshot }
+  | { status: 'load_error'; snapshot: null };
+
+export function restoreDailyControlledDrugCheckSnapshot(
+  storageKey: string,
+  getItem: (key: string) => string | null
+): DailyControlledDrugSnapshotRestoreResult {
+  try {
+    const raw = getItem(storageKey);
+    if (!raw) {
+      return { status: 'not_found', snapshot: null };
+    }
+    const snapshot = parseDailyControlledDrugCheckSnapshot(raw);
+    if (!snapshot) {
+      return { status: 'load_error', snapshot: null };
+    }
+    return { status: 'restored', snapshot };
+  } catch {
+    return { status: 'load_error', snapshot: null };
+  }
+}
+
+export function formatDailyCheckPreviousCheckedAt(value: string | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return date.toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+export function getDailyCheckPreviousSummary(
+  row: Pick<DailyControlledDrugCheckRow, 'previousDiff' | 'previousDifferenceReason' | 'previousCheckedAt'>,
+  hasRestoreError: boolean
+): string {
+  if (hasRestoreError) {
+    return DAILY_CHECK_PREVIOUS_LOAD_ERROR;
+  }
+  if (typeof row.previousDiff !== 'number') {
+    return DAILY_CHECK_PREVIOUS_NONE;
+  }
+  const when = formatDailyCheckPreviousCheckedAt(row.previousCheckedAt);
+  const statusText =
+    row.previousDiff === 0
+      ? '前回一致'
+      : `前回差異 ${formatDailyControlledDrugDiff(row.previousDiff)}`;
+  const reasonText = row.previousDifferenceReason
+    ? ` (${getDailyControlledDrugDifferenceReasonLabel(row.previousDifferenceReason)})`
+    : '';
+  return `${statusText}${reasonText}${when ? ` (${when})` : ''}`;
+}
+

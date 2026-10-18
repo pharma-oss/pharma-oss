@@ -2,21 +2,25 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
 import { logAuditAction, getCurrentUser } from '@/lib/audit';
-import { CheckCircle2, Download, Loader2, Search, X } from 'lucide-react';
+import { CheckCircle2, Download, Loader2, Search, X, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatInventoryAmount, formatDateForFileName } from '@/lib/inventory_order';
 import {
   DAILY_CONTROLLED_DRUG_DIFFERENCE_REASONS,
   DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY,
+  DAILY_CHECK_RESTORE_ERROR_BANNER,
+  DAILY_CHECK_RESTORE_ERROR_TOAST,
   buildDailyControlledDrugCheckAuditDetail,
   buildDailyControlledDrugCheckCsv,
   formatDailyControlledDrugDiff,
+  getDailyCheckPreviousSummary,
   getDailyControlledDrugCheckSummary,
   getDailyControlledDrugDiff,
   buildDailyCheckSaveNoticeMessage,
   getDailyControlledDrugDifferenceReasonLabel,
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
-  parseDailyControlledDrugCheckSnapshot,
+  restoreDailyControlledDrugCheckSnapshot,
   type DailyControlledDrugCheckRow,
   type DailyControlledDrugCheckSnapshot,
   type DailyControlledDrugDifferenceReason
@@ -25,18 +29,6 @@ import type { DrugWithSearchCache } from '../types';
 
 export type DailyCheckKindFilter = 'all' | 'narcotic' | 'psychotropic';
 export type DailyCheckStatusFilter = 'all' | 'unentered' | 'mismatch';
-
-function formatDailyCheckPreviousCheckedAt(value: string | undefined): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return date.toLocaleString('ja-JP', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-  });
-}
 
 export interface DailyCheckPanelProps {
   db: any;
@@ -48,6 +40,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
   const [actualCounts, setActualCounts] = useState<Record<string, number>>({});
   const [dailyCheckReasons, setDailyCheckReasons] = useState<Record<string, DailyControlledDrugDifferenceReason>>({});
   const [previousDailyCheckSnapshot, setPreviousDailyCheckSnapshot] = useState<DailyControlledDrugCheckSnapshot | null>(null);
+  const [hasRestoreError, setHasRestoreError] = useState(false);
   const [dailyCheckQuery, setDailyCheckQuery] = useState('');
   const [dailyCheckKindFilter, setDailyCheckKindFilter] = useState<DailyCheckKindFilter>('all');
   const [dailyCheckStatusFilter, setDailyCheckStatusFilter] = useState<DailyCheckStatusFilter>('all');
@@ -60,12 +53,26 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-        const raw = window.localStorage.getItem(DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = parseDailyControlledDrugCheckSnapshot(raw);
-        setPreviousDailyCheckSnapshot(parsed);
+      const outcome = restoreDailyControlledDrugCheckSnapshot(
+        DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY,
+        (key) => window.localStorage.getItem(key)
+      );
+      if (outcome.status === 'restored') {
+        setPreviousDailyCheckSnapshot(outcome.snapshot);
+        setHasRestoreError(false);
+      } else if (outcome.status === 'load_error') {
+        setPreviousDailyCheckSnapshot(null);
+        setHasRestoreError(true);
+        toast.error(DAILY_CHECK_RESTORE_ERROR_TOAST);
+      } else {
+        setPreviousDailyCheckSnapshot(null);
+        setHasRestoreError(false);
+      }
     } catch (error) {
-        console.warn('Failed to restore controlled drug daily check snapshot:', error);
+      console.warn('Failed to restore controlled drug daily check snapshot:', error);
+      setPreviousDailyCheckSnapshot(null);
+      setHasRestoreError(true);
+      toast.error(DAILY_CHECK_RESTORE_ERROR_TOAST);
     }
   }, []);
 
@@ -376,20 +383,6 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
     URL.revokeObjectURL(url);
   }, [filteredDailyCheckRows]);
 
-  const getDailyCheckPreviousSummary = (row: DailyControlledDrugCheckRow): string => {
-    if (typeof row.previousDiff !== 'number') {
-        return '前回なし';
-    }
-    const when = formatDailyCheckPreviousCheckedAt(row.previousCheckedAt);
-    const statusText = row.previousDiff === 0
-        ? '前回一致'
-        : `前回差異 ${formatDailyControlledDrugDiff(row.previousDiff)}`;
-    const reasonText = row.previousDifferenceReason
-        ? ` (${getDailyControlledDrugDifferenceReasonLabel(row.previousDifferenceReason)})`
-        : '';
-    return `${statusText}${reasonText}${when ? ` (${when})` : ''}`;
-  };
-
   return (
     <div className="card daily-check-card">
         <div className="daily-check-header">
@@ -412,6 +405,13 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
                 </button>
             </div>
         </div>
+
+        {hasRestoreError && (
+          <div className="daily-check-restore-error" role="alert">
+            <AlertTriangle size={18} aria-hidden="true" />
+            <span>{DAILY_CHECK_RESTORE_ERROR_BANNER}</span>
+          </div>
+        )}
 
         <div className="daily-check-summary-grid" aria-label="麻薬・向精神薬の日次棚卸サマリー">
             <div className="daily-check-summary-item">
@@ -509,8 +509,8 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
                                 <td>
                                     <div className="daily-drug-name">
                                         <span>{row.drugName}</span>
-                                        <span className={`daily-previous-check ${typeof row.previousDiff === 'number' && row.previousDiff !== 0 ? 'warn' : ''}`}>
-                                            {getDailyCheckPreviousSummary(row)}
+                                        <span className={`daily-previous-check ${hasRestoreError ? 'error' : typeof row.previousDiff === 'number' && row.previousDiff !== 0 ? 'warn' : ''}`}>
+                                            {getDailyCheckPreviousSummary(row, hasRestoreError)}
                                         </span>
                                     </div>
                                 </td>
