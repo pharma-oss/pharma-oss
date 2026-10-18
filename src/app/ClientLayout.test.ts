@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STAFF_LOAD_TIMEOUT_MS,
-  PRE_LOGIN_TOUR_STORAGE_KEY
+  PRE_LOGIN_TOUR_STORAGE_KEY,
+  getPatientSearchResultViewState
 } from './ClientLayout';
+import type { Patient } from '@/db/types';
 import {
   SESSION_LOCK_TIMEOUT_MS,
   SESSION_ACTIVITY_EVENTS
@@ -23,3 +25,49 @@ describe('ClientLayout and session lock contracts', () => {
     assert.ok(SESSION_ACTIVITY_EVENTS.includes('focus'));
   });
 });
+
+describe('getPatientSearchResultViewState', () => {
+  const dummyPatients: Patient[] = [
+    {
+      patientId: 'p1',
+      name: '佐藤 花子',
+      kana: 'サトウ ハナコ',
+      birthDate: '1980-05-12',
+      gender: 'female'
+    }
+  ];
+
+  it('returns error view state when hasSearchError is true with empty patients', () => {
+    const state = getPatientSearchResultViewState([], true);
+    assert.deepEqual(state, {
+      status: 'error',
+      message: '患者の検索に失敗しました'
+    });
+  });
+
+  it('prioritizes error view state when hasSearchError is true even if patients are present', () => {
+    const state = getPatientSearchResultViewState(dummyPatients, true);
+    assert.deepEqual(state, {
+      status: 'error',
+      message: '患者の検索に失敗しました'
+    });
+  });
+
+  it('returns empty view state when hasSearchError is false and patients array is empty', () => {
+    const state = getPatientSearchResultViewState([], false);
+    assert.deepEqual(state, {
+      status: 'empty',
+      message: '一致する患者がいません'
+    });
+  });
+
+  it('returns results view state when hasSearchError is false and patients array is non-empty', () => {
+    const state = getPatientSearchResultViewState(dummyPatients, false);
+    assert.equal(state.status, 'results');
+    if (state.status === 'results') {
+      assert.equal(state.patients.length, 1);
+      assert.equal(state.patients[0].name, '佐藤 花子');
+    }
+  });
+});
+

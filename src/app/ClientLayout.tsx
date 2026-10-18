@@ -44,6 +44,24 @@ const toUser = (doc: any): User => {
   };
 };
 
+export type PatientSearchResultViewState =
+  | { status: 'error'; message: string }
+  | { status: 'empty'; message: string }
+  | { status: 'results'; patients: Patient[] };
+
+export function getPatientSearchResultViewState(
+  patients: Patient[],
+  hasSearchError: boolean
+): PatientSearchResultViewState {
+  if (hasSearchError) {
+    return { status: 'error', message: '患者の検索に失敗しました' };
+  }
+  if (patients.length === 0) {
+    return { status: 'empty', message: '一致する患者がいません' };
+  }
+  return { status: 'results', patients };
+}
+
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -560,6 +578,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const searchPillRef = useRef<HTMLDivElement>(null);
   const [patientResults, setPatientResults] = useState<Patient[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [hasPatientSearchError, setHasPatientSearchError] = useState(false);
 
   // Patient search over the local DB (name / kana partial match)
   useEffect(() => {
@@ -567,6 +586,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (!isAuthenticated || !query) {
       setPatientResults([]);
       setIsSearchOpen(false);
+      setHasPatientSearchError(false);
       return;
     }
 
@@ -575,7 +595,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       try {
         const { getDatabase } = await import('@/db');
         const db = await getDatabase();
-        if (!db || cancelled) return;
+        if (cancelled) return;
+        if (!db) {
+          setPatientResults([]);
+          setHasPatientSearchError(true);
+          setIsSearchOpen(true);
+          toast.error('データベースに接続できませんでした。');
+          return;
+        }
         const docs = await db.patients.find().exec();
         const lower = query.toLowerCase();
         const matches: Patient[] = (docs || [])
@@ -586,9 +613,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           .slice(0, 8);
         if (cancelled) return;
         setPatientResults(matches);
+        setHasPatientSearchError(false);
         setIsSearchOpen(true);
       } catch (err) {
         console.error('Failed to search patients:', err);
+        if (!cancelled) {
+          setPatientResults([]);
+          setHasPatientSearchError(true);
+          setIsSearchOpen(true);
+          toast.error('患者の検索に失敗しました。');
+        }
       }
     }, 200);
 
@@ -828,7 +862,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     autoComplete="off"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => { if (searchQuery.trim() && patientResults.length > 0) setIsSearchOpen(true); }}
+                    onFocus={() => { if (searchQuery.trim() && (patientResults.length > 0 || hasPatientSearchError)) setIsSearchOpen(true); }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
                         setIsSearchOpen(false);
@@ -843,36 +877,41 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   ) : (
                     <button
                       className="btn-clear"
-                      onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                      onClick={() => { setSearchQuery(''); setHasPatientSearchError(false); searchInputRef.current?.focus(); }}
                       aria-label="検索キーワードをクリア"
                       title="検索キーワードをクリア"
                     >
                       <X size={14} aria-hidden="true" />
                     </button>
                   )}
-                  {isSearchOpen && (
-                    <div className="search-results" role="listbox" aria-label="患者検索結果">
-                      {patientResults.length === 0 ? (
-                        <p className="search-results-empty">一致する患者がいません</p>
-                      ) : (
-                        patientResults.map((patient) => (
-                          <button
-                            key={patient.patientId}
-                            type="button"
-                            role="option"
-                            aria-selected="false"
-                            className="search-result-item"
-                            onClick={() => void handleSelectPatient(patient)}
-                          >
-                            <span className="search-result-name">{patient.name}</span>
-                            <span className="search-result-meta">
-                              {[patient.kana, patient.birthDate].filter(Boolean).join(' / ') || '詳細未登録'}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
+                  {isSearchOpen && (() => {
+                    const searchViewState = getPatientSearchResultViewState(patientResults, hasPatientSearchError);
+                    return (
+                      <div className="search-results" role="listbox" aria-label="患者検索結果">
+                        {searchViewState.status === 'error' ? (
+                          <p className="search-results-empty text-danger" role="alert">{searchViewState.message}</p>
+                        ) : searchViewState.status === 'empty' ? (
+                          <p className="search-results-empty">{searchViewState.message}</p>
+                        ) : (
+                          searchViewState.patients.map((patient) => (
+                            <button
+                              key={patient.patientId}
+                              type="button"
+                              role="option"
+                              aria-selected="false"
+                              className="search-result-item"
+                              onClick={() => void handleSelectPatient(patient)}
+                            >
+                              <span className="search-result-name">{patient.name}</span>
+                              <span className="search-result-meta">
+                                {[patient.kana, patient.birthDate].filter(Boolean).join(' / ') || '詳細未登録'}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="user-profile">
