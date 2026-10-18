@@ -315,3 +315,8 @@ export function getDailyCheckPreviousSummary(
   return `${statusText}${reasonText}${when ? ` (${when})` : ''}`;
 }
 
+// 前回の点検結果を読み込めなかった状態は、保存で読めない値が新しいスナップショットに置き換わった（保存に成功した）ときだけ解消する。
+// 保存に失敗したときは読めない値が残るので、通知を下ろさない。
+export function resolveRestoreErrorAfterSave(hasRestoreError: boolean, snapshotPersisted: boolean): boolean {
+  return hasRestoreError && !snapshotPersisted;
+}

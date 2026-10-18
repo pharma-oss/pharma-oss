@@ -15,6 +15,7 @@ import {
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
   parseDailyControlledDrugCheckSnapshot,
+  resolveRestoreErrorAfterSave,
   restoreDailyControlledDrugCheckSnapshot,
   type DailyControlledDrugCheckRow,
   type DailyControlledDrugCheckSnapshot
@@ -268,3 +269,9 @@ test('getDailyCheckPreviousSummary distinguishes restore failure from empty stat
   );
 });
 
+test('resolveRestoreErrorAfterSave clears the restore error only when the unreadable value was replaced by a saved snapshot', () => {
+  assert.strictEqual(resolveRestoreErrorAfterSave(true, true), false);
+  assert.strictEqual(resolveRestoreErrorAfterSave(true, false), true);
+  assert.strictEqual(resolveRestoreErrorAfterSave(false, true), false);
+  assert.strictEqual(resolveRestoreErrorAfterSave(false, false), false);
+});

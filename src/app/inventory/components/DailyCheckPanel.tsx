@@ -20,6 +20,7 @@ import {
   getDailyControlledDrugDifferenceReasonLabel,
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
+  resolveRestoreErrorAfterSave,
   restoreDailyControlledDrugCheckSnapshot,
   type DailyControlledDrugCheckRow,
   type DailyControlledDrugCheckSnapshot,
@@ -226,6 +227,7 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
           }
 
           const snapshotPersisted = persistDailyCheckSnapshot(dailyCheckRows);
+          setHasRestoreError((current) => resolveRestoreErrorAfterSave(current, snapshotPersisted));
           alert(buildDailyCheckSaveNoticeMessage(snapshotPersisted));
       } catch (error) {
           console.error('Failed to save daily check inventory:', error);
