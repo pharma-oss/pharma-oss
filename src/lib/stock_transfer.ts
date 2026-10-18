@@ -440,3 +440,23 @@ export function openTransferDocumentPrintWindow(input: TransferDocumentInput): b
   printWindow.document.close();
   return true;
 }
+
+export const STOCK_TRANSFER_HISTORY_LOAD_ERROR_TOAST = '分譲履歴の読み込みに失敗しました。';
+export const STOCK_TRANSFER_HISTORY_LOAD_ERROR_MESSAGE =
+  '分譲履歴の読み込みに失敗したため、過去の分譲を確認できません。再読み込みして確認してください。';
+export const STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE = '分譲の記録はまだありません。';
+
+export type StockTransferHistoryViewState = 'error' | 'empty' | 'ready';
+
+export function getStockTransferHistoryViewState(params: { hasLoadError: boolean; historyCount: number }): StockTransferHistoryViewState {
+  if (params.hasLoadError) return 'error';
+  return params.historyCount > 0 ? 'ready' : 'empty';
+}
+
+export function getStockTransferHistoryHeading(params: { hasLoadError: boolean; historyCount: number }): string {
+  if (params.hasLoadError || params.historyCount <= 0) {
+    return '分譲履歴';
+  }
+  return `分譲履歴 (直近${params.historyCount}件)`;
+}
+

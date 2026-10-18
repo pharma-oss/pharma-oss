@@ -5,13 +5,19 @@ import { DrugStock } from '@/db/types';
 import {
   applyStockTransferIn,
   applyStockTransferOut,
+  getStockTransferHistoryHeading,
+  getStockTransferHistoryViewState,
   isTransferAuditDetail,
   openTransferDocumentPrintWindow,
   parseTransferAuditDetail,
+  STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE,
+  STOCK_TRANSFER_HISTORY_LOAD_ERROR_MESSAGE,
+  STOCK_TRANSFER_HISTORY_LOAD_ERROR_TOAST,
   TRANSFER_DIRECTION_LABELS,
   type StockTransferDirection,
   type StockTransferRecord
 } from '@/lib/stock_transfer';
+import { toast } from 'sonner';
 import { getCurrentUser } from '@/lib/audit';
 import type { DrugWithSearchCache, TransferPrefill } from '../types';
 
@@ -36,6 +42,7 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [historyReloadKey, setHistoryReloadKey] = useState(0);
     const [history, setHistory] = useState<Array<StockTransferRecord & { logId: string }>>([]);
+    const [hasHistoryLoadError, setHasHistoryLoadError] = useState(false);
 
     // 不動在庫・発注ワークベンチからの引き継ぎ(薬品・数量・方向)を反映する
     useEffect(() => {
@@ -93,6 +100,7 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
         let isMounted = true;
         const loadHistory = async () => {
             if (!db) return;
+            setHasHistoryLoadError(false);
             try {
                 const logs = await db.audit_logs.find({ selector: { actionType: 'stock_update' } }).exec();
                 if (!isMounted) return;
@@ -110,8 +118,13 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
                 }
                 records.sort((a, b) => b.transferredAt.localeCompare(a.transferredAt));
                 setHistory(records.slice(0, 100));
+                setHasHistoryLoadError(false);
             } catch (error) {
                 console.error('Failed to load transfer history:', error);
+                if (isMounted) {
+                    setHasHistoryLoadError(true);
+                    toast.error(STOCK_TRANSFER_HISTORY_LOAD_ERROR_TOAST);
+                }
             }
         };
         loadHistory();
@@ -303,41 +316,55 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
             </div>
 
             <div className="card transfer-history-card">
-                <h3>分譲履歴 (直近{history.length}件)</h3>
-                {history.length === 0 ? (
-                    <p className="text-muted">分譲の記録はまだありません。</p>
-                ) : (
-                    <table className="transfer-history-table">
-                        <thead>
-                            <tr>
-                                <th>日時</th>
-                                <th>区分</th>
-                                <th>薬品</th>
-                                <th className="text-right">数量</th>
-                                <th>相手先</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {history.map((record) => (
-                                <tr key={record.logId}>
-                                    <td>{record.transferredAt.slice(0, 16).replace('T', ' ')}</td>
-                                    <td>
-                                        <span className={`transfer-badge ${record.direction}`}>
-                                            {TRANSFER_DIRECTION_LABELS[record.direction]}
-                                        </span>
-                                    </td>
-                                    <td className="transfer-history-drug">{record.drugName}</td>
-                                    <td className="text-right">{record.quantity}</td>
-                                    <td>{record.partnerName}</td>
-                                    <td>
-                                        <button type="button" className="btn-secondary" onClick={() => printRecord(record)}>記録書</button>
-                                    </td>
+                <h3>{getStockTransferHistoryHeading({ hasLoadError: hasHistoryLoadError, historyCount: history.length })}</h3>
+                {(() => {
+                    const viewState = getStockTransferHistoryViewState({
+                        hasLoadError: hasHistoryLoadError,
+                        historyCount: history.length
+                    });
+                    if (viewState === 'error') {
+                        return (
+                            <p className="transfer-history-load-error" role="alert">
+                                {STOCK_TRANSFER_HISTORY_LOAD_ERROR_MESSAGE}
+                            </p>
+                        );
+                    }
+                    if (viewState === 'empty') {
+                        return <p className="text-muted">{STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE}</p>;
+                    }
+                    return (
+                        <table className="transfer-history-table">
+                            <thead>
+                                <tr>
+                                    <th>日時</th>
+                                    <th>区分</th>
+                                    <th>薬品</th>
+                                    <th className="text-right">数量</th>
+                                    <th>相手先</th>
+                                    <th></th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                            </thead>
+                            <tbody>
+                                {history.map((record) => (
+                                    <tr key={record.logId}>
+                                        <td>{record.transferredAt.slice(0, 16).replace('T', ' ')}</td>
+                                        <td>
+                                            <span className={`transfer-badge ${record.direction}`}>
+                                                {TRANSFER_DIRECTION_LABELS[record.direction]}
+                                            </span>
+                                        </td>
+                                        <td className="transfer-history-drug">{record.drugName}</td>
+                                        <td className="text-right">{record.quantity}</td>
+                                        <td>{record.partnerName}</td>
+                                        <td>
+                                            <button type="button" className="btn-secondary" onClick={() => printRecord(record)}>記録書</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    );
+                })()}
             </div>
         </div>
     );

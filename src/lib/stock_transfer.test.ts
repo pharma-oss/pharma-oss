@@ -5,10 +5,15 @@ import {
   applyStockTransferOut,
   buildTransferAuditDetail,
   buildTransferDocumentHtml,
+  getStockTransferHistoryHeading,
+  getStockTransferHistoryViewState,
   isTransferAuditDetail,
   openTransferDocumentPrintWindow,
   parseTransferAuditDetail,
   STOCK_TRANSFER_AUDIT_FAILED,
+  STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE,
+  STOCK_TRANSFER_HISTORY_LOAD_ERROR_MESSAGE,
+  STOCK_TRANSFER_HISTORY_LOAD_ERROR_TOAST,
   type StockTransferRecord
 } from './stock_transfer.ts';
 import { AuditLogFailedError, ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
@@ -485,3 +490,35 @@ test('applyStockTransferOut allows drawing exact lot quantity when lotId is spec
   assert.strictEqual(record.lotNumber, 'LATE');
   assert.deepStrictEqual(details, [buildTransferAuditDetail(record)]);
 });
+
+test('getStockTransferHistoryViewState handles error, empty, and ready states correctly', () => {
+  // When load error is true, state is always 'error', regardless of historyCount
+  assert.strictEqual(getStockTransferHistoryViewState({ hasLoadError: true, historyCount: 0 }), 'error');
+  assert.strictEqual(getStockTransferHistoryViewState({ hasLoadError: true, historyCount: 5 }), 'error');
+
+  // When load error is false, empty if 0, ready if > 0
+  assert.strictEqual(getStockTransferHistoryViewState({ hasLoadError: false, historyCount: 0 }), 'empty');
+  assert.strictEqual(getStockTransferHistoryViewState({ hasLoadError: false, historyCount: 1 }), 'ready');
+  assert.strictEqual(getStockTransferHistoryViewState({ hasLoadError: false, historyCount: 10 }), 'ready');
+});
+
+test('getStockTransferHistoryHeading returns plain heading on error or empty, and count on ready', () => {
+  // When load error is true, heading is plain '分譲履歴' without count
+  assert.strictEqual(getStockTransferHistoryHeading({ hasLoadError: true, historyCount: 0 }), '分譲履歴');
+  assert.strictEqual(getStockTransferHistoryHeading({ hasLoadError: true, historyCount: 5 }), '分譲履歴');
+
+  // When load error is false
+  assert.strictEqual(getStockTransferHistoryHeading({ hasLoadError: false, historyCount: 0 }), '分譲履歴');
+  assert.strictEqual(getStockTransferHistoryHeading({ hasLoadError: false, historyCount: 1 }), '分譲履歴 (直近1件)');
+  assert.strictEqual(getStockTransferHistoryHeading({ hasLoadError: false, historyCount: 12 }), '分譲履歴 (直近12件)');
+});
+
+test('stock transfer history load error and empty constants have correct user-facing messages', () => {
+  assert.strictEqual(STOCK_TRANSFER_HISTORY_LOAD_ERROR_TOAST, '分譲履歴の読み込みに失敗しました。');
+  assert.strictEqual(
+    STOCK_TRANSFER_HISTORY_LOAD_ERROR_MESSAGE,
+    '分譲履歴の読み込みに失敗したため、過去の分譲を確認できません。再読み込みして確認してください。'
+  );
+  assert.strictEqual(STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE, '分譲の記録はまだありません。');
+});
+
