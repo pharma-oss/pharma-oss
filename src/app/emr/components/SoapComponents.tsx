@@ -18,6 +18,11 @@ export const soapEntryTypeMeta: Record<SoapEntryType, { label: string; subLabel:
   P: { label: 'P (Plan)', subLabel: '計画・服薬指導方針・次回確認事項', className: 'type-p' }
 };
 
+// 外部（カードの押下やイベント）から来る種別は S/O/A/P 以外もありうる。soapEntryTypeMeta を引く前にこれで確かめる。
+export function isSoapEntryType(value: unknown): value is SoapEntryType {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(soapEntryTypeMeta, value);
+}
+
 export interface SoapEntry {
   id: string;
   type: SoapEntryType;

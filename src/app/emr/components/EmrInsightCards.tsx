@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
+import type { SoapEntryType } from './SoapComponents';
 
 export const CareChecklistCard = React.memo(function CareChecklistCard({
   warningCount,
@@ -290,12 +291,17 @@ export const VitalInsightCard = React.memo(function VitalInsightCard() {
   );
 });
 
+// 薬ごとの指導文書ボタンが SOAP へ追記する項目。種別は S/O/A/P のどれかでなければならない（服薬指導は P の計画）。
+export function buildDocLinkGuidanceEntry(drugName: string): { type: SoapEntryType; text: string } {
+  return { type: 'P', text: `${drugName}: 服用タイミングと注意点` };
+}
+
 export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
   prescribedDrugs,
   onSelectGuidance
 }: {
   prescribedDrugs?: any[];
-  onSelectGuidance: (type: string, text: string) => void;
+  onSelectGuidance: (type: SoapEntryType, text: string) => void;
 }) {
   return (
     <div className="insight-card doc-link emr-prescription-doc-links" id="emr-prescription-doc-links">
@@ -314,9 +320,10 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
               key={drug.name}
               type="button"
               className="doc-link-btn"
-              onClick={() =>
-                onSelectGuidance('medication', `${drug.name}: 服用タイミングと注意点`)
-              }
+              onClick={() => {
+                const entry = buildDocLinkGuidanceEntry(drug.name);
+                onSelectGuidance(entry.type, entry.text);
+              }}
             >
               <span>{drug.name}の指導文書</span>
             </button>

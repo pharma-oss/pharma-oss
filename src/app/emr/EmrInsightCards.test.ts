@@ -7,8 +7,10 @@ import {
   WarningInsightCard,
   SoapAiDraftInsightCard,
   VitalInsightCard,
-  DocLinkInsightCard
+  DocLinkInsightCard,
+  buildDocLinkGuidanceEntry
 } from './components/EmrInsightCards';
+import { isSoapEntryType } from './components/SoapComponents';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
 
 describe('EmrInsightCards renderToStaticMarkup contracts', () => {
@@ -187,6 +189,14 @@ describe('EmrInsightCards renderToStaticMarkup contracts', () => {
       );
 
       assert.ok(html.includes('処方薬を読み込み中...'), 'Should render loading placeholder when drugs are empty');
+    });
+
+    it('builds the guidance entry of a doc link button with a valid SOAP entry type', () => {
+      // 以前は種別に 'medication' を渡して SoapEntryBox が落ち、EMR 画面全体が描画できなくなった
+      const entry = buildDocLinkGuidanceEntry('アムロジピン錠5mg');
+
+      assert.deepEqual(entry, { type: 'P', text: 'アムロジピン錠5mg: 服用タイミングと注意点' });
+      assert.equal(isSoapEntryType(entry.type), true);
     });
   });
 });

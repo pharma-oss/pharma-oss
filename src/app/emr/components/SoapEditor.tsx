@@ -13,7 +13,8 @@ import {
   type SoapEntry,
   type SoapEntryType,
   type SoapSaveStatus,
-  soapEntryTypeMeta
+  soapEntryTypeMeta,
+  isSoapEntryType
 } from './SoapComponents';
 import {
   createDefaultSoapStructuredAssessment,
@@ -272,6 +273,11 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
     const handleInsert = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       const { type, text, origin, aiStatus, aiDraftId } = detail;
+      if (!isSoapEntryType(type)) {
+        console.error('Ignored insert-soap-guidance with an invalid SOAP entry type:', type);
+        toast.error('指導項目の種別が正しくないため、SOAPに追記できませんでした。');
+        return;
+      }
       markSoapDirty();
       setProblems((prev: SoapProblem[]) => {
         const targetId = activeProblemId || prev[0]?.id;
