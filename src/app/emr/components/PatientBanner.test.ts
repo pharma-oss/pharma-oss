@@ -164,3 +164,60 @@ test('buildPatientBannerSummaryDisplay formats patient name, age, gender, and bi
     }
   );
 });
+
+test('buildPatientBannerSummaryDisplay prioritizes load error display even when patientData is provided', () => {
+  const result = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '1980-05-12', gender: 'female' },
+    46,
+    true
+  );
+  assert.deepStrictEqual(result, {
+    patientTitle: PATIENT_BANNER_LOAD_ERROR_TITLE,
+    calcBirthDate: PATIENT_BANNER_LOAD_ERROR_SUBTITLE,
+    patientInitials: '!'
+  });
+  assert.strictEqual(result.patientTitle.includes('佐藤'), false);
+  assert.strictEqual(result.patientTitle.includes('46'), false);
+});
+
+test('buildPatientBannerSummaryDisplay formats 0 years old without treating 0 as unknown age', () => {
+  const result = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '2026-01-01', gender: 'female' },
+    0,
+    false
+  );
+  assert.strictEqual(result.patientTitle, '佐藤 花子 (0歳 / 女性)');
+});
+
+test('buildPatientBannerSummaryDisplay formats unknown age when calcAge is null or undefined', () => {
+  const nullAge = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '1980-05-12', gender: 'female' },
+    null,
+    false
+  );
+  assert.strictEqual(nullAge.patientTitle, '佐藤 花子 (年齢不明 / 女性)');
+
+  const undefinedAge = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '1980-05-12', gender: 'female' },
+    undefined,
+    false
+  );
+  assert.strictEqual(undefinedAge.patientTitle, '佐藤 花子 (年齢不明 / 女性)');
+});
+
+test('buildPatientBannerSummaryDisplay formats male gender and omits gender segment when gender is empty', () => {
+  const male = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '1980-05-12', gender: 'male' },
+    46,
+    false
+  );
+  assert.strictEqual(male.patientTitle, '佐藤 花子 (46歳 / 男性)');
+
+  const noGender = buildPatientBannerSummaryDisplay(
+    { name: '佐藤 花子', birthDate: '1980-05-12', gender: '' },
+    46,
+    false
+  );
+  assert.strictEqual(noGender.patientTitle, '佐藤 花子 (46歳)');
+});
+
