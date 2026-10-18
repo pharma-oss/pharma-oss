@@ -6,10 +6,12 @@ import {
   GUIDANCE_LOAD_ERROR_MESSAGE,
   buildGuidanceEntriesByDrugCode,
   getGuidanceDropdownState,
+  getGuidanceDuplicateNotice,
   getSafeDocumentUrl,
   getUniquePrescribedDrugs,
   getUsableGuidanceEntries,
-  isGuidanceEntryType
+  isGuidanceEntryType,
+  pickGuidanceDocument
 } from './medication_guidance.ts';
 
 test('isGuidanceEntryType accepts only S, O, A and P', () => {
@@ -73,4 +75,39 @@ test('getSafeDocumentUrl opens only http and https links', () => {
   for (const value of ['javascript:alert(1)', 'data:text/html,x', '//example.test/doc', '', undefined, null, 5]) {
     assert.equal(getSafeDocumentUrl(value), null, String(value));
   }
+});
+
+test('pickGuidanceDocument picks the latest update, then the smaller id, whatever the input order', () => {
+  const older = { id: 'g-b', updatedAt: '2026-10-01T09:00:00.000Z' };
+  const newer = { id: 'g-a', updatedAt: '2026-10-18T09:00:00.000Z' };
+  const sameTimeSmallerId = { id: 'g-0', updatedAt: '2026-10-18T09:00:00.000Z' };
+  const noDate = { id: 'g-00' };
+  const badDate = { id: 'g-000', updatedAt: 'not a date' };
+
+  assert.equal(pickGuidanceDocument([older, newer]), newer);
+  assert.equal(pickGuidanceDocument([newer, older]), newer);
+  assert.equal(pickGuidanceDocument([newer, sameTimeSmallerId]), sameTimeSmallerId);
+  assert.equal(pickGuidanceDocument([sameTimeSmallerId, newer]), sameTimeSmallerId);
+  assert.equal(pickGuidanceDocument([noDate, badDate, older]), older, 'A document without a usable date is the oldest');
+  assert.equal(pickGuidanceDocument([badDate, noDate]), noDate, 'Without any date the smaller id wins');
+  assert.equal(pickGuidanceDocument([]), null);
+  assert.equal(pickGuidanceDocument([older]), older);
+});
+
+test('buildGuidanceEntriesByDrugCode uses the picked document when a drug has duplicates', () => {
+  const docs = [
+    { id: 'g-1', drugCode: 'A1', updatedAt: '2026-10-01T09:00:00.000Z', entries: [{ type: 'S', text: '古い文例' }] },
+    { id: 'g-2', drugCode: 'A1', updatedAt: '2026-10-18T09:00:00.000Z', entries: [{ type: 'P', text: '新しい文例' }] },
+    { id: 'g-3', drugCode: 'B2', updatedAt: '2026-10-05T09:00:00.000Z', entries: [{ type: 'O', text: '別の薬' }] }
+  ];
+  const expected = { A1: [{ type: 'P', text: '新しい文例' }], B2: [{ type: 'O', text: '別の薬' }] };
+
+  assert.deepEqual(buildGuidanceEntriesByDrugCode(docs), expected);
+  assert.deepEqual(buildGuidanceEntriesByDrugCode([...docs].reverse()), expected);
+});
+
+test('getGuidanceDuplicateNotice appears only when a drug has more than one document', () => {
+  assert.equal(getGuidanceDuplicateNotice(0), null);
+  assert.equal(getGuidanceDuplicateNotice(1), null);
+  assert.equal(getGuidanceDuplicateNotice(2), '同じ薬の文例が2件登録されています。更新日時が最新のものを表示・編集しています。');
 });

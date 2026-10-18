@@ -2,6 +2,7 @@ import { Loader2, Save, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
+import { getGuidanceDuplicateNotice, pickGuidanceDocument, type GuidanceDocumentLike } from '@/lib/medication_guidance';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import {
   checkMedicationGuidanceEditPermission,
@@ -91,6 +92,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadError, setHasLoadError] = useState(Boolean(initialLoadError));
   const [docId, setDocId] = useState<string | null>(null);
+  const [duplicateCount, setDuplicateCount] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -98,6 +100,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
       if (!isOpen || !drug || !db) return;
       setIsLoading(true);
       setHasLoadError(false);
+      setDuplicateCount(0);
       try {
         if (!db.medication_guidances) {
           throw new Error('medication_guidances collection not found');
@@ -106,9 +109,12 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           .find({ selector: { drugCode: drug.code } })
           .exec();
         if (!isMounted) return;
-        if (guidances.length > 0) {
-          setEntries(guidances[0].entries.map((e: any) => ({ ...e, id: uuidv4() })));
-          setDocId(guidances[0].id);
+        const documents = (guidances as Array<{ toJSON: () => GuidanceDocumentLike }>).map((doc) => doc.toJSON());
+        const picked = pickGuidanceDocument(documents);
+        setDuplicateCount(documents.length);
+        if (picked) {
+          setEntries(picked.entries.map((e) => ({ ...e, id: uuidv4() })));
+          setDocId(picked.id);
         } else {
           setEntries([]);
           setDocId(null);
@@ -200,6 +206,11 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
               <p className="guidance-desc">
                 この薬剤に関する指導ポイントやヒントを登録できます。
               </p>
+              {getGuidanceDuplicateNotice(duplicateCount) && (
+                <p className="guidance-duplicate-note" role="note">
+                  {getGuidanceDuplicateNotice(duplicateCount)}
+                </p>
+              )}
 
               <div className="guidance-entry-list">
                 {entries.map((entry) => (
@@ -274,6 +285,12 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           font-size: var(--fs-md);
           color: var(--text-ghost);
           margin-bottom: var(--space-4);
+        }
+        .guidance-duplicate-note {
+          font-size: var(--fs-xs);
+          color: var(--status-orange);
+          margin: 0 0 var(--space-3);
+          font-weight: 600;
         }
         .guidance-load-error {
           font-size: var(--fs-md);

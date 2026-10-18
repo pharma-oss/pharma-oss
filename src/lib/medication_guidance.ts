@@ -50,13 +50,51 @@ export function getUsableGuidanceEntries(
   return usable;
 }
 
-// 薬品コードごとの文例。
+// 同じ薬の文書が複数ある場合（2台の端末がオフラインで同じ薬の文例を作って同期したときなど）に、
+// 表示・編集する1件を決める。更新日時が最新のもの、同時刻なら id が小さいもの。入力の並びに依らない。
+// 選ばれなかった文書は消さず、表示しないだけにする。
+export function pickGuidanceDocument<T extends { id: string; updatedAt?: string }>(
+  docs: ReadonlyArray<T>
+): T | null {
+  const time = (doc: T) => {
+    const parsed = doc.updatedAt ? Date.parse(doc.updatedAt) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  };
+  let picked: T | null = null;
+  for (const doc of docs) {
+    if (!picked) {
+      picked = doc;
+      continue;
+    }
+    // 日付の無いもの同士は -Infinity どうしになり、引き算は NaN になるので、大小を直接比べる
+    const docTime = time(doc);
+    const pickedTime = time(picked);
+    if (docTime > pickedTime || (docTime === pickedTime && doc.id < picked.id)) {
+      picked = doc;
+    }
+  }
+  return picked;
+}
+
+export function getGuidanceDuplicateNotice(documentCount: number): string | null {
+  if (documentCount <= 1) return null;
+  return `同じ薬の文例が${documentCount}件登録されています。更新日時が最新のものを表示・編集しています。`;
+}
+
+// 薬品コードごとの文例。同じ薬の文書が複数あるときは pickGuidanceDocument で選んだ1件の文例を使う。
 export function buildGuidanceEntriesByDrugCode(
   docs: ReadonlyArray<GuidanceDocumentLike>
 ): Record<string, Array<{ type: GuidanceEntryType; text: string }>> {
-  const byDrugCode: Record<string, Array<{ type: GuidanceEntryType; text: string }>> = {};
+  const docsByDrugCode = new Map<string, GuidanceDocumentLike[]>();
   for (const doc of docs) {
-    byDrugCode[doc.drugCode] = getUsableGuidanceEntries(doc.entries);
+    const group = docsByDrugCode.get(doc.drugCode);
+    if (group) group.push(doc);
+    else docsByDrugCode.set(doc.drugCode, [doc]);
+  }
+  const byDrugCode: Record<string, Array<{ type: GuidanceEntryType; text: string }>> = {};
+  for (const [drugCode, group] of docsByDrugCode) {
+    const picked = pickGuidanceDocument(group);
+    byDrugCode[drugCode] = picked ? getUsableGuidanceEntries(picked.entries) : [];
   }
   return byDrugCode;
 }
