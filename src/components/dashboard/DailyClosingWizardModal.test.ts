@@ -232,3 +232,291 @@ test('runDailyClosingBackupAndAudit does not advance to step 2 when password val
   assert.deepStrictEqual(auditFailSteps, [2, 1]);
   assert.deepStrictEqual(auditFailErrors, ['監査ログの記録に失敗したため、締め処理を完了できませんでした。']);
 });
+
+test('runDailyClosingBackupAndAudit returns to step 1 and reports error when getDatabaseFn returns null', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 4,
+    uncompletedEmrCount: 2,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const errors: string[] = [];
+  const processing: boolean[] = [];
+  let encryptCalled = false;
+  let saveCalled = false;
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processing.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    getDatabaseFn: async () => null,
+    encryptBackupPayloadFn: (() => {
+      encryptCalled = true;
+      return {} as any;
+    }) as any,
+    saveBackupToDirectoryFn: (async () => {
+      saveCalled = true;
+      return {} as any;
+    }) as any,
+  });
+
+  assert.deepStrictEqual(steps, [2, 1]);
+  assert.deepStrictEqual(errors, ['データベースに接続できませんでした。']);
+  assert.strictEqual(encryptCalled, false);
+  assert.strictEqual(saveCalled, false);
+  assert.strictEqual(processing[processing.length - 1], false);
+});
+
+test('runDailyClosingBackupAndAudit returns to step 1 and resets processing when buildDatabaseBackupFn throws', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 4,
+    uncompletedEmrCount: 2,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const errors: string[] = [];
+  const processing: boolean[] = [];
+  let saveCalled = false;
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processing.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: (async () => {
+      throw new Error('backup build failed');
+    }) as any,
+    saveBackupToDirectoryFn: (async () => {
+      saveCalled = true;
+      return {} as any;
+    }) as any,
+  });
+
+  assert.deepStrictEqual(steps, [2, 1]);
+  assert.deepStrictEqual(errors, ['日次締めの実行中にエラーが発生しました: backup build failed']);
+  assert.strictEqual(saveCalled, false);
+  assert.strictEqual(processing[processing.length - 1], false);
+});
+
+test('runDailyClosingBackupAndAudit returns to step 1 and avoids audit log when saveBackupToDirectoryFn throws', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 4,
+    uncompletedEmrCount: 2,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const fakeBackup = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    createdAt: '2026-10-14T00:00:00Z',
+    collections: {},
+  };
+  const fakeEncrypted = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    encrypted: true as const,
+    ciphertext: 'abc',
+    createdAt: '2026-10-14T00:00:00Z',
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const errors: string[] = [];
+  const processing: boolean[] = [];
+  let auditCalled = false;
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processing.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: async () => fakeBackup,
+    encryptBackupPayloadFn: () => fakeEncrypted,
+    makeBackupFileNameFn: () => 'backup.enc.json',
+    saveBackupToDirectoryFn: async () => {
+      throw new Error('disk write failed');
+    },
+    logAuditActionFn: async () => {
+      auditCalled = true;
+      return true;
+    },
+  });
+
+  assert.deepStrictEqual(steps, [2, 1]);
+  assert.deepStrictEqual(errors, ['日次締めの実行中にエラーが発生しました: disk write failed']);
+  assert.strictEqual(auditCalled, false);
+  assert.strictEqual(processing[processing.length - 1], false);
+});
+
+test('runDailyClosingBackupAndAudit advances to step 3 and records audit details with checkSummary counts on success', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 4,
+    uncompletedEmrCount: 2,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const fakeBackup = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    createdAt: '2026-10-14T00:00:00Z',
+    collections: {},
+  };
+  const fakeEncrypted = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    encrypted: true as const,
+    ciphertext: 'abc',
+    createdAt: '2026-10-14T00:00:00Z',
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const successes: string[] = [];
+  const errors: string[] = [];
+  const processing: boolean[] = [];
+  const auditCalls: Array<{ action: string; details: string }> = [];
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processing.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    toastSuccess: (msg) => successes.push(msg),
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: async () => fakeBackup,
+    encryptBackupPayloadFn: () => fakeEncrypted,
+    makeBackupFileNameFn: () => 'backup.enc.json',
+    saveBackupToDirectoryFn: async () => ({
+      success: true,
+      fileName: 'backup.enc.json',
+      pathOrName: 'NAS_Backups/backup.enc.json',
+      sha256Matched: true,
+    }),
+    logAuditActionFn: async (_db, action, details) => {
+      auditCalls.push({ action, details });
+      return true;
+    },
+  });
+
+  assert.deepStrictEqual(steps, [2, 3]);
+  assert.deepStrictEqual(successes, [
+    '日次締め・暗号化バックアップ外部保存を記録しました (NAS_Backups/backup.enc.json)',
+  ]);
+  assert.strictEqual(errors.length, 0);
+  assert.strictEqual(processing[processing.length - 1], false);
+  assert.strictEqual(auditCalls.length, 1);
+  assert.strictEqual(auditCalls[0].action, 'backup_export');
+  assert.ok(auditCalls[0].details.includes('backup.enc.json'));
+  assert.ok(auditCalls[0].details.includes('NAS_Backups/backup.enc.json'));
+  assert.ok(auditCalls[0].details.includes('受付件数 4件'));
+  assert.ok(auditCalls[0].details.includes('未完了薬歴 2件'));
+});
+
+test('runDailyClosingBackupAndAudit records audit details with 0 counts when checkSummary is null on success', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const fakeBackup = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    createdAt: '2026-10-14T00:00:00Z',
+    collections: {},
+  };
+  const fakeEncrypted = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    encrypted: true as const,
+    ciphertext: 'abc',
+    createdAt: '2026-10-14T00:00:00Z',
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const successes: string[] = [];
+  const errors: string[] = [];
+  const processing: boolean[] = [];
+  const auditCalls: Array<{ action: string; details: string }> = [];
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: null,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processing.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    toastSuccess: (msg) => successes.push(msg),
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: async () => fakeBackup,
+    encryptBackupPayloadFn: () => fakeEncrypted,
+    makeBackupFileNameFn: () => 'backup.enc.json',
+    saveBackupToDirectoryFn: async () => ({
+      success: true,
+      fileName: 'backup.enc.json',
+      pathOrName: 'NAS_Backups/backup.enc.json',
+      sha256Matched: true,
+    }),
+    logAuditActionFn: async (_db, action, details) => {
+      auditCalls.push({ action, details });
+      return true;
+    },
+  });
+
+  assert.deepStrictEqual(steps, [2, 3]);
+  assert.deepStrictEqual(successes, [
+    '日次締め・暗号化バックアップ外部保存を記録しました (NAS_Backups/backup.enc.json)',
+  ]);
+  assert.strictEqual(errors.length, 0);
+  assert.strictEqual(processing[processing.length - 1], false);
+  assert.strictEqual(auditCalls.length, 1);
+  assert.strictEqual(auditCalls[0].action, 'backup_export');
+  assert.ok(auditCalls[0].details.includes('受付件数 0件'));
+  assert.ok(auditCalls[0].details.includes('未完了薬歴 0件'));
+});
+
+test('runDailyClosingBackupAndAudit rejects operator with clerk role without advancing steps or querying database', async () => {
+  const clerk = { userId: 'u_clerk', name: '事務員A', role: 'clerk' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 4,
+    uncompletedEmrCount: 2,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const steps: Array<1 | 2 | 3> = [];
+  const errors: string[] = [];
+  let getDatabaseCalled = false;
+
+  await runDailyClosingBackupAndAudit({
+    operator: clerk,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: () => {},
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    getDatabaseFn: async () => {
+      getDatabaseCalled = true;
+      return null;
+    },
+  });
+
+  assert.deepStrictEqual(steps, []);
+  assert.deepStrictEqual(errors, [
+    '事務員A（事務）には「バックアップ/復旧」の権限がありません。必要に応じて薬剤師または管理者に切り替えてください。',
+  ]);
+  assert.strictEqual(getDatabaseCalled, false);
+});
+
