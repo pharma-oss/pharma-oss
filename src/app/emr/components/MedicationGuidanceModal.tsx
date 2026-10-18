@@ -2,6 +2,12 @@ import { Loader2, Save, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
+import { getCurrentUser, logAuditAction } from '@/lib/audit';
+import {
+  checkMedicationGuidanceEditPermission,
+  getMedicationGuidanceSaveErrorMessage,
+  saveMedicationGuidance
+} from '@/lib/medication_guidance_write';
 
 export interface MedicationGuidanceEntry {
   id?: string;
@@ -140,31 +146,28 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
 
   const handleSave = async () => {
     if (!db || !drug || hasLoadError || isLoading) return;
+    // 画面の入口でも確認しているが、保存の直前にも確認する（操作者がモーダルを開いたまま切り替わった場合など）
+    const permission = checkMedicationGuidanceEditPermission(getCurrentUser());
+    if (!permission.ok) {
+      toast.error(permission.message);
+      return;
+    }
     setIsSaving(true);
     try {
-      const cleanEntries = normalizeGuidanceEntries(entries);
-      if (docId) {
-        const doc = await db.medication_guidances.findOne({ selector: { id: docId } }).exec();
-        if (doc) {
-          await doc.patch({
-            entries: cleanEntries,
-            updatedAt: new Date().toISOString()
-          });
-        }
-      } else {
-        await db.medication_guidances.insert({
-          id: `guidance_${uuidv4()}`,
-          drugCode: drug.code,
-          drugName: drug.name,
-          entries: cleanEntries,
-          updatedAt: new Date().toISOString()
-        });
-      }
+      await saveMedicationGuidance({
+        collection: db.medication_guidances,
+        docId,
+        drug: { code: drug.code || '', name: drug.name || '' },
+        entries: normalizeGuidanceEntries(entries),
+        now: new Date().toISOString(),
+        newId: `guidance_${uuidv4()}`,
+        logAudit: (detail) => logAuditAction(db, 'patient_medication_info_template', detail)
+      });
       toast.success('服薬指導補助マニュアルを保存しました');
       onClose();
     } catch (e) {
       console.error('Failed to save guidance:', e);
-      toast.error('保存に失敗しました');
+      toast.error(getMedicationGuidanceSaveErrorMessage(e));
     } finally {
       setIsSaving(false);
     }

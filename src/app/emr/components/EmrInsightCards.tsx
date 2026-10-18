@@ -20,6 +20,8 @@ import {
   getUniquePrescribedDrugs,
   type GuidanceLoadStatus
 } from '@/lib/medication_guidance';
+import { getCurrentUser } from '@/lib/audit';
+import { checkMedicationGuidanceEditPermission } from '@/lib/medication_guidance_write';
 import { MedicationGuidanceModal } from './MedicationGuidanceModal';
 import type { SoapEntryType } from './SoapComponents';
 
@@ -533,8 +535,14 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
                           setOpenDrugCode(null);
                         }}
                         onEdit={() => {
-                          setSelectedDrug(drug);
                           setOpenDrugCode(null);
+                          // 文例は全患者のSOAPに追記される共有の参照データなので、編集できるのは権限のあるスタッフだけ
+                          const permission = checkMedicationGuidanceEditPermission(getCurrentUser());
+                          if (!permission.ok) {
+                            toast.error(permission.message);
+                            return;
+                          }
+                          setSelectedDrug(drug);
                         }}
                       />
                     )}
