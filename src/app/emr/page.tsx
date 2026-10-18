@@ -94,7 +94,6 @@ import {
   VitalInsightCard,
   DocLinkInsightCard
 } from './components/EmrInsightCards';
-import { MedicationGuidanceModal } from './components/MedicationGuidanceModal';
 import { PickingSupportModal } from './components/PickingSupportModal';
 import { TracingReportModal } from './components/TracingReportModal';
 

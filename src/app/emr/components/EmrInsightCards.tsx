@@ -1,13 +1,26 @@
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
+  ChevronDown,
   FileText,
   Loader2,
   Plus,
   Sparkles
 } from 'lucide-react';
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { useDatabase } from '@/db/DatabaseProvider';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
+import {
+  GUIDANCE_LOAD_ERROR_TOAST,
+  buildGuidanceEntriesByDrugCode,
+  getGuidanceDropdownState,
+  getSafeDocumentUrl,
+  getUniquePrescribedDrugs,
+  type GuidanceLoadStatus
+} from '@/lib/medication_guidance';
+import { MedicationGuidanceModal } from './MedicationGuidanceModal';
 import type { SoapEntryType } from './SoapComponents';
 
 export const CareChecklistCard = React.memo(function CareChecklistCard({
@@ -291,9 +304,134 @@ export const VitalInsightCard = React.memo(function VitalInsightCard() {
   );
 });
 
-// 薬ごとの指導文書ボタンが SOAP へ追記する項目。種別は S/O/A/P のどれかでなければならない（服薬指導は P の計画）。
-export function buildDocLinkGuidanceEntry(drugName: string): { type: SoapEntryType; text: string } {
-  return { type: 'P', text: `${drugName}: 服用タイミングと注意点` };
+type GuidanceDropdownEntry = { type: SoapEntryType; text: string };
+
+// 薬ごとの「服薬指導補助」ドロップダウンの中身。登録済みの文例（S/O/A/P）の一覧、
+// 読み込み中・未登録・読み込み失敗の表示、マニュアル編集への入口を持つ。
+export function GuidanceDropdownPanel({
+  loadStatus,
+  entries,
+  onSelectEntry,
+  onEdit
+}: {
+  loadStatus: GuidanceLoadStatus;
+  entries: GuidanceDropdownEntry[];
+  onSelectEntry: (entry: GuidanceDropdownEntry) => void;
+  onEdit: () => void;
+}) {
+  const state = getGuidanceDropdownState({ loadStatus, entryCount: entries.length });
+  return (
+    <div className="guidance-dropdown">
+      <div className="guidance-header">サジェスト（クリックでアクティブなプロブレムに追記）</div>
+      <div className="guidance-list">
+        {state.status === 'list' ? (
+          entries.map((entry, index) => (
+            <button
+              key={`${entry.type}-${index}`}
+              type="button"
+              className="guidance-item"
+              onClick={() => onSelectEntry(entry)}
+            >
+              <span className={`tag ${entry.type.toLowerCase()}`}>{entry.type}</span>
+              <span className="text">{entry.text}</span>
+            </button>
+          ))
+        ) : state.status === 'error' ? (
+          <p className="guidance-state is-error" role="alert">{state.message}</p>
+        ) : (
+          <p className="guidance-state">{state.message}</p>
+        )}
+      </div>
+      <div className="guidance-footer">
+        <button type="button" className="guidance-item edit" onClick={onEdit}>
+          <BookOpen size={14} aria-hidden="true" />
+          マニュアルを編集
+        </button>
+      </div>
+
+      <style jsx>{`
+        .guidance-dropdown {
+          position: absolute;
+          top: calc(100% + 0.25rem);
+          right: 0;
+          width: min(320px, 80vw);
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-md);
+          z-index: 100;
+          padding: 0.25rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .guidance-header {
+          font-size: var(--fs-2xs);
+          color: var(--text-ghost);
+          padding: 0.25rem 0.5rem;
+          margin-bottom: 0.25rem;
+          border-bottom: 1px dashed var(--border);
+        }
+        .guidance-list {
+          max-height: 250px;
+          overflow-y: auto;
+        }
+        .guidance-state {
+          margin: 0;
+          padding: 0.5rem;
+          font-size: var(--fs-xs);
+          color: var(--text-ghost);
+          text-align: center;
+        }
+        .guidance-state.is-error {
+          color: var(--danger);
+          font-weight: 700;
+          text-align: left;
+        }
+        .guidance-footer {
+          border-top: 1px solid var(--border);
+          margin-top: 0.25rem;
+          padding-top: 0.25rem;
+        }
+        .guidance-item {
+          display: flex;
+          align-items: flex-start;
+          text-align: left;
+          width: 100%;
+          background: transparent;
+          border: none;
+          padding: 0.5rem;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          font-size: var(--fs-xs);
+        }
+        .guidance-item:hover { background: var(--bg-hover); }
+        .guidance-item .tag {
+          font-weight: 800;
+          font-size: var(--fs-2xs);
+          margin-right: 0.5rem;
+          padding: 0.1rem 0.3rem;
+          border-radius: 4px;
+        }
+        .guidance-item .tag.s { color: var(--status-blue); background: rgba(59, 130, 246, 0.1); }
+        .guidance-item .tag.o { color: var(--status-green); background: rgba(34, 197, 94, 0.1); }
+        .guidance-item .tag.a { color: var(--status-orange); background: rgba(249, 115, 22, 0.1); }
+        .guidance-item .tag.p { color: var(--status-purple); background: rgba(168, 85, 247, 0.1); }
+        .guidance-item .text {
+          flex: 1;
+          color: var(--text-main);
+          line-height: 1.4;
+        }
+        .guidance-item.edit {
+          color: var(--primary);
+          font-weight: 600;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+        }
+        .guidance-item.edit:hover { background: var(--primary-light); }
+      `}</style>
+    </div>
+  );
 }
 
 export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
@@ -303,107 +441,189 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
   prescribedDrugs?: any[];
   onSelectGuidance: (type: SoapEntryType, text: string) => void;
 }) {
-  return (
-    <div className="insight-card doc-link emr-prescription-doc-links" id="emr-prescription-doc-links">
-      <div className="insight-header">
-        <FileText size={18} className="icon-doc" />
-        <h3>指導文・患者説明資料</h3>
-      </div>
-      {!prescribedDrugs || prescribedDrugs.length === 0 ? (
-        <p className="insight-empty-text">
-          処方薬を読み込み中...
-        </p>
-      ) : (
-        <div className="doc-link-list">
-          {prescribedDrugs.map((drug) => (
-            <button
-              key={drug.name}
-              type="button"
-              className="doc-link-btn"
-              onClick={() => {
-                const entry = buildDocLinkGuidanceEntry(drug.name);
-                onSelectGuidance(entry.type, entry.text);
-              }}
-            >
-              <span>{drug.name}の指導文書</span>
-            </button>
-          ))}
-        </div>
-      )}
+  const db = useDatabase();
+  const [selectedDrug, setSelectedDrug] = useState<any>(null);
+  const [guidanceByDrugCode, setGuidanceByDrugCode] = useState<Record<string, GuidanceDropdownEntry[]>>({});
+  const [loadStatus, setLoadStatus] = useState<GuidanceLoadStatus>('loading');
+  const [openDrugCode, setOpenDrugCode] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-      <style jsx>{`
-        .insight-card {
-          background: var(--bg-card);
-          border-radius: var(--radius-md);
-          padding: 1.25rem;
-          border: 1px solid var(--border);
-          box-shadow: var(--shadow-sm);
+  const displayDrugs = useMemo(() => getUniquePrescribedDrugs(prescribedDrugs), [prescribedDrugs]);
+  const drugCodesKey = displayDrugs.map((drug) => drug.code || '').filter(Boolean).join('|');
+
+  useEffect(() => {
+    if (!db) return;
+    let isMounted = true;
+    const codes = drugCodesKey ? drugCodesKey.split('|') : [];
+    if (codes.length === 0) {
+      setGuidanceByDrugCode({});
+      setLoadStatus('ready');
+      return;
+    }
+    setLoadStatus('loading');
+    const fetchGuidances = async () => {
+      try {
+        if (!db.medication_guidances) {
+          throw new Error('medication_guidances collection not found');
         }
-        .insight-card.warning { border-left: 4px solid #f59e0b; }
-        .insight-card.warning.is-clear {
-          border-color: var(--green-200);
-          background-color: var(--green-50);
-          border-left: 4px solid var(--green-600);
-        }
-        .text-success-dark { color: var(--green-700); }
-        .insight-clear-desc {
-          font-size: var(--fs-md);
-          color: var(--green-700);
-          margin-top: 0.5rem;
-        }
-        .severity-danger { color: #ef4444; }
-        .severity-warning { color: #eab308; }
-        .insight-empty-text {
-          font-size: var(--fs-md);
-          color: var(--text-ghost);
-          margin: 0;
-          font-weight: 700;
-        }
-        .insight-card.info { border-left: 4px solid #3b82f6; }
-        .insight-card.default { border-left: 4px solid var(--text-ghost); }
-        .insight-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
-        }
-        .insight-header h3 {
-          font-size: 1rem;
-          margin: 0;
-        }
-        .icon-warning { color: #f59e0b; }
-        .icon-info { color: #3b82f6; }
-        .icon-default { color: var(--text-ghost); }
-        .insight-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          font-size: var(--fs-base);
-        }
-        .insight-list li {
-          padding-bottom: 0.5rem;
-          border-bottom: 1px dashed var(--border);
-        }
-        .insight-list li:last-child { border-bottom: none; padding-bottom: 0; }
-        .doc-links {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        .doc-link {
-          font-size: var(--fs-base);
-          color: var(--primary);
-          text-decoration: none;
-          padding: 0.5rem;
-          background: var(--bg-base);
-          border-radius: var(--radius-sm);
-          transition: background var(--transition-fast);
-        }
-        .doc-link:hover { background: var(--primary-light); }
-      `}</style>
-    </div>
+        const docs = await db.medication_guidances.find({ selector: { drugCode: { $in: codes } } }).exec();
+        if (!isMounted) return;
+        setGuidanceByDrugCode(buildGuidanceEntriesByDrugCode(docs.map((doc) => doc.toJSON())));
+        setLoadStatus('ready');
+      } catch (error) {
+        console.error('Failed to fetch guidances:', error);
+        if (!isMounted) return;
+        setGuidanceByDrugCode({});
+        setLoadStatus('error');
+        toast.error(GUIDANCE_LOAD_ERROR_TOAST);
+      }
+    };
+    fetchGuidances();
+    return () => { isMounted = false; };
+  }, [db, drugCodesKey, reloadKey]);
+
+  return (
+    <>
+      <div id="emr-prescription-doc-links" className="insight-card default emr-prescription-doc-links">
+        <div className="insight-header">
+          <FileText size={18} className="icon-default" />
+          <h3>添付文書・服薬指導補助</h3>
+        </div>
+        {displayDrugs.length === 0 ? (
+          <p className="insight-empty-text">
+            処方薬を読み込み中...
+          </p>
+        ) : (
+          <div className="doc-drug-list">
+            {displayDrugs.map((drug) => {
+              const drugKey = drug.code || drug.name || '';
+              const isOpen = openDrugCode === drugKey;
+              const documentUrl = getSafeDocumentUrl(drug.documentUrl);
+              return (
+                <div key={drugKey} className="doc-drug-row">
+                  <div className="doc-drug-info">
+                    <div className="doc-drug-name">{drug.name}</div>
+                    <div className="doc-drug-links">
+                      {documentUrl ? (
+                        <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="doc-link">
+                          添付文書 ↗
+                        </a>
+                      ) : (
+                        <span className="doc-link-none">添付文書なし</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="guidance-anchor">
+                    <button
+                      type="button"
+                      className="btn-secondary guidance-trigger"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenDrugCode(isOpen ? null : drugKey)}
+                    >
+                      <BookOpen size={14} aria-hidden="true" />
+                      服薬指導補助
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </button>
+                    {isOpen && (
+                      <GuidanceDropdownPanel
+                        loadStatus={loadStatus}
+                        entries={guidanceByDrugCode[drug.code || ''] || []}
+                        onSelectEntry={(entry) => {
+                          onSelectGuidance(entry.type, entry.text);
+                          setOpenDrugCode(null);
+                        }}
+                        onEdit={() => {
+                          setSelectedDrug(drug);
+                          setOpenDrugCode(null);
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <style jsx>{`
+          .insight-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+          }
+          .insight-card.default { border-left: 4px solid var(--text-ghost); }
+          .insight-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+          }
+          .insight-header h3 {
+            font-size: 1rem;
+            margin: 0;
+          }
+          .icon-default { color: var(--text-ghost); }
+          .insight-empty-text {
+            font-size: var(--fs-md);
+            color: var(--text-ghost);
+            margin: 0;
+            font-weight: 700;
+          }
+          .doc-drug-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+          }
+          .doc-drug-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+          }
+          .doc-drug-row:last-child { border-bottom: none; padding-bottom: 0; }
+          .doc-drug-info { min-width: 0; }
+          .doc-drug-name {
+            font-weight: 600;
+            font-size: var(--fs-sm);
+            margin-bottom: 0.25rem;
+            overflow-wrap: anywhere;
+          }
+          .doc-drug-links { display: flex; gap: 0.5rem; }
+          .doc-link {
+            font-size: var(--fs-xs);
+            color: var(--primary);
+            text-decoration: none;
+          }
+          .doc-link:hover { text-decoration: underline; }
+          .doc-link-none {
+            font-size: var(--fs-xs);
+            color: var(--text-ghost);
+          }
+          .guidance-anchor { position: relative; flex-shrink: 0; }
+          .guidance-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            font-size: var(--fs-xs);
+          }
+        `}</style>
+      </div>
+
+      <MedicationGuidanceModal
+        isOpen={!!selectedDrug}
+        onClose={() => {
+          setSelectedDrug(null);
+          // 登録・編集した文例をドロップダウンへ反映する
+          setReloadKey((key) => key + 1);
+        }}
+        drug={selectedDrug}
+        db={db ?? undefined}
+      />
+    </>
   );
 });

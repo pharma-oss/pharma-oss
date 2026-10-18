@@ -8,9 +8,8 @@ import {
   SoapAiDraftInsightCard,
   VitalInsightCard,
   DocLinkInsightCard,
-  buildDocLinkGuidanceEntry
+  GuidanceDropdownPanel
 } from './components/EmrInsightCards';
-import { isSoapEntryType } from './components/SoapComponents';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
 
 describe('EmrInsightCards renderToStaticMarkup contracts', () => {
@@ -164,20 +163,33 @@ describe('EmrInsightCards renderToStaticMarkup contracts', () => {
       assert.ok(html.includes('最新の検査値（eGFR / Blood Pressure等）は未登録です'), 'Should render empty state');
     });
 
-    it('renders drug documentation links when prescribed drugs are provided', () => {
-      const html = renderToStaticMarkup(
+    const withoutStyle = (html: string) => html.replace(/<style[\s\S]*?<\/style>/g, '');
+
+    it('renders each prescribed drug once with its document link and the guidance trigger', () => {
+      const html = withoutStyle(renderToStaticMarkup(
         React.createElement(DocLinkInsightCard, {
           prescribedDrugs: [
-            { name: 'アムロジピン錠5mg' },
-            { name: 'メトホルミン塩酸塩錠250mg' }
+            { code: 'A1', name: 'アムロジピン錠5mg', documentUrl: 'https://www.pmda.go.jp/PmdaSearch/iyakuDetail/GeneralList/2171022' },
+            { code: 'B2', name: 'メトホルミン塩酸塩錠250mg' },
+            { code: 'A1', name: 'アムロジピン錠5mg（重複）' },
+            { code: 'C3', name: '危険なリンクの薬', documentUrl: 'javascript:alert(1)' }
           ],
           onSelectGuidance: () => {}
         })
-      );
+      ));
 
-      assert.ok(html.includes('指導文・患者説明資料'), 'Should render doc link header');
-      assert.ok(html.includes('アムロジピン錠5mgの指導文書'), 'Should render drug 1 doc link button');
-      assert.ok(html.includes('メトホルミン塩酸塩錠250mgの指導文書'), 'Should render drug 2 doc link button');
+      assert.ok(html.includes('id="emr-prescription-doc-links"'), 'Should keep the id that the AI draft evidence points to');
+      assert.ok(html.includes('添付文書・服薬指導補助'), 'Should render the card header');
+      assert.ok(html.includes('アムロジピン錠5mg'), 'Should render drug 1');
+      assert.ok(!html.includes('アムロジピン錠5mg（重複）'), 'Should list a drug code only once');
+      assert.ok(html.includes('メトホルミン塩酸塩錠250mg'), 'Should render drug 2');
+      assert.ok(html.includes('href="https://www.pmda.go.jp/PmdaSearch/iyakuDetail/GeneralList/2171022"'), 'Should link the package insert');
+      assert.ok(html.includes('rel="noopener noreferrer"'), 'Should open the link safely');
+      assert.equal((html.match(/添付文書なし/g) || []).length, 2, 'Drugs without a usable link say so');
+      assert.ok(!html.includes('javascript:'), 'Should never render a javascript: link');
+      assert.equal((html.match(/服薬指導補助<\/button>|服薬指導補助<svg/g) || []).length, 3, 'One guidance trigger per drug');
+      assert.ok(!html.includes('の指導文書'), 'The fixed-text button was removed');
+      assert.ok(!html.includes('guidance-dropdown'), 'The dropdown stays closed until it is opened');
     });
 
     it('renders loading placeholder when prescribed drugs array is empty or undefined', () => {
@@ -190,13 +202,53 @@ describe('EmrInsightCards renderToStaticMarkup contracts', () => {
 
       assert.ok(html.includes('処方薬を読み込み中...'), 'Should render loading placeholder when drugs are empty');
     });
+  });
 
-    it('builds the guidance entry of a doc link button with a valid SOAP entry type', () => {
-      // 以前は種別に 'medication' を渡して SoapEntryBox が落ち、EMR 画面全体が描画できなくなった
-      const entry = buildDocLinkGuidanceEntry('アムロジピン錠5mg');
+  describe('GuidanceDropdownPanel', () => {
+    const withoutStyle = (html: string) => html.replace(/<style[\s\S]*?<\/style>/g, '');
+    const render = (props: { loadStatus: 'loading' | 'ready' | 'error'; entries: Array<{ type: 'S' | 'O' | 'A' | 'P'; text: string }> }) =>
+      withoutStyle(renderToStaticMarkup(
+        React.createElement(GuidanceDropdownPanel, { ...props, onSelectEntry: () => {}, onEdit: () => {} })
+      ));
 
-      assert.deepEqual(entry, { type: 'P', text: 'アムロジピン錠5mg: 服用タイミングと注意点' });
-      assert.equal(isSoapEntryType(entry.type), true);
+    it('lists the registered entries with their SOAP tags and always offers the manual editor', () => {
+      const html = render({
+        loadStatus: 'ready',
+        entries: [
+          { type: 'S', text: '服用後のふらつきはありませんか' },
+          { type: 'P', text: '朝食後に服用してください' }
+        ]
+      });
+
+      assert.ok(html.includes('class="tag s"') && html.includes('>S<'), 'Should tag the S entry');
+      assert.ok(html.includes('class="tag p"') && html.includes('>P<'), 'Should tag the P entry');
+      assert.ok(html.includes('服用後のふらつきはありませんか'));
+      assert.ok(html.includes('朝食後に服用してください'));
+      assert.ok(html.includes('マニュアルを編集'), 'Should offer the editor');
+      assert.ok(!html.includes('マニュアル未登録'));
+    });
+
+    it('says the manual is not registered when a successful load found nothing', () => {
+      const html = render({ loadStatus: 'ready', entries: [] });
+
+      assert.ok(html.includes('マニュアル未登録'));
+      assert.ok(html.includes('マニュアルを編集'));
+      assert.ok(!html.includes('role="alert"'));
+    });
+
+    it('tells a failed load apart from an unregistered manual', () => {
+      const html = render({ loadStatus: 'error', entries: [] });
+
+      assert.ok(html.includes('role="alert"'));
+      assert.ok(html.includes('読み込みに失敗したため、登録済みの文例を確認できません'));
+      assert.ok(!html.includes('マニュアル未登録'), 'A failure must not look like an empty manual');
+    });
+
+    it('shows a loading message while the entries are being read', () => {
+      const html = render({ loadStatus: 'loading', entries: [] });
+
+      assert.ok(html.includes('読み込み中...'));
+      assert.ok(!html.includes('マニュアル未登録'));
     });
   });
 });
