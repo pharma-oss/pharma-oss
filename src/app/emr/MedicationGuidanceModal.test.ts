@@ -184,4 +184,60 @@ describe('MedicationGuidanceModal renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('data-disabled="true"'), 'Tooltip wrapper should reflect disabled state');
     assert.ok(html.includes('disabled=""'), 'Save button should be disabled when load failed');
   });
+
+  it('prioritizes loading status over error status when both isLoading and hasLoadError are true', () => {
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(true, true, false), {
+      status: 'loading',
+      errorMessage: null,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込み中...'
+    });
+  });
+
+  it('keeps error status and disabled save during saving attempts, and keeps loading status while saving', () => {
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(false, true, true), {
+      status: 'error',
+      errorMessage: MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込みに失敗したため保存できません'
+    });
+    assert.deepStrictEqual(getMedicationGuidanceModalViewState(true, false, true), {
+      status: 'loading',
+      errorMessage: null,
+      isSaveDisabled: true,
+      saveDisabledTitle: '読み込み中...'
+    });
+  });
+
+  it('renders load error message inside role="alert" paragraph and omits role="alert" elements in normal rendering', () => {
+    const errorHtmlRaw = renderToStaticMarkup(
+      React.createElement(MedicationGuidanceModal, {
+        isOpen: true,
+        onClose: () => {},
+        drug: { code: 'D001', name: 'アムロジピン錠5mg' },
+        initialLoadError: true
+      })
+    );
+    const errorHtml = errorHtmlRaw.replace(/<style[\s\S]*?<\/style>/g, '');
+    assert.ok(
+      errorHtml.includes(`<p class="guidance-load-error" role="alert">${MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE}</p>`),
+      'Error message must be wrapped inside role="alert" paragraph'
+    );
+    assert.ok(errorHtml.includes('role="alert"'), 'Error HTML must contain role="alert"');
+
+    const normalHtmlRaw = renderToStaticMarkup(
+      React.createElement(MedicationGuidanceModal, {
+        isOpen: true,
+        onClose: () => {},
+        drug: { code: 'D001', name: 'アムロジピン錠5mg' }
+      })
+    );
+    const normalHtml = normalHtmlRaw.replace(/<style[\s\S]*?<\/style>/g, '');
+    assert.strictEqual(
+      normalHtml.includes('role="alert"'),
+      false,
+      'Normal rendering must not contain any element with role="alert"'
+    );
+  });
 });
+
