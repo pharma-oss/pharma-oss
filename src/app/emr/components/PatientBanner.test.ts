@@ -5,6 +5,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   PatientBanner,
   buildPatientBannerSummaryDisplay,
+  getPatientBannerEditButtonState,
+  PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE,
+  PATIENT_BANNER_EDIT_TITLE,
+  PATIENT_BANNER_EDIT_UNSELECTED_TITLE,
   PATIENT_BANNER_LOAD_ERROR_SUBTITLE,
   PATIENT_BANNER_LOAD_ERROR_TITLE
 } from './PatientBanner';
@@ -29,6 +33,39 @@ test('PatientBanner renders initial fallback state without crashing and contains
   assert.ok(html.includes('患者・保険・公費編集'), 'Must expose patient & insurance edit button');
   assert.ok(html.includes('ピッキング支援'), 'Must expose picking button');
   assert.ok(html.includes('マイナ読取'), 'Must expose myna card reader button');
+});
+
+test('PatientBanner disables the edit action while no patient is loaded, so the edit modal cannot open for an unselected patient', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => {} })
+  );
+  const editButton = html.match(/<button[^>]*class="btn-edit-insurance[^"]*"[^>]*>/)?.[0] ?? '';
+  assert.ok(editButton.length > 0, 'edit button must be rendered');
+  assert.ok(/\sdisabled(=""|\s|>)/.test(editButton), 'edit button must be disabled without a patient');
+  // マイナ読取ボタンの包みにも同じ title があるので、編集ボタンの直前の包みだけを取り出して確かめる
+  const wrapper = html.match(/<span[^>]*>(?=<button[^>]*class="btn-edit-insurance)/)?.[0] ?? '';
+  assert.ok(wrapper.includes(`title="${PATIENT_BANNER_EDIT_UNSELECTED_TITLE}"`), 'tooltip must explain why it is disabled');
+  assert.ok(wrapper.includes('data-disabled="true"'), 'wrapper must mark the disabled state for the not-allowed cursor');
+});
+
+test('getPatientBannerEditButtonState keeps the edit action off while the patient failed to load, and on only for a loaded patient', () => {
+  assert.deepStrictEqual(getPatientBannerEditButtonState(null, true), {
+    isDisabled: true,
+    title: PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE
+  });
+  // 取得失敗が優先される(患者データが残っていても編集させない)
+  assert.deepStrictEqual(getPatientBannerEditButtonState({ name: '佐藤 花子' }, true), {
+    isDisabled: true,
+    title: PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE
+  });
+  assert.deepStrictEqual(getPatientBannerEditButtonState(null, false), {
+    isDisabled: true,
+    title: PATIENT_BANNER_EDIT_UNSELECTED_TITLE
+  });
+  assert.deepStrictEqual(getPatientBannerEditButtonState({ name: '佐藤 花子' }, false), {
+    isDisabled: false,
+    title: PATIENT_BANNER_EDIT_TITLE
+  });
 });
 
 test('buildPublicInsuranceBadgeList formats multiple public badges and maps legal categories', () => {

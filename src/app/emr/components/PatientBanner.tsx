@@ -80,6 +80,24 @@ export function buildPatientBannerSummaryDisplay(
   };
 }
 
+export const PATIENT_BANNER_EDIT_TITLE = '患者・保険・公費情報を編集';
+export const PATIENT_BANNER_EDIT_UNSELECTED_TITLE = '患者を選択してください';
+export const PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE =
+  '患者基本情報を読み込めないため編集できません。再読み込みまたは患者確認を行ってください。';
+
+export function getPatientBannerEditButtonState(
+  patientData: object | null | undefined,
+  hasLoadError: boolean
+): { isDisabled: boolean; title: string } {
+  if (hasLoadError) {
+    return { isDisabled: true, title: PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE };
+  }
+  if (!patientData) {
+    return { isDisabled: true, title: PATIENT_BANNER_EDIT_UNSELECTED_TITLE };
+  }
+  return { isDisabled: false, title: PATIENT_BANNER_EDIT_TITLE };
+}
+
 export const PatientBanner = React.memo(function PatientBanner({
   patientAlerts,
   targetVisitId,
@@ -130,6 +148,7 @@ export const PatientBanner = React.memo(function PatientBanner({
     calcAge,
     hasPatientLoadError
   );
+  const editButtonState = getPatientBannerEditButtonState(patientData, hasPatientLoadError);
   const activePatientAlerts = patientAlerts.filter(isActivePatientAlert).slice(0, 4);
 
   const [isReading, setIsReading] = useState(false);
@@ -540,14 +559,20 @@ export const PatientBanner = React.memo(function PatientBanner({
         </div>
         <p className="text-muted">{calcBirthDate}</p>
         <div className="patient-actions">
-          <button
-            className="btn-edit-insurance flex align-center gap-1"
-            onClick={openModal}
-            title="患者・保険・公費情報を編集"
+          <span
+            className="btn-tooltip-wrapper"
+            data-disabled={editButtonState.isDisabled}
+            title={editButtonState.title}
           >
-            <CreditCard size={12} />
-            <span>患者・保険・公費編集</span>
-          </button>
+            <button
+              className="btn-edit-insurance flex align-center gap-1"
+              onClick={openModal}
+              disabled={editButtonState.isDisabled}
+            >
+              <CreditCard size={12} />
+              <span>患者・保険・公費編集</span>
+            </button>
+          </span>
           <button
             className="btn-picking flex align-center gap-1"
             onClick={onOpenPicking}
@@ -1324,6 +1349,10 @@ export const PatientBanner = React.memo(function PatientBanner({
           font-size: var(--fs-xs);
           font-weight: 600;
           cursor: pointer;
+        }
+        .btn-edit-insurance:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
         }
 
         .btn-picking {
