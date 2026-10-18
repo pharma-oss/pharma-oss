@@ -116,7 +116,7 @@ describe('OCR Reception Public Insurance & Eligibility helpers', () => {
         }
       ];
 
-      const surfaced = filterReceptionEligibilityAlerts(allIssues);
+      const surfaced = filterReceptionEligibilityAlerts(allIssues, { hasPatientAlertsFetchError: false });
       const surfacedCodes = surfaced.map((i) => i.code);
 
       assert.ok(surfacedCodes.includes('public_insurance_expired'), 'Should include public insurance expired');
@@ -136,7 +136,7 @@ describe('OCR Reception Public Insurance & Eligibility helpers', () => {
           message: '未標準区分'
         }
       ];
-      assert.deepEqual(filterReceptionEligibilityAlerts(issues), []);
+      assert.deepEqual(filterReceptionEligibilityAlerts(issues, { hasPatientAlertsFetchError: false }), []);
     });
 
     it('appends warning when patient alerts fetch failed', () => {

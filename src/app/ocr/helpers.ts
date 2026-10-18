@@ -255,7 +255,7 @@ export function buildPrescriptionFromElectronicItem(
  */
 export function filterReceptionEligibilityAlerts(
   issues: ReadonlyArray<InsuranceEligibilityIssue>,
-  options: { hasPatientAlertsFetchError?: boolean } = {}
+  options: { hasPatientAlertsFetchError: boolean }
 ): InsuranceEligibilityIssue[] {
   const filtered = issues.filter((issue) => {
     // 公費関連のエラー・警告はすべて表面化
@@ -276,7 +276,7 @@ export function filterReceptionEligibilityAlerts(
 
   if (options.hasPatientAlertsFetchError) {
     filtered.push({
-      code: 'patient_alerts_fetch_failed' as InsuranceEligibilityIssue['code'],
+      code: 'patient_alerts_fetch_failed',
       severity: 'warning',
       title: '患者アラート取得失敗',
       message: 'アレルギー・副作用歴等の取得に失敗したため確認できません。患者情報を確認してください。'
