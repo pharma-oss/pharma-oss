@@ -421,3 +421,70 @@ export function getClaimItemFlagValue(item: object, field: string): boolean {
   }
   return (item as Record<string, unknown>)[field] !== false;
 }
+
+export const PRINT_LOAD_ERROR_HEADING = '印刷データの読み込みに失敗しました';
+export const PRINT_LOAD_ERROR_DESCRIPTION =
+  '受付や患者の情報を読み込めませんでした。再読み込みしてから、もう一度開いてください。';
+export const PRINT_NOT_FOUND_HEADING = '印刷対象の受付が見つかりませんでした';
+
+export type PrintVisitDataStatus = 'loading' | 'error' | 'not_found' | 'ready';
+
+export interface PrintVisitDataViewState {
+  status: PrintVisitDataStatus;
+  isLoading: boolean;
+  hasError: boolean;
+  isNotFound: boolean;
+  isReady: boolean;
+}
+
+export function getPrintVisitDataViewState(params: {
+  isLoading: boolean;
+  hasLoadError: boolean;
+  hasVisitData: boolean;
+  hasPatientData: boolean;
+}): PrintVisitDataViewState {
+  // 読み込み中が最優先
+  if (params.isLoading) {
+    return {
+      status: 'loading',
+      isLoading: true,
+      hasError: false,
+      isNotFound: false,
+      isReady: false
+    };
+  }
+
+  const hasCompleteData = params.hasVisitData && params.hasPatientData;
+
+  // 次に失敗（データが揃っていないとき）
+  if (params.hasLoadError && !hasCompleteData) {
+    return {
+      status: 'error',
+      isLoading: false,
+      hasError: true,
+      isNotFound: false,
+      isReady: false
+    };
+  }
+
+  // 受付なし
+  if (!hasCompleteData) {
+    return {
+      status: 'not_found',
+      isLoading: false,
+      hasError: false,
+      isNotFound: true,
+      isReady: false
+    };
+  }
+
+  // 表示可
+  return {
+    status: 'ready',
+    isLoading: false,
+    hasError: false,
+    isNotFound: false,
+    isReady: true
+  };
+}
+

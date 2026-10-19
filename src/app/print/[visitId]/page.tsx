@@ -20,6 +20,7 @@ import {
   Sparkles,
   Clipboard,
   Pencil,
+  RefreshCw,
   XCircle
 } from 'lucide-react';
 import { COMMON_RECEIPT_REMARKS } from "@/lib/data/receipt_remarks";
@@ -115,7 +116,11 @@ import {
   isLiquidItem,
   isOintmentItem,
   formatPrescriptionAuditIssues,
-  buildPrintAuditItems
+  buildPrintAuditItems,
+  getPrintVisitDataViewState,
+  PRINT_LOAD_ERROR_HEADING,
+  PRINT_LOAD_ERROR_DESCRIPTION,
+  PRINT_NOT_FOUND_HEADING
 } from '../helpers';
 
 import {
@@ -208,6 +213,7 @@ export default function PrintPage() {
 
   const {
     isLoading,
+    hasLoadError,
     visitData,
     patientData,
     patientAlerts,
@@ -220,7 +226,8 @@ export default function PrintPage() {
     setVisitData,
     setPrescriptionItems,
     setRemarks,
-    setClaimOptions
+    setClaimOptions,
+    reloadVisitData
   } = usePrintVisitData(db, visitId);
 
   const currentUser = useMemo(() => getCurrentUser(), []);
@@ -1232,7 +1239,14 @@ export default function PrintPage() {
     document.getElementById(action.elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  if (isLoading) {
+  const printViewState = getPrintVisitDataViewState({
+    isLoading,
+    hasLoadError,
+    hasVisitData: !!visitData,
+    hasPatientData: !!patientData
+  });
+
+  if (printViewState.isLoading) {
     return (
       <div className="print-loading-screen" role="status" aria-live="polite">
         <Loader2 size={36} className="animate-spin" aria-hidden="true" />
@@ -1241,10 +1255,35 @@ export default function PrintPage() {
     );
   }
 
-  if (!visitData || !patientData) {
+  if (printViewState.hasError) {
     return (
       <div className="print-error-screen" role="alert">
-        <h2>印刷対象の受付が見つかりませんでした</h2>
+        <h2>{PRINT_LOAD_ERROR_HEADING}</h2>
+        <p className="print-error-description">{PRINT_LOAD_ERROR_DESCRIPTION}</p>
+        <div className="print-error-actions">
+          <button
+            className="btn-secondary compact"
+            type="button"
+            onClick={() => reloadVisitData()}
+          >
+            <RefreshCw size={16} aria-hidden="true" />再読み込み
+          </button>
+          <button
+            className="btn-secondary"
+            type="button"
+            onClick={() => router.back()}
+          >
+            戻る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (printViewState.isNotFound) {
+    return (
+      <div className="print-error-screen" role="alert">
+        <h2>{PRINT_NOT_FOUND_HEADING}</h2>
         <button className="btn-secondary" onClick={() => router.back()}>戻る</button>
       </div>
     );

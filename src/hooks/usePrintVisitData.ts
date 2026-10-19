@@ -8,6 +8,7 @@ import type { PrintPrescriptionItem } from '@/app/print/types';
 
 export interface UsePrintVisitDataReturn {
   isLoading: boolean;
+  hasLoadError: boolean;
   visitData: any;
   patientData: any;
   patientAlerts: any[];
@@ -26,6 +27,7 @@ export interface UsePrintVisitDataReturn {
 
 export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataReturn {
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadError, setHasLoadError] = useState(false);
   const [visitData, setVisitData] = useState<any>(null);
   const [patientData, setPatientData] = useState<any>(null);
   const [patientAlerts, setPatientAlerts] = useState<any[]>([]);
@@ -39,6 +41,9 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
   const loadData = useCallback(async () => {
     if (!db || !visitId) return;
 
+    setIsLoading(true);
+    setHasLoadError(false);
+
     try {
       const visitPromise = db.visits.findOne(visitId).exec();
       const itemsPromise = db.prescription_items.find({ selector: { visitId } }).exec();
@@ -47,6 +52,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
       const visit = await visitPromise;
       if (!visit) {
         setIsLoading(false);
+        setHasLoadError(false);
         return;
       }
 
@@ -135,8 +141,10 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
         if (it.receiptRemark) initialRemarks[it.itemId] = it.receiptRemark;
       });
       setRemarks(initialRemarks);
+      setHasLoadError(false);
     } catch (e) {
       console.error('Failed to load print visit data:', e);
+      setHasLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -148,6 +156,7 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
 
   return {
     isLoading,
+    hasLoadError,
     visitData,
     patientData,
     patientAlerts,

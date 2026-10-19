@@ -30,6 +30,10 @@ import {
   buildPrintAuditItems,
   buildPrintItemMasterFacts,
   buildPrintPrescriptionItem,
+  getPrintVisitDataViewState,
+  PRINT_LOAD_ERROR_HEADING,
+  PRINT_LOAD_ERROR_DESCRIPTION,
+  PRINT_NOT_FOUND_HEADING,
   type PrintDrugMasterDoc
 } from './helpers.ts';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
@@ -765,3 +769,73 @@ test('buildPrintAuditItems prefers the prescribed drug\'s YJ code and generic na
   assert.strictEqual(fallback.yjCode, 'YJ-BILLING');
   assert.strictEqual(fallback.genericName, '請求側一般名');
 });
+
+test('getPrintVisitDataViewState prioritizes loading status over error and missing data', () => {
+  const state = getPrintVisitDataViewState({
+    isLoading: true,
+    hasLoadError: true,
+    hasVisitData: false,
+    hasPatientData: false
+  });
+
+  assert.strictEqual(state.status, 'loading');
+  assert.strictEqual(state.isLoading, true);
+  assert.strictEqual(state.hasError, false);
+  assert.strictEqual(state.isNotFound, false);
+  assert.strictEqual(state.isReady, false);
+});
+
+test('getPrintVisitDataViewState returns error status when load error occurs and visit/patient data are incomplete', () => {
+  const state = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: true,
+    hasVisitData: true,
+    hasPatientData: false
+  });
+
+  assert.strictEqual(state.status, 'error');
+  assert.strictEqual(state.isLoading, false);
+  assert.strictEqual(state.hasError, true);
+  assert.strictEqual(state.isNotFound, false);
+  assert.strictEqual(state.isReady, false);
+});
+
+test('getPrintVisitDataViewState returns not_found status when loading succeeded but visit or patient is missing', () => {
+  const state = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: false,
+    hasVisitData: false,
+    hasPatientData: false
+  });
+
+  assert.strictEqual(state.status, 'not_found');
+  assert.strictEqual(state.isLoading, false);
+  assert.strictEqual(state.hasError, false);
+  assert.strictEqual(state.isNotFound, true);
+  assert.strictEqual(state.isReady, false);
+});
+
+test('getPrintVisitDataViewState returns ready status when not loading, no error, and both visit and patient data exist', () => {
+  const state = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: false,
+    hasVisitData: true,
+    hasPatientData: true
+  });
+
+  assert.strictEqual(state.status, 'ready');
+  assert.strictEqual(state.isLoading, false);
+  assert.strictEqual(state.hasError, false);
+  assert.strictEqual(state.isNotFound, false);
+  assert.strictEqual(state.isReady, true);
+});
+
+test('PRINT_LOAD_ERROR_HEADING, DESCRIPTION, and NOT_FOUND_HEADING define explicit non-empty Japanese guidance', () => {
+  assert.strictEqual(PRINT_LOAD_ERROR_HEADING, '印刷データの読み込みに失敗しました');
+  assert.strictEqual(
+    PRINT_LOAD_ERROR_DESCRIPTION,
+    '受付や患者の情報を読み込めませんでした。再読み込みしてから、もう一度開いてください。'
+  );
+  assert.strictEqual(PRINT_NOT_FOUND_HEADING, '印刷対象の受付が見つかりませんでした');
+});
+
