@@ -520,3 +520,214 @@ test('runDailyClosingBackupAndAudit rejects operator with clerk role without adv
   assert.strictEqual(getDatabaseCalled, false);
 });
 
+test('runDailyClosingBackupAndAudit trims encryption password, writes formatted encrypted JSON payload without plaintext marker, and toggles isProcessing', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 1,
+    uncompletedEmrCount: 0,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const plainBackupPayload = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    createdAt: '2026-10-19T00:00:00Z',
+    collections: {
+      patients: [{ id: 'pt_secret', marker: 'SECRET-PLAINTEXT-MARKER' }],
+    },
+  };
+  const fakeEncryptedPayload = {
+    app: 'yakureki' as const,
+    formatVersion: 1 as const,
+    encrypted: true as const,
+    ciphertext: 'AES_ENCRYPTED_DATA_ABC123',
+    createdAt: '2026-10-19T00:00:00Z',
+  };
+
+  let recordedEncryptPayload: unknown = null;
+  let recordedEncryptPassword = '';
+  let recordedSaveFileName = '';
+  let recordedSaveContent = '';
+  const processingCalls: boolean[] = [];
+  const steps: Array<1 | 2 | 3> = [];
+  const errors: string[] = [];
+  const successes: string[] = [];
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: '  secure-password-1234  ',
+    checkSummary: summary,
+    setStep: (s) => steps.push(s),
+    setIsProcessing: (p) => processingCalls.push(p),
+    setSaveStatus: () => {},
+    toastError: (msg) => errors.push(msg),
+    toastSuccess: (msg) => successes.push(msg),
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: async () => plainBackupPayload,
+    encryptBackupPayloadFn: (payload, pass) => {
+      recordedEncryptPayload = payload;
+      recordedEncryptPassword = pass;
+      return fakeEncryptedPayload;
+    },
+    makeBackupFileNameFn: () => 'closing-2026-10-19.enc.json',
+    saveBackupToDirectoryFn: async (fileName, content) => {
+      recordedSaveFileName = fileName;
+      recordedSaveContent = content;
+      return {
+        success: true,
+        fileName,
+        pathOrName: 'NAS_Backups/closing-2026-10-19.enc.json',
+        sha256Matched: true,
+      };
+    },
+    logAuditActionFn: async () => true,
+  });
+
+  assert.strictEqual(recordedEncryptPayload, plainBackupPayload);
+  assert.strictEqual(recordedEncryptPassword, 'secure-password-1234');
+  assert.strictEqual(recordedSaveFileName, 'closing-2026-10-19.enc.json');
+  assert.strictEqual(recordedSaveContent, JSON.stringify(fakeEncryptedPayload, null, 2));
+  assert.ok(!recordedSaveContent.includes('SECRET-PLAINTEXT-MARKER'));
+  assert.strictEqual(processingCalls[0], true);
+  assert.strictEqual(processingCalls[processingCalls.length - 1], false);
+  assert.deepStrictEqual(steps, [2, 3]);
+  assert.strictEqual(errors.length, 0);
+  assert.strictEqual(successes.length, 1);
+});
+
+test('runDailyClosingBackupAndAudit includes distinct fileName and distinct pathOrName with labels in audit log details', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 5,
+    uncompletedEmrCount: 1,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+  const auditCalls: Array<{ action: string; details: string }> = [];
+
+  await runDailyClosingBackupAndAudit({
+    operator: admin,
+    password: 'password123',
+    checkSummary: summary,
+    setStep: () => {},
+    setIsProcessing: () => {},
+    setSaveStatus: () => {},
+    getDatabaseFn: async () => ({}),
+    buildDatabaseBackupFn: async () => ({
+      app: 'yakureki' as const,
+      formatVersion: 1 as const,
+      createdAt: '2026-10-18T00:00:00Z',
+      collections: {},
+    }),
+    encryptBackupPayloadFn: () => ({
+      app: 'yakureki' as const,
+      formatVersion: 1 as const,
+      encrypted: true as const,
+      ciphertext: 'ciphertext_xyz',
+      createdAt: '2026-10-18T00:00:00Z',
+    }),
+    makeBackupFileNameFn: () => 'closing-2026-10-18.enc.json',
+    saveBackupToDirectoryFn: async () => ({
+      success: true,
+      fileName: 'closing-2026-10-18.enc.json',
+      pathOrName: 'NAS_Backups/other/saved.enc.json',
+      sha256Matched: true,
+    }),
+    logAuditActionFn: async (_db, action, details) => {
+      auditCalls.push({ action, details });
+      return true;
+    },
+  });
+
+  assert.strictEqual(auditCalls.length, 1);
+  assert.strictEqual(auditCalls[0].action, 'backup_export');
+  assert.ok(auditCalls[0].details.includes('ファイル名 closing-2026-10-18.enc.json'));
+  assert.ok(auditCalls[0].details.includes('保存先 NAS_Backups/other/saved.enc.json'));
+});
+
+test('runDailyClosingBackupAndAudit uses fallback error message when saveBackupToDirectoryFn fails without errorMessage or with empty errorMessage', async () => {
+  const admin = { userId: 'u_admin', name: '管理者A', role: 'admin' as const };
+  const summary: ClosingCheckSummary = {
+    todayVisitsCount: 2,
+    uncompletedEmrCount: 1,
+    unsentClaimCount: 0,
+    canProceed: true,
+  };
+
+  const testCases: Array<{
+    name: string;
+    failureResult: {
+      success: false;
+      fileName: string;
+      pathOrName: string;
+      sha256Matched: boolean;
+      errorMessage?: string;
+    };
+  }> = [
+    {
+      name: 'errorMessage undefined',
+      failureResult: {
+        success: false,
+        fileName: 'backup.enc.json',
+        pathOrName: '',
+        sha256Matched: false,
+      },
+    },
+    {
+      name: 'errorMessage empty string',
+      failureResult: {
+        success: false,
+        fileName: 'backup.enc.json',
+        pathOrName: '',
+        sha256Matched: false,
+        errorMessage: '',
+      },
+    },
+  ];
+
+  for (const tc of testCases) {
+    const steps: Array<1 | 2 | 3> = [];
+    const errors: string[] = [];
+    let auditCalled = false;
+
+    await runDailyClosingBackupAndAudit({
+      operator: admin,
+      password: 'password123',
+      checkSummary: summary,
+      setStep: (s) => steps.push(s),
+      setIsProcessing: () => {},
+      setSaveStatus: () => {},
+      toastError: (msg) => errors.push(msg),
+      getDatabaseFn: async () => ({}),
+      buildDatabaseBackupFn: async () => ({
+        app: 'yakureki' as const,
+        formatVersion: 1 as const,
+        createdAt: '2026-10-18T00:00:00Z',
+        collections: {},
+      }),
+      encryptBackupPayloadFn: () => ({
+        app: 'yakureki' as const,
+        formatVersion: 1 as const,
+        encrypted: true as const,
+        ciphertext: 'ciphertext_xyz',
+        createdAt: '2026-10-18T00:00:00Z',
+      }),
+      makeBackupFileNameFn: () => 'backup.enc.json',
+      saveBackupToDirectoryFn: async () => tc.failureResult,
+      logAuditActionFn: async () => {
+        auditCalled = true;
+        return true;
+      },
+    });
+
+    assert.deepStrictEqual(steps, [2, 1], `steps mismatch for ${tc.name}`);
+    assert.deepStrictEqual(
+      errors,
+      ['外部保存に失敗しました。締め処理を中止します。'],
+      `errors mismatch for ${tc.name}`
+    );
+    assert.strictEqual(auditCalled, false, `audit should not be called for ${tc.name}`);
+  }
+});
+
+
