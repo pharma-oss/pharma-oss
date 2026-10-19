@@ -408,3 +408,43 @@ export function getPreviousDoViewState(params: {
   };
 }
 
+export const DISPENSED_DRUG_CANDIDATES_FETCH_ERROR_MESSAGE =
+  '調剤薬品の候補を取得できませんでした。薬品検索を開くから選んでください。';
+
+export type DispensedDrugCandidateStatus = 'error' | 'candidates' | 'empty';
+
+export interface DispensedDrugCandidateViewState {
+  status: DispensedDrugCandidateStatus;
+  hasError: boolean;
+  errorMessage: string | null;
+  candidateCount: number;
+}
+
+export function getDispensedDrugCandidateViewState(params: {
+  candidateCount: number;
+  hasFetchError: boolean;
+}): DispensedDrugCandidateViewState {
+  if (params.hasFetchError) {
+    return {
+      status: 'error',
+      hasError: true,
+      errorMessage: DISPENSED_DRUG_CANDIDATES_FETCH_ERROR_MESSAGE,
+      candidateCount: 0
+    };
+  }
+  if (params.candidateCount > 0) {
+    return {
+      status: 'candidates',
+      hasError: false,
+      errorMessage: null,
+      candidateCount: params.candidateCount
+    };
+  }
+  return {
+    status: 'empty',
+    hasError: false,
+    errorMessage: null,
+    candidateCount: 0
+  };
+}
+

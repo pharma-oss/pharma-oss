@@ -8,7 +8,8 @@ import {
   stockClassName,
   stockTitle,
   isNoSubstitutionValue,
-  NO_SUBSTITUTION_LABEL
+  NO_SUBSTITUTION_LABEL,
+  getDispensedDrugCandidateViewState
 } from '../helpers';
 
 export interface DispensedDrugInputProps {
@@ -26,6 +27,7 @@ export const DispensedDrugInput = React.memo(({
 }: DispensedDrugInputProps) => {
   const db = useDatabase();
   const [candidates, setCandidates] = useState<DrugMasterRecord[]>([]);
+  const [hasFetchError, setHasFetchError] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,9 +45,11 @@ export const DispensedDrugInput = React.memo(({
     const fetchCandidates = async () => {
       if (!db || !prescription.drugName.startsWith('【般】') || !prescription.drugCode) {
         setCandidates([]);
+        setHasFetchError(false);
         return;
       }
 
+      setHasFetchError(false);
       try {
         const filtered = await findSubstitutionCandidates(prescription.drugCode);
         const drugCodes = filtered.map(d => d.code);
@@ -75,9 +79,14 @@ export const DispensedDrugInput = React.memo(({
 
         if (isMounted) {
           setCandidates(mapped);
+          setHasFetchError(false);
         }
       } catch (err) {
         console.error("Failed to fetch candidates", err);
+        if (isMounted) {
+          setCandidates([]);
+          setHasFetchError(true);
+        }
       }
     };
 
@@ -94,6 +103,11 @@ export const DispensedDrugInput = React.memo(({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const candidateViewState = getDispensedDrugCandidateViewState({
+    candidateCount: candidates.length,
+    hasFetchError
+  });
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!showDropdown && candidates.length > 0 && e.key === 'ArrowDown') {
@@ -186,6 +200,11 @@ export const DispensedDrugInput = React.memo(({
           >
             {NO_SUBSTITUTION_LABEL}
           </li>
+          {candidateViewState.hasError && (
+            <li className="dispensed-candidates-error" role="alert">
+              {candidateViewState.errorMessage}
+            </li>
+          )}
           {candidates.map((candidate, i) => (
             <li
               key={candidate.code}
@@ -287,6 +306,18 @@ export const DispensedDrugInput = React.memo(({
         .no-substitution-option {
           color: var(--text-main);
           font-weight: 800;
+        }
+
+        .dispensed-candidates-error {
+          padding: 0.55rem 0.6rem;
+          color: var(--danger);
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-radius: 6px;
+          font-size: var(--fs-xs);
+          font-weight: 600;
+          line-height: 1.4;
+          margin: 0.2rem 0;
         }
 
         .dispensed-candidate {
