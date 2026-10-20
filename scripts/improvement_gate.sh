@@ -5,7 +5,8 @@
 #
 # TAG は baseline / final、一括実行では <テーマID>-baseline / <テーマID>-final。
 # 再実行は別の TAG にする(例: final-rerun)。同じ TAG のディレクトリが既にあれば何もせず止まる(赤の出力を上書きしない)。
-# 出力は artifacts/improvement/<日付-時刻>-<TAG>/ の tsc.txt / lint.txt / test.txt / build.txt。
+# 出力は artifacts/improvement/<日付-時刻>-<TAG>/ の tsc.txt / lint.txt / test.txt / build.txt / swf.txt(回帰ガード SW-F と any の件数)。
+# 報告の SW-F の欄は swf.txt の行をそのまま写す(項目名も数え方も変えない)。
 # 各ファイルの末尾に "exit N" の行が残る。ゲートは直列に実行する(build の実行中にソースを触らない)。
 
 set -u
@@ -30,7 +31,9 @@ npx tsc --noEmit > "$OUT/tsc.txt" 2>&1;   echo "exit $?" >> "$OUT/tsc.txt"
 npm run lint     > "$OUT/lint.txt" 2>&1;  echo "exit $?" >> "$OUT/lint.txt"
 npm test         > "$OUT/test.txt" 2>&1;  echo "exit $?" >> "$OUT/test.txt"
 npm run build    > "$OUT/build.txt" 2>&1; echo "exit $?" >> "$OUT/build.txt"
+bash scripts/improvement_swf.sh > "$OUT/swf.txt" 2>&1; echo "exit $?" >> "$OUT/swf.txt"
 
 tail -n 12 "$OUT/test.txt"
 grep -E "^exit" "$OUT"/*.txt
+cat "$OUT/swf.txt"
 echo "OUT=$OUT"
