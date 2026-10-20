@@ -224,7 +224,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           saveOfflineAuthCache(nextUsers);
         }).catch(() => {});
       } else {
-        import('@/lib/sync/satellite_offline_auth').then(({ isSatelliteRevokedTombstone, getOfflineAuthCache }) => {
+        import('@/lib/sync/satellite_offline_auth').then(({ isSatelliteRevokedTombstone, getOfflineAuthCache, resolveOfflineAuthStaffLoadOutcome }) => {
           if (!isMounted) return;
           if (isSatelliteRevokedTombstone()) {
             setIsTerminalRevoked(true);
@@ -235,20 +235,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           }
 
           const offlineCache = getOfflineAuthCache();
-          if (offlineCache.ok && offlineCache.users.length > 0) {
-            setUsers(offlineCache.users);
-            setIsOfflineAuthMode(true);
-            setOfflineExpiresAt(offlineCache.expiresAt);
+          const outcome = resolveOfflineAuthStaffLoadOutcome(offlineCache);
+          if (outcome.users.length > 0) {
+            setUsers(outcome.users);
+            setIsOfflineAuthMode(outcome.isOffline);
+            setOfflineExpiresAt(outcome.expiresAt);
             setStaffLoadTimedOut(false);
             setLocalCurrentUser((current) => {
-              if (!isAuthenticatedUser(current)) return offlineCache.users[0] || UNAUTHENTICATED_USER;
-              const matched = offlineCache.users.find((u) => u.userId === current.userId);
+              if (!isAuthenticatedUser(current)) return outcome.users[0] || UNAUTHENTICATED_USER;
+              const matched = outcome.users.find((u) => u.userId === current.userId);
               return matched || UNAUTHENTICATED_USER;
             });
             setHasLoadedUsers(true);
           } else {
             setUsers([]);
             setLocalCurrentUser(UNAUTHENTICATED_USER);
+            if (outcome.errorMessage) {
+              setStaffLoadError(outcome.errorMessage);
+            }
             setHasLoadedUsers(true);
           }
         }).catch(() => {

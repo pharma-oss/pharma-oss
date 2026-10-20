@@ -10,6 +10,7 @@ import {
   computeStandbyHubHmac,
   verifyStandbyHubHmac,
   verifyStandbyHubEndpoint,
+  resolveOfflineAuthStaffLoadOutcome,
   OFFLINE_AUTH_CACHE_KEY,
   REVOCATION_TOMBSTONE_KEY,
   STANDBY_HUB_ALLOWLIST_KEY,
@@ -226,4 +227,61 @@ test('8. isAllowedHubEndpoint rejects plaintext HTTP for private LAN when transp
 
   // 4. Plaintext HTTP to private LAN with aes-gcm encryption is ALLOWED
   assert.strictEqual(isAllowedHubEndpoint('http://192.168.1.50:3000', 'aes-gcm'), true);
+});
+
+test('9. resolveOfflineAuthStaffLoadOutcome correctly handles ok, corrupted, expired, and empty states', () => {
+  const mockUser: User = {
+    userId: 'u_1',
+    name: 'テストスタッフ',
+    role: 'pharmacist'
+  };
+
+  // 1. ok state
+  const okOutcome = resolveOfflineAuthStaffLoadOutcome({
+    ok: true,
+    users: [mockUser],
+    cachedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 3600000).toISOString()
+  });
+  assert.strictEqual(okOutcome.users.length, 1);
+  assert.strictEqual(okOutcome.isOffline, true);
+  assert.strictEqual(okOutcome.errorMessage, null);
+
+  // 2. corrupted state
+  const corruptedOutcome = resolveOfflineAuthStaffLoadOutcome({
+    ok: false,
+    reason: 'corrupted'
+  });
+  assert.strictEqual(corruptedOutcome.users.length, 0);
+  assert.strictEqual(corruptedOutcome.isOffline, false);
+  assert.ok(corruptedOutcome.errorMessage?.includes('破損しています'));
+  assert.ok(corruptedOutcome.errorMessage?.includes('再同期'));
+
+  // 3. expired state
+  const expiredOutcome = resolveOfflineAuthStaffLoadOutcome({
+    ok: false,
+    reason: 'expired'
+  });
+  assert.strictEqual(expiredOutcome.users.length, 0);
+  assert.strictEqual(expiredOutcome.isOffline, false);
+  assert.ok(expiredOutcome.errorMessage?.includes('有効期限が切れています'));
+  assert.ok(expiredOutcome.errorMessage?.includes('更新'));
+
+  // 4. empty state
+  const emptyOutcome = resolveOfflineAuthStaffLoadOutcome({
+    ok: false,
+    reason: 'empty'
+  });
+  assert.strictEqual(emptyOutcome.users.length, 0);
+  assert.strictEqual(emptyOutcome.isOffline, false);
+  assert.strictEqual(emptyOutcome.errorMessage, null);
+
+  // 5. revoked state
+  const revokedOutcome = resolveOfflineAuthStaffLoadOutcome({
+    ok: false,
+    reason: 'revoked'
+  });
+  assert.strictEqual(revokedOutcome.users.length, 0);
+  assert.strictEqual(revokedOutcome.isOffline, false);
+  assert.strictEqual(revokedOutcome.errorMessage, null);
 });

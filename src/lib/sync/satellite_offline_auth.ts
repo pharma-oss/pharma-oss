@@ -275,3 +275,52 @@ export async function verifyStandbyHubEndpoint(
     };
   }
 }
+
+export interface OfflineAuthStaffLoadOutcome {
+  users: User[];
+  isOffline: boolean;
+  expiresAt: string;
+  errorMessage: string | null;
+}
+
+/**
+ * オフライン認証キャッシュの検証結果からログイン画面のスタッフ読み込み状態・エラー文言を決定する純粋関数
+ */
+export function resolveOfflineAuthStaffLoadOutcome(
+  cacheResult: OfflineAuthCacheResult
+): OfflineAuthStaffLoadOutcome {
+  if (cacheResult.ok && cacheResult.users.length > 0) {
+    return {
+      users: cacheResult.users,
+      isOffline: true,
+      expiresAt: cacheResult.expiresAt,
+      errorMessage: null,
+    };
+  }
+
+  if (!cacheResult.ok) {
+    if (cacheResult.reason === 'corrupted') {
+      return {
+        users: [],
+        isOffline: false,
+        expiresAt: '',
+        errorMessage: '端末内のオフライン認証データが破損しています。メイン端末と接続して認証情報を再同期してください。',
+      };
+    }
+    if (cacheResult.reason === 'expired') {
+      return {
+        users: [],
+        isOffline: false,
+        expiresAt: '',
+        errorMessage: 'オフライン認証の有効期限が切れています。メイン端末と接続して認証情報を更新してください。',
+      };
+    }
+  }
+
+  return {
+    users: [],
+    isOffline: false,
+    expiresAt: '',
+    errorMessage: null,
+  };
+}
