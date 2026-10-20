@@ -36,6 +36,9 @@ export interface SatelliteQueueHealth {
   hasExpired: boolean;
   isNearLimit: boolean;
   isLimitExceeded: boolean;
+  hasStoragePersistenceError?: boolean;
+  hasCorruptedQueue?: boolean;
+  hasPersistentKeyError?: boolean;
   oldestEnqueuedAt: string | null;
   newestEnqueuedAt: string | null;
 }
@@ -43,6 +46,15 @@ export interface SatelliteQueueHealth {
 const LOCAL_QUEUE_STORAGE_KEY = 'yakureki_satellite_unsent_queue_v1';
 const PERSISTENT_QUEUE_KEY_STORAGE_KEY = 'yakureki_satellite_persistent_queue_enc_key';
 let memoryQueue: UnsentLocalRecord[] = [];
+let hasStoragePersistenceError = false;
+let hasCorruptedQueue = false;
+let hasPersistentKeyError = false;
+
+export function resetSatelliteQueueErrors(): void {
+  hasStoragePersistenceError = false;
+  hasCorruptedQueue = false;
+  hasPersistentKeyError = false;
+}
 
 /**
  * レコードが保持期限警告閾値(既定24時間)を超過しているか判定します。
@@ -61,7 +73,7 @@ export function isRecordExpired(
 }
 
 /**
- * 未送信ローカルキューの健康状態（件数、期限超過、上限接近/超過、コレクション別内訳）を返します。
+ * 未送信ローカルキューの健康状態（件数、期限超過、上限接近/超過、コレクション別内訳、保存エラー）を返します。
  */
 export function getSatelliteQueueHealth(now: Date = new Date()): SatelliteQueueHealth {
   const queue = getUnsentLocalQueue();
@@ -100,6 +112,9 @@ export function getSatelliteQueueHealth(now: Date = new Date()): SatelliteQueueH
     hasExpired: expiredCount > 0,
     isNearLimit: total >= SATELLITE_QUEUE_LIMITS.WARN_RECORDS && total < SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS,
     isLimitExceeded: total >= SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS,
+    hasStoragePersistenceError,
+    hasCorruptedQueue,
+    hasPersistentKeyError,
     oldestEnqueuedAt,
     newestEnqueuedAt,
   };
@@ -139,7 +154,9 @@ function getPersistentEncryptionKey(): string {
       window.localStorage.setItem(PERSISTENT_QUEUE_KEY_STORAGE_KEY, key);
     }
     return key;
-  } catch {
+  } catch (e) {
+    hasPersistentKeyError = true;
+    console.error('[Satellite Local Queue] Failed to access or persist encryption key:', e);
     return getVolatileFallbackKey();
   }
 }
@@ -164,26 +181,36 @@ export function getUnsentLocalQueue(): UnsentLocalRecord[] {
     const bytes = CryptoJS.AES.decrypt(rawEncrypted, getPersistentEncryptionKey());
     const rawJson = bytes.toString(CryptoJS.enc.Utf8);
     if (!rawJson) {
+      hasCorruptedQueue = true;
       console.warn('[Satellite Local Queue] Warning: Could not decrypt queue payload with persistent key.');
       return [...memoryQueue];
     }
     const parsed = JSON.parse(rawJson);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      hasCorruptedQueue = true;
+      return [];
+    }
+    return parsed;
   } catch (e) {
+    hasCorruptedQueue = true;
     console.error('[Satellite Local Queue] Failed to decrypt or parse local queue:', e);
     return [...memoryQueue];
   }
 }
 
-function saveQueueToStorage(queue: UnsentLocalRecord[]): void {
+function saveQueueToStorage(queue: UnsentLocalRecord[]): boolean {
   memoryQueue = [...queue];
-  if (!isBrowser()) return;
+  if (!isBrowser()) return true;
   try {
     const jsonStr = JSON.stringify(queue);
     const encrypted = CryptoJS.AES.encrypt(jsonStr, getPersistentEncryptionKey()).toString();
     window.localStorage.setItem(LOCAL_QUEUE_STORAGE_KEY, encrypted);
+    hasStoragePersistenceError = false;
+    return true;
   } catch (e) {
+    hasStoragePersistenceError = true;
     console.error('[Satellite Local Queue] Failed to persist encrypted queue:', e);
+    return false;
   }
 }
 
@@ -239,6 +266,7 @@ export function clearAckedRecord(id: string, collectionName: string): boolean {
 
 export function clearAllUnsentQueue(): void {
   memoryQueue = [];
+  resetSatelliteQueueErrors();
   if (isBrowser()) {
     try {
       window.localStorage.removeItem(LOCAL_QUEUE_STORAGE_KEY);

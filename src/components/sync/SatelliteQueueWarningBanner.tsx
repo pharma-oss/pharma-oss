@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner';
 
 export type QueueWarningSeverity = 'danger' | 'warning';
-export type QueueWarningCause = 'limit_exceeded' | 'expired' | 'near_limit';
+export type QueueWarningCause = 'limit_exceeded' | 'expired' | 'near_limit' | 'persistence_failed' | 'corrupted';
 
 export interface QueueWarning {
   severity: QueueWarningSeverity;
@@ -22,12 +22,28 @@ export interface QueueWarning {
   description: string;
 }
 
-// 警告条件: 上限超過または期限切れは danger、上限接近のみは warning。いずれにも当たらなければ表示しない。
-// 文言の優先順位は 上限超過 > 期限切れ > 上限接近。
+// 警告条件: 保存失敗、破損、上限超過または期限切れは danger、上限接近のみは warning。いずれにも当たらなければ表示しない。
+// 文言の優先順位は 保存失敗 > 破損 > 上限超過 > 期限切れ > 上限接近。
 export function resolveQueueWarning(health: SatelliteQueueHealth | null): QueueWarning | null {
   if (!health) return null;
   const limitLabel = SATELLITE_QUEUE_LIMITS.MAX_RECOMMENDED_RECORDS.toLocaleString('ja-JP');
 
+  if (health.hasStoragePersistenceError || health.hasPersistentKeyError) {
+    return {
+      severity: 'danger',
+      cause: 'persistence_failed',
+      title: '【データ保全警告】未送信データの端末保存に失敗しています',
+      description: '端末ストレージの容量超過または制限により、未送信キューを永続化できません。ブラウザを閉じると未送信データが消失する危険があります。直ちにHub端末へ同期してください。'
+    };
+  }
+  if (health.hasCorruptedQueue) {
+    return {
+      severity: 'danger',
+      cause: 'corrupted',
+      title: '【データ保全警告】未送信キューのデータが破損しています',
+      description: '端末内に保存された未送信キューの復号または解析に失敗しました。Hub端末との接続を確認し、同期状態を点検してください。'
+    };
+  }
   if (health.isLimitExceeded) {
     return {
       severity: 'danger',

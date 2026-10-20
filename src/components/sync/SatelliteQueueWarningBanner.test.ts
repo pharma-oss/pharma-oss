@@ -19,6 +19,9 @@ function health(overrides: Partial<SatelliteQueueHealth> = {}): SatelliteQueueHe
     hasExpired: false,
     isNearLimit: false,
     isLimitExceeded: false,
+    hasStoragePersistenceError: false,
+    hasCorruptedQueue: false,
+    hasPersistentKeyError: false,
     oldestEnqueuedAt: null,
     newestEnqueuedAt: null,
     ...overrides
@@ -84,6 +87,33 @@ describe('resolveQueueWarning', () => {
       title: '【要同期】未送信データが 1000 件滞留しています（推奨上限1,000件超過）',
       description: 'サテライト端末の未送信キューが上限に達しています。Hub端末へデータを同期するまで、新規受付等の連続入力は控えてください。'
     });
+  });
+
+  it('prefers data preservation causes (persistence_failed, corrupted) above capacity limits', () => {
+    const persistenceFailed = resolveQueueWarning(health({
+      hasStoragePersistenceError: true,
+      isLimitExceeded: true,
+      hasExpired: true,
+      expiredCount: 5
+    }));
+    assert.equal(persistenceFailed?.cause, 'persistence_failed');
+    assert.equal(persistenceFailed?.severity, 'danger');
+    assert.match(persistenceFailed!.title, /未送信データの端末保存に失敗しています/);
+
+    const persistentKeyFailed = resolveQueueWarning(health({
+      hasPersistentKeyError: true,
+      isLimitExceeded: true
+    }));
+    assert.equal(persistentKeyFailed?.cause, 'persistence_failed');
+    assert.equal(persistentKeyFailed?.severity, 'danger');
+
+    const corrupted = resolveQueueWarning(health({
+      hasCorruptedQueue: true,
+      isLimitExceeded: true
+    }));
+    assert.equal(corrupted?.cause, 'corrupted');
+    assert.equal(corrupted?.severity, 'danger');
+    assert.match(corrupted!.title, /未送信キューのデータが破損しています/);
   });
 
   it('prefers the most severe cause: limit exceeded over expired, and expired over near-limit', () => {

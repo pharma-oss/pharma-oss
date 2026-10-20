@@ -10,6 +10,7 @@ import {
   flushUnsentLocalQueue,
   isRecordExpired,
   getSatelliteQueueHealth,
+  resetSatelliteQueueErrors,
   SATELLITE_QUEUE_LIMITS,
 } from './satellite_local_queue.ts';
 
@@ -88,6 +89,39 @@ test('queue survives when localStorage throws, without falling back to a public 
     // 鍵として使われていないことを確認する
     const summary = getUnsentQueueSummary();
     assert.strictEqual(summary.total, 1);
+
+    const health = getSatelliteQueueHealth();
+    assert.strictEqual(health.hasStoragePersistenceError, true, 'localStorage persistence failure must be flagged');
+    assert.strictEqual(health.hasPersistentKeyError, true, 'persistent key error must be flagged');
+  } finally {
+    (global as any).window = originalWindow;
+    clearAllUnsentQueue();
+  }
+});
+
+test('corrupted queue in localStorage is detected and flags hasCorruptedQueue without crashing', () => {
+  clearAllUnsentQueue();
+  const originalWindow = (global as any).window;
+
+  try {
+    (global as any).window = {
+      localStorage: {
+        getItem: (key: string) => {
+          if (key === 'yakureki_satellite_unsent_queue_v1') {
+            return 'invalid-encrypted-payload-string';
+          }
+          return 'mock_key';
+        },
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    };
+
+    const queue = getUnsentLocalQueue();
+    assert.deepStrictEqual(queue, []);
+
+    const health = getSatelliteQueueHealth();
+    assert.strictEqual(health.hasCorruptedQueue, true, 'Corrupted payload must flag hasCorruptedQueue');
   } finally {
     (global as any).window = originalWindow;
     clearAllUnsentQueue();
