@@ -830,6 +830,55 @@ test('getPrintVisitDataViewState returns ready status when not loading, no error
   assert.strictEqual(state.isReady, true);
 });
 
+test('getPrintVisitDataViewState returns not_found when only one of visit and patient exists and no load error occurred', () => {
+  // 受付はあるが患者の文書が無い(患者の削除など)。表示可にすると、患者が null のまま印刷画面を描画して壊れる。
+  const visitOnly = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: false,
+    hasVisitData: true,
+    hasPatientData: false
+  });
+  assert.strictEqual(visitOnly.status, 'not_found');
+  assert.strictEqual(visitOnly.isNotFound, true);
+  assert.strictEqual(visitOnly.isReady, false);
+  assert.strictEqual(visitOnly.hasError, false);
+
+  const patientOnly = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: false,
+    hasVisitData: false,
+    hasPatientData: true
+  });
+  assert.strictEqual(patientOnly.status, 'not_found');
+  assert.strictEqual(patientOnly.isNotFound, true);
+  assert.strictEqual(patientOnly.isReady, false);
+  assert.strictEqual(patientOnly.hasError, false);
+});
+
+test('getPrintVisitDataViewState reports a load error when either visit or patient is missing, and keeps showing complete data despite a load error', () => {
+  const patientOnlyWithError = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: true,
+    hasVisitData: false,
+    hasPatientData: true
+  });
+  assert.strictEqual(patientOnlyWithError.status, 'error');
+  assert.strictEqual(patientOnlyWithError.hasError, true);
+  assert.strictEqual(patientOnlyWithError.isNotFound, false);
+
+  // 読み込みに失敗した後でも、受付と患者が両方揃っているなら、エラー画面で隠さず表示する。
+  const completeWithError = getPrintVisitDataViewState({
+    isLoading: false,
+    hasLoadError: true,
+    hasVisitData: true,
+    hasPatientData: true
+  });
+  assert.strictEqual(completeWithError.status, 'ready');
+  assert.strictEqual(completeWithError.isReady, true);
+  assert.strictEqual(completeWithError.hasError, false);
+  assert.strictEqual(completeWithError.isNotFound, false);
+});
+
 test('PRINT_LOAD_ERROR_HEADING, DESCRIPTION, and NOT_FOUND_HEADING define explicit non-empty Japanese guidance', () => {
   assert.strictEqual(PRINT_LOAD_ERROR_HEADING, '印刷データの読み込みに失敗しました');
   assert.strictEqual(
