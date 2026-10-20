@@ -214,6 +214,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         setIsOfflineAuthMode(false);
         setIsTerminalRevoked(false);
         setStaffLoadTimedOut(false);
+        setStaffLoadError('');
         setLocalCurrentUser((current) => {
           if (!isAuthenticatedUser(current)) return nextUsers.length > 0 ? current : UNAUTHENTICATED_USER;
           const refreshedCurrent = nextUsers.find((user) => user.userId === current.userId);
@@ -228,6 +229,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           if (!isMounted) return;
           if (isSatelliteRevokedTombstone()) {
             setIsTerminalRevoked(true);
+            setStaffLoadError('');
             setUsers([]);
             setLocalCurrentUser(UNAUTHENTICATED_USER);
             setHasLoadedUsers(true);
@@ -241,6 +243,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             setIsOfflineAuthMode(outcome.isOffline);
             setOfflineExpiresAt(outcome.expiresAt);
             setStaffLoadTimedOut(false);
+            setStaffLoadError('');
             setLocalCurrentUser((current) => {
               if (!isAuthenticatedUser(current)) return outcome.users[0] || UNAUTHENTICATED_USER;
               const matched = outcome.users.find((u) => u.userId === current.userId);
@@ -250,9 +253,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           } else {
             setUsers([]);
             setLocalCurrentUser(UNAUTHENTICATED_USER);
-            if (outcome.errorMessage) {
-              setStaffLoadError(outcome.errorMessage);
-            }
+            setStaffLoadError(outcome.errorMessage || '');
             setHasLoadedUsers(true);
           }
         }).catch(() => {
