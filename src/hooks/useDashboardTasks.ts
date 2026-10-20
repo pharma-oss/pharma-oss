@@ -160,12 +160,12 @@ export function useDashboardTasks() {
           basisDate: today
         });
 
-        const processingVisitIds = new Set<string>(processingVisits.map((v: any) => v.visitId));
-        const activeVisitIdSet = new Set<string>(activeVisits.map((v: any) => v.visitId));
-        const activeVisitById = new Map<string, any>(activeVisits.map((v: any) => [v.visitId, v]));
-        const activeVisitIds = activeVisits.map((v: any) => v.visitId);
-        const completedVisitIds = completedVisits.map((v: any) => v.visitId);
-        const monthlyClaimVisitIds = monthlyClaimVisits.map((v: any) => v.visitId);
+        const processingVisitIds = new Set<string>(processingVisits.map((v) => v.visitId));
+        const activeVisitIdSet = new Set<string>(activeVisits.map((v) => v.visitId));
+        const activeVisitById = new Map<string, any>(activeVisits.map((v) => [v.visitId, v]));
+        const activeVisitIds = activeVisits.map((v) => v.visitId);
+        const completedVisitIds = completedVisits.map((v) => v.visitId);
+        const monthlyClaimVisitIds = monthlyClaimVisits.map((v) => v.visitId);
 
         const uniqueVisitIdsForItems = Array.from(new Set(
           activeVisitIds.concat(completedVisitIds, monthlyClaimVisitIds)
@@ -183,8 +183,8 @@ export function useDashboardTasks() {
             : Promise.resolve([])
         ]);
 
-        const interventionVisitIds = new Set<string>(interventionDocs.map((d: any) => d.visitId));
-        const prescriptionItems = prescriptionDocs.map((d: any) => typeof d.toJSON === 'function' ? d.toJSON() : d);
+        const interventionVisitIds = new Set<string>(interventionDocs.map((d) => d.visitId));
+        const prescriptionItems = prescriptionDocs.map((d) => typeof d.toJSON === 'function' ? d.toJSON() : d);
 
         const {
           itemsByVisitId,
