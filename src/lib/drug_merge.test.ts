@@ -150,12 +150,12 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   const makeDoc = (id: string) => ({
     patch: async (value: unknown) => { calls.push(`patch:${id}:${JSON.stringify(value)}`); },
     // 薬品本体は文書全体を差し替える(patch だと統合前に無かった項目が取り消しで消えない)
-    incrementalModify: async (mutate: (data: unknown) => unknown) => { calls.push(`replace:${id}:${JSON.stringify(mutate({}))}`); },
+    incrementalModify: async (mutate: (data: Drug) => Drug) => { calls.push(`replace:${id}:${JSON.stringify(mutate({ code: id, name: '', isGeneric: false, price: 0 }))}`); },
     remove: async () => { calls.push(`remove:${id}`); }
   });
   const collection = (docs: Record<string, ReturnType<typeof makeDoc>>) => ({
     findOne: (id: string) => ({ exec: async () => docs[id] || null }),
-    insert: async (value: { code?: string }) => { calls.push(`insert:${value.code}`); }
+    insert: async (value: Drug) => { calls.push(`insert:${value.code}`); }
   });
   const db = {
     drugs: collection({ drug_target: makeDoc('drug_target') }),

@@ -48,12 +48,40 @@ export class DrugMergeExecutionError extends Error {
   }
 }
 
+export interface DrugMergeDocLike {
+  incrementalModify(mutationFunction: (doc: Drug) => Drug | Promise<Drug>): Promise<unknown>;
+  remove(): Promise<unknown>;
+}
+
+export interface DrugMergeQueryLike<T> {
+  exec(): Promise<T | null>;
+}
+
+export interface DrugMergeDrugsCollectionLike {
+  findOne(code: string): DrugMergeQueryLike<DrugMergeDocLike>;
+  insert(drug: Drug): Promise<unknown>;
+}
+
+export interface DrugMergeStockDocLike {
+  patch(data: { drugCode: string }): Promise<unknown>;
+}
+
+export interface DrugMergeItemDocLike {
+  patch(data: { [field: string]: string }): Promise<unknown>;
+}
+
+export interface DrugMergeDatabaseLike {
+  drugs: DrugMergeDrugsCollectionLike;
+  drug_stocks: {
+    findOne(stockId: string): DrugMergeQueryLike<DrugMergeStockDocLike>;
+  };
+  prescription_items: {
+    findOne(itemId: string): DrugMergeQueryLike<DrugMergeItemDocLike>;
+  };
+}
+
 // RxDBコレクションを DrugMergeExecutionStore として扱う共通ファクトリ
-export function createRxdbDrugMergeExecutionStore(db: {
-  drugs: any;
-  drug_stocks: any;
-  prescription_items: any;
-}): DrugMergeExecutionStore {
+export function createRxdbDrugMergeExecutionStore(db: DrugMergeDatabaseLike): DrugMergeExecutionStore {
   return {
     async upsertDrug(drug) {
       const drugDoc = await db.drugs.findOne(drug.code).exec();
