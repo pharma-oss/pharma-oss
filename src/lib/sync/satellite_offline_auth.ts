@@ -36,10 +36,20 @@ function getPersistentEncKey(): string {
   }
 }
 
+let memoryRevokedTombstone = false;
+
+/**
+ * テスト用にインメモリの失効墓石フラグをリセットする
+ */
+export function resetSatelliteRevocationTombstoneForTest(): void {
+  memoryRevokedTombstone = false;
+}
+
 /**
  * 端末失効 (Tombstone) フラグを記録する
  */
 export function recordSatelliteRevocationTombstone(): void {
+  memoryRevokedTombstone = true;
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(REVOCATION_TOMBSTONE_KEY, 'true');
@@ -52,6 +62,7 @@ export function recordSatelliteRevocationTombstone(): void {
  * 端末失効 (Tombstone) フラグが立っているか判定する
  */
 export function isSatelliteRevokedTombstone(): boolean {
+  if (memoryRevokedTombstone) return true;
   if (typeof window === 'undefined') return false;
   try {
     return window.localStorage.getItem(REVOCATION_TOMBSTONE_KEY) === 'true';

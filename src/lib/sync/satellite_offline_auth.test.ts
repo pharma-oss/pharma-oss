@@ -6,6 +6,7 @@ import {
   verifyOfflinePassword,
   recordSatelliteRevocationTombstone,
   isSatelliteRevokedTombstone,
+  resetSatelliteRevocationTombstoneForTest,
   purgeSatelliteAllCaches,
   computeStandbyHubHmac,
   verifyStandbyHubHmac,
@@ -21,6 +22,7 @@ import type { User } from '@/db/types';
 import { isAllowedHubEndpoint } from './sync_config';
 
 function setupMockLocalStorage() {
+  resetSatelliteRevocationTombstoneForTest();
   const store: Record<string, string> = {};
   (globalThis as any).window = {
     localStorage: {
@@ -285,3 +287,36 @@ test('9. resolveOfflineAuthStaffLoadOutcome correctly handles ok, corrupted, exp
   assert.strictEqual(revokedOutcome.isOffline, false);
   assert.strictEqual(revokedOutcome.errorMessage, null);
 });
+
+test('10. Revocation tombstone is preserved in memory even if localStorage.setItem throws (SW-C-30)', async () => {
+  const store = setupMockLocalStorage();
+  const salt = 'salt_tomb_err';
+  const passwordHash = await hashPassword('pass123', salt);
+  const user: User = { userId: 'u_tomb_err', name: '管理者', role: 'admin', salt, passwordHash };
+
+  // First save cache successfully
+  saveOfflineAuthCache([user], 'test_key');
+  assert.strictEqual(isSatelliteRevokedTombstone(), false);
+
+  // Now make localStorage.setItem throw QuotaExceededError or security exception
+  (globalThis as any).window.localStorage.setItem = () => {
+    throw new Error('QuotaExceededError: storage is full');
+  };
+
+  // Revoke terminal (calls purgeSatelliteAllCaches which calls recordSatelliteRevocationTombstone)
+  purgeSatelliteAllCaches();
+
+  // Tombstone must still be recognized as revoked via in-memory flag
+  assert.strictEqual(isSatelliteRevokedTombstone(), true);
+
+  // Attempting offline auth cache retrieval must be rejected with 'revoked'
+  const result = getOfflineAuthCache('test_key');
+  assert.strictEqual(result.ok, false);
+  if (!result.ok) {
+    assert.strictEqual(result.reason, 'revoked');
+  }
+
+  // Cleanup for other tests
+  resetSatelliteRevocationTombstoneForTest();
+});
+
