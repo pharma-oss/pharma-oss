@@ -76,15 +76,22 @@ export function isSatelliteRevokedTombstone(): boolean {
  */
 export function purgeSatelliteAllCaches(): void {
   if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(OFFLINE_AUTH_CACHE_KEY);
-    window.localStorage.removeItem('yakureki_satellite_unsent_queue_v1');
-    window.localStorage.removeItem('yakureki_satellite_persistent_queue_enc_key');
-    window.localStorage.removeItem(STANDBY_HUB_ALLOWLIST_KEY);
-    window.sessionStorage.removeItem('pharmacy_os_current_user');
-    recordSatelliteRevocationTombstone();
-  } catch (e) {
-    console.error('[Satellite Auth] Failed to purge all satellite caches:', e);
+  // 失効の記録を最初に残す。以降の消去がどれか失敗しても、失効した端末として扱い続けるため。
+  recordSatelliteRevocationTombstone();
+  const removals: Array<() => void> = [
+    () => window.localStorage.removeItem(OFFLINE_AUTH_CACHE_KEY),
+    () => window.localStorage.removeItem('yakureki_satellite_unsent_queue_v1'),
+    () => window.localStorage.removeItem('yakureki_satellite_persistent_queue_enc_key'),
+    () => window.localStorage.removeItem(STANDBY_HUB_ALLOWLIST_KEY),
+    () => window.sessionStorage.removeItem('pharmacy_os_current_user')
+  ];
+  // 1件の失敗で残りの消去を止めない
+  for (const remove of removals) {
+    try {
+      remove();
+    } catch (e) {
+      console.error('[Satellite Auth] Failed to purge a satellite cache entry:', e);
+    }
   }
 }
 

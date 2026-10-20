@@ -320,3 +320,63 @@ test('10. Revocation tombstone is preserved in memory even if localStorage.setIt
   resetSatelliteRevocationTombstoneForTest();
 });
 
+test('11. Purge records the revocation tombstone even if removing a cache entry throws', () => {
+  const store = setupMockLocalStorage();
+  store[OFFLINE_AUTH_CACHE_KEY] = 'some_auth_data';
+  (globalThis as any).window.localStorage.removeItem = () => {
+    throw new Error('SecurityError: storage access denied');
+  };
+
+  purgeSatelliteAllCaches();
+
+  // 失効の記録は、消去の失敗より前に残る(メモリにも localStorage にも)
+  assert.strictEqual(isSatelliteRevokedTombstone(), true);
+  assert.strictEqual(store[REVOCATION_TOMBSTONE_KEY], 'true');
+  const result = getOfflineAuthCache('test_key');
+  assert.strictEqual(result.ok, false);
+  if (!result.ok) {
+    assert.strictEqual(result.reason, 'revoked');
+  }
+
+  resetSatelliteRevocationTombstoneForTest();
+});
+
+test('12. Purge keeps removing the other cache entries when one removal throws', () => {
+  const store = setupMockLocalStorage();
+  store[OFFLINE_AUTH_CACHE_KEY] = 'some_auth_data';
+  store['yakureki_satellite_unsent_queue_v1'] = 'some_queue_data';
+  store['yakureki_satellite_persistent_queue_enc_key'] = 'some_enc_key';
+  store[STANDBY_HUB_ALLOWLIST_KEY] = 'some_allowlist';
+  const win = (globalThis as any).window;
+  const originalRemove = win.localStorage.removeItem;
+  win.localStorage.removeItem = (key: string) => {
+    if (key === OFFLINE_AUTH_CACHE_KEY) throw new Error('SecurityError: cannot remove the auth cache');
+    originalRemove(key);
+  };
+  const removedFromSession: string[] = [];
+  win.sessionStorage.removeItem = (key: string) => { removedFromSession.push(key); };
+
+  purgeSatelliteAllCaches();
+
+  // 失敗した1件だけが残り、他の4件(localStorage 3件と sessionStorage 1件)は消える
+  assert.strictEqual(store[OFFLINE_AUTH_CACHE_KEY], 'some_auth_data');
+  assert.strictEqual(store['yakureki_satellite_unsent_queue_v1'], undefined);
+  assert.strictEqual(store['yakureki_satellite_persistent_queue_enc_key'], undefined);
+  assert.strictEqual(store[STANDBY_HUB_ALLOWLIST_KEY], undefined);
+  assert.deepStrictEqual(removedFromSession, ['pharmacy_os_current_user']);
+  assert.strictEqual(isSatelliteRevokedTombstone(), true);
+
+  // sessionStorage の消去が失敗しても、localStorage の消去と墓石は行われる
+  const store2 = setupMockLocalStorage();
+  store2[OFFLINE_AUTH_CACHE_KEY] = 'some_auth_data';
+  (globalThis as any).window.sessionStorage.removeItem = () => {
+    throw new Error('SecurityError: session storage denied');
+  };
+
+  purgeSatelliteAllCaches();
+
+  assert.strictEqual(store2[OFFLINE_AUTH_CACHE_KEY], undefined);
+  assert.strictEqual(isSatelliteRevokedTombstone(), true);
+
+  resetSatelliteRevocationTombstoneForTest();
+});
