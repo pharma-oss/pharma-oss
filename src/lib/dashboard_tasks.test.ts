@@ -681,6 +681,60 @@ describe('dashboard_tasks pure functions', () => {
       assert.ok(missingDaysRisk, 'Visit with missing days must be flagged as claim risk');
       assert.ok(missingDaysRisk.topIssueTitles.includes('通常薬 の日数が不正です'));
     });
+
+    it('surfaces claim_fee_calculation_failed error risk when calculateDispensingFees throws', () => {
+      const claimReadyVisits = [
+        { visitId: 'v_fee_error', patientId: 'p_valid', issueDate: '2026-08-23T10:00:00' }
+      ];
+      const patientMap = new Map([
+        ['p_valid', {
+          id: 'p_valid',
+          name: '算定エラー患者',
+          birthDate: '1980-04-01',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 30,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-20'
+          }
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_fee_error', [
+          { itemId: 'item_normal', visitId: 'v_fee_error', drugId: 'd_normal', amount: 1, usage: '内服 1日1回朝食後', days: 14, isPicked: true }
+        ]]
+      ]);
+      const drugMap = new Map([
+        ['d_normal', { id: 'd_normal', code: '620000001', name: '通常薬', price: 100, yjCode: '2149001F1020', isHighRisk: false }]
+      ]);
+      const settingsData = {
+        id: 'default',
+        baseFeeCategory: '1' as const,
+        pharmacyCode: '1312345678',
+        pharmacyName: 'テスト薬局',
+        get medicalDxAddition() {
+          throw new Error('Forced dispensing fee calculation failure');
+        }
+      };
+
+      const result = calculateDashboardClaimRisks({
+        claimReadyVisits,
+        patientMap,
+        itemsByVisitId,
+        drugMap,
+        settingsData,
+        alertsByPatientId: new Map()
+      });
+
+      assert.equal(result.claimRisks.length, 1);
+      const feeErrorRisk = result.claimRisks[0];
+      assert.equal(feeErrorRisk.visitId, 'v_fee_error');
+      assert.equal(feeErrorRisk.errorCount >= 1, true);
+      assert.equal(feeErrorRisk.priority, 'high');
+      assert.equal(feeErrorRisk.topIssueTitles[0], '調剤報酬点数の算出に失敗しました');
+    });
   });
 
   describe('calculateDashboardFollowUpCandidates', () => {

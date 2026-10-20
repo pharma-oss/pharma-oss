@@ -1,7 +1,7 @@
 import type { Alert, Drug, DrugStock, FacilitySettings, Patient, PrescriptionItem, Visit } from '@/db/types';
 import { calculateDispensingFees, getTotalPoints, type ItemWithPrice } from './calculator';
 import { isActivePatientAlert } from './patient_alerts';
-import { validateDispensingClaim, type ClaimValidationItem } from './claim_validation';
+import { validateDispensingClaim, type ClaimValidationItem, type ClaimValidationIssue } from './claim_validation';
 import { buildClaimRiskSummary } from './claim_risk';
 import { buildPrescriptionInputAudit, type PrescriptionInputAuditItem } from './prescription_input_audit';
 import { choosePrimarySupplier, getInventoryOrderActionLabel, getInventoryOrderPriority } from './inventory_order';
@@ -575,6 +575,7 @@ export function calculateDashboardClaimRisks({
 
     let calculatedFees: ReturnType<typeof calculateDispensingFees> = [];
     let totalPoints = 0;
+    let hasFeeCalculationError = false;
     if (settingsData && patientDoc && claimItems.length > 0) {
       try {
         calculatedFees = calculateDispensingFees(
@@ -587,10 +588,11 @@ export function calculateDashboardClaimRisks({
         totalPoints = getTotalPoints(calculatedFees);
       } catch (err) {
         console.error('Failed to calculate dashboard claim risk:', err);
+        hasFeeCalculationError = true;
       }
     }
 
-    const claimValidationIssues = validateDispensingClaim({
+    const baseClaimValidationIssues = validateDispensingClaim({
       settings: (settingsData as FacilitySettings) || null,
       patient: (patientDoc as Patient) || null,
       items: claimItems,
@@ -599,6 +601,18 @@ export function calculateDashboardClaimRisks({
       patientAlerts: (alertsByPatientId.get(visit.patientId) as Alert[]) || [],
       totalPoints
     });
+    const claimValidationIssues: ClaimValidationIssue[] = hasFeeCalculationError
+      ? [
+          {
+            severity: 'error',
+            code: 'claim_fee_calculation_failed',
+            title: '調剤報酬点数の算出に失敗しました',
+            message:
+              '処方内容または算定設定の異常により、調剤報酬点数を算出できませんでした。処方内容と施設基準設定を確認してください。'
+          },
+          ...baseClaimValidationIssues
+        ]
+      : baseClaimValidationIssues;
     const claimSummary = buildClaimRiskSummary({
       issues: claimValidationIssues,
       totalPoints
