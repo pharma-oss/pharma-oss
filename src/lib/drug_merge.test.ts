@@ -169,6 +169,7 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   await store.deleteDrug('drug_target');
   await store.deleteDrug('drug_missing');
   await store.patchItemDrugField('item_1', 'drugId', 'drug_target');
+  await store.patchItemDrugField('item_1', 'dispensedDrugCode', 'drug_target');
   await store.patchStockDrug('stock_1', 'drug_target');
   await assert.rejects(() => store.patchItemDrugField('item_missing', 'drugId', 'drug_target'), /処方明細が見つかりません/);
   await assert.rejects(() => store.patchStockDrug('stock_missing', 'drug_target'), /在庫ロットが見つかりません/);
@@ -177,6 +178,7 @@ test('createRxdbDrugMergeExecutionStore はRxDB文書を更新・削除する', 
   assert.ok(calls.includes('insert:drug_new'));
   assert.ok(calls.includes('remove:drug_target'));
   assert.ok(calls.some((call) => call.includes('patch:item_1') && call.includes('drugId')));
+  assert.ok(calls.some((call) => call.includes('patch:item_1') && call.includes('"dispensedDrugCode":"drug_target"')));
   assert.ok(calls.some((call) => call.includes('patch:stock_1') && call.includes('drugCode')));
 });
 

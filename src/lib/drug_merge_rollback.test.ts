@@ -67,6 +67,12 @@ test('a drug merge moves stock lots and references to the kept drug and removes 
     assert.strictEqual(after.drugs[0].location, 'B-02', 'filled in from the source');
     assert.strictEqual(after.drugs[0].reorderPoint, 40, 'the kept drug\'s own order setting is kept');
     assert.ok(after.stocks.every((s: any) => s.drugCode === 'drug_target'));
+    const item1 = after.items.find((item: any) => item.itemId === 'item_1');
+    assert.strictEqual(item1?.drugId, 'drug_target');
+    assert.strictEqual(item1?.dispensedDrugCode, 'drug_target');
+    const item2 = after.items.find((item: any) => item.itemId === 'item_2');
+    assert.strictEqual(item2?.drugId, 'drug_target');
+    assert.strictEqual(item2?.dispensedDrugCode, undefined);
   } finally { await db.close(); }
 });
 
