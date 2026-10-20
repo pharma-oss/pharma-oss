@@ -30,15 +30,15 @@ export interface BulkRemoveResultLike {
 
 interface RegistrationDb {
   patients: {
-    insert: (doc: any) => Promise<unknown>;
+    insert(doc: unknown): Promise<unknown>;
     findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
   };
   visits: {
-    insert: (doc: any) => Promise<unknown>;
+    insert(doc: unknown): Promise<unknown>;
     findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
   };
   prescription_items: {
-    bulkInsert: (docs: any[]) => Promise<{ success?: Array<{ primary?: string; itemId?: string }>; error?: Array<{ documentId?: string }> }>;
+    bulkInsert(docs: unknown[]): Promise<{ success?: Array<{ primary?: string; itemId?: string }>; error?: Array<{ documentId?: string }> }>;
     bulkRemove: (ids: string[]) => Promise<BulkRemoveResultLike | undefined>;
   };
 }
