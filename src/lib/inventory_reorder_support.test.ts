@@ -103,8 +103,8 @@ test('findInStockSubstitutes extracts matching YJ prefix (7 chars) and prioritiz
   ];
 
   const lotsMap = new Map<string, StockLotExpiryLike[]>([
-    ['D02', [{ quantity: 120, expirationDate: '2027-06-30' }]],
-    ['D03', [{ quantity: 0, expirationDate: '2027-06-30' }]]
+    ['D02', [{ quantity: 120, expirationDate: '2027-06-30', supplier: 'メディセオ' }]],
+    ['D03', [{ quantity: 0, expirationDate: '2027-06-30', supplier: '東邦薬品' }]]
   ]);
 
   const substitutes = findInStockSubstitutes(target, allDrugs, lotsMap);
@@ -114,9 +114,11 @@ test('findInStockSubstitutes extracts matching YJ prefix (7 chars) and prioritiz
   assert.strictEqual(substitutes[0].drugCode, 'D02');
   assert.strictEqual(substitutes[0].availableAmount, 120);
   assert.strictEqual(substitutes[0].isSameGenericName, true);
+  assert.strictEqual(substitutes[0].supplierName, 'メディセオ');
   // D03 has stock 0
   assert.strictEqual(substitutes[1].drugCode, 'D03');
   assert.strictEqual(substitutes[1].availableAmount, 0);
+  assert.strictEqual(substitutes[1].supplierName, '東邦薬品');
 });
 
 test('buildEnhancedInventoryOrderRisk constructs comprehensive risk excluding expired lots from available amount', () => {
