@@ -448,3 +448,47 @@ export function getDispensedDrugCandidateViewState(params: {
   };
 }
 
+export const PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE =
+  '過去の医療機関の入力履歴を読み込めませんでした。';
+
+export const PROVIDER_HISTORY_FETCH_ERROR_ALERT_MESSAGE =
+  '過去の医療機関の入力履歴を読み込めなかったため、医療機関の候補を表示できません。医療機関コードと名前は手入力してください。';
+
+export type ProviderHistoryCandidateStatus = 'error' | 'candidates' | 'empty';
+
+export interface ProviderHistoryCandidateViewState {
+  status: ProviderHistoryCandidateStatus;
+  hasError: boolean;
+  errorMessage: string | null;
+  candidateCount: number;
+}
+
+export function getProviderHistoryCandidateViewState(params: {
+  candidateCount: number;
+  hasFetchError: boolean;
+}): ProviderHistoryCandidateViewState {
+  if (params.hasFetchError) {
+    return {
+      status: 'error',
+      hasError: true,
+      errorMessage: PROVIDER_HISTORY_FETCH_ERROR_ALERT_MESSAGE,
+      candidateCount: 0
+    };
+  }
+  if (params.candidateCount > 0) {
+    return {
+      status: 'candidates',
+      hasError: false,
+      errorMessage: null,
+      candidateCount: params.candidateCount
+    };
+  }
+  return {
+    status: 'empty',
+    hasError: false,
+    errorMessage: null,
+    candidateCount: 0
+  };
+}
+
+

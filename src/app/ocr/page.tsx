@@ -95,7 +95,10 @@ import {
   isGeneralNameDrug,
   sortDrugSuggestions,
   NO_SUBSTITUTION_LABEL,
-  isNoSubstitutionValue
+  isNoSubstitutionValue,
+  getProviderHistoryCandidateViewState,
+  PROVIDER_HISTORY_FETCH_ERROR_ALERT_MESSAGE,
+  PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE
 } from './helpers';
 import { OcrRawTextArea, OcrConfidencePanel } from './components/OcrConfidencePanel';
 import { PrescribedDrugInput } from './components/PrescribedDrugInput';
@@ -271,6 +274,7 @@ export default function OcrPage() {
   const [prescriptionDate, setPrescriptionDate] = useState(() => toDateInputValue());
   const [dispensingDate, setDispensingDate] = useState(() => toDateInputValue());
   const [providerHistory, setProviderHistory] = useState<ProviderHistoryOption[]>([]);
+  const [hasProviderHistoryFetchError, setHasProviderHistoryFetchError] = useState(false);
 
   // Hook: 電子処方箋連携
   const {
@@ -528,12 +532,21 @@ export default function OcrPage() {
     let isMounted = true;
     const loadProviderHistory = async () => {
       if (!db) return;
+      setHasProviderHistoryFetchError(false);
       try {
         const visitDocs = await db.visits.find().exec();
         const history = buildProviderHistory(visitDocs.map((visitDoc) => visitDoc.toJSON() as Visit));
-        if (isMounted) setProviderHistory(history.slice(0, 20));
+        if (isMounted) {
+          setProviderHistory(history.slice(0, 20));
+          setHasProviderHistoryFetchError(false);
+        }
       } catch (error) {
         console.error('Failed to load provider history:', error);
+        if (isMounted) {
+          setProviderHistory([]);
+          setHasProviderHistoryFetchError(true);
+          toast.error(PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE);
+        }
       }
     };
 
@@ -902,6 +915,13 @@ export default function OcrPage() {
   const matchingProviderHistory = useMemo(() => {
     return matchProviderHistory(providerHistory, { institutionCode, institutionName });
   }, [institutionCode, institutionName, providerHistory]);
+
+  const providerHistoryViewState = useMemo(() => (
+    getProviderHistoryCandidateViewState({
+      candidateCount: matchingProviderHistory.length,
+      hasFetchError: hasProviderHistoryFetchError
+    })
+  ), [hasProviderHistoryFetchError, matchingProviderHistory.length]);
 
   const selectedProvider = useMemo(() => {
     const code = institutionCode.trim();
@@ -2196,7 +2216,15 @@ export default function OcrPage() {
                 </div>
               </div>
 
-              {matchingProviderHistory.length > 0 && (
+              {providerHistoryViewState.hasError && (
+                <div className="provider-history-list" aria-label="医療機関候補">
+                  <p className="provider-history-error" role="alert">
+                    {providerHistoryViewState.errorMessage}
+                  </p>
+                </div>
+              )}
+
+              {providerHistoryViewState.status === 'candidates' && (
                 <div className="provider-history-list" aria-label="医療機関候補">
                   {matchingProviderHistory.map((provider) => (
                     <button
@@ -3252,6 +3280,19 @@ export default function OcrPage() {
           flex-wrap: wrap;
           gap: 0.45rem;
           margin-top: -0.35rem;
+        }
+
+        .provider-history-error {
+          width: 100%;
+          color: var(--danger);
+          background: var(--danger-soft);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm);
+          padding: 0.45rem 0.65rem;
+          font-size: var(--fs-xs);
+          font-weight: 500;
+          line-height: 1.4;
+          margin: 0;
         }
 
         .provider-history-item {
