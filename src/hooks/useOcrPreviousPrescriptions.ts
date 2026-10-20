@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import type { Visit, PrescriptionItem } from '@/db/types';
+import type { Visit, PrescriptionItem, PharmacyDatabase } from '@/db/types';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { formatVisitDateLabel, getVisitSortTime } from '@/app/ocr/helpers';
 import {
@@ -129,7 +129,7 @@ export function buildPreviousDoSourceItems(
 }
 
 interface UseOcrPreviousPrescriptionsOptions {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   selectedPatientId: string | null;
   prescriptions: Prescription[];
 }
@@ -162,7 +162,7 @@ export function useOcrPreviousPrescriptions({
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
         const historyVisits = selectRecentVisits(
-          visitDocs.map((visitDoc: any) => visitDoc.toJSON() as Visit),
+          visitDocs.map((visitDoc) => visitDoc.toJSON() as Visit),
           2
         );
 
@@ -178,7 +178,7 @@ export function useOcrPreviousPrescriptions({
           const itemDocs = await db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec();
           return {
             visit,
-            items: itemDocs.map((itemDoc: any) => itemDoc.toJSON() as PrescriptionItem)
+            items: itemDocs.map((itemDoc) => itemDoc.toJSON() as PrescriptionItem)
           };
         }));
         const drugIds = collectReferencedDrugIds(historyItemGroups.flatMap((group) => group.items));
@@ -225,7 +225,7 @@ export function useOcrPreviousPrescriptions({
       try {
         const visitDocs = await db.visits.find({ selector: { patientId: selectedPatientId } }).exec();
         const latestCompletedVisit = selectLatestCompletedVisit(
-          visitDocs.map((visitDoc: any) => visitDoc.toJSON() as Visit)
+          visitDocs.map((visitDoc) => visitDoc.toJSON() as Visit)
         );
 
         if (!latestCompletedVisit) {
@@ -239,7 +239,7 @@ export function useOcrPreviousPrescriptions({
         const itemDocs = await db.prescription_items.find({
           selector: { visitId: latestCompletedVisit.visitId }
         }).exec();
-        const items = itemDocs.map((itemDoc: any) => itemDoc.toJSON() as PrescriptionItem);
+        const items = itemDocs.map((itemDoc) => itemDoc.toJSON() as PrescriptionItem);
 
         if (items.length === 0) {
           if (isMounted) {
