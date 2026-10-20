@@ -250,7 +250,7 @@ export function findInStockSubstitutes(
       isGeneric: !!drug.isGeneric,
       availableAmount,
       location: drug.location || '棚位置未設定',
-      supplierName: choosePrimarySupplier(lots as any),
+      supplierName: choosePrimarySupplier(lots),
       isSameGenericName
     });
   }
@@ -381,7 +381,7 @@ export function buildEnhancedInventoryOrderRisk({
     drugId: drug.code,
     drugName: drug.name,
     location: drug.location || '棚位置未設定',
-    supplierName: choosePrimarySupplier(lots as any),
+    supplierName: choosePrimarySupplier(lots),
     requiredAmount,
     availableAmount: rawAvailable,
     effectiveAvailableAmount,

@@ -46,7 +46,7 @@ export function formatDateForFileName(date: Date): string {
   return `${year}${month}${day}`;
 }
 
-export function choosePrimarySupplier(stocks: InventoryStockLotLike[]): string {
+export function choosePrimarySupplier(stocks: readonly InventoryStockLotLike[]): string {
   const supplierScores = new Map<string, number>();
   for (let i = 0; i < stocks.length; i++) {
     const supplier = String(stocks[i].supplier || '').trim();
