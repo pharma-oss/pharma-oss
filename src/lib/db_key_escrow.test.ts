@@ -5,7 +5,10 @@ import {
   restoreDbKeyFromEscrow,
   computeKeyFingerprint,
   formatEscrowKeySheetText,
-  parseEscrowKeySheetText
+  parseEscrowKeySheetText,
+  saveRestoredDbPassword,
+  LOCAL_DB_PASSWORD_KEY,
+  LOCAL_DB_PASSWORD_SAVE_FAILED_REASON
 } from './db_key_escrow.ts';
 
 test('createDbKeyEscrow & restoreDbKeyFromEscrow performs successful encryption and decryption roundtrip', async () => {
@@ -113,4 +116,61 @@ test('computeKeyFingerprint produces consistent 12-char fingerprint', async () =
   assert.strictEqual(fp1, fp2);
   assert.strictEqual(fp1.length, 12);
   assert.notStrictEqual(fp1, fp3);
+});
+
+function withMockWindow<T>(localStorage: unknown, run: () => T): T {
+  const originalWindow = (global as any).window;
+  try {
+    (global as any).window = localStorage === undefined ? undefined : { localStorage };
+    return run();
+  } finally {
+    (global as any).window = originalWindow;
+  }
+}
+
+const RESTORED_OK = { ok: true as const, dbPassword: 'restored-db-key-123', keyFingerprint: 'abcdef123456' };
+
+test('saveRestoredDbPassword stores the restored DB key in this browser and returns the success result unchanged', () => {
+  const storage = new Map<string, string>();
+  const result = withMockWindow(
+    { setItem: (key: string, value: string) => storage.set(key, value) },
+    () => saveRestoredDbPassword(RESTORED_OK)
+  );
+
+  assert.deepStrictEqual(result, RESTORED_OK);
+  assert.strictEqual(storage.get(LOCAL_DB_PASSWORD_KEY), 'restored-db-key-123');
+});
+
+test('saveRestoredDbPassword does not report success when the browser storage write throws', () => {
+  const storage = new Map<string, string>();
+  const result = withMockWindow(
+    { setItem: () => { throw new Error('QuotaExceededError'); } },
+    () => saveRestoredDbPassword(RESTORED_OK)
+  );
+
+  assert.strictEqual(result.ok, false);
+  if (!result.ok) {
+    assert.strictEqual(result.reason, LOCAL_DB_PASSWORD_SAVE_FAILED_REASON);
+    // 何が起きたか(復元はできたが保存できなかった)と、次にすること(もう一度お試し)が書かれている
+    assert.match(result.reason, /復元できましたが.*保存できませんでした/);
+    assert.match(result.reason, /もう一度/);
+  }
+  assert.strictEqual(storage.size, 0);
+});
+
+test('saveRestoredDbPassword does not report success when there is no browser storage at all', () => {
+  const result = withMockWindow(undefined, () => saveRestoredDbPassword(RESTORED_OK));
+  assert.strictEqual(result.ok, false);
+});
+
+test('saveRestoredDbPassword passes a failed restore through and never touches the storage', () => {
+  let writes = 0;
+  const failed = { ok: false as const, reason: '管理者パスワードが正しくありません。' };
+  const result = withMockWindow(
+    { setItem: () => { writes += 1; } },
+    () => saveRestoredDbPassword(failed)
+  );
+
+  assert.deepStrictEqual(result, failed);
+  assert.strictEqual(writes, 0);
 });

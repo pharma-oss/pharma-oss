@@ -33,7 +33,7 @@ import {
   createDbKeyEscrow,
   restoreDbKeyFromEscrow,
   getLocalStoredDbPassword,
-  setLocalStoredDbPassword
+  saveRestoredDbPassword
 } from './db_key_escrow.ts';
 
 export interface YakurekiBackup {
@@ -312,13 +312,7 @@ export async function restoreDatabaseKeyFromBackupEscrow(
     return { ok: false, reason: 'バックアップに暗号鍵エスクローデータが含まれていません。' };
   }
 
-  const result = await restoreDbKeyFromEscrow(backup.keyEscrow, adminPassword);
-  if (!result.ok) {
-    return result;
-  }
-
-  setLocalStoredDbPassword(result.dbPassword);
-  return result;
+  return saveRestoredDbPassword(await restoreDbKeyFromEscrow(backup.keyEscrow, adminPassword));
 }
 
 export function isEncryptedBackup(value: unknown): value is EncryptedYakurekiBackup {

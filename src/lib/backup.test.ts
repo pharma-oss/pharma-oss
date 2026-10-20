@@ -37,6 +37,7 @@ import {
   type BackupPayload,
   type YakurekiBackup
 } from './backup.ts';
+import { createDbKeyEscrow } from './db_key_escrow.ts';
 
 test('makeBackupFileName creates a stable timestamped JSON name', () => {
   const date = new Date(2026, 5, 4, 9, 8, 7);
@@ -874,14 +875,46 @@ test('buildDatabaseBackup includes keyEscrow and restoreDatabaseKeyFromBackupEsc
   assert.strictEqual(backup.keyEscrow.version, 1);
   assert.strictEqual(backup.keyEscrow.algorithm, 'PBKDF2-AES-GCM-256');
 
-  // 正しい管理者パスワードで復元
-  const restoreResult = await restoreDatabaseKeyFromBackupEscrow(backup, adminPassword);
-  assert.strictEqual(restoreResult.ok, true);
-  if (restoreResult.ok) {
-    assert.strictEqual(restoreResult.dbPassword, originalDbKey);
-  }
+  // 復元した鍵はこの端末のブラウザへ保存される(保存先が無い環境では成功と返さない)ので、保存先を用意する
+  const storageMap = new Map<string, string>();
+  const originalWindow = (global as any).window;
+  try {
+    (global as any).window = {
+      localStorage: { setItem: (key: string, value: string) => storageMap.set(key, value) }
+    };
 
-  // 誤った管理者パスワードで復元失敗
-  const failResult = await restoreDatabaseKeyFromBackupEscrow(backup, 'WrongAdminPassword!');
-  assert.strictEqual(failResult.ok, false);
+    // 正しい管理者パスワードで復元
+    const restoreResult = await restoreDatabaseKeyFromBackupEscrow(backup, adminPassword);
+    assert.strictEqual(restoreResult.ok, true);
+    if (restoreResult.ok) {
+      assert.strictEqual(restoreResult.dbPassword, originalDbKey);
+    }
+    assert.strictEqual(storageMap.get('pharmacy_os_local_db_password'), originalDbKey);
+
+    // 誤った管理者パスワードで復元失敗
+    const failResult = await restoreDatabaseKeyFromBackupEscrow(backup, 'WrongAdminPassword!');
+    assert.strictEqual(failResult.ok, false);
+  } finally {
+    (global as any).window = originalWindow;
+  }
+});
+
+test('restoreDatabaseKeyFromBackupEscrow does not report success when the recovered DB key cannot be saved in this browser', async () => {
+  const adminPassword = 'AdminSecurePassword2026!';
+  const keyEscrow = await createDbKeyEscrow('my-super-secret-db-key-999', adminPassword);
+  const originalWindow = (global as any).window;
+  try {
+    (global as any).window = {
+      localStorage: { setItem: () => { throw new Error('QuotaExceededError'); } }
+    };
+
+    const result = await restoreDatabaseKeyFromBackupEscrow({ keyEscrow } as any, adminPassword);
+
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.reason, /復元できましたが.*保存できませんでした/);
+    }
+  } finally {
+    (global as any).window = originalWindow;
+  }
 });

@@ -47,6 +47,18 @@ export function setLocalStoredDbPassword(password: string): boolean {
   }
 }
 
+export const LOCAL_DB_PASSWORD_SAVE_FAILED_REASON =
+  'DB暗号鍵は復元できましたが、この端末のブラウザに保存できませんでした。ブラウザの保存領域の空き容量やプライベートブラウズの設定を確認して、もう一度お試しください。';
+
+// 復元したDB暗号鍵をこの端末のブラウザへ保存する。保存できなかったときは、復元に成功したとは返さない
+export function saveRestoredDbPassword(restored: RestoreDbKeyResult): RestoreDbKeyResult {
+  if (!restored.ok) return restored;
+  if (!setLocalStoredDbPassword(restored.dbPassword)) {
+    return { ok: false, reason: LOCAL_DB_PASSWORD_SAVE_FAILED_REASON };
+  }
+  return restored;
+}
+
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }

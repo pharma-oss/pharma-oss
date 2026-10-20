@@ -31,7 +31,7 @@ import {
   formatEscrowKeySheetText,
   parseEscrowKeySheetText,
   getLocalStoredDbPassword,
-  setLocalStoredDbPassword
+  saveRestoredDbPassword
 } from '@/lib/db_key_escrow';
 
 import { getBackupDrillStatusStyle as backupDrillStatusStyle } from '@/lib/backup_settings_helpers';
@@ -287,11 +287,10 @@ export default function BackupSettingsTab({
       if (!parsed) {
         throw new Error('エスクローデータの形式を認識できませんでした。Base64またはJSONをそのまま貼り付けてください。');
       }
-      const result = await restoreDbKeyFromEscrow(parsed, escrowRestorePassword);
+      const result = saveRestoredDbPassword(await restoreDbKeyFromEscrow(parsed, escrowRestorePassword));
       if (!result.ok) {
         throw new Error(result.reason);
       }
-      setLocalStoredDbPassword(result.dbPassword);
       setEscrowRestoreMessage({
         ok: true,
         text: `DB暗号鍵の復元に成功しました（Fingerprint: ${result.keyFingerprint}）。ページを再読み込みして復旧したDBにアクセスしてください。`
