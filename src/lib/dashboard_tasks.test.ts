@@ -735,6 +735,116 @@ describe('dashboard_tasks pure functions', () => {
       assert.equal(feeErrorRisk.priority, 'high');
       assert.equal(feeErrorRisk.topIssueTitles[0], '調剤報酬点数の算出に失敗しました');
     });
+
+    it('pins errorCount, riskScore, actionLabel, priority, and topIssueTitles when calculateDispensingFees throws', () => {
+      // a1e9daf^ の本番コードでも total_points_zero（error）により risk 判定自体は出ていたことを確認済み（git show a1e9daf^:src/lib/dashboard_tasks.ts）
+      // 同じ原因（算定失敗）を足した issue と total_points_zero の 2 件で error として数えている現状の固定
+      const claimReadyVisits = [
+        { visitId: 'v_fee_error', patientId: 'p_valid', issueDate: '2026-08-23T10:00:00' }
+      ];
+      const patientMap = new Map([
+        ['p_valid', {
+          id: 'p_valid',
+          name: '算定エラー患者',
+          birthDate: '1980-04-01',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 30,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-20'
+          }
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_fee_error', [
+          { itemId: 'item_normal', visitId: 'v_fee_error', drugId: 'd_normal', amount: 1, usage: '内服 1日1回朝食後', days: 14, isPicked: true }
+        ]]
+      ]);
+      const drugMap = new Map([
+        ['d_normal', { id: 'd_normal', code: '620000001', name: '通常薬', price: 100, yjCode: '2149001F1020', isHighRisk: false }]
+      ]);
+      const settingsData = {
+        id: 'default',
+        baseFeeCategory: '1' as const,
+        pharmacyCode: '1312345678',
+        pharmacyName: 'テスト薬局',
+        get medicalDxAddition() {
+          throw new Error('Forced dispensing fee calculation failure');
+        }
+      };
+
+      const result = calculateDashboardClaimRisks({
+        claimReadyVisits,
+        patientMap,
+        itemsByVisitId,
+        drugMap,
+        settingsData,
+        alertsByPatientId: new Map()
+      });
+
+      assert.equal(result.claimRisks.length, 1);
+      const feeErrorRisk = result.claimRisks[0];
+      assert.equal(feeErrorRisk.visitId, 'v_fee_error');
+      assert.equal(feeErrorRisk.errorCount, 3);
+      assert.equal(feeErrorRisk.warningCount, 2);
+      assert.equal(feeErrorRisk.riskScore, 216);
+      assert.equal(feeErrorRisk.priority, 'high');
+      assert.equal(feeErrorRisk.actionLabel, '施設設定・薬品マスタを確認');
+      assert.deepEqual(feeErrorRisk.topIssueTitles, [
+        '調剤報酬点数の算出に失敗しました',
+        '資格確認日から時間が経っています',
+        '薬剤料が算定されていません'
+      ]);
+    });
+
+    it('does not include claim_fee_calculation_failed in topIssueTitles when fee calculation succeeds', () => {
+      const claimReadyVisits = [
+        { visitId: 'v_normal', patientId: 'p_valid', issueDate: '2026-08-23T10:00:00' }
+      ];
+      const patientMap = new Map([
+        ['p_valid', {
+          id: 'p_valid',
+          name: '通常患者',
+          birthDate: '1980-04-01',
+          insuranceInfo: {
+            provider: '01130012',
+            number: '1234567',
+            relationship: '本人',
+            burdenRatio: 30,
+            eligibilityStatus: 'valid',
+            eligibilityCheckedAt: '2026-08-20'
+          }
+        }]
+      ]);
+      const itemsByVisitId = new Map([
+        ['v_normal', [
+          { itemId: 'item_normal', visitId: 'v_normal', drugId: 'd_normal', amount: 1, usage: '内服 1日1回朝食後', days: 14, isPicked: true }
+        ]]
+      ]);
+      const drugMap = new Map([
+        ['d_normal', { id: 'd_normal', code: '620000001', name: '通常薬', price: 100, yjCode: '2149001F1020', isHighRisk: false }]
+      ]);
+      const settingsData = {
+        id: 'default',
+        baseFeeCategory: '1' as const,
+        pharmacyCode: '1312345678',
+        pharmacyName: 'テスト薬局'
+      };
+
+      const result = calculateDashboardClaimRisks({
+        claimReadyVisits,
+        patientMap,
+        itemsByVisitId,
+        drugMap,
+        settingsData,
+        alertsByPatientId: new Map()
+      });
+
+      const allTopTitles = result.claimRisks.flatMap((r) => r.topIssueTitles);
+      assert.equal(allTopTitles.includes('調剤報酬点数の算出に失敗しました'), false);
+    });
   });
 
   describe('calculateDashboardFollowUpCandidates', () => {
