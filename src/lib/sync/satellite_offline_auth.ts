@@ -297,13 +297,10 @@ export function saveStandbyHubAllowlist(entries: StandbyHubEntry[]): boolean {
 export interface StandbyEndpointRegistrationOutcome {
   ok: boolean;
   errorMessage: string | null;
-  shouldUpdateList: boolean;
-  shouldResetInput: boolean;
-  shouldRecordAudit: boolean;
 }
 
 /**
- * 予備機エンドポイント登録の保存成否からハンドラの挙動（一覧更新・入力リセット・監査・エラー文言）を決定する純粋関数
+ * 予備機エンドポイント登録の保存成否からハンドラの挙動（エラー文言）を決定する純粋関数
  */
 export function resolveStandbyEndpointRegistrationOutcome(
   saved: boolean
@@ -313,18 +310,12 @@ export function resolveStandbyEndpointRegistrationOutcome(
       ok: false,
       errorMessage:
         '予備機エンドポイントを保存できませんでした。ブラウザの保存領域の空き容量やプライベートブラウズの設定を確認して、もう一度お試しください。',
-      shouldUpdateList: false,
-      shouldResetInput: false,
-      shouldRecordAudit: false,
     };
   }
 
   return {
     ok: true,
     errorMessage: null,
-    shouldUpdateList: true,
-    shouldResetInput: true,
-    shouldRecordAudit: true,
   };
 }
 

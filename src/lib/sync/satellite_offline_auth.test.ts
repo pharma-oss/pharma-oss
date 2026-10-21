@@ -415,23 +415,17 @@ test('13. saveStandbyHubAllowlist returns true on success, false on exception, a
 });
 
 test('14. resolveStandbyEndpointRegistrationOutcome handles success and failure pure logic', () => {
-  // 失敗時: ok=false、一覧・入力・監査は更新せず、所定のエラーメッセージを返す
+  // 失敗時: ok=false、所定のエラーメッセージを返す
   const failure = resolveStandbyEndpointRegistrationOutcome(false);
   assert.strictEqual(failure.ok, false);
-  assert.strictEqual(failure.shouldUpdateList, false);
-  assert.strictEqual(failure.shouldResetInput, false);
-  assert.strictEqual(failure.shouldRecordAudit, false);
   assert.strictEqual(
     failure.errorMessage,
     '予備機エンドポイントを保存できませんでした。ブラウザの保存領域の空き容量やプライベートブラウズの設定を確認して、もう一度お試しください。'
   );
 
-  // 成功時: ok=true、一覧・入力・監査を更新し、errorMessage は null
+  // 成功時: ok=true、errorMessage は null
   const success = resolveStandbyEndpointRegistrationOutcome(true);
   assert.strictEqual(success.ok, true);
-  assert.strictEqual(success.shouldUpdateList, true);
-  assert.strictEqual(success.shouldResetInput, true);
-  assert.strictEqual(success.shouldRecordAudit, true);
   assert.strictEqual(success.errorMessage, null);
 });
 

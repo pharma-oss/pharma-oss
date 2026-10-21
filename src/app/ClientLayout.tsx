@@ -70,7 +70,6 @@ export interface StaffAuthGateViewState {
   hasError: boolean;
   errorMessage: string;
   isLoading: boolean;
-  status: 'revoked' | 'error' | 'loading' | 'ready';
 }
 
 export function getStaffAuthGateViewState(params: {
@@ -84,8 +83,7 @@ export function getStaffAuthGateViewState(params: {
       isRevoked: true,
       hasError: false,
       errorMessage: '',
-      isLoading: false,
-      status: 'revoked'
+      isLoading: false
     };
   }
 
@@ -94,8 +92,7 @@ export function getStaffAuthGateViewState(params: {
       isRevoked: false,
       hasError: true,
       errorMessage: params.staffLoadError,
-      isLoading: false,
-      status: 'error'
+      isLoading: false
     };
   }
 
@@ -104,8 +101,7 @@ export function getStaffAuthGateViewState(params: {
       isRevoked: false,
       hasError: false,
       errorMessage: '',
-      isLoading: true,
-      status: 'loading'
+      isLoading: true
     };
   }
 
@@ -114,8 +110,7 @@ export function getStaffAuthGateViewState(params: {
       isRevoked: false,
       hasError: true,
       errorMessage: STAFF_NO_USERS_ERROR_MESSAGE,
-      isLoading: false,
-      status: 'error'
+      isLoading: false
     };
   }
 
@@ -123,8 +118,7 @@ export function getStaffAuthGateViewState(params: {
     isRevoked: false,
     hasError: false,
     errorMessage: '',
-    isLoading: false,
-    status: 'ready'
+    isLoading: false
   };
 }
 

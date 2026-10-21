@@ -82,7 +82,6 @@ describe('getStaffAuthGateViewState', () => {
       usersCount: 0
     });
     assert.deepEqual(state, {
-      status: 'revoked',
       isRevoked: true,
       hasError: false,
       errorMessage: '',
@@ -98,7 +97,6 @@ describe('getStaffAuthGateViewState', () => {
       usersCount: 0
     });
     assert.deepEqual(state, {
-      status: 'error',
       isRevoked: false,
       hasError: true,
       errorMessage: 'データベース接続エラー',
@@ -114,7 +112,6 @@ describe('getStaffAuthGateViewState', () => {
       usersCount: 0
     });
     assert.deepEqual(state, {
-      status: 'loading',
       isRevoked: false,
       hasError: false,
       errorMessage: '',
@@ -130,7 +127,6 @@ describe('getStaffAuthGateViewState', () => {
       usersCount: 0
     });
     assert.deepEqual(state, {
-      status: 'error',
       isRevoked: false,
       hasError: true,
       errorMessage: STAFF_NO_USERS_ERROR_MESSAGE,
@@ -148,7 +144,6 @@ describe('getStaffAuthGateViewState', () => {
       usersCount: 2
     });
     assert.deepEqual(state, {
-      status: 'ready',
       isRevoked: false,
       hasError: false,
       errorMessage: '',
