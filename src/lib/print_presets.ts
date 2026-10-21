@@ -97,37 +97,3 @@ export function loadCustomPrintPresets(): PrintPreset[] {
   }
 }
 
-export function saveCustomPrintPreset(preset: Omit<PrintPreset, 'id' | 'isBuiltIn'>): PrintPreset {
-  const customPresets = loadCustomPrintPresets();
-  const newPreset: PrintPreset = {
-    ...preset,
-    id: `custom_preset_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    isBuiltIn: false
-  };
-
-  const updated = [...customPresets, newPreset];
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.error('Failed to save custom print preset:', err);
-    }
-  }
-  return newPreset;
-}
-
-export function deleteCustomPrintPreset(presetId: string): boolean {
-  const customPresets = loadCustomPrintPresets();
-  const filtered = customPresets.filter((p) => p.id !== presetId);
-  if (filtered.length === customPresets.length) return false;
-
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(filtered));
-    } catch (err) {
-      console.error('Failed to delete custom print preset:', err);
-      return false;
-    }
-  }
-  return true;
-}
