@@ -75,6 +75,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [isOfflineAuthMode, setIsOfflineAuthMode] = useState(false);
   const [isTerminalRevoked, setIsTerminalRevoked] = useState(false);
   const [offlineExpiresAt, setOfflineExpiresAt] = useState('');
+  const hasWarnedOfflineAuthFailureRef = useRef(false);
 
   const isAuthenticated = isAuthenticatedUser(currentUser);
   const initialAdmin = users.find(isInitialAdminUser);
@@ -221,8 +222,19 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           return refreshedCurrent || UNAUTHENTICATED_USER;
         });
         setHasLoadedUsers(true);
-        import('@/lib/sync/satellite_offline_auth').then(({ saveOfflineAuthCache }) => {
-          saveOfflineAuthCache(nextUsers);
+        import('@/lib/sync/satellite_offline_auth').then(async ({ saveOfflineAuthCache, resolveOfflineAuthSaveWarningOutcome }) => {
+          const saveResult = saveOfflineAuthCache(nextUsers);
+          const { resolveClientSyncRole } = await import('@/lib/sync/client_role');
+          const role = await resolveClientSyncRole();
+          const outcome = resolveOfflineAuthSaveWarningOutcome({
+            saveResult,
+            role,
+            alreadyWarned: hasWarnedOfflineAuthFailureRef.current,
+          });
+          if (outcome.shouldWarn && outcome.warningMessage) {
+            hasWarnedOfflineAuthFailureRef.current = outcome.nextAlreadyWarned;
+            toast.warning(outcome.warningMessage);
+          }
         }).catch(() => {});
       } else {
         import('@/lib/sync/satellite_offline_auth').then(({ isSatelliteRevokedTombstone, getOfflineAuthCache, resolveOfflineAuthStaffLoadOutcome }) => {

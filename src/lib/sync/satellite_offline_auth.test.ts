@@ -15,6 +15,7 @@ import {
   saveStandbyHubAllowlist,
   getStandbyHubAllowlist,
   resolveStandbyEndpointRegistrationOutcome,
+  resolveOfflineAuthSaveWarningOutcome,
   OFFLINE_AUTH_CACHE_KEY,
   REVOCATION_TOMBSTONE_KEY,
   STANDBY_HUB_ALLOWLIST_KEY,
@@ -433,6 +434,105 @@ test('14. resolveStandbyEndpointRegistrationOutcome handles success and failure 
   assert.strictEqual(success.shouldRecordAudit, true);
   assert.strictEqual(success.errorMessage, null);
 });
+
+test('15. saveOfflineAuthCache returns saved on success, failed on exception, and noop when revoked or zero valid users', async () => {
+  const store = setupMockLocalStorage();
+  const salt = 'salt_offline_15';
+  const passwordHash = await hashPassword('Pass1234!', salt);
+  const user: User = { userId: 'admin_15', name: '管理者15', role: 'admin', salt, passwordHash };
+
+  // 1. 成功時: 'saved' を返し、キャッシュが保存される
+  const saveResult = saveOfflineAuthCache([user], 'test_key_15');
+  assert.strictEqual(saveResult, 'saved');
+  const cacheResult = getOfflineAuthCache('test_key_15');
+  assert.strictEqual(cacheResult.ok, true);
+
+  // 2. setItem が例外のとき: 'failed' を返す
+  (globalThis as any).window.localStorage.setItem = () => {
+    throw new Error('QuotaExceededError: storage full');
+  };
+  const failResult = saveOfflineAuthCache([user], 'test_key_15');
+  assert.strictEqual(failResult, 'failed');
+
+  // 3. 失効済み端末: 'noop' を返す
+  setupMockLocalStorage();
+  recordSatelliteRevocationTombstone();
+  const revokedResult = saveOfflineAuthCache([user], 'test_key_15');
+  assert.strictEqual(revokedResult, 'noop');
+  resetSatelliteRevocationTombstoneForTest();
+
+  // 4. 保存対象 0 人: 'noop' を返す
+  setupMockLocalStorage();
+  const noCredUser: User = { userId: 'user_nocred', name: '認証なし', role: 'pharmacist' };
+  const zeroResult = saveOfflineAuthCache([noCredUser], 'test_key_15');
+  assert.strictEqual(zeroResult, 'noop');
+
+  // 5. window が未定義のとき: 'noop' を返す
+  delete (globalThis as any).window;
+  const noWindowResult = saveOfflineAuthCache([user], 'test_key_15');
+  assert.strictEqual(noWindowResult, 'noop');
+});
+
+test('16. resolveOfflineAuthSaveWarningOutcome notifies once on satellite failure and silences on hub, standalone, success, or repeated calls', () => {
+  // 1. サテライト端末かつ保存失敗かつ未通知: 警告通知を出し、フラグを true に更新
+  const warn = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'failed',
+    role: 'satellite',
+    alreadyWarned: false,
+  });
+  assert.strictEqual(warn.shouldWarn, true);
+  assert.strictEqual(
+    warn.warningMessage,
+    'この端末のオフライン用スタッフ認証情報を保存できませんでした。メイン端末と通信できないとき、この端末ではログインできなくなります。ブラウザの保存領域の空き容量を確認して、再読み込みしてください。'
+  );
+  assert.strictEqual(warn.nextAlreadyWarned, true);
+
+  // 2. 既に通知済みの場合: 二重通知しない
+  const already = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'failed',
+    role: 'satellite',
+    alreadyWarned: true,
+  });
+  assert.strictEqual(already.shouldWarn, false);
+  assert.strictEqual(already.warningMessage, null);
+  assert.strictEqual(already.nextAlreadyWarned, true);
+
+  // 3. ハブ端末またはスタンドアロン端末: 保存失敗でも通知しない（自機DBから読めるため）
+  const hubResult = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'failed',
+    role: 'hub',
+    alreadyWarned: false,
+  });
+  assert.strictEqual(hubResult.shouldWarn, false);
+  assert.strictEqual(hubResult.warningMessage, null);
+
+  const standaloneResult = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'failed',
+    role: 'standalone',
+    alreadyWarned: false,
+  });
+  assert.strictEqual(standaloneResult.shouldWarn, false);
+  assert.strictEqual(standaloneResult.warningMessage, null);
+
+  // 4. 保存成功（saved）または何もしなかった（noop）: 通知しない
+  const savedResult = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'saved',
+    role: 'satellite',
+    alreadyWarned: false,
+  });
+  assert.strictEqual(savedResult.shouldWarn, false);
+  assert.strictEqual(savedResult.warningMessage, null);
+
+  const noopResult = resolveOfflineAuthSaveWarningOutcome({
+    saveResult: 'noop',
+    role: 'satellite',
+    alreadyWarned: false,
+  });
+  assert.strictEqual(noopResult.shouldWarn, false);
+  assert.strictEqual(noopResult.warningMessage, null);
+});
+
+
 
 
 

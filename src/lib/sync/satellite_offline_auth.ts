@@ -95,14 +95,20 @@ export function purgeSatelliteAllCaches(): void {
   }
 }
 
+export type SaveOfflineAuthCacheResult = 'saved' | 'noop' | 'failed';
+
 /**
  * スタッフマスタをオフライン認証キャッシュへ暗号化保存する
  */
-export function saveOfflineAuthCache(users: User[], encKey?: string, cachedAt: Date = new Date()): void {
-  if (typeof window === 'undefined') return;
+export function saveOfflineAuthCache(
+  users: User[],
+  encKey?: string,
+  cachedAt: Date = new Date()
+): SaveOfflineAuthCacheResult {
+  if (typeof window === 'undefined') return 'noop';
   if (isSatelliteRevokedTombstone()) {
     console.warn('[Satellite Auth] Cannot save offline auth cache: Terminal is revoked.');
-    return;
+    return 'noop';
   }
 
   const validUsers = users.filter(
@@ -115,7 +121,7 @@ export function saveOfflineAuthCache(users: User[], encKey?: string, cachedAt: D
       (u.role === 'admin' || u.role === 'pharmacist' || u.role === 'clerk')
   );
 
-  if (validUsers.length === 0) return;
+  if (validUsers.length === 0) return 'noop';
 
   const key = encKey || getPersistentEncKey();
   const cachedAtIso = cachedAt.toISOString();
@@ -132,10 +138,44 @@ export function saveOfflineAuthCache(users: User[], encKey?: string, cachedAt: D
   try {
     const encrypted = CryptoJS.AES.encrypt(JSON.stringify(cachePayload), key).toString();
     window.localStorage.setItem(OFFLINE_AUTH_CACHE_KEY, encrypted);
+    return 'saved';
   } catch (e) {
     console.error('[Satellite Auth] Failed to save encrypted offline auth cache:', e);
+    return 'failed';
   }
 }
+
+export interface OfflineAuthSaveWarningOutcome {
+  shouldWarn: boolean;
+  warningMessage: string | null;
+  nextAlreadyWarned: boolean;
+}
+
+/**
+ * オフライン認証キャッシュ保存結果・端末役割・通知済みフラグから
+ * 画面寿命で1回だけの警告通知を出すかを判定する純粋関数
+ */
+export function resolveOfflineAuthSaveWarningOutcome(params: {
+  saveResult: SaveOfflineAuthCacheResult;
+  role: 'hub' | 'satellite' | 'standalone';
+  alreadyWarned: boolean;
+}): OfflineAuthSaveWarningOutcome {
+  if (params.saveResult === 'failed' && params.role === 'satellite' && !params.alreadyWarned) {
+    return {
+      shouldWarn: true,
+      warningMessage:
+        'この端末のオフライン用スタッフ認証情報を保存できませんでした。メイン端末と通信できないとき、この端末ではログインできなくなります。ブラウザの保存領域の空き容量を確認して、再読み込みしてください。',
+      nextAlreadyWarned: true,
+    };
+  }
+
+  return {
+    shouldWarn: false,
+    warningMessage: null,
+    nextAlreadyWarned: params.alreadyWarned,
+  };
+}
+
 
 /**
  * オフライン認証キャッシュを復号・検証して取得する
