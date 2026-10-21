@@ -12,6 +12,9 @@ import {
   verifyStandbyHubHmac,
   verifyStandbyHubEndpoint,
   resolveOfflineAuthStaffLoadOutcome,
+  saveStandbyHubAllowlist,
+  getStandbyHubAllowlist,
+  resolveStandbyEndpointRegistrationOutcome,
   OFFLINE_AUTH_CACHE_KEY,
   REVOCATION_TOMBSTONE_KEY,
   STANDBY_HUB_ALLOWLIST_KEY,
@@ -380,3 +383,56 @@ test('12. Purge keeps removing the other cache entries when one removal throws',
 
   resetSatelliteRevocationTombstoneForTest();
 });
+
+test('13. saveStandbyHubAllowlist returns true on success, false on exception, and preserves existing items on failure', () => {
+  const store = setupMockLocalStorage();
+  const initialEntries: StandbyHubEntry[] = [
+    { endpoint: 'https://standby1.local:3000', issuedAt: '2026-10-21T00:00:00.000Z', signature: 'sig1' }
+  ];
+
+  // 成功時: true を返し、値が保存される
+  const saveSuccess = saveStandbyHubAllowlist(initialEntries);
+  assert.strictEqual(saveSuccess, true);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), initialEntries);
+
+  // 失敗時: setItem が例外を投げた場合、false を返し既存の値が変わらない
+  (globalThis as any).window.localStorage.setItem = () => {
+    throw new Error('QuotaExceededError: localStorage full');
+  };
+  const newEntries: StandbyHubEntry[] = [
+    ...initialEntries,
+    { endpoint: 'https://standby2.local:3000', issuedAt: '2026-10-21T01:00:00.000Z', signature: 'sig2' }
+  ];
+  const saveFailure = saveStandbyHubAllowlist(newEntries);
+  assert.strictEqual(saveFailure, false);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), initialEntries);
+
+  // window が無いときは false
+  delete (globalThis as any).window;
+  const noWindowResult = saveStandbyHubAllowlist(newEntries);
+  assert.strictEqual(noWindowResult, false);
+});
+
+test('14. resolveStandbyEndpointRegistrationOutcome handles success and failure pure logic', () => {
+  // 失敗時: ok=false、一覧・入力・監査は更新せず、所定のエラーメッセージを返す
+  const failure = resolveStandbyEndpointRegistrationOutcome(false);
+  assert.strictEqual(failure.ok, false);
+  assert.strictEqual(failure.shouldUpdateList, false);
+  assert.strictEqual(failure.shouldResetInput, false);
+  assert.strictEqual(failure.shouldRecordAudit, false);
+  assert.strictEqual(
+    failure.errorMessage,
+    '予備機エンドポイントを保存できませんでした。ブラウザの保存領域の空き容量やプライベートブラウズの設定を確認して、もう一度お試しください。'
+  );
+
+  // 成功時: ok=true、一覧・入力・監査を更新し、errorMessage は null
+  const success = resolveStandbyEndpointRegistrationOutcome(true);
+  assert.strictEqual(success.ok, true);
+  assert.strictEqual(success.shouldUpdateList, true);
+  assert.strictEqual(success.shouldResetInput, true);
+  assert.strictEqual(success.shouldRecordAudit, true);
+  assert.strictEqual(success.errorMessage, null);
+});
+
+
+

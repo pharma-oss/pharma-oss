@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Laptop, KeyRound, ShieldOff, RefreshCw, Copy, CheckCircle2, AlertTriangle, AlertOctagon, Clock, Database, Server, Radio, ShieldCheck, ArrowRightLeft } from 'lucide-react';
 import { resolveClientSyncIdentity, type ClientSyncRole } from '@/lib/sync/client_role';
 import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
-import { getStandbyHubAllowlist, saveStandbyHubAllowlist, verifyStandbyHubEndpoint, computeStandbyHubHmac, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
+import { getStandbyHubAllowlist, saveStandbyHubAllowlist, resolveStandbyEndpointRegistrationOutcome, verifyStandbyHubEndpoint, computeStandbyHubHmac, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
 import { isAllowedHubEndpoint } from '@/lib/sync/sync_config';
 import { logAuditAction, getCurrentUser } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
@@ -151,7 +151,15 @@ export default function TerminalSyncPanel() {
       };
 
       const updated = [...standbyList.filter((e) => e.endpoint !== trimmedUrl), newEntry];
-      saveStandbyHubAllowlist(updated);
+      const saved = saveStandbyHubAllowlist(updated);
+      const outcome = resolveStandbyEndpointRegistrationOutcome(saved);
+      if (!outcome.ok) {
+        if (outcome.errorMessage) {
+          toast.error(outcome.errorMessage);
+        }
+        return;
+      }
+
       setStandbyList(updated);
       setNewStandbyEndpoint('');
       toast.success(`予備機エンドポイント「${trimmedUrl}」を承認済みリストに登録しました。`);

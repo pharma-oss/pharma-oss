@@ -241,16 +241,53 @@ export function getStandbyHubAllowlist(): StandbyHubEntry[] {
 }
 
 /**
- * 予備機候補リストを localStorage に保存する
+ * 予備機候補リストを localStorage に保存する（成功は true、失敗は false）
  */
-export function saveStandbyHubAllowlist(entries: StandbyHubEntry[]): void {
-  if (typeof window === 'undefined') return;
+export function saveStandbyHubAllowlist(entries: StandbyHubEntry[]): boolean {
+  if (typeof window === 'undefined') return false;
   try {
     window.localStorage.setItem(STANDBY_HUB_ALLOWLIST_KEY, JSON.stringify(entries));
+    return true;
   } catch (e) {
     console.error('[Satellite Auth] Failed to save standby hub allowlist:', e);
+    return false;
   }
 }
+
+export interface StandbyEndpointRegistrationOutcome {
+  ok: boolean;
+  errorMessage: string | null;
+  shouldUpdateList: boolean;
+  shouldResetInput: boolean;
+  shouldRecordAudit: boolean;
+}
+
+/**
+ * 予備機エンドポイント登録の保存成否からハンドラの挙動（一覧更新・入力リセット・監査・エラー文言）を決定する純粋関数
+ */
+export function resolveStandbyEndpointRegistrationOutcome(
+  saved: boolean
+): StandbyEndpointRegistrationOutcome {
+  if (!saved) {
+    return {
+      ok: false,
+      errorMessage:
+        '予備機エンドポイントを保存できませんでした。ブラウザの保存領域の空き容量やプライベートブラウズの設定を確認して、もう一度お試しください。',
+      shouldUpdateList: false,
+      shouldResetInput: false,
+      shouldRecordAudit: false,
+    };
+  }
+
+  return {
+    ok: true,
+    errorMessage: null,
+    shouldUpdateList: true,
+    shouldResetInput: true,
+    shouldRecordAudit: true,
+  };
+}
+
 
 /**
  * ブラウザ側から自機 Next サーバー (127.0.0.1) の /api/sync/standby-hub/verify を叩いて署名を検証する
