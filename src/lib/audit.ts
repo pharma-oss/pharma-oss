@@ -218,6 +218,12 @@ export function getPermissionDeniedMessage(user: User, action: PermissionAction)
   return `${user.name}（${roleLabel}）には「${label}」の権限がありません。必要に応じて薬剤師または管理者に切り替えてください。`;
 }
 
+let inMemoryCurrentUserFallback: User | null = null;
+
+export function resetCurrentUserMemoryFallbackForTest(): void {
+  inMemoryCurrentUserFallback = null;
+}
+
 export function getCurrentUser(): User {
   if (typeof window === 'undefined') {
     return UNAUTHENTICATED_USER;
@@ -234,6 +240,7 @@ export function getCurrentUser(): User {
         ['admin', 'pharmacist', 'clerk'].includes(parsed.role)
       ) {
         if (isRemovedDemoStaffUserId(parsed.userId)) {
+          inMemoryCurrentUserFallback = null;
           sessionStorage.removeItem(USER_STORAGE_KEY);
           return UNAUTHENTICATED_USER;
         }
@@ -245,6 +252,15 @@ export function getCurrentUser(): User {
   } catch (e) {
     console.error('Failed to get current user:', e);
   }
+
+  if (inMemoryCurrentUserFallback) {
+    if (isRemovedDemoStaffUserId(inMemoryCurrentUserFallback.userId) || !isAuthenticatedUser(inMemoryCurrentUserFallback)) {
+      inMemoryCurrentUserFallback = null;
+      return UNAUTHENTICATED_USER;
+    }
+    return inMemoryCurrentUserFallback;
+  }
+
   return UNAUTHENTICATED_USER;
 }
 
@@ -263,10 +279,17 @@ export function setFirstRunBypassEnabled(enabled: boolean): void {
 
 export function setCurrentUser(user: User): void {
   if (typeof window === 'undefined') return;
+  if (!isAuthenticatedUser(user)) {
+    inMemoryCurrentUserFallback = null;
+  }
   try {
     sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    inMemoryCurrentUserFallback = null;
   } catch (e) {
     console.error('Failed to set current user:', e);
+    if (isAuthenticatedUser(user)) {
+      inMemoryCurrentUserFallback = user;
+    }
   }
 }
 

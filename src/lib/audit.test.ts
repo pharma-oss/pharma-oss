@@ -10,6 +10,7 @@ import {
   normalizeRolePermissionPolicy,
   readRolePermissionPolicy,
   resetRolePermissionPolicy,
+  resetCurrentUserMemoryFallbackForTest,
   setCurrentUser,
   UNAUTHENTICATED_USER,
   writeRolePermissionPolicy,
@@ -361,4 +362,105 @@ test('logAuditAction starts a new chain when no log has been signed yet', async 
 
   assert.deepStrictEqual(pagesRead, [0, 50, 100], 'stops at the last, short page');
   assert.strictEqual(insertedRows[0].previousHash, '');
+});
+
+test('getCurrentUser returns in-memory user when sessionStorage setItem throws', () => {
+  const previousWindow = (globalThis as any).window;
+  const previousSessionStorage = (globalThis as any).sessionStorage;
+  const previousLocalStorage = (globalThis as any).localStorage;
+  resetCurrentUserMemoryFallbackForTest();
+
+  (globalThis as any).window = {};
+  (globalThis as any).localStorage = createStorage();
+  (globalThis as any).sessionStorage = {
+    getItem: () => null,
+    setItem: () => { throw new Error('QuotaExceededError'); },
+    removeItem: () => {}
+  };
+
+  try {
+    setCurrentUser(admin);
+    assert.deepStrictEqual(getCurrentUser(), admin);
+  } finally {
+    resetCurrentUserMemoryFallbackForTest();
+    (globalThis as any).window = previousWindow;
+    (globalThis as any).sessionStorage = previousSessionStorage;
+    (globalThis as any).localStorage = previousLocalStorage;
+  }
+});
+
+test('setCurrentUser clears in-memory user and returns unauthenticated when unauthenticated user is passed', () => {
+  const previousWindow = (globalThis as any).window;
+  const previousSessionStorage = (globalThis as any).sessionStorage;
+  const previousLocalStorage = (globalThis as any).localStorage;
+  resetCurrentUserMemoryFallbackForTest();
+
+  (globalThis as any).window = {};
+  (globalThis as any).localStorage = createStorage();
+  (globalThis as any).sessionStorage = {
+    getItem: () => null,
+    setItem: () => { throw new Error('QuotaExceededError'); },
+    removeItem: () => {}
+  };
+
+  try {
+    setCurrentUser(admin);
+    assert.deepStrictEqual(getCurrentUser(), admin);
+
+    setCurrentUser(UNAUTHENTICATED_USER);
+    assert.deepStrictEqual(getCurrentUser(), UNAUTHENTICATED_USER);
+  } finally {
+    resetCurrentUserMemoryFallbackForTest();
+    (globalThis as any).window = previousWindow;
+    (globalThis as any).sessionStorage = previousSessionStorage;
+    (globalThis as any).localStorage = previousLocalStorage;
+  }
+});
+
+test('getCurrentUser prioritizes sessionStorage when write succeeds and does not use memory fallback', () => {
+  const previousWindow = (globalThis as any).window;
+  const previousSessionStorage = (globalThis as any).sessionStorage;
+  const previousLocalStorage = (globalThis as any).localStorage;
+  const sessionStorage = createStorage();
+  resetCurrentUserMemoryFallbackForTest();
+
+  (globalThis as any).window = {};
+  (globalThis as any).localStorage = createStorage();
+  (globalThis as any).sessionStorage = sessionStorage;
+
+  try {
+    setCurrentUser(admin);
+    assert.deepStrictEqual(getCurrentUser(), admin);
+
+    sessionStorage.setItem('pharmacy_os_current_user', JSON.stringify(pharmacist));
+    assert.deepStrictEqual(getCurrentUser(), pharmacist);
+
+    sessionStorage.removeItem('pharmacy_os_current_user');
+    assert.deepStrictEqual(getCurrentUser(), UNAUTHENTICATED_USER, 'memory fallback was discarded on successful write');
+  } finally {
+    resetCurrentUserMemoryFallbackForTest();
+    (globalThis as any).window = previousWindow;
+    (globalThis as any).sessionStorage = previousSessionStorage;
+    (globalThis as any).localStorage = previousLocalStorage;
+  }
+});
+
+test('getCurrentUser returns unauthenticated user when neither sessionStorage nor memory retention exists', () => {
+  const previousWindow = (globalThis as any).window;
+  const previousSessionStorage = (globalThis as any).sessionStorage;
+  const previousLocalStorage = (globalThis as any).localStorage;
+  resetCurrentUserMemoryFallbackForTest();
+
+  (globalThis as any).window = {};
+  (globalThis as any).localStorage = createStorage();
+  (globalThis as any).sessionStorage = createStorage();
+
+  try {
+    assert.deepStrictEqual(getCurrentUser(), UNAUTHENTICATED_USER);
+  } finally {
+    resetCurrentUserMemoryFallbackForTest();
+    (globalThis as any).window = previousWindow;
+    (globalThis as any).sessionStorage = previousSessionStorage;
+    (globalThis as any).localStorage = previousLocalStorage;
+  }
 });
