@@ -62,6 +62,72 @@ export function getPatientSearchResultViewState(
   return { status: 'results', patients };
 }
 
+export const STAFF_NO_USERS_ERROR_MESSAGE =
+  'スタッフ情報が登録されていないか、初期管理者の作成に失敗しました。ページを再読み込みしてください。解消しないときはシステム管理者に連絡してください。';
+
+export interface StaffAuthGateViewState {
+  isRevoked: boolean;
+  hasError: boolean;
+  errorMessage: string;
+  isLoading: boolean;
+  status: 'revoked' | 'error' | 'loading' | 'ready';
+}
+
+export function getStaffAuthGateViewState(params: {
+  isTerminalRevoked: boolean;
+  staffLoadError: string;
+  hasLoadedUsers: boolean;
+  usersCount: number;
+}): StaffAuthGateViewState {
+  if (params.isTerminalRevoked) {
+    return {
+      isRevoked: true,
+      hasError: false,
+      errorMessage: '',
+      isLoading: false,
+      status: 'revoked'
+    };
+  }
+
+  if (params.staffLoadError) {
+    return {
+      isRevoked: false,
+      hasError: true,
+      errorMessage: params.staffLoadError,
+      isLoading: false,
+      status: 'error'
+    };
+  }
+
+  if (!params.hasLoadedUsers) {
+    return {
+      isRevoked: false,
+      hasError: false,
+      errorMessage: '',
+      isLoading: true,
+      status: 'loading'
+    };
+  }
+
+  if (params.usersCount === 0) {
+    return {
+      isRevoked: false,
+      hasError: true,
+      errorMessage: STAFF_NO_USERS_ERROR_MESSAGE,
+      isLoading: false,
+      status: 'error'
+    };
+  }
+
+  return {
+    isRevoked: false,
+    hasError: false,
+    errorMessage: '',
+    isLoading: false,
+    status: 'ready'
+  };
+}
+
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -92,6 +158,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // ゲスト体験中(パスワード未設定の初期管理者としてログインしている)かどうか。
   // 実際にパスワード/パスキーが設定されるとhasLoginCredentialがtrueになり自動的に外れる。
   const isGuestDemoSession = isAuthenticated && isInitialAdminUser(currentUser) && !hasLoginCredential(currentUser);
+
+  const staffAuthGate = getStaffAuthGateViewState({
+    isTerminalRevoked,
+    staffLoadError,
+    hasLoadedUsers,
+    usersCount: users.length
+  });
 
   // Custom hook for PWA
   const { showPwaBanner, handlePwaInstall, dismissPwaBanner } = usePWA();
@@ -968,7 +1041,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               </header>
 
               <section className="content-scroll">
-                {isTerminalRevoked ? (
+                {staffAuthGate.isRevoked ? (
                   <div className="card glass auth-card auth-card-revoked" role="alert">
                     <div className="auth-revoked-header">
                       <AlertOctagon size={28} aria-hidden="true" />
@@ -981,11 +1054,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       業務を再開するには、メイン端末の「設定 &gt; 端末同期」から本端末を再登録してください。
                     </p>
                   </div>
-                ) : staffLoadError ? (
+                ) : staffAuthGate.hasError ? (
                   <div className="card glass auth-card" role="alert">
                     <h2 className="auth-title">スタッフ情報を確認できません</h2>
                     <p className="text-muted auth-desc">
-                      {staffLoadError} 患者情報や受付は、確認が完了するまで表示しません。
+                      {staffAuthGate.errorMessage} 患者情報や受付は、確認が完了するまで表示しません。
                     </p>
                     <button
                       type="button"
@@ -996,7 +1069,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       <span>再試行</span>
                     </button>
                   </div>
-                ) : !hasLoadedUsers ? (
+                ) : staffAuthGate.isLoading ? (
                   <div className="card glass auth-card" role="status">
                     <div className="auth-status-row">
                       <Loader2 size={17} className="animate-spin" aria-hidden="true" />
