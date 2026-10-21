@@ -16,6 +16,7 @@ import { POST as terminalActionPOST, DELETE as terminalDELETE } from './terminal
 import { GET as conflictsGET } from './conflicts/route.ts';
 import { POST as conflictResolvePOST } from './conflicts/[conflictId]/route.ts';
 import { TERMINAL_ID_HEADER } from '@/lib/sync/sync_http';
+import { getHubStoreSingleton } from '@/lib/sync/hub_store_singleton';
 
 const ORIGINAL_ENV = { ...process.env };
 let tempDir: string;
@@ -109,6 +110,36 @@ test('GET /api/sync/status reports terminals and unresolved conflicts on the hub
   assert.equal(statusBody.role, 'hub');
   assert.equal(statusBody.terminals.length, 1);
   assert.equal(statusBody.unresolvedConflictCount, 0);
+});
+
+test('POST /api/sync/terminals answers 409 with the duplicate message only when the id is really taken', async () => {
+  setHubEnv();
+  const post = () => terminalsPOST(new NextRequest('http://localhost:3000/api/sync/terminals', {
+    method: 'POST',
+    body: JSON.stringify({ terminalId: 'satellite-1', label: 'レジ横端末' })
+  }));
+  assert.equal((await post()).status, 201);
+  const duplicate = await post();
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).message, '端末ID satellite-1 は既に登録されています。');
+});
+
+test('POST /api/sync/terminals answers 500 with a non-duplicate message when the hub store fails', async () => {
+  setHubEnv();
+  // ハブの DB が書き込めない状況(空き容量不足・ロックなど)を、シングルトンの登録だけ差し替えて再現する
+  const store = getHubStoreSingleton();
+  store.registerTerminal = () => {
+    throw new Error('database or disk is full');
+  };
+  const response = await terminalsPOST(new NextRequest('http://localhost:3000/api/sync/terminals', {
+    method: 'POST',
+    body: JSON.stringify({ terminalId: 'satellite-2', label: '調剤室端末' })
+  }));
+  assert.equal(response.status, 500);
+  const { message } = await response.json();
+  assert.equal(message.includes('既に登録'), false, 'a storage failure must not be reported as a duplicate id');
+  assert.match(message, /端末の登録に失敗しました/);
+  assert.match(message, /もう一度/);
 });
 
 test('terminal registration issues a token that authenticates against /api/sync/remote/pull', async () => {

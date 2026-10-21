@@ -10,6 +10,15 @@ import { decryptAesGcm, encryptAesGcm, isValidAesGcmKey } from './sync_crypto.ts
 
 export const HUB_LOCAL_TERMINAL_ID = 'hub-local';
 
+// 端末IDがすでに登録されているときだけ投げる。ディスクの空き不足やロックなど、重複ではない
+// 失敗と区別できるように専用の型にしている(呼び出し側は instanceof で判別する)。
+export class TerminalAlreadyRegisteredError extends Error {
+  constructor(terminalId: string) {
+    super(`端末ID ${terminalId} は既に登録されています。`);
+    this.name = 'TerminalAlreadyRegisteredError';
+  }
+}
+
 export interface HubPushRow {
   docId: string;
   newDocumentState: Record<string, unknown>;
@@ -237,7 +246,7 @@ export function openHubStore(options: HubStoreOptions): HubStore {
     registerTerminal(terminalId, label) {
       const existing = db.prepare('SELECT terminal_id FROM terminals WHERE terminal_id = ?').get(terminalId);
       if (existing) {
-        throw new Error(`端末ID ${terminalId} は既に登録されています。`);
+        throw new TerminalAlreadyRegisteredError(terminalId);
       }
       const token = generateTerminalToken();
       db.prepare(`

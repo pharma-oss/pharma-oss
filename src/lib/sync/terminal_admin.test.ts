@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { openHubStore } from './hub_store.ts';
+import { openHubStore, TerminalAlreadyRegisteredError, type HubStore } from './hub_store.ts';
 import { isValidTerminalId, listTerminals, registerTerminal, revokeTerminal, rotateTerminalToken } from './terminal_admin.ts';
 
 function createTestStore() {
@@ -44,6 +44,48 @@ test('registerTerminal returns 409 for a duplicate terminal id', () => {
     const duplicate = registerTerminal(store, 'satellite-1', '別のラベル');
     assert.equal(duplicate.ok, false);
     assert.equal(duplicate.ok === false && duplicate.status, 409);
+    assert.equal(duplicate.ok === false && duplicate.body.message, '端末ID satellite-1 は既に登録されています。');
+  } finally {
+    store.close();
+  }
+});
+
+test('registerTerminal does not report a storage failure as a duplicate id (the error reaches the caller)', () => {
+  const store = createTestStore();
+  // ディスクの空き不足やロックなど、重複ではない失敗を再現する(HubStore の登録だけを差し替える)
+  const failingStore: HubStore = {
+    ...store,
+    registerTerminal() {
+      throw new Error('database or disk is full');
+    }
+  };
+  try {
+    assert.throws(() => registerTerminal(failingStore, 'satellite-1', 'レジ横端末'), /database or disk is full/);
+  } finally {
+    store.close();
+  }
+});
+
+test('registerTerminal lets a real SQLite failure through instead of answering 409 (store already closed)', () => {
+  const store = createTestStore();
+  store.close();
+  // 閉じた DB への書き込みは node:sqlite が投げる(重複ではない実際の失敗)
+  assert.throws(() => registerTerminal(store, 'satellite-1', 'レジ横端末'), /not open/);
+});
+
+test('registerTerminal still answers 409 only for the duplicate-id error the store raises', () => {
+  const store = createTestStore();
+  const duplicateStore: HubStore = {
+    ...store,
+    registerTerminal(terminalId: string) {
+      throw new TerminalAlreadyRegisteredError(terminalId);
+    }
+  };
+  try {
+    const result = registerTerminal(duplicateStore, 'satellite-9', 'レジ横端末');
+    assert.equal(result.ok, false);
+    assert.equal(result.ok === false && result.status, 409);
+    assert.equal(result.ok === false && result.body.message, '端末ID satellite-9 は既に登録されています。');
   } finally {
     store.close();
   }

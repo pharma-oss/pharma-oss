@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof HubRoleUnavailableError) {
       return NextResponse.json({ message: error.message }, { status: 404 });
     }
-    return NextResponse.json({ message: '端末登録で予期しないエラーが発生しました。' }, { status: 500 });
+    console.error('[sync/terminals] failed to register a terminal:', error);
+    return NextResponse.json(
+      { message: '端末の登録に失敗しました。メイン端末のディスクの空き容量とデータベースの状態を確認して、もう一度お試しください。' },
+      { status: 500 }
+    );
   }
 }

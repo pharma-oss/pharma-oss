@@ -1,4 +1,4 @@
-import type { HubStore } from './hub_store.ts';
+import { TerminalAlreadyRegisteredError, type HubStore } from './hub_store.ts';
 import type { SyncOperationResult } from './sync_client.ts';
 
 // メイン端末の設定画面(Phase 3で実装)が使う、サテライト端末の登録・トークン再発行・
@@ -34,8 +34,13 @@ export function registerTerminal(store: HubStore, terminalId: string, label: str
   try {
     const { token } = store.registerTerminal(trimmedId, trimmedLabel);
     return { ok: true, status: 201, body: { terminalId: trimmedId, label: trimmedLabel, token } };
-  } catch {
-    return { ok: false, status: 409, body: { message: `端末ID ${trimmedId} は既に登録されています。` } };
+  } catch (error) {
+    // 409 にするのは本当に重複したときだけ。ディスクの空き不足やロックなどの失敗は、
+    // 「既に登録されています」と言うと別のIDを試して迷うので、呼び出し側(ルート)へ投げて 500 にする。
+    if (error instanceof TerminalAlreadyRegisteredError) {
+      return { ok: false, status: 409, body: { message: `端末ID ${trimmedId} は既に登録されています。` } };
+    }
+    throw error;
   }
 }
 
