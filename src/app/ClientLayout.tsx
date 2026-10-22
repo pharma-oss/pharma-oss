@@ -10,6 +10,11 @@ import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
 import type { Patient, User } from '@/db/types';
 import { toast } from 'sonner';
+import {
+  resolveReferenceDataSeedWarningOutcome,
+  subscribeReferenceDataSeedFailure,
+  type ReferenceDataSeedTarget
+} from '@/db/reference_data_seed_notice';
 import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
 import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
@@ -136,6 +141,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [isTerminalRevoked, setIsTerminalRevoked] = useState(false);
   const [offlineExpiresAt, setOfflineExpiresAt] = useState('');
   const hasWarnedOfflineAuthFailureRef = useRef(false);
+  const hasWarnedSeedFailureRef = useRef<Set<ReferenceDataSeedTarget>>(new Set());
 
   const isAuthenticated = isAuthenticatedUser(currentUser);
   const initialAdmin = users.find(isInitialAdminUser);
@@ -190,6 +196,24 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   useEffect(() => {
     const user = getCurrentUser();
     setLocalCurrentUser(user);
+  }, []);
+
+  // 初期シード失敗の通知を購読し、画面寿命につき対象ごとに1回だけ toast.warning を出す
+  useEffect(() => {
+    const unsubscribe = subscribeReferenceDataSeedFailure((target) => {
+      const outcome = resolveReferenceDataSeedWarningOutcome({
+        target,
+        alreadyWarned: hasWarnedSeedFailureRef.current.has(target)
+      });
+      if (outcome.shouldWarn && outcome.warningMessage) {
+        hasWarnedSeedFailureRef.current.add(target);
+        toast.warning(outcome.warningMessage);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Periodic and storage event check for satellite offline auth and revocation tombstone

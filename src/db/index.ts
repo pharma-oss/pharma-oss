@@ -25,7 +25,12 @@ import {
   PATIENT_MEDICATION_INFO_TEMPLATE_SCHEMA,
   AUDIT_LOG_SCHEMA
 } from './schema';
-
+import {
+  recordReferenceDataSeedFailure,
+  subscribeReferenceDataSeedFailure,
+  getReferenceDataSeedFailures,
+  type ReferenceDataSeedTarget
+} from './reference_data_seed_notice';
 
 import { isDevelopment, getDbPassword } from '@/lib/env';
 
@@ -142,6 +147,7 @@ async function seedReferenceData(db: PharmacyDatabase) {
             console.log("Seeded medication_guidances successfully.");
         } catch (e) {
             console.error("Failed to seed medication_guidances:", e);
+            recordReferenceDataSeedFailure('medication_guidances', e);
         }
     }
 
@@ -170,6 +176,7 @@ async function seedReferenceData(db: PharmacyDatabase) {
             console.log("Seeded drugs successfully.");
         } catch (e) {
             console.error("Failed to seed drugs:", e);
+            recordReferenceDataSeedFailure('drugs', e);
         }
     }
 }
@@ -718,3 +725,11 @@ export const getDatabase = () => {
     }
     return dbPromise;
 };
+
+export {
+    subscribeReferenceDataSeedFailure,
+    getReferenceDataSeedFailures,
+    recordReferenceDataSeedFailure,
+    type ReferenceDataSeedTarget
+} from './reference_data_seed_notice';
+
