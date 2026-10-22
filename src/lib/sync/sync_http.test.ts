@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { decodeTransportPayload, encodeTransportPayload, extractBearerToken } from './sync_http.ts';
+import { decodeTransportPayload, encodeTransportPayload, extractBearerToken, isSameOriginJsonRequest } from './sync_http.ts';
 
 const KEY = randomBytes(32);
 
@@ -44,4 +44,19 @@ test('decodeTransportPayload rejects plain input when aes-gcm mode is expected',
 test('decodeTransportPayload fails with a different key than was used to encrypt', () => {
   const encoded = encodeTransportPayload({ a: 1 }, 'aes-gcm', KEY);
   assert.throws(() => decodeTransportPayload(encoded, 'aes-gcm', randomBytes(32)));
+});
+
+test('isSameOriginJsonRequest accepts same-origin JSON posts and requests without an Origin header', () => {
+  const headers = (init: Record<string, string>) => new Headers(init);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'application/json', origin: 'http://127.0.0.1:3402', host: '127.0.0.1:3402' })), true);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'application/json; charset=utf-8', host: '127.0.0.1:3402' })), true);
+});
+
+test('isSameOriginJsonRequest rejects cross-site pages and non-JSON "simple" requests', () => {
+  const headers = (init: Record<string, string>) => new Headers(init);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'application/json', origin: 'https://evil.example', host: '127.0.0.1:3402' })), false);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'application/json', origin: 'http://127.0.0.1:9999', host: '127.0.0.1:3402' })), false);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'text/plain', origin: 'http://127.0.0.1:3402', host: '127.0.0.1:3402' })), false);
+  assert.equal(isSameOriginJsonRequest(headers({ origin: 'http://127.0.0.1:3402', host: '127.0.0.1:3402' })), false);
+  assert.equal(isSameOriginJsonRequest(headers({ 'content-type': 'application/json', origin: 'null', host: '127.0.0.1:3402' })), false);
 });

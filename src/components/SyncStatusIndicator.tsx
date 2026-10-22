@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CloudOff, Cloud, RefreshCw, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { resolveClientSyncIdentity, type ClientSyncRole } from '@/lib/sync/client_role';
-import { getActiveReplicationHandle } from '@/lib/sync/replication_bootstrap';
+import { getActiveReplicationHandle, subscribeToReplicationHandle } from '@/lib/sync/replication_bootstrap';
+import type { ReplicationHandle } from '@/lib/sync/replication_client';
 import { getSatelliteQueueHealth, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
 import { useDatabase } from '@/db/DatabaseContext';
 
@@ -168,20 +169,35 @@ export function SyncStatusIndicator() {
 
   useEffect(() => {
     if (role === 'standalone') return;
-    const handle = getActiveReplicationHandle();
-    if (!handle) return;
     const activeCollections = new Set<string>();
-    const subscriptions = Object.entries(handle.states).map(([collectionName, state]) =>
-      state.active$.subscribe((isActive: boolean) => {
-        if (isActive) {
-          activeCollections.add(collectionName);
-        } else {
-          activeCollections.delete(collectionName);
-        }
-        setActiveCollectionCount(activeCollections.size);
-      })
-    );
-    return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
+    let subscriptions: { unsubscribe(): void }[] = [];
+    const detach = () => {
+      subscriptions.forEach((subscription) => subscription.unsubscribe());
+      subscriptions = [];
+      activeCollections.clear();
+      setActiveCollectionCount(0);
+    };
+    // 予備機への切替でレプリケーションが作り直されたら、新しいハンドルの購読に付け替える
+    const attach = (handle: ReplicationHandle | null) => {
+      detach();
+      if (!handle) return;
+      subscriptions = Object.entries(handle.states).map(([collectionName, state]) =>
+        state.active$.subscribe((isActive: boolean) => {
+          if (isActive) {
+            activeCollections.add(collectionName);
+          } else {
+            activeCollections.delete(collectionName);
+          }
+          setActiveCollectionCount(activeCollections.size);
+        })
+      );
+    };
+    attach(getActiveReplicationHandle());
+    const unsubscribeFromHandle = subscribeToReplicationHandle(attach);
+    return () => {
+      unsubscribeFromHandle();
+      detach();
+    };
   }, [role, db]);
 
   const indicator = resolveSyncIndicatorState({

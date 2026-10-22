@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveClientSyncRole } from './client_role.ts';
+import { resolveClientSyncIdentity, resolveClientSyncRole } from './client_role.ts';
 
 test('resolveClientSyncRole returns standalone when window is undefined (SSR)', async () => {
   assert.equal(typeof window, 'undefined');
@@ -35,6 +35,27 @@ test('resolveClientSyncRole falls back to standalone on network failure or bad r
 
     const garbageFetch: typeof fetch = async () => new Response(JSON.stringify({ role: 'nonsense' }), { status: 200 });
     assert.equal(await resolveClientSyncRole({ fetchImpl: garbageFetch }), 'standalone');
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+});
+
+test('resolveClientSyncIdentity carries the hub epoch of a satellite that switched to a standby', async () => {
+  (globalThis as { window?: unknown }).window = {};
+  try {
+    const switched: typeof fetch = async () => new Response(
+      JSON.stringify({ role: 'satellite', configured: true, terminalId: 'sat-1', hubEpoch: ' abcd1234 ' }),
+      { status: 200 }
+    );
+    assert.deepEqual(await resolveClientSyncIdentity({ fetchImpl: switched }), { role: 'satellite', terminalId: 'sat-1', hubEpoch: 'abcd1234' });
+
+    const neverSwitched: typeof fetch = async () => new Response(
+      JSON.stringify({ role: 'satellite', configured: true, terminalId: 'sat-1' }),
+      { status: 200 }
+    );
+    const identity = await resolveClientSyncIdentity({ fetchImpl: neverSwitched });
+    assert.equal(identity.role, 'satellite');
+    assert.equal('hubEpoch' in identity, false);
   } finally {
     delete (globalThis as { window?: unknown }).window;
   }

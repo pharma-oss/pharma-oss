@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { performSyncPull } from '@/lib/sync/sync_client';
+import { getDefaultSatelliteHubStateStore } from '@/lib/sync/satellite_hub_state';
 import { getHubStoreSingleton, HubRoleUnavailableError } from '@/lib/sync/hub_store_singleton';
 
 // ブラウザ(自機)から呼ばれるローカル同期エンドポイント。role=hubならハブストアを
@@ -11,7 +12,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await performSyncPull(collection, Number.isFinite(checkpoint) ? checkpoint : 0, batchSize, {
-      getHubStore: getHubStoreSingleton
+      getHubStore: getHubStoreSingleton,
+      satelliteHubStateStore: getDefaultSatelliteHubStateStore()
     });
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {

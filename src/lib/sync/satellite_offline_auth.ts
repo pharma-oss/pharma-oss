@@ -1,7 +1,6 @@
 import CryptoJS from 'crypto-js';
 import type { User } from '@/db/types';
 import { verifyPassword } from '../auth';
-import { isAllowedHubEndpoint } from './sync_config';
 
 export const OFFLINE_AUTH_CACHE_KEY = 'yakureki_satellite_offline_auth_cache_v1';
 export const OFFLINE_AUTH_CACHE_TTL_HOURS = 24;
@@ -319,48 +318,6 @@ export function resolveStandbyEndpointRegistrationOutcome(
   };
 }
 
-
-/**
- * ブラウザ側から自機 Next サーバー (127.0.0.1) の /api/sync/standby-hub/verify を叩いて署名を検証する
- */
-export async function verifyStandbyHubEndpoint(
-  entry: StandbyHubEntry,
-  fetchImpl: typeof fetch = fetch
-): Promise<{ ok: boolean; reason?: string }> {
-  if (!entry || !entry.endpoint) {
-    return { ok: false, reason: '予備機エンドポイントが指定されていません。' };
-  }
-
-  // URL 形式および LAN 暗号化ルールの検証
-  if (!isAllowedHubEndpoint(entry.endpoint, 'none')) {
-    // 転送暗号化 'none' の場合、LAN平文HTTPは拒否される
-    return {
-      ok: false,
-      reason: '接続先 URL が許可されていません（LAN 経由の接続には HTTPS または転送暗号化 (aes-gcm) が必要です）。'
-    };
-  }
-
-  try {
-    const response = await fetchImpl('/api/sync/standby-hub/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry)
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ message: '署名検証に失敗しました。' }));
-      return { ok: false, reason: body.message || '予備機の署名が無効または改ざんされています。' };
-    }
-
-    const body = await response.json();
-    return { ok: Boolean(body.ok), reason: body.message };
-  } catch (e) {
-    return {
-      ok: false,
-      reason: `自機検証サーバーへの接続に失敗しました: ${e instanceof Error ? e.message : 'ネットワークエラー'}`
-    };
-  }
-}
 
 export interface OfflineAuthStaffLoadOutcome {
   users: User[];

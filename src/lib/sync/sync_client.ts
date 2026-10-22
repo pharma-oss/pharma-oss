@@ -1,5 +1,6 @@
 import { HUB_LOCAL_TERMINAL_ID, type HubPullResult, type HubPushRow, type HubStore } from './hub_store.ts';
-import { resolvePharmacySyncConfig, type PharmacySyncEnv } from './sync_config.ts';
+import { resolvePharmacySyncConfig, type PharmacySyncConfigResult, type PharmacySyncEnv } from './sync_config.ts';
+import { applySatelliteHubState, type SatelliteHubStateStore } from './satellite_hub_state.ts';
 import { decodeTransportPayload, encodeTransportPayload, TERMINAL_ID_HEADER } from './sync_http.ts';
 import { isPushOnlyFromSatelliteCollection, isSyncCollectionName } from './sync_collections.ts';
 
@@ -16,6 +17,11 @@ export interface SyncClientOptions {
   env?: PharmacySyncEnv;
   fetchImpl?: typeof fetch;
   getHubStore?: () => HubStore;
+  /**
+   * サテライトの「いまの接続先」の保存先。渡すと、環境変数の接続先より保存済みの接続先
+   * (設定 > 端末同期で予備機へ切り替えた結果)を優先する。未指定なら環境変数のまま。
+   */
+  satelliteHubStateStore?: SatelliteHubStateStore;
 }
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
@@ -35,7 +41,7 @@ function unknownCollectionResult<T>(): SyncOperationResult<T> {
   return { ok: false, status: 400, body: { message: '不明なコレクションです。' } };
 }
 
-async function fetchWithTimeout(
+export async function fetchWithTimeout(
   fetchImpl: typeof fetch,
   url: string,
   init: RequestInit,
@@ -50,13 +56,23 @@ async function fetchWithTimeout(
   }
 }
 
+function resolveSyncConfig(options: SyncClientOptions): PharmacySyncConfigResult {
+  const configResult = resolvePharmacySyncConfig(options.env);
+  if (!configResult.ok || configResult.config.role !== 'satellite' || !options.satelliteHubStateStore) {
+    return configResult;
+  }
+  const effective = applySatelliteHubState(configResult.config, options.satelliteHubStateStore);
+  if (!effective.ok) return { ok: false, role: 'satellite', message: effective.message };
+  return { ok: true, config: effective.config };
+}
+
 export async function performSyncPull(
   collection: string,
   checkpointSeq: number,
   batchSize: number,
   options: SyncClientOptions = {}
 ): Promise<SyncOperationResult<HubPullResult>> {
-  const configResult = resolvePharmacySyncConfig(options.env);
+  const configResult = resolveSyncConfig(options);
   if (!configResult.ok) {
     return { ok: false, status: 500, body: { message: configResult.message } };
   }
@@ -108,7 +124,7 @@ export async function performSyncPush(
   rows: HubPushRow[],
   options: SyncClientOptions = {}
 ): Promise<SyncOperationResult<{ conflicts: Record<string, unknown>[] }>> {
-  const configResult = resolvePharmacySyncConfig(options.env);
+  const configResult = resolveSyncConfig(options);
   if (!configResult.ok) {
     return { ok: false, status: 500, body: { message: configResult.message } };
   }
@@ -163,7 +179,7 @@ export interface SyncStatus {
 }
 
 export async function getSyncStatus(options: SyncClientOptions = {}): Promise<SyncOperationResult<SyncStatus>> {
-  const configResult = resolvePharmacySyncConfig(options.env);
+  const configResult = resolveSyncConfig(options);
   if (!configResult.ok) {
     return { ok: false, status: 500, body: { message: configResult.message } };
   }

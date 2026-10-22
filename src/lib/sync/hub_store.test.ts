@@ -294,3 +294,37 @@ test('generateTerminalToken returns unique, sufficiently long tokens', () => {
   assert.notEqual(a, b);
   assert.ok(a.length >= 32);
 });
+
+test('push does not record a conflict or bump seq when the pushed state is identical to the stored one', () => {
+  const store = createTestStore();
+  try {
+    const state = { patientId: 'p1', name: '山田太郎', _deleted: false };
+    store.push('patients', 'hub-local', [{ docId: 'p1', newDocumentState: state }]);
+    const seqBefore = store.pull('patients', 0, 10).checkpoint.seq;
+
+    // 接続先を切り替えた端末が、何も前提(assumedMasterState)を持たずに全件を送り直す場面
+    const conflicts = store.push('patients', 'sat-1', [{ docId: 'p1', newDocumentState: { ...state }, assumedMasterState: null }]);
+
+    assert.deepEqual(conflicts, []);
+    assert.equal(store.listConflicts().length, 0);
+    assert.equal(store.pull('patients', 0, 10).checkpoint.seq, seqBefore);
+  } finally {
+    store.close();
+  }
+});
+
+test('push still records a conflict when the pushed state differs and no assumed state matches', () => {
+  const store = createTestStore();
+  try {
+    store.push('patients', 'hub-local', [{ docId: 'p1', newDocumentState: { patientId: 'p1', name: '山田太郎', _deleted: false } }]);
+    const conflicts = store.push('patients', 'sat-1', [{
+      docId: 'p1',
+      newDocumentState: { patientId: 'p1', name: '別の内容', _deleted: false },
+      assumedMasterState: null
+    }]);
+    assert.equal(conflicts.length, 1);
+    assert.equal(store.listConflicts().length, 1);
+  } finally {
+    store.close();
+  }
+});

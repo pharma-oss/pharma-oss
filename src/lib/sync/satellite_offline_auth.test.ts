@@ -10,7 +10,6 @@ import {
   purgeSatelliteAllCaches,
   computeStandbyHubHmac,
   verifyStandbyHubHmac,
-  verifyStandbyHubEndpoint,
   resolveOfflineAuthStaffLoadOutcome,
   saveStandbyHubAllowlist,
   getStandbyHubAllowlist,
@@ -165,7 +164,7 @@ test('5. Revoked terminal CANNOT break into offline login even after LAN cable i
   }
 });
 
-test('6. Server-side HMAC verification: Valid signed standby endpoint passes, tampered/DevTools entry rejected', async () => {
+test('6. HMAC verification: Valid signed standby endpoint passes, tampered/DevTools entry rejected', async () => {
   const terminalToken = 'secret_terminal_token_777';
   const endpoint = 'https://standby-hub.local:3000';
   const issuedAt = '2026-08-24T00:00:00.000Z';
@@ -190,32 +189,6 @@ test('6. Server-side HMAC verification: Valid signed standby endpoint passes, ta
     signature: 'bad_signature_12345'
   };
   assert.strictEqual(verifyStandbyHubHmac(forgedEntry, terminalToken), false);
-
-  // 4. Test client verifyStandbyHubEndpoint against mock server response
-  const mockFetchPass = async () =>
-    new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  const clientPass = await verifyStandbyHubEndpoint(validEntry, mockFetchPass as any);
-  assert.strictEqual(clientPass.ok, true);
-
-  const mockFetchReject = async () =>
-    new Response(JSON.stringify({ ok: false, message: 'HMAC 署名検証に失敗しました。' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  const clientReject = await verifyStandbyHubEndpoint(tamperedEntry, mockFetchReject as any);
-  assert.strictEqual(clientReject.ok, false);
-});
-
-test('7. Offline state rejects adding new unapproved Hub endpoints (online-only registration rule)', async () => {
-  // In offline mode (LAN down), verifyStandbyHubEndpoint for disallowed / malformed endpoint is rejected
-  const entry: StandbyHubEntry = {
-    endpoint: '',
-    issuedAt: new Date().toISOString(),
-    signature: 'sig'
-  };
-  const res = await verifyStandbyHubEndpoint(entry);
-  assert.strictEqual(res.ok, false);
-  assert.match(res.reason || '', /指定されていません/);
 });
 
 test('8. isAllowedHubEndpoint rejects plaintext HTTP for private LAN when transportEncryption is none', () => {

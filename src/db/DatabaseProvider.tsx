@@ -34,11 +34,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         // メイン端末(hub)・サテライト端末は自機の /api/sync と常時レプリケーションする。
         // サテライトはメモリDBが空の状態で起動するため、ログインに必要なコレクション
         // (users, facility_settings)の初回取得が終わるまで画面をブロックする。
-        const { resolveClientSyncRole } = await import('@/lib/sync/client_role');
-        const syncRole = await resolveClientSyncRole();
+        const { resolveClientSyncIdentity } = await import('@/lib/sync/client_role');
+        const { role: syncRole, hubEpoch } = await resolveClientSyncIdentity();
         if (syncRole === 'hub' || syncRole === 'satellite') {
           const { startAppReplication, awaitSatelliteLoginGate } = await import('@/lib/sync/replication_bootstrap');
-          const handle = startAppReplication(_db, syncRole);
+          const handle = startAppReplication(_db, syncRole, hubEpoch);
           if (syncRole === 'satellite') {
             setSatelliteSyncing(true);
             await awaitSatelliteLoginGate(handle);

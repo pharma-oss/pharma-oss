@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSyncStatus } from '@/lib/sync/sync_client';
+import { getDefaultSatelliteHubStateStore } from '@/lib/sync/satellite_hub_state';
 import { getHubStoreSingleton, HubRoleUnavailableError } from '@/lib/sync/hub_store_singleton';
 
 export async function GET() {
   try {
-    const result = await getSyncStatus({ getHubStore: getHubStoreSingleton });
+    const result = await getSyncStatus({
+      getHubStore: getHubStoreSingleton,
+      satelliteHubStateStore: getDefaultSatelliteHubStateStore()
+    });
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     if (error instanceof HubRoleUnavailableError) {

@@ -116,10 +116,13 @@ function createMockSyncPanelViewProps(overrides: Partial<TerminalSyncPanelViewPr
     setNewStandbyEndpoint: () => {},
     isHubReachable: true,
     currentHubEndpoint: '',
+    defaultHubEndpoint: '',
+    hubOverridden: false,
     switchingHub: false,
     isAdmin: true,
     handleRegisterStandbyEndpoint: () => {},
     handleSwitchStandbyHub: () => {},
+    handleSwitchBackToDefaultHub: () => {},
     registerTerminal: () => {},
     rotateToken: () => {},
     revokeTerminal: () => {},
@@ -190,6 +193,31 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('https://standby-1.local:3000'), 'Should render standby endpoint in list');
     assert.ok(html.includes('メインHub接続中 (オンライン)'), 'Should render online status');
     assert.ok(html.includes('旧ローカルデータを完全に削除'), 'Should render wipe legacy local data button');
+  });
+
+  it('shows the way back to the main hub only while the satellite is switched to a standby', () => {
+    const base = {
+      role: 'satellite' as const,
+      isHubReachable: true,
+      currentHubEndpoint: 'https://standby-1.local:3443',
+      defaultHubEndpoint: 'https://main.local:3443'
+    };
+    const switched = renderToStaticMarkup(React.createElement(
+      TerminalSyncPanelView,
+      createMockSyncPanelViewProps({ ...base, hubOverridden: true })
+    ));
+    assert.ok(switched.includes('data-testid="standby-hub-switch-back"'), 'Should offer the way back to the main hub');
+    assert.ok(switched.includes('メイン端末（既定）へ戻す'), 'Should label the way back');
+    assert.ok(switched.includes('https://main.local:3443'), 'Should show the default endpoint to return to');
+    assert.ok(switched.includes('予備機に接続中 (オンライン)'), 'Should say the satellite is on the standby');
+    assert.ok(!switched.includes('メインHub接続中 (オンライン)'), 'Should no longer claim the main hub');
+
+    const normal = renderToStaticMarkup(React.createElement(
+      TerminalSyncPanelView,
+      createMockSyncPanelViewProps({ ...base, currentHubEndpoint: 'https://main.local:3443', hubOverridden: false })
+    ));
+    assert.ok(!normal.includes('standby-hub-switch-back'), 'Should not offer a way back when already on the main hub');
+    assert.ok(normal.includes('メインHub接続中 (オンライン)'));
   });
 
   it('renders hub terminal management table, register form, and conflict review when role is hub', () => {

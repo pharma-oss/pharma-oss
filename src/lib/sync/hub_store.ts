@@ -220,6 +220,9 @@ export function openHubStore(options: HubStoreOptions): HubStore {
             writeDoc(collection, row.docId, row.newDocumentState);
             continue;
           }
+          // すでに同じ内容が保存されている(接続先の切替直後に端末が全件を送り直すとき等)。
+          // 競合ではないので、競合記録も seq の更新もしない。
+          if (statesMatch(row.newDocumentState, currentDoc)) continue;
           if (currentDoc) {
             conflicts.push(currentDoc);
           }

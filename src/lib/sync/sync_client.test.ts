@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { openHubStore } from './hub_store.ts';
 import { getSyncStatus, performSyncPull, performSyncPush } from './sync_client.ts';
 import type { PharmacySyncEnv } from './sync_config.ts';
+import { SatelliteHubStateCorruptError } from './satellite_hub_state.ts';
 
 const VALID_HUB_KEY = randomBytes(32).toString('hex');
 
@@ -177,4 +178,70 @@ test('getSyncStatus (satellite) reports unreachable when the hub cannot be conta
   const result = await getSyncStatus({ env: satelliteEnv(), fetchImpl });
   assert.equal(result.ok, true);
   assert.equal(result.ok && result.body.hubReachable, false);
+});
+
+const SWITCHED_STATE = { endpoint: 'https://standby.local:3443', epoch: 'abcd1234', switchedAt: '2026-10-22T01:00:00.000Z' };
+
+test('satellite pull, push and status follow the saved hub endpoint instead of the environment one', async () => {
+  const urls: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ documents: [], checkpoint: { seq: 0 }, conflicts: [] }), { status: 200 });
+  };
+  const options = {
+    env: satelliteEnv(),
+    fetchImpl,
+    satelliteHubStateStore: { read: () => SWITCHED_STATE, write: () => {} }
+  };
+
+  await performSyncPull('patients', 0, 10, options);
+  await performSyncPush('patients', [], options);
+  await getSyncStatus(options);
+
+  assert.equal(urls.length, 3);
+  for (const url of urls) {
+    assert.ok(url.startsWith('https://standby.local:3443/api/sync/remote/'), url);
+  }
+});
+
+test('satellite sync keeps using the environment endpoint when the saved state says it was returned to the main hub', async () => {
+  let url = '';
+  const fetchImpl: typeof fetch = async (input) => {
+    url = String(input);
+    return new Response(JSON.stringify({ documents: [], checkpoint: { seq: 0 } }), { status: 200 });
+  };
+  await performSyncPull('patients', 0, 10, {
+    env: satelliteEnv(),
+    fetchImpl,
+    satelliteHubStateStore: { read: () => ({ ...SWITCHED_STATE, endpoint: null }), write: () => {} }
+  });
+  assert.ok(url.startsWith('http://127.0.0.1:3000/api/sync/remote/pull'), url);
+});
+
+test('satellite sync stops with a 500 instead of guessing when the saved endpoint cannot be read', async () => {
+  let fetched = false;
+  const fetchImpl: typeof fetch = async () => { fetched = true; return new Response('{}'); };
+  const result = await performSyncPull('patients', 0, 10, {
+    env: satelliteEnv(),
+    fetchImpl,
+    satelliteHubStateStore: { read: () => { throw new SatelliteHubStateCorruptError('/data/state.json'); }, write: () => {} }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false && result.status, 500);
+  assert.equal(fetched, false);
+});
+
+test('the saved hub endpoint is ignored for the hub role', async () => {
+  const env: PharmacySyncEnv = { PHARMACY_SYNC_ROLE: 'hub', PHARMACY_SYNC_HUB_ENCRYPTION_KEY: VALID_HUB_KEY };
+  const store = createTestStore();
+  try {
+    const result = await performSyncPull('patients', 0, 10, {
+      env,
+      getHubStore: () => store,
+      satelliteHubStateStore: { read: () => { throw new Error('must not be read'); }, write: () => {} }
+    });
+    assert.equal(result.ok, true);
+  } finally {
+    store.close();
+  }
 });

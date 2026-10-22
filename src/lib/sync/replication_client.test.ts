@@ -163,3 +163,108 @@ test('two satellite replicas converge to the hub-assigned winner on a concurrent
     store.close();
   }
 });
+
+function patientState(patientId: string, name: string): Record<string, unknown> {
+  return { patientId, name, kana: 'テスト', birthDate: '1980-01-01', _deleted: false };
+}
+
+function pushPatients(store: HubStore, terminalId: string, states: Record<string, unknown>[]): void {
+  store.push('patients', terminalId, states.map((state) => ({
+    docId: String(state.patientId),
+    newDocumentState: state
+  })));
+}
+
+// 既にある文書の更新は、現在の内容を前提(assumedMasterState)として送らないとハブに競合扱いされる
+function updatePatient(store: HubStore, terminalId: string, state: Record<string, unknown>): void {
+  const current = store.pull('patients', 0, 1000).documents.find((d) => d.patientId === state.patientId);
+  const conflicts = store.push('patients', terminalId, [{
+    docId: String(state.patientId),
+    newDocumentState: state,
+    assumedMasterState: current ?? null
+  }]);
+  assert.equal(conflicts.length, 0);
+}
+
+// メイン端末の故障後に予備機へ接続先を切り替える場面の再現。
+// 予備機はメインのバックアップ時点の内容から始まるので、ハブ採番の seq はメインより小さい。
+async function prepareMainAndStandby() {
+  const main = openHubStore({ dbPath: ':memory:', encryptionKey: randomBytes(32) });
+  const standby = openHubStore({ dbPath: ':memory:', encryptionKey: randomBytes(32) });
+  pushPatients(main, 'hub-local', Array.from({ length: 10 }, (_, i) => patientState(`p${i + 1}`, `患者${i + 1}`)));
+  // バックアップを予備機へ復旧する(この時点のメインと同じ内容)
+  pushPatients(standby, 'hub-local', main.pull('patients', 0, 100).documents);
+  // バックアップ後にメインだけが進む: 新規10件と、p5の更新
+  pushPatients(main, 'hub-local', Array.from({ length: 10 }, (_, i) => patientState(`p${i + 11}`, `患者${i + 11}`)));
+  updatePatient(main, 'hub-local', patientState('p5', 'メインで更新'));
+  return { main, standby };
+}
+
+test('a replication that keeps its identifier across a hub switch misses the standby changes whose seq the old hub already passed', async () => {
+  const { main, standby } = await prepareMainAndStandby();
+  const db = await createPatientsOnlyDatabase();
+  let target: HubStore = main;
+  const fetchImpl: typeof fetch = (input, init) => buildHubBackedFetch(target)(input, init);
+  const handle = startReplication(db, { role: 'satellite', fetchImpl, collections: ['patients'], retryTimeMs: 200, pollIntervalMs: 100 });
+  try {
+    await handle.awaitInitialReplication();
+    await waitUntil(async () => (await db.patients.find().exec()).length === 20);
+
+    // メインが落ち、接続先が予備機に変わる。他の端末が予備機へ書き込む(seq=11 < メインで進んだ21)
+    target = standby;
+    pushPatients(standby, 'other-terminal', [patientState('p_new', '予備機の新規')]);
+
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.equal(await db.patients.findOne('p_new').exec(), null);
+  } finally {
+    await handle.cancel();
+    await db.close();
+    main.close();
+    standby.close();
+  }
+});
+
+test('restarting the replication under a new epoch pulls the standby in full and pushes only what the standby lacks or differs on', async () => {
+  const { main, standby } = await prepareMainAndStandby();
+  const db = await createPatientsOnlyDatabase();
+  let target: HubStore = main;
+  // pushの応答が遅くても、pullが先に終わってこの端末の文書を上書きしてはいけない
+  const fetchImpl: typeof fetch = async (input, init) => {
+    if (String(input).includes('/api/sync/push')) await new Promise((resolve) => setTimeout(resolve, 150));
+    return buildHubBackedFetch(target)(input, init);
+  };
+  const first = startReplication(db, { role: 'satellite', fetchImpl, collections: ['patients'], retryTimeMs: 200, pollIntervalMs: 100 });
+  let second: ReturnType<typeof startReplication> | null = null;
+  try {
+    await first.awaitInitialReplication();
+    await waitUntil(async () => (await db.patients.find().exec()).length === 20);
+
+    target = standby;
+    pushPatients(standby, 'other-terminal', [patientState('p_new', '予備機の新規')]);
+    await first.cancel();
+    second = startReplication(db, {
+      role: 'satellite', fetchImpl, collections: ['patients'], retryTimeMs: 200, pollIntervalMs: 100, replicationEpoch: 'e1'
+    });
+    await second.awaitInitialReplication();
+
+    // 予備機の変更が届く
+    await waitUntil(async () => (await db.patients.findOne('p_new').exec()) !== null);
+    // この端末にしか無い p11〜p20 は予備機へ渡る
+    await waitUntil(() => standby.pull('patients', 0, 100).documents.length === 21);
+    const standbyDocs = standby.pull('patients', 0, 100).documents;
+    assert.equal(standbyDocs.filter((d) => /^p1\d$|^p20$/.test(String(d.patientId)) && Number(String(d.patientId).slice(1)) > 10).length, 10);
+
+    // p5 はメイン(この端末)と予備機で内容が違う: 予備機が正本として残り、この端末側の内容は競合として記録される
+    await waitUntil(async () => (await db.patients.findOne('p5').exec())?.name === '患者5');
+    const conflicts = standby.listConflicts();
+    assert.equal(conflicts.length, 1);
+    assert.equal(conflicts[0].docId, 'p5');
+    assert.equal(conflicts[0].losingDocumentState.name, 'メインで更新');
+  } finally {
+    await first.cancel();
+    await second?.cancel();
+    await db.close();
+    main.close();
+    standby.close();
+  }
+});

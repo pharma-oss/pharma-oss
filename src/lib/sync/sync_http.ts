@@ -51,3 +51,21 @@ export function decodeTransportPayload<T>(
   }
   return raw as T;
 }
+
+/**
+ * 接続先のような端末の設定を変える要求が、自機の画面(同一オリジン)から来たかを確かめる。
+ * 他のサイトのページが、ブラウザ経由で 127.0.0.1 の API を叩いて設定を書き換えるのを防ぐ。
+ * ブラウザの POST には Origin が付くので、あれば Host と一致することを求める。
+ * 本文は JSON に限る(フォーム送信などの「単純リクエスト」を弾く)。
+ */
+export function isSameOriginJsonRequest(headers: Pick<Headers, 'get'>): boolean {
+  const contentType = headers.get('content-type') || '';
+  if (!/^application\/json(\s*;|$)/i.test(contentType.trim())) return false;
+  const origin = headers.get('origin');
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === headers.get('host');
+  } catch {
+    return false;
+  }
+}

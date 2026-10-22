@@ -14,6 +14,7 @@ export interface PharmacySyncEnv {
   PHARMACY_SYNC_ROLE?: string;
   PHARMACY_SYNC_HUB_ENCRYPTION_KEY?: string;
   PHARMACY_SYNC_HUB_DB_PATH?: string;
+  PHARMACY_SYNC_SATELLITE_STATE_PATH?: string;
   PHARMACY_SYNC_HUB_ENDPOINT?: string;
   PHARMACY_SYNC_TERMINAL_ID?: string;
   PHARMACY_SYNC_TERMINAL_TOKEN?: string;
@@ -57,6 +58,7 @@ export function getPharmacySyncEnv(env?: PharmacySyncEnv): PharmacySyncEnv {
     PHARMACY_SYNC_ROLE: appEnv.syncRole,
     PHARMACY_SYNC_HUB_ENCRYPTION_KEY: appEnv.syncHubEncryptionKey,
     PHARMACY_SYNC_HUB_DB_PATH: appEnv.syncHubDbPath,
+    PHARMACY_SYNC_SATELLITE_STATE_PATH: appEnv.syncSatelliteStatePath,
     PHARMACY_SYNC_HUB_ENDPOINT: appEnv.syncHubEndpoint,
     PHARMACY_SYNC_TERMINAL_ID: appEnv.syncTerminalId,
     PHARMACY_SYNC_TERMINAL_TOKEN: appEnv.syncHubToken,

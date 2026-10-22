@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { performSyncPush } from '@/lib/sync/sync_client';
+import { getDefaultSatelliteHubStateStore } from '@/lib/sync/satellite_hub_state';
 import { getHubStoreSingleton, HubRoleUnavailableError } from '@/lib/sync/hub_store_singleton';
 import type { HubPushRow } from '@/lib/sync/hub_store';
 
@@ -10,7 +11,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await performSyncPush(body.collection, body.rows, { getHubStore: getHubStoreSingleton });
+    const result = await performSyncPush(body.collection, body.rows, {
+      getHubStore: getHubStoreSingleton,
+      satelliteHubStateStore: getDefaultSatelliteHubStateStore()
+    });
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     if (error instanceof HubRoleUnavailableError) {

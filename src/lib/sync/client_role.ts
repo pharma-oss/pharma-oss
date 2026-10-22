@@ -9,6 +9,8 @@ export type ClientSyncRole = 'hub' | 'satellite' | 'standalone';
 export interface ClientSyncIdentity {
   role: ClientSyncRole;
   terminalId?: string;
+  /** サテライトが予備機へ切り替えた世代。未切替なら無い。レプリケーション識別子に入る。 */
+  hubEpoch?: string;
 }
 
 export interface ResolveClientSyncRoleOptions {
@@ -48,7 +50,10 @@ async function fetchClientSyncIdentity(fetchImpl: typeof fetch): Promise<ClientS
     const terminalId = typeof body.terminalId === 'string' && body.terminalId.trim()
       ? body.terminalId.trim()
       : undefined;
-    return { role: body.role, terminalId };
+    const hubEpoch = typeof body.hubEpoch === 'string' && body.hubEpoch.trim()
+      ? body.hubEpoch.trim()
+      : undefined;
+    return { role: body.role, terminalId, ...(hubEpoch ? { hubEpoch } : {}) };
   } catch {
     return { role: 'standalone' };
   }

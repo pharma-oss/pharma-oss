@@ -41,7 +41,7 @@ describe('decideGatewayRoute', () => {
       '/api/sync/terminals/satellite-1',
       '/api/sync/conflicts',
       '/api/sync/conflicts/c1',
-      '/api/sync/standby-hub/verify',
+      '/api/sync/standby-hub/switch',
       '/api/eligibility/check',
       '/api/electronic-prescription/operation',
       '/api/external-integration/prescription-handoff',

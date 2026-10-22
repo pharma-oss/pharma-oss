@@ -23,6 +23,15 @@ export interface StartReplicationOptions {
    */
   pollIntervalMs?: number;
   collections?: readonly SyncCollectionName[];
+  /**
+   * 接続先のメイン端末(ハブ)を切り替えた世代。pullのチェックポイントはハブ採番の seq なので、
+   * 別のハブ(バックアップから復旧した予備機)とは比較できない。切替前のチェックポイントを使い続けると、
+   * 予備機の seq がそれより小さい間の変更を取りこぼす。世代をレプリケーション識別子に含めると、
+   * 切替後は pull を最初からやり直し、この端末にだけある文書はすべて新しいハブへ送られる。
+   * 新しいハブと内容が食い違う文書は、RxDB が pull で上書きせずに push を先に通すので、
+   * ハブ側の競合として記録される。未指定(初期の接続先)は従来の識別子のまま。
+   */
+  replicationEpoch?: string;
 }
 
 export interface ReplicationHandle {
@@ -34,6 +43,10 @@ export interface ReplicationHandle {
 const DEFAULT_BATCH_SIZE = 200;
 const DEFAULT_RETRY_TIME_MS = 5000;
 const DEFAULT_POLL_INTERVAL_MS = 5000;
+
+export function buildReplicationIdentifier(collectionName: SyncCollectionName, epoch?: string): string {
+  return epoch ? `yakureki-sync-${collectionName}-${epoch}` : `yakureki-sync-${collectionName}`;
+}
 
 function buildPullHandler(collectionName: SyncCollectionName, fetchImpl: typeof fetch, batchSize: number) {
   return async (lastCheckpoint: { seq: number } | undefined, requestedBatchSize: number) => {
@@ -130,7 +143,7 @@ export function startReplication(db: PharmacyDatabase, options: StartReplication
     const pushOnly = options.role === 'satellite' && isPushOnlyFromSatelliteCollection(collectionName);
 
     const state = replicateRxCollection({
-      replicationIdentifier: `yakureki-sync-${collectionName}`,
+      replicationIdentifier: buildReplicationIdentifier(collectionName, options.replicationEpoch),
       collection,
       live: true,
       retryTime,

@@ -3,8 +3,14 @@ import { toast } from 'sonner';
 import { Laptop, KeyRound, ShieldOff, RefreshCw, Copy, CheckCircle2, AlertTriangle, AlertOctagon, Clock, Database, Server, Radio, ShieldCheck, ArrowRightLeft } from 'lucide-react';
 import { resolveClientSyncIdentity, type ClientSyncRole } from '@/lib/sync/client_role';
 import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
-import { getStandbyHubAllowlist, saveStandbyHubAllowlist, resolveStandbyEndpointRegistrationOutcome, verifyStandbyHubEndpoint, computeStandbyHubHmac, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
-import { isAllowedHubEndpoint } from '@/lib/sync/sync_config';
+import { getStandbyHubAllowlist, saveStandbyHubAllowlist, resolveStandbyEndpointRegistrationOutcome, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
+import {
+  fetchStandbyHubState,
+  isSameStandbyEndpoint,
+  requestHubSwitch,
+  requestStandbyHubRegistration,
+  type HubSwitchTarget
+} from '@/lib/sync/standby_hub_client';
 import { logAuditAction, getCurrentUser } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { useDatabase } from '@/db/DatabaseContext';
@@ -71,6 +77,8 @@ export default function TerminalSyncPanel() {
   const [newStandbyEndpoint, setNewStandbyEndpoint] = useState<string>('');
   const [isHubReachable, setIsHubReachable] = useState<boolean>(true);
   const [currentHubEndpoint, setCurrentHubEndpoint] = useState<string>('');
+  const [defaultHubEndpoint, setDefaultHubEndpoint] = useState<string>('');
+  const [hubOverridden, setHubOverridden] = useState<boolean>(false);
   const [switchingHub, setSwitchingHub] = useState<boolean>(false);
 
   const currentUser = getCurrentUser();
@@ -82,17 +90,19 @@ export default function TerminalSyncPanel() {
     if (identity.role === 'satellite') {
       setSatelliteHealth(getSatelliteQueueHealth());
       setStandbyList(getStandbyHubAllowlist());
-      try {
-        const res = await fetch('/api/sync/config');
-        if (res.ok) {
-          setIsHubReachable(true);
-          const body = await res.json();
-          if (body.hubEndpoint) setCurrentHubEndpoint(body.hubEndpoint);
-        } else {
-          setIsHubReachable(false);
-        }
-      } catch {
-        setIsHubReachable(false);
+      const [hubState, reachable] = await Promise.all([
+        fetchStandbyHubState(),
+        fetch('/api/sync/status')
+          .then(async (res) => res.ok && (await res.json()).hubReachable === true)
+          .catch(() => false)
+      ]);
+      setIsHubReachable(reachable);
+      if (hubState.ok) {
+        setCurrentHubEndpoint(hubState.value.activeEndpoint);
+        setDefaultHubEndpoint(hubState.value.defaultEndpoint);
+        setHubOverridden(hubState.value.overridden);
+      } else {
+        toast.error(`接続先の状態を取得できませんでした: ${hubState.message}`);
       }
       return;
     }
@@ -128,10 +138,6 @@ export default function TerminalSyncPanel() {
     }
 
     const trimmedUrl = newStandbyEndpoint.trim();
-    if (!isAllowedHubEndpoint(trimmedUrl, 'none')) {
-      toast.error('接続先 URL が許可されていません（LAN 経由の接続には HTTPS または転送暗号化 (aes-gcm) が必要です）。');
-      return;
-    }
 
     if (!isHubReachable) {
       toast.error('メイン端末とオンライン接続中のみ新規登録が可能です。');
@@ -140,17 +146,16 @@ export default function TerminalSyncPanel() {
 
     setBusy(true);
     try {
-      // 在オンライ環境下でHubに署名生成をリクエストするか、トークンからHMACを発行
-      const issuedAt = new Date().toISOString();
-      const mockToken = 'mock_satellite_token'; // Hubが発行
-      const signature = computeStandbyHubHmac(trimmedUrl, issuedAt, mockToken);
-      const newEntry: StandbyHubEntry = {
-        endpoint: trimmedUrl,
-        issuedAt,
-        signature
-      };
+      // 署名はこの端末のサーバーが端末トークンで行う(トークンはブラウザに渡らない)。
+      // URL の許可規則(LAN は HTTPS または転送暗号化)の判定も、実際の設定を持つサーバー側で行う。
+      const signed = await requestStandbyHubRegistration(trimmedUrl);
+      if (!signed.ok) {
+        toast.error(signed.message);
+        return;
+      }
+      const newEntry = signed.value;
 
-      const updated = [...standbyList.filter((e) => e.endpoint !== trimmedUrl), newEntry];
+      const updated = [...standbyList.filter((e) => !isSameStandbyEndpoint(e.endpoint, newEntry.endpoint)), newEntry];
       const saved = saveStandbyHubAllowlist(updated);
       const outcome = resolveStandbyEndpointRegistrationOutcome(saved);
       if (!outcome.ok) {
@@ -162,10 +167,10 @@ export default function TerminalSyncPanel() {
 
       setStandbyList(updated);
       setNewStandbyEndpoint('');
-      toast.success(`予備機エンドポイント「${trimmedUrl}」を承認済みリストに登録しました。`);
+      toast.success(`予備機エンドポイント「${newEntry.endpoint}」を承認済みリストに登録しました。`);
       if (db) {
         await recordAuditOrNotify(
-          () => logAuditAction(db, 'facility_settings_update', `予備機Hubエンドポイント登録: ${trimmedUrl}`),
+          () => logAuditAction(db, 'facility_settings_update', `予備機Hubエンドポイント登録: ${newEntry.endpoint}`),
           (message) => toast.warning(message)
         );
       }
@@ -173,6 +178,56 @@ export default function TerminalSyncPanel() {
       toast.error(`登録に失敗しました: ${e?.message || '不明なエラー'}`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // 接続先の切替の共通処理。サーバーが署名の検証と切替先への疎通確認をして接続先を保存し、
+  // 成功したらこのタブのレプリケーションを新しい世代でやり直す(メモリDBはそのまま保つので、
+  // この端末にだけある入力は新しい接続先へ送られ、新しい接続先の内容は最初から取り込まれる)。
+  const runHubSwitch = async (params: { target: HubSwitchTarget; confirmMessage: string; destinationLabel: string }) => {
+    if (!isAdmin) {
+      toast.error('接続先の切替には管理者権限が必要です。');
+      return;
+    }
+    if (!db) {
+      toast.error('データベースの準備ができていません。しばらくしてからもう一度お試しください。');
+      return;
+    }
+    if (!window.confirm(params.confirmMessage)) return;
+
+    setSwitchingHub(true);
+    try {
+      const switched = await requestHubSwitch(params.target);
+      if (!switched.ok) {
+        toast.error(`切替を拒否しました: ${switched.message}`);
+        return;
+      }
+
+      const oldEndpoint = currentHubEndpoint || 'メイン端末 (既定)';
+      setCurrentHubEndpoint(switched.value.activeEndpoint);
+      setDefaultHubEndpoint(switched.value.defaultEndpoint);
+      setHubOverridden(switched.value.overridden);
+      try {
+        const { restartAppReplication } = await import('@/lib/sync/replication_bootstrap');
+        await restartAppReplication(db, 'satellite', switched.value.epoch);
+      } catch {
+        toast.error('接続先は切り替わりましたが、同期の再開に失敗しました。ページを再読み込みしてください。');
+        return;
+      }
+      toast.success(`接続先を${params.destinationLabel}（${switched.value.activeEndpoint}）へ切り替えました。`);
+
+      await recordAuditOrNotify(
+        () => logAuditAction(
+          db,
+          'facility_settings_update',
+          `Hub接続先エンドポイントを変更: 「${oldEndpoint}」 -> 「${switched.value.activeEndpoint}」`
+        ),
+        (message) => toast.warning(message)
+      );
+    } catch (e: any) {
+      toast.error(`接続先の切替中にエラーが発生しました: ${e?.message || '通信エラー'}`);
+    } finally {
+      setSwitchingHub(false);
     }
   };
 
@@ -186,35 +241,27 @@ export default function TerminalSyncPanel() {
       toast.error('切り替える予備機を選択してください。');
       return;
     }
+    await runHubSwitch({
+      target: { entry },
+      destinationLabel: '予備機',
+      confirmMessage:
+        `接続先を予備機（${entry.endpoint}）へ切り替えますか?\n\n`
+        + '・予備機はバックアップから復旧したメイン端末です。復旧時点より後の入力は予備機にありません。\n'
+        + '・この端末にだけある入力は予備機へ送られます。予備機と内容が食い違う項目は予備機の内容が採用され、'
+        + 'この端末側の内容は予備機の「設定 > 端末同期」の競合レビューに残ります。\n'
+        + '・すべてのサテライト端末で同じ切替が必要です。'
+    });
+  };
 
-    setSwitchingHub(true);
-    try {
-      // サーバー側 (127.0.0.1) で HMAC 署名を検証
-      const verification = await verifyStandbyHubEndpoint(entry);
-      if (!verification.ok) {
-        toast.error(`切替を拒否しました: ${verification.reason || '署名検証に失敗しました。'}`);
-        return;
-      }
-
-      const oldEndpoint = currentHubEndpoint || 'メイン端末 (既定)';
-      setCurrentHubEndpoint(entry.endpoint);
-      toast.success(`接続先を予備機（${entry.endpoint}）へ切り替えました。`);
-
-      if (db) {
-        await recordAuditOrNotify(
-          () => logAuditAction(
-            db,
-            'facility_settings_update',
-            `Hub接続先エンドポイントを変更: 「${oldEndpoint}」 -> 「${entry.endpoint}」`
-          ),
-          (message) => toast.warning(message)
-        );
-      }
-    } catch (e: any) {
-      toast.error(`予備機切替中にエラーが発生しました: ${e?.message || '通信エラー'}`);
-    } finally {
-      setSwitchingHub(false);
-    }
+  const handleSwitchBackToDefaultHub = async () => {
+    await runHubSwitch({
+      target: { target: 'default' },
+      destinationLabel: 'メイン端末',
+      confirmMessage:
+        `接続先をメイン端末（既定: ${defaultHubEndpoint}）へ戻しますか?\n\n`
+        + '・この端末にある内容のうち、メイン端末に無いもの(予備機での入力を含む)はメイン端末へ送られます。\n'
+        + '・内容が食い違う項目はメイン端末の内容が採用され、この端末側の内容はメイン端末の競合レビューに残ります。'
+    });
   };
 
   const registerTerminal = async () => {
@@ -419,10 +466,13 @@ export default function TerminalSyncPanel() {
       setNewStandbyEndpoint={setNewStandbyEndpoint}
       isHubReachable={isHubReachable}
       currentHubEndpoint={currentHubEndpoint}
+      defaultHubEndpoint={defaultHubEndpoint}
+      hubOverridden={hubOverridden}
       switchingHub={switchingHub}
       isAdmin={isAdmin}
       handleRegisterStandbyEndpoint={handleRegisterStandbyEndpoint}
       handleSwitchStandbyHub={handleSwitchStandbyHub}
+      handleSwitchBackToDefaultHub={handleSwitchBackToDefaultHub}
       registerTerminal={registerTerminal}
       rotateToken={rotateToken}
       revokeTerminal={revokeTerminal}
@@ -452,10 +502,13 @@ export interface TerminalSyncPanelViewProps {
   setNewStandbyEndpoint: (v: string) => void;
   isHubReachable: boolean;
   currentHubEndpoint: string;
+  defaultHubEndpoint: string;
+  hubOverridden: boolean;
   switchingHub: boolean;
   isAdmin: boolean;
   handleRegisterStandbyEndpoint: () => void | Promise<void>;
   handleSwitchStandbyHub: () => void | Promise<void>;
+  handleSwitchBackToDefaultHub: () => void | Promise<void>;
   registerTerminal: () => void | Promise<void>;
   rotateToken: (terminalId: string) => void | Promise<void>;
   revokeTerminal: (terminalId: string) => void | Promise<void>;
@@ -483,10 +536,13 @@ export function TerminalSyncPanelView({
     setNewStandbyEndpoint,
     isHubReachable,
     currentHubEndpoint,
+    defaultHubEndpoint,
+    hubOverridden,
     switchingHub,
     isAdmin,
     handleRegisterStandbyEndpoint,
     handleSwitchStandbyHub,
+    handleSwitchBackToDefaultHub,
     registerTerminal,
     rotateToken,
     revokeTerminal,
@@ -633,7 +689,9 @@ export function TerminalSyncPanelView({
               <h3 className="sync-card-title-compact">予備機切替（Standby Hub設定）</h3>
             </div>
             <span className={`queue-badge ${isHubReachable ? 'badge-success' : 'badge-danger'}`}>
-              {isHubReachable ? 'メインHub接続中 (オンライン)' : 'メインHub切断 (オフライン)'}
+              {hubOverridden
+                ? (isHubReachable ? '予備機に接続中 (オンライン)' : '予備機と切断 (オフライン)')
+                : (isHubReachable ? 'メインHub接続中 (オンライン)' : 'メインHub切断 (オフライン)')}
             </span>
           </div>
 
@@ -649,6 +707,24 @@ export function TerminalSyncPanelView({
             <div className="standby-hub-current-endpoint">
               {currentHubEndpoint || 'メイン端末 (既定)'}
             </div>
+            {hubOverridden && (
+              <div className="standby-hub-override-note" data-testid="standby-hub-override-note">
+                <p className="text-muted standby-hub-override-desc">
+                  予備機に切り替え中です。メイン端末（既定: {defaultHubEndpoint}）が復旧したら、メイン端末へ戻してください。
+                </p>
+                <button
+                  type="button"
+                  className="btn-secondary flex items-center gap-1.5"
+                  onClick={() => void handleSwitchBackToDefaultHub()}
+                  disabled={switchingHub || !isAdmin}
+                  title={!isAdmin ? '管理者権限が必要です' : ''}
+                  data-testid="standby-hub-switch-back"
+                >
+                  <ArrowRightLeft size={14} aria-hidden="true" />
+                  <span>メイン端末（既定）へ戻す</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 予備機リスト */}
@@ -1249,6 +1325,17 @@ export function TerminalSyncPanelView({
           font-size: var(--fs-md);
           font-weight: 700;
           font-family: monospace;
+        }
+        .standby-hub-override-note {
+          margin-top: var(--space-3);
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: var(--space-2);
+        }
+        .standby-hub-override-desc {
+          margin: 0;
+          font-size: var(--fs-sm);
         }
         .standby-hub-section {
           margin-bottom: var(--space-4);

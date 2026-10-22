@@ -89,6 +89,7 @@ export interface AppEnvConfig {
   syncTransportKey: string;
   syncHubDbPath: string;
   syncHubEncryptionKey: string;
+  syncSatelliteStatePath: string;
 
   // SQLite WASM / Master Data
   sqliteWasmModuleUrl?: string;
@@ -205,6 +206,7 @@ export function parseEnvConfig(env: Record<string, string | undefined> = process
     syncTransportKey: env.PHARMACY_SYNC_TRANSPORT_KEY || '',
     syncHubDbPath: env.PHARMACY_SYNC_HUB_DB_PATH || './data/sync_hub.sqlite',
     syncHubEncryptionKey: env.PHARMACY_SYNC_HUB_ENCRYPTION_KEY || '',
+    syncSatelliteStatePath: env.PHARMACY_SYNC_SATELLITE_STATE_PATH || './data/satellite_hub_state.json',
 
     // SQLite WASM / Master Data
     sqliteWasmModuleUrl: env.NEXT_PUBLIC_SQLITE_WASM_MODULE_URL,
