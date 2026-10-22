@@ -1,11 +1,23 @@
 export class DbKeyStorageUnavailableError extends Error {
   readonly code = 'DB_KEY_STORAGE_UNAVAILABLE';
+  readonly causeName: string | null;
 
   constructor(cause?: unknown) {
     super(
       'このブラウザでは暗号化キーを保存できないため、データベースを開けません。プライベートブラウズを終了するか、ブラウザの保存領域（localStorage）の利用を許可して、再読み込みしてください。'
     );
     this.name = 'DbKeyStorageUnavailableError';
+    if (
+      cause &&
+      typeof cause === 'object' &&
+      'name' in cause &&
+      typeof (cause as { name?: unknown }).name === 'string' &&
+      (cause as { name: string }).name.length > 0
+    ) {
+      this.causeName = (cause as { name: string }).name;
+    } else {
+      this.causeName = null;
+    }
     if (cause && typeof cause === 'object' && 'stack' in cause) {
       this.stack = `${this.stack}\nCaused by: ${(cause as Error).stack}`;
     }
@@ -61,7 +73,7 @@ export function resolveDbPassword(
 export interface DatabaseErrorCardViewState {
   title: string;
   description: string;
-  errorMessage: string;
+  errorMessage: string | null;
 }
 
 export const DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION =
@@ -71,20 +83,15 @@ export const DB_DEFAULT_ERROR_DESCRIPTION =
   '患者データ保護のため、アプリは自動削除や自動初期化を実行していません。バックアップの有無を確認し、管理者の復旧手順に従ってください。';
 
 export function getDatabaseErrorCardViewState(error: unknown): DatabaseErrorCardViewState {
-  const isKeyStorageUnavailable =
-    error instanceof DbKeyStorageUnavailableError ||
-    (typeof error === 'object' && error !== null && 'name' in error && (error as { name: string }).name === 'DbKeyStorageUnavailableError') ||
-    (typeof error === 'string' && error.includes('DbKeyStorageUnavailableError'));
-
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '不明なエラー';
-
-  if (isKeyStorageUnavailable) {
+  if (error instanceof DbKeyStorageUnavailableError) {
     return {
       title: 'ローカルデータベースを開けません',
       description: DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION,
-      errorMessage: message
+      errorMessage: error.causeName ? `詳細: ${error.causeName}` : null
     };
   }
+
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '不明なエラー';
 
   return {
     title: 'ローカルデータベースを開けません',

@@ -132,6 +132,20 @@ describe('db_password contracts', () => {
   });
 
   describe('getDatabaseErrorCardViewState', () => {
+    it('extracts cause name when present and null when absent in DbKeyStorageUnavailableError', () => {
+      const withName = new DbKeyStorageUnavailableError(new DOMException('quota', 'QuotaExceededError'));
+      assert.strictEqual(withName.causeName, 'QuotaExceededError');
+
+      const withGenericError = new DbKeyStorageUnavailableError(new Error('something'));
+      assert.strictEqual(withGenericError.causeName, 'Error');
+
+      const withoutCause = new DbKeyStorageUnavailableError();
+      assert.strictEqual(withoutCause.causeName, null);
+
+      const withNonObject = new DbKeyStorageUnavailableError('string-cause');
+      assert.strictEqual(withNonObject.causeName, null);
+    });
+
     it('returns target action guidance for DbKeyStorageUnavailableError instance', () => {
       const err = new DbKeyStorageUnavailableError();
       const state = getDatabaseErrorCardViewState(err);
@@ -139,7 +153,29 @@ describe('db_password contracts', () => {
       assert.strictEqual(state.title, 'ローカルデータベースを開けません');
       assert.strictEqual(state.description, DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION);
       assert.ok(state.description.includes('プライベートブラウズを終了'));
-      assert.strictEqual(state.errorMessage, err.message);
+      assert.strictEqual(state.errorMessage, null);
+    });
+
+    it('returns formatted detail message when causeName is present and null when absent', () => {
+      const withCause = new DbKeyStorageUnavailableError(new DOMException('quota', 'QuotaExceededError'));
+      const stateWithCause = getDatabaseErrorCardViewState(withCause);
+      assert.strictEqual(stateWithCause.errorMessage, '詳細: QuotaExceededError');
+
+      const withoutCause = new DbKeyStorageUnavailableError();
+      const stateWithoutCause = getDatabaseErrorCardViewState(withoutCause);
+      assert.strictEqual(stateWithoutCause.errorMessage, null);
+    });
+
+    it('relies strictly on instanceof DbKeyStorageUnavailableError rather than name or string matching', () => {
+      const fakeErrorObject = { name: 'DbKeyStorageUnavailableError', message: 'fake error' };
+      const fakeState = getDatabaseErrorCardViewState(fakeErrorObject);
+      assert.strictEqual(fakeState.description, DB_DEFAULT_ERROR_DESCRIPTION);
+      assert.strictEqual(fakeState.errorMessage, '不明なエラー');
+
+      const fakeString = 'DbKeyStorageUnavailableError occurred';
+      const fakeStringState = getDatabaseErrorCardViewState(fakeString);
+      assert.strictEqual(fakeStringState.description, DB_DEFAULT_ERROR_DESCRIPTION);
+      assert.strictEqual(fakeStringState.errorMessage, fakeString);
     });
 
     it('returns default protection description for generic errors', () => {

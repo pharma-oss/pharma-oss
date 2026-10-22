@@ -108,7 +108,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         <div role="alert" className="db-alert-card">
           <h1 className="db-card-title">{errorCard.title}</h1>
           <p className="db-card-desc">{errorCard.description}</p>
-          <p className="db-error-text">エラー: {errorCard.errorMessage}</p>
+          {errorCard.errorMessage && (
+            <p className="db-error-text">
+              {errorCard.errorMessage.startsWith('詳細:')
+                ? errorCard.errorMessage
+                : `エラー: ${errorCard.errorMessage}`}
+            </p>
+          )}
         </div>
         <style jsx>{`
           .db-fullscreen-container {
