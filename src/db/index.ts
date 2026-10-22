@@ -26,19 +26,12 @@ import {
   AUDIT_LOG_SCHEMA
 } from './schema';
 import {
-  recordReferenceDataSeedFailure,
-  subscribeReferenceDataSeedFailure,
-  getReferenceDataSeedFailures,
-  type ReferenceDataSeedTarget
+  recordReferenceDataSeedFailure
 } from './reference_data_seed_notice';
 import {
   resolveDbPassword as resolveDbPasswordHelper,
-  getOrCreateLocalDbPassword as getOrCreateLocalDbPasswordHelper,
   LOCAL_DB_PASSWORD_KEY,
-  generateRandomPassword,
-  DbKeyStorageUnavailableError,
-  getDatabaseErrorCardViewState,
-  type DatabaseErrorCardViewState
+  generateRandomPassword
 } from './db_password';
 
 import { isDevelopment, getDbPassword } from '@/lib/env';
@@ -75,11 +68,6 @@ function assertBulkWriteSuccess(result: BulkWriteResultLike, label: string) {
 // var, generate a random key on first run and persist it in this browser
 // profile only (unique per install, never leaves the device, never committed
 // to source).
-function getOrCreateLocalDbPassword(): string {
-    const storage = typeof window !== 'undefined' ? window.localStorage : null;
-    return getOrCreateLocalDbPasswordHelper(storage, generateRandomPassword);
-}
-
 function resolveDbPassword(): string {
     const storage = typeof window !== 'undefined' ? window.localStorage : null;
     return resolveDbPasswordHelper(getDbPassword(), storage, generateRandomPassword);
@@ -709,17 +697,4 @@ export const getDatabase = () => {
     }
     return dbPromise;
 };
-
-export {
-    subscribeReferenceDataSeedFailure,
-    getReferenceDataSeedFailures,
-    recordReferenceDataSeedFailure,
-    type ReferenceDataSeedTarget
-} from './reference_data_seed_notice';
-
-export {
-    DbKeyStorageUnavailableError,
-    getDatabaseErrorCardViewState,
-    type DatabaseErrorCardViewState
-} from './db_password';
 
