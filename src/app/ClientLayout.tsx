@@ -16,7 +16,6 @@ import {
   type ReferenceDataSeedTarget
 } from '@/db/reference_data_seed_notice';
 import FirstRunTutorial, { tutorialStorageKey } from '@/components/FirstRunTutorial';
-import PreLoginTour from '@/components/PreLoginTour';
 import { SyncStatusIndicator } from '@/components/SyncStatusIndicator';
 import { CapsuleGlyph } from '@/components/brand/CapsuleMark';
 import { DbSecurityBanner } from '@/components/DbSecurityBanner';
@@ -33,8 +32,6 @@ const navItems = [
 ];
 
 export const STAFF_LOAD_TIMEOUT_MS = 8000;
-// 初期管理者パスワード設定より前に、未ログインのまま体験できるデモの既読状態
-export const PRE_LOGIN_TOUR_STORAGE_KEY = 'yakureki:pre-login-tour:v1';
 
 const toUser = (doc: any): User => {
   const data = typeof doc?.toJSON === 'function' ? doc.toJSON() : doc;
@@ -146,15 +143,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const isAuthenticated = isAuthenticatedUser(currentUser);
   const initialAdmin = users.find(isInitialAdminUser);
   const initialAdminNeedsCredential = !isOfflineAuthMode && !isTerminalRevoked && !!initialAdmin && !hasLoginCredential(initialAdmin);
-  const [preLoginTourDismissed, setPreLoginTourDismissed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return Boolean(window.localStorage.getItem(PRE_LOGIN_TOUR_STORAGE_KEY));
-    } catch {
-      return false;
-    }
-  });
-  const showPreLoginTour = !isAuthenticated && initialAdminNeedsCredential && !preLoginTourDismissed;
   // ゲスト体験中(パスワード未設定の初期管理者としてログインしている)かどうか。
   // 実際にパスワード/パスキーが設定されるとhasLoginCredentialがtrueになり自動的に外れる。
   const isGuestDemoSession = isAuthenticated && isInitialAdminUser(currentUser) && !hasLoginCredential(currentUser);
@@ -182,15 +170,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     currentUser,
     onSessionLocked: handleSessionLocked
   });
-
-  const handleFinishPreLoginTour = useCallback(() => {
-    try {
-      window.localStorage.setItem(PRE_LOGIN_TOUR_STORAGE_KEY, new Date().toISOString());
-    } catch {
-      // このセッション中はステートで既読を保持する
-    }
-    setPreLoginTourDismissed(true);
-  }, []);
 
   // Load current user on mount to avoid hydration mismatch
   useEffect(() => {
@@ -527,8 +506,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       toast.error('初期管理者の準備が完了していません。再読み込みしてください。');
       return;
     }
-    handleFinishPreLoginTour();
-    // PreLoginTourで既に案内済みのため、ログイン直後に「3分デモ」を二重に自動表示しない。
+    // デモ患者で始める人には、ログイン直後に「3分デモ」を重ねて自動表示しない。
     try {
       window.localStorage.setItem(tutorialStorageKey(initialAdmin.userId), new Date().toISOString());
     } catch {
@@ -1111,8 +1089,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     )}
                     {children}
                   </>
-                ) : showPreLoginTour ? (
-                  <PreLoginTour onFinish={handleFinishPreLoginTour} onStartGuestDemo={handleStartGuestDemo} />
                 ) : initialAdminNeedsCredential ? (
                   <form className="card glass auth-setup-form" onSubmit={handleInitialAdminPasswordSetup}>
                     <div>
@@ -1166,17 +1142,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     </div>
                     <div className="auth-demo-footer">
                       <p className="text-muted auth-demo-desc">
-                        まだパスワードを決めていない場合は、デモ患者・受付データで自由に試せる体験モードに戻れます。
+                        パスワードを決める前に、デモ患者・受付データで画面を試せます。
                       </p>
                       <button
                         type="button"
                         className="btn-secondary flex-center gap-2 btn-resume-demo"
+                        data-testid="guest-demo-start"
                         onClick={handleResumeGuestDemoFromAuthGate}
                         disabled={isResumingGuestDemo || isCreatingInitialAdmin}
                       >
                         {isResumingGuestDemo && <Loader2 size={16} className="animate-spin" />}
                         <Sparkles size={16} />
-                        <span>デモ体験を再開する</span>
+                        <span>デモ患者で試してみる</span>
                       </button>
                     </div>
                   </form>

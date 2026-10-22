@@ -59,7 +59,7 @@ type TutorialStep = {
 };
 
 // ClientLayoutがゲスト体験開始時に既読マークするために公開する
-// (PreLoginTourと連続で同じような案内が2回出るのを防ぐ)。
+// (デモ患者で始めた直後に「3分デモ」が重ねて出るのを防ぐ)。
 export function tutorialStorageKey(userId: string): string {
   return `yakureki:first-run-tutorial:${TUTORIAL_VERSION}:${userId}`;
 }

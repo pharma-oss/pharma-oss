@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   STAFF_LOAD_TIMEOUT_MS,
-  PRE_LOGIN_TOUR_STORAGE_KEY,
   STAFF_NO_USERS_ERROR_MESSAGE,
   getPatientSearchResultViewState,
   getStaffAuthGateViewState
@@ -14,9 +13,8 @@ import {
 } from '@/hooks/useSessionLock';
 
 describe('ClientLayout and session lock contracts', () => {
-  it('defines valid staff load timeout and pre-login tour storage key', () => {
+  it('defines valid staff load timeout', () => {
     assert.equal(STAFF_LOAD_TIMEOUT_MS, 8000);
-    assert.equal(PRE_LOGIN_TOUR_STORAGE_KEY, 'yakureki:pre-login-tour:v1');
   });
 
   it('defines 15-minute inactivity session lock timeout and standard activity events', () => {
