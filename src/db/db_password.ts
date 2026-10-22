@@ -31,6 +31,10 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
+export interface WindowLike {
+  localStorage?: StorageLike | null;
+}
+
 export function generateRandomPassword(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -68,6 +72,28 @@ export function resolveDbPassword(
     'NEXT_PUBLIC_DB_PASSWORD explicitly before production use — see README.md.'
   );
   return getOrCreateLocalDbPassword(storage, generateKey);
+}
+
+export function resolveDbPasswordWithWindow(
+  configuredPassword: string | undefined,
+  windowObj: WindowLike | null | undefined,
+  generateKey: () => string = generateRandomPassword
+): string {
+  if (configuredPassword) return configuredPassword;
+
+  let storage: StorageLike | null | undefined;
+  if (windowObj) {
+    try {
+      storage = windowObj.localStorage;
+    } catch (e) {
+      console.error('Failed to access window.localStorage for DB encryption key:', e);
+      throw new DbKeyStorageUnavailableError(e);
+    }
+  } else {
+    storage = null;
+  }
+
+  return resolveDbPassword(configuredPassword, storage, generateKey);
 }
 
 export interface DatabaseErrorCardViewState {

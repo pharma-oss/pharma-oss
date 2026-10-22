@@ -29,7 +29,7 @@ import {
   recordReferenceDataSeedFailure
 } from './reference_data_seed_notice';
 import {
-  resolveDbPassword as resolveDbPasswordHelper,
+  resolveDbPasswordWithWindow,
   LOCAL_DB_PASSWORD_KEY,
   generateRandomPassword
 } from './db_password';
@@ -69,8 +69,8 @@ function assertBulkWriteSuccess(result: BulkWriteResultLike, label: string) {
 // profile only (unique per install, never leaves the device, never committed
 // to source).
 function resolveDbPassword(): string {
-    const storage = typeof window !== 'undefined' ? window.localStorage : null;
-    return resolveDbPasswordHelper(getDbPassword(), storage, generateRandomPassword);
+    const win = typeof window !== 'undefined' ? window : null;
+    return resolveDbPasswordWithWindow(getDbPassword(), win, generateRandomPassword);
 }
 
 // 旧バージョンは env 未設定時にこの固定文字列で暗号化していた。読み取り互換のためだけに

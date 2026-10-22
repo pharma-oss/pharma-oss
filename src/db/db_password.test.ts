@@ -5,10 +5,12 @@ import {
   LOCAL_DB_PASSWORD_KEY,
   getOrCreateLocalDbPassword,
   resolveDbPassword,
+  resolveDbPasswordWithWindow,
   getDatabaseErrorCardViewState,
   DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION,
   DB_DEFAULT_ERROR_DESCRIPTION,
-  type StorageLike
+  type StorageLike,
+  type WindowLike
 } from './db_password';
 
 describe('db_password contracts', () => {
@@ -126,6 +128,64 @@ describe('db_password contracts', () => {
       );
       assert.throws(
         () => resolveDbPassword('', brokenStorage),
+        (err: unknown) => err instanceof DbKeyStorageUnavailableError
+      );
+    });
+  });
+
+  describe('resolveDbPasswordWithWindow', () => {
+    it('returns configured password without touching window.localStorage even when accessing it throws', () => {
+      let getterCalled = false;
+      const throwingWindow: WindowLike = {
+        get localStorage(): StorageLike {
+          getterCalled = true;
+          throw new DOMException('Access is denied for this document.', 'SecurityError');
+        }
+      };
+
+      const key = resolveDbPasswordWithWindow('configured-env-key-123', throwingWindow, () => 'gen-key');
+      assert.strictEqual(key, 'configured-env-key-123');
+      assert.strictEqual(getterCalled, false);
+    });
+
+    it('throws DbKeyStorageUnavailableError with cause name SecurityError when password unset and accessing localStorage throws', () => {
+      const throwingWindow: WindowLike = {
+        get localStorage(): StorageLike {
+          throw new DOMException('Access is denied for this document.', 'SecurityError');
+        }
+      };
+
+      assert.throws(
+        () => resolveDbPasswordWithWindow(undefined, throwingWindow, () => 'gen-key'),
+        (err: unknown) => {
+          assert.ok(err instanceof DbKeyStorageUnavailableError);
+          assert.strictEqual((err as DbKeyStorageUnavailableError).causeName, 'SecurityError');
+          return true;
+        }
+      );
+    });
+
+    it('delegates to normal storage resolution when password unset and window has normal storage', () => {
+      let storedKey: string | null = null;
+      const mockStorage: StorageLike = {
+        getItem: (k: string) => (k === LOCAL_DB_PASSWORD_KEY ? storedKey : null),
+        setItem: (k: string, v: string) => {
+          if (k === LOCAL_DB_PASSWORD_KEY) storedKey = v;
+        }
+      };
+      const normalWindow: WindowLike = { localStorage: mockStorage };
+
+      const key1 = resolveDbPasswordWithWindow(undefined, normalWindow, () => 'generated-test-key-abc');
+      assert.strictEqual(key1, 'generated-test-key-abc');
+      assert.strictEqual(storedKey, 'generated-test-key-abc');
+
+      const key2 = resolveDbPasswordWithWindow(undefined, normalWindow, () => 'different-key');
+      assert.strictEqual(key2, 'generated-test-key-abc');
+    });
+
+    it('throws DbKeyStorageUnavailableError when window is null and password unset', () => {
+      assert.throws(
+        () => resolveDbPasswordWithWindow(undefined, null, () => 'gen-key'),
         (err: unknown) => err instanceof DbKeyStorageUnavailableError
       );
     });
