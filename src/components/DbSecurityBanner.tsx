@@ -21,7 +21,7 @@ export function DbSecurityBannerView({ showBanner }: DbSecurityBannerViewProps) 
       <div className="banner-content">
         <AlertTriangle size={16} aria-hidden="true" className="banner-icon" />
         <span>
-          <strong>【本番運用上の注意】</strong> DB暗号鍵（<code>NEXT_PUBLIC_DB_PASSWORD</code>）が未設定です。ブラウザプロファイル喪失時に復号不能となるリスクがあります。本番運用前に設定してください。
+          <strong>【本番運用上の注意】</strong> DB暗号鍵（<code>NEXT_PUBLIC_DB_PASSWORD</code>）が未設定です。<span className="banner-detail">ブラウザプロファイル喪失時に復号不能となるリスクがあります。本番運用前に設定してください。</span>
         </span>
       </div>
       <a
@@ -59,6 +59,20 @@ export function DbSecurityBannerView({ showBanner }: DbSecurityBannerViewProps) 
           color: var(--warning);
           font-weight: 600;
           text-decoration: underline;
+        }
+        /* 狭い画面では注意の見出しだけにして、説明は設定画面で読んでもらう
+           (バナーが画面の1/4を占めて入力欄を押し下げないようにする) */
+        @media (max-width: 640px) {
+          .db-security-banner {
+            padding: var(--space-1-5) var(--space-3);
+            gap: var(--space-2);
+          }
+          .banner-detail {
+            display: none;
+          }
+          .banner-link {
+            white-space: nowrap;
+          }
         }
       `}</style>
     </div>

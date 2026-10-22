@@ -178,7 +178,7 @@ export default function ExternalConnectorSettingsTab({
         }
         .connector-stat-label {
           color: var(--text-ghost);
-          fontSize: var(--fs-xs);
+          font-size: var(--fs-xs);
           font-weight: 800;
         }
         .connector-stat-value {

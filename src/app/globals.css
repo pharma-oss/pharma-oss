@@ -3203,6 +3203,13 @@ input[type="search"]::-webkit-search-cancel-button {
   .content-scroll {
     padding: 1rem;
   }
+
+  /* 狭い画面ではページ全体(document)がスクロールする。ここで overflow を持たせたままだと、
+     画面下に固定したい操作ボタン(position: sticky)がスクロール枠の内側で止まってしまう。 */
+  .main-viewport,
+  .content-scroll {
+    overflow: visible;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3234,6 +3241,41 @@ input[type="search"]::-webkit-search-cancel-button {
 
   .pwa-install-button {
     min-width: 112px;
+  }
+
+  /* インストール案内は1行に畳む(説明文は出さない)。画面の上部を占めて入力欄を押し下げないため。
+     体験モードの案内は終了ボタンの説明が要るので従来の縦並びのまま。 */
+  .pwa-install-banner:not(.guest-demo-banner) {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0.75rem 0;
+    padding: 0.45rem 0.45rem 0.45rem 0.65rem;
+  }
+
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-copy {
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-copy span,
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-icon {
+    display: none;
+  }
+
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-copy strong {
+    font-size: var(--fs-sm);
+  }
+
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-actions {
+    width: auto;
+    align-self: center;
+    gap: 0.25rem;
+  }
+
+  .pwa-install-banner:not(.guest-demo-banner) .pwa-install-button {
+    min-width: 0;
   }
 
   .search-pill {
@@ -3361,6 +3403,50 @@ input[type="search"]::-webkit-search-cancel-button {
 
   .user-select {
     max-width: 145px;
+  }
+}
+
+/* 360px前後の画面でロゴ+ナビ4つが371px必要になり、ページ全体が横に広がっていた。
+   ナビを少し詰めて320pxまで収める。 */
+@media (max-width: 420px) {
+  .sidebar {
+    gap: 0.4rem;
+    padding: 0.6rem 0.5rem;
+  }
+
+  .brand {
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .brand h1 {
+    font-size: 0.95rem;
+  }
+
+  .logo-spark {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+  }
+
+  .side-nav {
+    gap: 0;
+    min-width: 0;
+  }
+
+  .nav-item {
+    width: 38px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 340px) {
+  .brand h1 {
+    font-size: 0.85rem;
+  }
+
+  .nav-item {
+    width: 34px;
   }
 }
 
@@ -4422,3 +4508,253 @@ td.text-right {
   }
 }
 
+
+/* ==========================================================================
+   複数のコンポーネントから使う共有クラス
+
+   styled-jsx の <style jsx> は、書いたコンポーネントの中のマークアップにしか効かない。
+   2026-07 に EMR・受付ページをコンポーネントに分けたとき、元のページの <style jsx> にあった
+   次のクラスは別コンポーネントに当たらなくなり、エラーも出ずに無装飾で描画されていた
+   (カードの枠や余白が消え、見出しと本文が詰まって重なって見える)。
+   初期リリース(8091090)の定義を、ここで全体に戻す。
+   ========================================================================== */
+
+/* --- EMR: 右側の確認カード(相互作用・注意、服薬指導チェック、SOAP下書き、書類リンクなど) --- */
+.insight-card {
+  min-width: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.insight-card.warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.insight-card.info {
+  border-left: 4px solid #3b82f6;
+}
+
+.insight-card.default {
+  border-left: 4px solid var(--text-ghost);
+}
+
+.insight-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.insight-header h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.insight-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: var(--fs-md);
+}
+
+.insight-list li {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--border);
+}
+
+.insight-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.icon-warning {
+  color: #f59e0b;
+}
+
+.icon-ai {
+  color: #7c3aed;
+}
+
+/* --- EMR: AI補助 SOAP下書きカード --- */
+.soap-ai-draft {
+  border-left: 4px solid #7c3aed;
+}
+
+.soap-ai-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.soap-ai-item {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.7rem;
+}
+
+.soap-ai-item.critical {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.soap-ai-item.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.soap-ai-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.soap-ai-title-row strong {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-main);
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+}
+
+.soap-ai-type,
+.soap-ai-confidence {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.soap-ai-type {
+  width: 28px;
+  color: #fff;
+}
+
+.soap-ai-type.s { background: var(--status-blue); }
+.soap-ai-type.o { background: var(--status-green); }
+.soap-ai-type.a { background: var(--status-orange); }
+.soap-ai-type.p { background: var(--status-purple); }
+
+.soap-ai-confidence {
+  padding: 0 0.45rem;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.soap-ai-item p {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.soap-ai-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.soap-ai-evidence-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.72);
+  color: #64748b;
+  cursor: pointer;
+  font-size: var(--fs-2xs);
+  font-weight: 650;
+  line-height: 1.35;
+  padding: 0.14rem 0.4rem;
+  text-align: left;
+}
+
+.soap-ai-evidence-link:hover:not(:disabled) {
+  border-color: #a78bfa;
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
+.soap-ai-evidence-link:disabled {
+  cursor: default;
+}
+
+.soap-ai-evidence-link span,
+.soap-ai-evidence-link small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.soap-ai-evidence-link small {
+  flex: 0 0 auto;
+  color: #6d28d9;
+  font-size: var(--fs-2xs);
+  font-weight: 850;
+}
+
+.soap-ai-apply {
+  justify-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 30px;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* --- 受付・設定: 状態チップと小見出し(親ページと子コンポーネントの両方で使う) --- */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: #f8fafc;
+}
+
+.status-chip.confirmed {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.status-chip.warning,
+.status-chip.unavailable {
+  border-color: #fed7aa;
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.status-chip.compact {
+  min-height: 28px;
+  padding: 0.25rem 0.5rem;
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+}
+
+.section-kicker {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 800;
+}

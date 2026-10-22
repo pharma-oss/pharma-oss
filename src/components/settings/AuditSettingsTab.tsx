@@ -1118,7 +1118,7 @@ export default function AuditSettingsTab({
         .ai-feedback-subtitle {
           margin: 0.2rem 0 0;
           color: var(--text-muted);
-          fontSize: var(--fs-md);
+          font-size: var(--fs-md);
         }
         .ai-feedback-header-actions {
           display: flex;
@@ -1799,12 +1799,15 @@ export default function AuditSettingsTab({
         }
         .multimonth-field-kpis {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 0.25rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.25rem 0.5rem;
           margin-top: 0.35rem;
           color: var(--text-muted);
           font-size: var(--fs-2xs);
           font-weight: 700;
+        }
+        .multimonth-field-kpis span {
+          white-space: nowrap;
         }
 
         /* 推移グラフ & 最近の承認 */
@@ -1911,21 +1914,23 @@ export default function AuditSettingsTab({
         /* フィルター & 監査証跡一覧テーブル */
         .audit-filter-bar {
           display: flex;
-          gap: 1rem;
+          flex-wrap: wrap;
+          gap: 0.75rem 1rem;
           margin-bottom: 1.5rem;
-          align-items: center;
+          align-items: flex-end;
         }
         .filter-field-user {
           display: flex;
           flex-direction: column;
           gap: 0.25rem;
-          flex: 1;
+          flex: 1 1 12rem;
         }
         .filter-field-action {
           display: flex;
           flex-direction: column;
           gap: 0.25rem;
-          width: 200px;
+          flex: 1 1 10rem;
+          max-width: 14rem;
         }
         .filter-label {
           font-size: var(--fs-sm);
@@ -1952,6 +1957,7 @@ export default function AuditSettingsTab({
         }
         .audit-data-table {
           width: 100%;
+          min-width: 760px;
           border-collapse: collapse;
           font-size: var(--fs-md);
         }
@@ -1962,6 +1968,7 @@ export default function AuditSettingsTab({
         }
         .audit-th {
           padding: 0.75rem;
+          white-space: nowrap;
         }
         .audit-empty-td {
           padding: 2rem;
@@ -1995,6 +2002,8 @@ export default function AuditSettingsTab({
           color: var(--text-main);
         }
         .audit-action-badge {
+          display: inline-block;
+          white-space: nowrap;
           padding: 2px 6px;
           border-radius: 4px;
           color: white;

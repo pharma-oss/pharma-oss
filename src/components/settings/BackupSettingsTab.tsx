@@ -1386,6 +1386,8 @@ export default function BackupSettingsTab({
         .backup-schedule-status {
           display: inline-flex;
           align-items: center;
+          flex: none;
+          white-space: nowrap;
           border: 1px solid rgba(148, 163, 184, 0.35);
           border-radius: 999px;
           padding: 0.15rem 0.65rem;
@@ -1622,7 +1624,7 @@ export default function BackupSettingsTab({
         .generation-kpi-label {
           color: var(--text-ghost);
           font-size: var(--fs-xs);
-          fontWeight: 700;
+          font-weight: 700;
         }
         .generation-kpi-value {
           color: var(--text-main);

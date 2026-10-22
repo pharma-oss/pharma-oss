@@ -318,6 +318,12 @@ export default function DrugHistoryModal({
         .dh-drug-count {
           font-size: var(--fs-xs); font-weight: 800; opacity: 0.75;
         }
+        .dh-drug-name { min-width: 0; font-size: var(--fs-sm); font-weight: 700; overflow-wrap: anywhere; }
+        .dh-drug-meta { flex: 0 0 auto; font-size: var(--fs-2xs); font-weight: 600; opacity: 0.8; white-space: nowrap; }
+        .dh-rx-sub {
+          font-size: var(--fs-2xs); font-weight: 700; color: var(--accent);
+          background: var(--accent-soft); padding: 0.05rem 0.4rem; border-radius: var(--radius-sm);
+        }
         .dh-timeline { padding: 1rem 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.85rem; }
         .dh-anchor {
           display: flex; flex-direction: column; gap: 0.15rem; padding-bottom: 0.4rem;

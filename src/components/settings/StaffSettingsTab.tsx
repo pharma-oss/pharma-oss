@@ -811,7 +811,7 @@ export default function StaffSettingsTab({
               display: flex;
               flex-direction: column;
               gap: 0.35rem;
-              fontWeight: 700;
+              font-weight: 700;
               font-size: var(--fs-md);
             }
             .recovery-note-label {
@@ -881,6 +881,7 @@ export default function StaffSettingsTab({
               border-bottom: 1px solid var(--border);
             }
             .staff-th {
+              white-space: nowrap;
               padding: 0.75rem 1rem;
               font-size: var(--fs-md);
               font-weight: 600;
@@ -897,6 +898,7 @@ export default function StaffSettingsTab({
               border-bottom: 1px solid #f1f5f9;
             }
             .staff-td-name {
+              min-width: 9rem;
               padding: 1rem;
               font-size: var(--fs-base);
               font-weight: 600;
@@ -916,6 +918,8 @@ export default function StaffSettingsTab({
               font-size: var(--fs-md);
             }
             .badge-role {
+              display: inline-block;
+              white-space: nowrap;
               padding: 0.2rem 0.5rem;
               border-radius: 4px;
               font-size: var(--fs-sm);

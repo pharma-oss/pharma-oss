@@ -340,6 +340,34 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         </div>
       </div>
       <style jsx>{`
+        .picking-modal {
+          width: 760px;
+          max-width: 95%;
+          background: rgba(255, 255, 255, 0.88);
+          backdrop-filter: blur(25px);
+          border: 1px solid rgba(255, 255, 255, 0.45);
+          border-radius: 16px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          padding: 1.75rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+          border: none;
+          outline: none;
+        }
+        .picking-modal:not([open]) {
+          display: none;
+        }
+        .picking-modal::backdrop {
+          background-color: rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(8px);
+        }
+        @media (max-width: 720px) {
+          .picking-modal {
+            width: 95%;
+            padding: 1rem;
+          }
+        }
         .picking-header {
           display: flex;
           flex-direction: column;
@@ -392,7 +420,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         }
         .scan-label {
           font-size: var(--fs-md);
-          fontWeight: 600;
+          font-weight: 600;
           display: flex;
           align-items: center;
           gap: var(--space-1-5);
