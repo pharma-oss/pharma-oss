@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Upload, FileSearch, CheckCircle, Trash2, Loader2, CreditCard, Search, Plus, Hospital, Printer, AlertTriangle, ShieldCheck, History } from 'lucide-react';
+import { Upload, FileSearch, CheckCircle, Trash2, Loader2, CreditCard, Search, Plus, Hospital, Printer, AlertTriangle, ShieldCheck, History, QrCode, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, Drug, InsuranceEligibilityStatus, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
@@ -220,6 +220,8 @@ export default function OcrPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isManualEntry, setIsManualEntry] = useState(false);
+  // QR・電子処方箋の取り込み欄。普段は畳み、電子処方箋で受付を選んだときや取得結果が出たときに開く。
+  const [isIntakeToolsOpen, setIsIntakeToolsOpen] = useState(false);
 
   useEffect(() => {
     // ⚡ Bolt: Defer heavy OCR engine initialization to idle time.
@@ -381,6 +383,10 @@ export default function OcrPage() {
     const linkedIds = appliedElectronicPrescription.linkedPrescriptions?.map((link) => link.prescriptionId) || [];
     return Array.from(new Set([appliedElectronicPrescription.prescriptionId, ...linkedIds]));
   }, [appliedElectronicPrescription]);
+  // 取得結果(確認待ち・反映済み)が出たら取り込み欄を開いて内容を見せる
+  useEffect(() => {
+    if (pendingElectronicPrescription || appliedElectronicPrescription) setIsIntakeToolsOpen(true);
+  }, [pendingElectronicPrescription, appliedElectronicPrescription]);
   const pendingElectronicPrescriptionAlreadyApplied = !!pendingElectronicPrescription?.prescription?.prescriptionId
     && appliedElectronicPrescriptionIds.includes(pendingElectronicPrescription.prescription.prescriptionId);
   const displayedElectronicPrescriptionWarnings = useMemo(
@@ -1158,6 +1164,7 @@ export default function OcrPage() {
     if (window.confirm('入力内容と画像を破棄して最初からやり直しますか？')) {
       setImage(null);
       setIsManualEntry(false);
+      setIsIntakeToolsOpen(false);
       setPatientName('');
       setPatientBirthDate('');
       setInsuranceNumber('');
@@ -1447,6 +1454,14 @@ export default function OcrPage() {
 
   const isEditorOpen = !!image || isManualEntry;
 
+  // 手入力受付を始めたら、続けて患者名を打てるように入力欄へ進める(QR・電子処方箋で患者名が入っているときは動かさない)
+  useEffect(() => {
+    if (!isManualEntry || image) return;
+    const nameInput = document.getElementById('patientName') as HTMLInputElement | null;
+    if (nameInput && !nameInput.value && document.activeElement === document.body) nameInput.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManualEntry]);
+
   return (
     <div className="ocr-page">
       <div className="page-header">
@@ -1503,6 +1518,7 @@ export default function OcrPage() {
               data-testid="electronic-prescription-entry"
               onClick={() => {
                 setIsManualEntry(true);
+                setIsIntakeToolsOpen(true);
                 setElectronicPrescriptionMessage('引換番号または処方箋IDを入力して取得してください。');
               }}
             >
@@ -1559,18 +1575,21 @@ export default function OcrPage() {
             </div>
 
             <div className="input-readiness-strip" aria-label="受付入力状況">
-              <div className={`readiness-item ${patientName.trim() && patientBirthDate ? 'ready' : 'attention'}`}>
-                <span>患者</span>
-                <strong>{patientName.trim() && patientBirthDate ? '入力済' : '未入力'}</strong>
-              </div>
-              <div className={`readiness-item ${institutionName.trim() && departmentName.trim() && doctorName.trim() ? 'ready' : 'attention'}`}>
-                <span>処方元</span>
-                <strong>{institutionName.trim() && departmentName.trim() && doctorName.trim() ? '入力済' : '未入力'}</strong>
-              </div>
-              <div className={`readiness-item ${prescriptionMetrics.missingTotal === 0 ? 'ready' : 'attention'}`}>
-                <span>処方</span>
-                <strong>{prescriptionMetrics.missingTotal === 0 ? '入力済' : `未入力 ${prescriptionMetrics.missingTotal}`}</strong>
-              </div>
+              {[
+                { key: 'patient', label: '患者', ready: !!(patientName.trim() && patientBirthDate), text: patientName.trim() && patientBirthDate ? '入力済' : '未入力' },
+                { key: 'provider', label: '処方元', ready: !!(institutionName.trim() && departmentName.trim() && doctorName.trim()), text: institutionName.trim() && departmentName.trim() && doctorName.trim() ? '入力済' : '未入力' },
+                { key: 'prescription', label: '処方', ready: prescriptionMetrics.missingTotal === 0, text: prescriptionMetrics.missingTotal === 0 ? '入力済' : `未入力 ${prescriptionMetrics.missingTotal}` }
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`readiness-item ${item.ready ? 'ready' : 'attention'}`}
+                  onClick={() => document.getElementById(`reception-section-${item.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                >
+                  <span>{item.label}</span>
+                  <strong>{item.text}</strong>
+                </button>
+              ))}
             </div>
 
             <OcrConfidencePanel
@@ -1580,6 +1599,250 @@ export default function OcrPage() {
             />
 
             <div className="ocr-form">
+              <section className="intake-tools" aria-label="読み取り・取得">
+                <button
+                  type="button"
+                  className="intake-tools-toggle"
+                  aria-expanded={isIntakeToolsOpen}
+                  aria-controls="intake-tools-body"
+                  onClick={() => setIsIntakeToolsOpen((open) => !open)}
+                  data-testid="intake-tools-toggle"
+                >
+                  <QrCode size={18} aria-hidden="true" />
+                  <span className="intake-tools-title">QR・電子処方箋から取り込む</span>
+                  {appliedElectronicPrescription && (
+                    <span className="status-chip compact confirmed">反映済み {appliedElectronicPrescriptionIds.length}件</span>
+                  )}
+                  <ChevronDown size={18} aria-hidden="true" className={isIntakeToolsOpen ? 'chevron open' : 'chevron'} />
+                </button>
+                {/* 閉じている間もマウントしたままにする(読み取り済みのQRや取得結果を失わないため) */}
+                <div id="intake-tools-body" className="intake-tools-body" hidden={!isIntakeToolsOpen}>
+                  <PrescriptionQrReader
+                    onApplyQrData={handleApplyPrescriptionQrData}
+                    disabled={isProcessing || isSaving}
+                  />
+
+                  <section
+                    className="electronic-prescription-panel"
+                    data-testid="electronic-prescription-panel"
+                    aria-label="電子処方箋受付"
+                  >
+                    <div className="electronic-prescription-header">
+                      <div>
+                        <span className="section-kicker">電子処方箋</span>
+                        <strong>取得内容を確認して受付</strong>
+                      </div>
+                      <span className={`status-chip ${electronicPrescriptionStatus}`}>
+                        {appliedElectronicPrescription
+                          ? `反映済み ${appliedElectronicPrescriptionIds.length}件`
+                          : electronicPrescriptionStatus === 'confirmed'
+                            ? '取得済み'
+                          : electronicPrescriptionStatus === 'checking'
+                            ? '取得中'
+                            : electronicPrescriptionStatus === 'warning'
+                              ? '要確認'
+                              : electronicPrescriptionStatus === 'unavailable'
+                                ? '未接続'
+                                : '未取得'}
+                      </span>
+                    </div>
+                    <div className="electronic-prescription-controls">
+                      <div
+                        className="electronic-prescription-key-kind"
+                        role="radiogroup"
+                        aria-label="電子処方箋取得キー種別"
+                        data-testid="electronic-prescription-key-kind"
+                      >
+                        <button
+                          type="button"
+                          className={electronicPrescriptionKeyKind === 'exchange_number' ? 'active' : ''}
+                          aria-pressed={electronicPrescriptionKeyKind === 'exchange_number'}
+                          onClick={() => {
+                            setElectronicPrescriptionKeyKind('exchange_number');
+                            setPendingElectronicPrescription(null);
+                            setElectronicPrescriptionPaperOriginalConfirmed(false);
+                          }}
+                          data-testid="electronic-prescription-key-kind-exchange"
+                        >
+                          引換番号
+                        </button>
+                        <button
+                          type="button"
+                          className={electronicPrescriptionKeyKind === 'prescription_id' ? 'active' : ''}
+                          aria-pressed={electronicPrescriptionKeyKind === 'prescription_id'}
+                          onClick={() => {
+                            setElectronicPrescriptionKeyKind('prescription_id');
+                            setPendingElectronicPrescription(null);
+                            setElectronicPrescriptionPaperOriginalConfirmed(false);
+                          }}
+                          data-testid="electronic-prescription-key-kind-prescription-id"
+                        >
+                          処方箋ID
+                        </button>
+                      </div>
+                      <label htmlFor="electronicPrescriptionKey">引換番号・処方箋ID</label>
+                      <input
+                        id="electronicPrescriptionKey"
+                        type="text"
+                        maxLength={80}
+                        value={electronicPrescriptionKey}
+                        onChange={(e) => {
+                          setElectronicPrescriptionKey(e.target.value);
+                          setPendingElectronicPrescription(null);
+                          setElectronicPrescriptionPaperOriginalConfirmed(false);
+                        }}
+                        placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '半角数字6〜16桁' : '英数字・ハイフン'}
+                        data-testid="electronic-prescription-key"
+                      />
+                      <label htmlFor="electronicPrescriptionInsuredNumber">
+                        被保険者番号{electronicPrescriptionKeyKind === 'exchange_number' ? '（必須）' : '（任意照合）'}
+                      </label>
+                      <input
+                        id="electronicPrescriptionInsuredNumber"
+                        type="text"
+                        maxLength={40}
+                        value={electronicPrescriptionInsuredNumber}
+                        onChange={(event) => {
+                          setElectronicPrescriptionInsuredNumber(event.target.value);
+                          setPendingElectronicPrescription(null);
+                          setElectronicPrescriptionPaperOriginalConfirmed(false);
+                        }}
+                        placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '引換番号での取得時に入力' : '患者照合に使う場合だけ入力'}
+                        data-testid="electronic-prescription-insured-number"
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary flex-center gap-2"
+                        onClick={() => handleElectronicPrescriptionFetch(patientBirthDate)}
+                        disabled={isFetchingElectronicPrescription}
+                        data-testid="electronic-prescription-fetch"
+                      >
+                        {isFetchingElectronicPrescription ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                        {isFetchingElectronicPrescription ? '取得中...' : '取得して確認'}
+                      </button>
+                    </div>
+                    <p className="electronic-prescription-note">
+                      引換番号での取得には被保険者番号が必要です。接続先未設定時は取得せず、デモ応答も本番受付へ反映しません。
+                    </p>
+                    {electronicPrescriptionMessage && (
+                      <div className={`electronic-prescription-message ${electronicPrescriptionStatus}`}>
+                        {electronicPrescriptionMessage}
+                      </div>
+                    )}
+                    {pendingElectronicPrescription?.prescription && electronicPrescriptionApplyDecision && (
+                      <div className="electronic-prescription-review" data-testid="electronic-prescription-review">
+                        <dl>
+                          <div>
+                            <dt>文書</dt>
+                            <dd>
+                              {pendingElectronicPrescription.prescription.documentKind === 'electronic_prescription'
+                                ? '電子処方箋'
+                                : pendingElectronicPrescription.prescription.documentKind === 'prescription_information'
+                                  ? '処方箋情報提供ファイル'
+                                  : '判定不能'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>電子署名</dt>
+                            <dd>{pendingElectronicPrescription.prescription.signatureVerification?.status || '未確認'}</dd>
+                          </div>
+                          <div>
+                            <dt>有効期限</dt>
+                            <dd>{pendingElectronicPrescription.prescription.validUntil || '不明'}</dd>
+                          </div>
+                          <div>
+                            <dt>重複確認</dt>
+                            <dd>{pendingElectronicPrescription.duplicateCheck?.status || 'not_checked'}</dd>
+                          </div>
+                          {pendingElectronicPrescription.prescription.refill && (
+                            <div>
+                              <dt>リフィル</dt>
+                              <dd>
+                                {pendingElectronicPrescription.prescription.refill.currentCount}
+                                /{pendingElectronicPrescription.prescription.refill.totalCount}回目
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                        {(
+                          pendingElectronicPrescription.prescription.items.some((item) => item.unitConversion || item.usageSupplementText)
+                          || (pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.length || 0) > 0
+                          || (pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.length || 0) > 0
+                          || !!pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription
+                        ) && (
+                          <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
+                            <strong>処方補足情報</strong>
+                            <ul>
+                              {pendingElectronicPrescription.prescription.items.flatMap((item) => [
+                                ...(item.unitConversion ? [
+                                  `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
+                                ] : []),
+                                ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
+                              ]).map((text) => <li key={text}>{text}</li>)}
+                              {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
+                                <li key={`comment-${comment}`}>処方コメント: {comment}</li>
+                              ))}
+                              {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
+                                <li key={`lab-${result.testName}-${index}`}>
+                                  検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
+                                  {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
+                                </li>
+                              ))}
+                              {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
+                                <li>
+                                  麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                        {pendingElectronicPrescription.prescription.documentKind === 'prescription_information' && (
+                          <label className="electronic-prescription-original-check">
+                            <input
+                              type="checkbox"
+                              checked={electronicPrescriptionPaperOriginalConfirmed}
+                              onChange={(event) => setElectronicPrescriptionPaperOriginalConfirmed(event.target.checked)}
+                            />
+                            <span>紙の処方箋原本を受領し、取得内容と照合しました</span>
+                          </label>
+                        )}
+                        <div className={`electronic-prescription-decision ${electronicPrescriptionApplyDecision.status}`}>
+                          <strong>{electronicPrescriptionApplyDecision.statusLabel}</strong>
+                          <span>{electronicPrescriptionApplyDecision.message}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-primary flex-center gap-2"
+                          onClick={handleElectronicPrescriptionApply}
+                          disabled={!electronicPrescriptionApplyDecision.canApply || pendingElectronicPrescriptionAlreadyApplied}
+                          data-testid="electronic-prescription-apply"
+                        >
+                          <CheckCircle size={16} />
+                          {pendingElectronicPrescriptionAlreadyApplied
+                            ? 'この処方箋は反映済み'
+                            : appliedElectronicPrescription
+                              ? '同日処方として追加'
+                              : '処方入力へ反映'}
+                        </button>
+                      </div>
+                    )}
+                    {displayedElectronicPrescriptionWarnings.length > 0 && (
+                      <ul className="electronic-prescription-warnings">
+                        {displayedElectronicPrescriptionWarnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {electronicPrescriptionIntegrityHash && (
+                      <div className="electronic-prescription-hash">
+                        取得内容SHA-256: {electronicPrescriptionIntegrityHash.slice(0, 16)}...
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </section>
+
+              <div className="form-section-title section-first" id="reception-section-patient">患者・保険</div>
               <div className="form-group">
                 <label htmlFor="patientName">
                   患者名
@@ -1632,6 +1895,8 @@ export default function OcrPage() {
                   <input
                     id="insuranceNumber"
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
                     maxLength={20}
                     value={insuranceNumber}
                     onChange={(e) => {
@@ -1694,438 +1959,223 @@ export default function OcrPage() {
                 )}
               </div>
 
-              <PrescriptionQrReader
-                onApplyQrData={handleApplyPrescriptionQrData}
-                disabled={isProcessing || isSaving}
-              />
-
-              <section
-                className="electronic-prescription-panel"
-                data-testid="electronic-prescription-panel"
-                aria-label="電子処方箋受付"
-              >
-                <div className="electronic-prescription-header">
-                  <div>
-                    <span className="section-kicker">電子処方箋</span>
-                    <strong>取得内容を確認して受付</strong>
-                  </div>
-                  <span className={`status-chip ${electronicPrescriptionStatus}`}>
-                    {appliedElectronicPrescription
-                      ? `反映済み ${appliedElectronicPrescriptionIds.length}件`
-                      : electronicPrescriptionStatus === 'confirmed'
-                        ? '取得済み'
-                      : electronicPrescriptionStatus === 'checking'
-                        ? '取得中'
-                        : electronicPrescriptionStatus === 'warning'
-                          ? '要確認'
-                          : electronicPrescriptionStatus === 'unavailable'
-                            ? '未接続'
-                            : '未取得'}
-                  </span>
-                </div>
-                <div className="electronic-prescription-controls">
-                  <div
-                    className="electronic-prescription-key-kind"
-                    role="radiogroup"
-                    aria-label="電子処方箋取得キー種別"
-                    data-testid="electronic-prescription-key-kind"
-                  >
-                    <button
-                      type="button"
-                      className={electronicPrescriptionKeyKind === 'exchange_number' ? 'active' : ''}
-                      aria-pressed={electronicPrescriptionKeyKind === 'exchange_number'}
-                      onClick={() => {
-                        setElectronicPrescriptionKeyKind('exchange_number');
-                        setPendingElectronicPrescription(null);
-                        setElectronicPrescriptionPaperOriginalConfirmed(false);
-                      }}
-                      data-testid="electronic-prescription-key-kind-exchange"
-                    >
-                      引換番号
-                    </button>
-                    <button
-                      type="button"
-                      className={electronicPrescriptionKeyKind === 'prescription_id' ? 'active' : ''}
-                      aria-pressed={electronicPrescriptionKeyKind === 'prescription_id'}
-                      onClick={() => {
-                        setElectronicPrescriptionKeyKind('prescription_id');
-                        setPendingElectronicPrescription(null);
-                        setElectronicPrescriptionPaperOriginalConfirmed(false);
-                      }}
-                      data-testid="electronic-prescription-key-kind-prescription-id"
-                    >
-                      処方箋ID
-                    </button>
-                  </div>
-                  <label htmlFor="electronicPrescriptionKey">引換番号・処方箋ID</label>
-                  <input
-                    id="electronicPrescriptionKey"
-                    type="text"
-                    maxLength={80}
-                    value={electronicPrescriptionKey}
-                    onChange={(e) => {
-                      setElectronicPrescriptionKey(e.target.value);
-                      setPendingElectronicPrescription(null);
-                      setElectronicPrescriptionPaperOriginalConfirmed(false);
-                    }}
-                    placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '半角数字6〜16桁' : '英数字・ハイフン'}
-                    data-testid="electronic-prescription-key"
-                  />
-                  <label htmlFor="electronicPrescriptionInsuredNumber">
-                    被保険者番号{electronicPrescriptionKeyKind === 'exchange_number' ? '（必須）' : '（任意照合）'}
-                  </label>
-                  <input
-                    id="electronicPrescriptionInsuredNumber"
-                    type="text"
-                    maxLength={40}
-                    value={electronicPrescriptionInsuredNumber}
-                    onChange={(event) => {
-                      setElectronicPrescriptionInsuredNumber(event.target.value);
-                      setPendingElectronicPrescription(null);
-                      setElectronicPrescriptionPaperOriginalConfirmed(false);
-                    }}
-                    placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '引換番号での取得時に入力' : '患者照合に使う場合だけ入力'}
-                    data-testid="electronic-prescription-insured-number"
-                  />
-                  <button
-                    type="button"
-                    className="btn-secondary flex-center gap-2"
-                    onClick={() => handleElectronicPrescriptionFetch(patientBirthDate)}
-                    disabled={isFetchingElectronicPrescription}
-                    data-testid="electronic-prescription-fetch"
-                  >
-                    {isFetchingElectronicPrescription ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                    {isFetchingElectronicPrescription ? '取得中...' : '取得して確認'}
-                  </button>
-                </div>
-                <p className="electronic-prescription-note">
-                  引換番号での取得には被保険者番号が必要です。接続先未設定時は取得せず、デモ応答も本番受付へ反映しません。
-                </p>
-                {electronicPrescriptionMessage && (
-                  <div className={`electronic-prescription-message ${electronicPrescriptionStatus}`}>
-                    {electronicPrescriptionMessage}
-                  </div>
-                )}
-                {pendingElectronicPrescription?.prescription && electronicPrescriptionApplyDecision && (
-                  <div className="electronic-prescription-review" data-testid="electronic-prescription-review">
-                    <dl>
-                      <div>
-                        <dt>文書</dt>
-                        <dd>
-                          {pendingElectronicPrescription.prescription.documentKind === 'electronic_prescription'
-                            ? '電子処方箋'
-                            : pendingElectronicPrescription.prescription.documentKind === 'prescription_information'
-                              ? '処方箋情報提供ファイル'
-                              : '判定不能'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>電子署名</dt>
-                        <dd>{pendingElectronicPrescription.prescription.signatureVerification?.status || '未確認'}</dd>
-                      </div>
-                      <div>
-                        <dt>有効期限</dt>
-                        <dd>{pendingElectronicPrescription.prescription.validUntil || '不明'}</dd>
-                      </div>
-                      <div>
-                        <dt>重複確認</dt>
-                        <dd>{pendingElectronicPrescription.duplicateCheck?.status || 'not_checked'}</dd>
-                      </div>
-                      {pendingElectronicPrescription.prescription.refill && (
-                        <div>
-                          <dt>リフィル</dt>
-                          <dd>
-                            {pendingElectronicPrescription.prescription.refill.currentCount}
-                            /{pendingElectronicPrescription.prescription.refill.totalCount}回目
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                    {(
-                      pendingElectronicPrescription.prescription.items.some((item) => item.unitConversion || item.usageSupplementText)
-                      || (pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.length || 0) > 0
-                      || (pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.length || 0) > 0
-                      || !!pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription
-                    ) && (
-                      <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
-                        <strong>処方補足情報</strong>
-                        <ul>
-                          {pendingElectronicPrescription.prescription.items.flatMap((item) => [
-                            ...(item.unitConversion ? [
-                              `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
-                            ] : []),
-                            ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
-                          ]).map((text) => <li key={text}>{text}</li>)}
-                          {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
-                            <li key={`comment-${comment}`}>処方コメント: {comment}</li>
-                          ))}
-                          {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
-                            <li key={`lab-${result.testName}-${index}`}>
-                              検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
-                              {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
-                            </li>
-                          ))}
-                          {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
-                            <li>
-                              麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                    {pendingElectronicPrescription.prescription.documentKind === 'prescription_information' && (
-                      <label className="electronic-prescription-original-check">
-                        <input
-                          type="checkbox"
-                          checked={electronicPrescriptionPaperOriginalConfirmed}
-                          onChange={(event) => setElectronicPrescriptionPaperOriginalConfirmed(event.target.checked)}
-                        />
-                        <span>紙の処方箋原本を受領し、取得内容と照合しました</span>
-                      </label>
-                    )}
-                    <div className={`electronic-prescription-decision ${electronicPrescriptionApplyDecision.status}`}>
-                      <strong>{electronicPrescriptionApplyDecision.statusLabel}</strong>
-                      <span>{electronicPrescriptionApplyDecision.message}</span>
+              {(patientCandidatePanelViewState.errorBannerMessage
+                || patientCandidatePanelViewState.showCandidates
+                || selectedPatient
+                || isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage
+                || (patientCandidatePanelViewState.emptyNoteMessage && patientName.trim())) && (
+                <div className="patient-selection-panel">
+                  <div className="panel-title">患者選択</div>
+                  {patientCandidatePanelViewState.errorBannerMessage && (
+                    <div className="patient-candidate-fetch-error" role="alert">
+                      <AlertTriangle size={16} aria-hidden="true" />
+                      <span>{patientCandidatePanelViewState.errorBannerMessage}</span>
                     </div>
-                    <button
-                      type="button"
-                      className="btn-primary flex-center gap-2"
-                      onClick={handleElectronicPrescriptionApply}
-                      disabled={!electronicPrescriptionApplyDecision.canApply || pendingElectronicPrescriptionAlreadyApplied}
-                      data-testid="electronic-prescription-apply"
-                    >
-                      <CheckCircle size={16} />
-                      {pendingElectronicPrescriptionAlreadyApplied
-                        ? 'この処方箋は反映済み'
-                        : appliedElectronicPrescription
-                          ? '同日処方として追加'
-                          : '処方入力へ反映'}
-                    </button>
-                  </div>
-                )}
-                {displayedElectronicPrescriptionWarnings.length > 0 && (
-                  <ul className="electronic-prescription-warnings">
-                    {displayedElectronicPrescriptionWarnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                )}
-                {electronicPrescriptionIntegrityHash && (
-                  <div className="electronic-prescription-hash">
-                    取得内容SHA-256: {electronicPrescriptionIntegrityHash.slice(0, 16)}...
-                  </div>
-                )}
-              </section>
-
-              <div className="patient-selection-panel">
-                <div className="panel-title">患者選択</div>
-                {patientCandidatePanelViewState.errorBannerMessage && (
-                  <div className="patient-candidate-fetch-error" role="alert">
-                    <AlertTriangle size={16} aria-hidden="true" />
-                    <span>{patientCandidatePanelViewState.errorBannerMessage}</span>
-                  </div>
-                )}
-                {patientCandidatePanelViewState.showCandidates && (
-                  <div className="patient-candidate-list">
-                    {patientCandidates.map((patient) => {
-                      const match = patientCandidateMatchById.get(patient.patientId);
-                      const canOpenMergeReview = !!selectedPatient && selectedPatient.patientId !== patient.patientId;
-                      return (
-                        <div
-                          key={patient.patientId}
-                          className={`patient-candidate risk-${match?.risk || 'medium'} ${selectedPatientId === patient.patientId ? 'selected' : ''}`}
-                        >
-                          <button
-                            type="button"
-                            className="patient-candidate-select"
-                            onClick={() => applyPatientCandidate(patient)}
+                  )}
+                  {patientCandidatePanelViewState.showCandidates && (
+                    <div className="patient-candidate-list">
+                      {patientCandidates.map((patient) => {
+                        const match = patientCandidateMatchById.get(patient.patientId);
+                        const canOpenMergeReview = !!selectedPatient && selectedPatient.patientId !== patient.patientId;
+                        return (
+                          <div
+                            key={patient.patientId}
+                            className={`patient-candidate risk-${match?.risk || 'medium'} ${selectedPatientId === patient.patientId ? 'selected' : ''}`}
                           >
-                            <span className="candidate-main">{patient.name}</span>
-                            <span className="candidate-meta">
-                              {patient.birthDate} / 保険者番号 {patient.insuranceInfo?.number || '未登録'}
-                            </span>
-                            {match && (
-                              <span className="candidate-reasons">
-                                {match.reasonLabels.map((label) => (
-                                  <span key={label}>{label}</span>
-                                ))}
-                              </span>
-                            )}
-                            {match?.warning && (
-                              <span className="candidate-warning">
-                                <AlertTriangle size={12} aria-hidden="true" />
-                                {match.warning}
-                              </span>
-                            )}
-                            {candidatePublicSummaryByPatientId.get(patient.patientId) && (
-                              <span className="candidate-public-tags">
-                                <span className={`candidate-pub-badge ${candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired ? 'error' : candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning ? 'warning' : 'normal'}`}>
-                                  公費: {candidatePublicSummaryByPatientId.get(patient.patientId)?.summary}
-                                  {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired && '【期限切】'}
-                                  {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning && '【期限注意】'}
-                                </span>
-                              </span>
-                            )}
-                          </button>
-                          {canOpenMergeReview && (
                             <button
                               type="button"
-                              className={`patient-merge-open ${patientMergeReview?.sourcePatientId === patient.patientId ? 'active' : ''}`}
-                              onClick={() => openPatientMergeReview(patient)}
-                              disabled={isLoadingPatientMergeReview || isApplyingPatientMerge}
+                              className="patient-candidate-select"
+                              onClick={() => applyPatientCandidate(patient)}
                             >
-                              <ShieldCheck size={13} aria-hidden="true" />
-                              統合確認
+                              <span className="candidate-main">{patient.name}</span>
+                              <span className="candidate-meta">
+                                {patient.birthDate} / 保険者番号 {patient.insuranceInfo?.number || '未登録'}
+                              </span>
+                              {match && (
+                                <span className="candidate-reasons">
+                                  {match.reasonLabels.map((label) => (
+                                    <span key={label}>{label}</span>
+                                  ))}
+                                </span>
+                              )}
+                              {match?.warning && (
+                                <span className="candidate-warning">
+                                  <AlertTriangle size={12} aria-hidden="true" />
+                                  {match.warning}
+                                </span>
+                              )}
+                              {candidatePublicSummaryByPatientId.get(patient.patientId) && (
+                                <span className="candidate-public-tags">
+                                  <span className={`candidate-pub-badge ${candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired ? 'error' : candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning ? 'warning' : 'normal'}`}>
+                                    公費: {candidatePublicSummaryByPatientId.get(patient.patientId)?.summary}
+                                    {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired && '【期限切】'}
+                                    {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning && '【期限注意】'}
+                                  </span>
+                                </span>
+                              )}
                             </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {patientCandidatePanelViewState.emptyNoteMessage && (
-                  <div className="temporary-registration-note">
-                    <Plus size={16} aria-hidden="true" />
-                    <span>{patientCandidatePanelViewState.emptyNoteMessage}</span>
-                  </div>
-                )}
-                {selectedPatient && (
-                  <div className="selected-patient-card" data-testid="selected-patient-card">
-                    <div className="selected-patient-header">
-                      <div className="selected-patient-title-line">
-                        <span className="selected-patient-badge">選択中患者</span>
-                        <strong className="selected-patient-name">{selectedPatient.name}</strong>
-                        <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
-                        <span className="selected-patient-insurance">
-                          保険者番号: {selectedPatient.insuranceInfo?.number || '未登録'}
-                        </span>
-                      </div>
-                      {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
-                        <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
-                          {selectedPatientPublicBadges.map((badge) => (
-                            <span
-                              key={`selected-pub-badge-${badge.index}`}
-                              className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
-                              title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
-                            >
-                              公費{badge.index}: {badge.label}
-                              {badge.hasError && '【要確認】'}
-                              {badge.hasWarning && '【期限注意】'}
-                            </span>
-                          ))}
-                          {selectedPatientCopaymentBadges.map((badge, idx) => (
-                            <span
-                              key={`selected-copay-badge-${idx}`}
-                              className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
-                              title={badge.title}
-                              data-testid={`selected-patient-copay-badge-${idx}`}
-                            >
-                              {badge.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                            {canOpenMergeReview && (
+                              <button
+                                type="button"
+                                className={`patient-merge-open ${patientMergeReview?.sourcePatientId === patient.patientId ? 'active' : ''}`}
+                                onClick={() => openPatientMergeReview(patient)}
+                                disabled={isLoadingPatientMergeReview || isApplyingPatientMerge}
+                              >
+                                <ShieldCheck size={13} aria-hidden="true" />
+                                統合確認
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-
-                    {selectedPatientReceptionAlerts.length > 0 && (
-                      <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
-                        {selectedPatientReceptionAlerts.map((issue) => (
-                          <div
-                            key={issue.code}
-                            className={`selected-patient-alert-item ${issue.severity}`}
-                          >
-                            <AlertTriangle size={13} aria-hidden="true" />
-                            <span className="alert-item-title">{issue.title}:</span>
-                            <span className="alert-item-message">{issue.message}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
-                  <div className="patient-merge-review">
-                    <div className="patient-merge-review-title">
-                      <ShieldCheck size={15} aria-hidden="true" />
-                      同姓同名の統合確認
+                  )}
+                  {patientCandidatePanelViewState.emptyNoteMessage && patientName.trim() && (
+                    <div className="temporary-registration-note">
+                      <Plus size={16} aria-hidden="true" />
+                      <span>{patientCandidatePanelViewState.emptyNoteMessage}</span>
                     </div>
-                    {isLoadingPatientMergeReview && (
-                      <div className="merge-status-line">
-                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                        統合内容を確認しています
-                      </div>
-                    )}
-                    {patientMergeReview && (
-                      <>
-                        <div className="merge-patient-grid">
-                          <div>
-                            <span>残す患者</span>
-                            <strong>{patientMergeReview.plan.mergedPatient.name}</strong>
-                            <small>{patientMergeReview.plan.targetPatientId}</small>
-                          </div>
-                          <div>
-                            <span>統合元</span>
-                            <strong>{patientMergeReview.plan.sourcePatient.name}</strong>
-                            <small>{patientMergeReview.plan.sourcePatientId}</small>
-                          </div>
+                  )}
+                  {selectedPatient && (
+                    <div className="selected-patient-card" data-testid="selected-patient-card">
+                      <div className="selected-patient-header">
+                        <div className="selected-patient-title-line">
+                          <span className="selected-patient-badge">選択中患者</span>
+                          <strong className="selected-patient-name">{selectedPatient.name}</strong>
+                          <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
+                          <span className="selected-patient-insurance">
+                            保険者番号: {selectedPatient.insuranceInfo?.number || '未登録'}
+                          </span>
                         </div>
-                        <div className="merge-summary-row">
-                          {patientMergeReview.plan.reassignments.map((reassignment) => (
-                            <span key={reassignment.collection}>
-                              {patientMergeCollectionLabel[reassignment.collection]} {reassignment.count}件
-                            </span>
-                          ))}
-                          <span>確認事項 {patientMergeReview.plan.issues.length + patientMergeReview.plan.conflicts.length}件</span>
-                        </div>
-                        {(patientMergeReview.plan.issues.length > 0 || patientMergeReview.plan.conflicts.length > 0) && (
-                          <div className="merge-warning-list">
-                            {patientMergeReview.plan.issues.slice(0, 3).map((issue) => (
-                              <span key={issue.code}>{issue.message}</span>
+                        {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
+                          <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
+                            {selectedPatientPublicBadges.map((badge) => (
+                              <span
+                                key={`selected-pub-badge-${badge.index}`}
+                                className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
+                                title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
+                              >
+                                公費{badge.index}: {badge.label}
+                                {badge.hasError && '【要確認】'}
+                                {badge.hasWarning && '【期限注意】'}
+                              </span>
                             ))}
-                            {patientMergeReview.plan.conflicts.slice(0, 3).map((conflict) => (
-                              <span key={conflict.field}>{conflict.label}: {conflict.sourceValue} / {conflict.targetValue}</span>
+                            {selectedPatientCopaymentBadges.map((badge, idx) => (
+                              <span
+                                key={`selected-copay-badge-${idx}`}
+                                className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
+                                title={badge.title}
+                                data-testid={`selected-patient-copay-badge-${idx}`}
+                              >
+                                {badge.label}
+                              </span>
                             ))}
                           </div>
                         )}
-                        <div className="merge-operation-list">
-                          {patientMergeReview.executionPlan.applyOperations.map((operation, index) => (
-                            <span key={`${operation.type}-${index}`}>
-                              {index + 1}. {formatPatientMergeOperationLabel(operation)}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="merge-checklist">
-                          {patientMergeReview.executionPlan.checklist.map((item) => (
-                            <span key={item}>{item}</span>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-primary patient-merge-apply"
-                          onClick={handleApplyPatientMerge}
-                          disabled={!patientMergeReview.executionPlan.canApply || isApplyingPatientMerge}
-                        >
-                          {isApplyingPatientMerge ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
-                          {isApplyingPatientMerge ? '統合中...' : '患者統合を実行'}
-                        </button>
-                      </>
-                    )}
-                    {patientMergeMessage && (
-                      <div className="merge-status-line">
-                        {patientMergeMessage}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              <div className="form-section-title">処方箋情報</div>
+                      {selectedPatientReceptionAlerts.length > 0 && (
+                        <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
+                          {selectedPatientReceptionAlerts.map((issue) => (
+                            <div
+                              key={issue.code}
+                              className={`selected-patient-alert-item ${issue.severity}`}
+                            >
+                              <AlertTriangle size={13} aria-hidden="true" />
+                              <span className="alert-item-title">{issue.title}:</span>
+                              <span className="alert-item-message">{issue.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
+                    <div className="patient-merge-review">
+                      <div className="patient-merge-review-title">
+                        <ShieldCheck size={15} aria-hidden="true" />
+                        同姓同名の統合確認
+                      </div>
+                      {isLoadingPatientMergeReview && (
+                        <div className="merge-status-line">
+                          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                          統合内容を確認しています
+                        </div>
+                      )}
+                      {patientMergeReview && (
+                        <>
+                          <div className="merge-patient-grid">
+                            <div>
+                              <span>残す患者</span>
+                              <strong>{patientMergeReview.plan.mergedPatient.name}</strong>
+                              <small>{patientMergeReview.plan.targetPatientId}</small>
+                            </div>
+                            <div>
+                              <span>統合元</span>
+                              <strong>{patientMergeReview.plan.sourcePatient.name}</strong>
+                              <small>{patientMergeReview.plan.sourcePatientId}</small>
+                            </div>
+                          </div>
+                          <div className="merge-summary-row">
+                            {patientMergeReview.plan.reassignments.map((reassignment) => (
+                              <span key={reassignment.collection}>
+                                {patientMergeCollectionLabel[reassignment.collection]} {reassignment.count}件
+                              </span>
+                            ))}
+                            <span>確認事項 {patientMergeReview.plan.issues.length + patientMergeReview.plan.conflicts.length}件</span>
+                          </div>
+                          {(patientMergeReview.plan.issues.length > 0 || patientMergeReview.plan.conflicts.length > 0) && (
+                            <div className="merge-warning-list">
+                              {patientMergeReview.plan.issues.slice(0, 3).map((issue) => (
+                                <span key={issue.code}>{issue.message}</span>
+                              ))}
+                              {patientMergeReview.plan.conflicts.slice(0, 3).map((conflict) => (
+                                <span key={conflict.field}>{conflict.label}: {conflict.sourceValue} / {conflict.targetValue}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="merge-operation-list">
+                            {patientMergeReview.executionPlan.applyOperations.map((operation, index) => (
+                              <span key={`${operation.type}-${index}`}>
+                                {index + 1}. {formatPatientMergeOperationLabel(operation)}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="merge-checklist">
+                            {patientMergeReview.executionPlan.checklist.map((item) => (
+                              <span key={item}>{item}</span>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-primary patient-merge-apply"
+                            onClick={handleApplyPatientMerge}
+                            disabled={!patientMergeReview.executionPlan.canApply || isApplyingPatientMerge}
+                          >
+                            {isApplyingPatientMerge ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
+                            {isApplyingPatientMerge ? '統合中...' : '患者統合を実行'}
+                          </button>
+                        </>
+                      )}
+                      {patientMergeMessage && (
+                        <div className="merge-status-line">
+                          {patientMergeMessage}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="form-section-title" id="reception-section-provider">処方箋情報</div>
               <div className="provider-grid">
                 <div className="form-group">
                   <label htmlFor="institutionCode">医療機関コード</label>
                   <input
                     id="institutionCode"
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
                     maxLength={50}
                     value={institutionCode}
                     onChange={(e) => setInstitutionCode(e.target.value)}
@@ -2240,7 +2290,7 @@ export default function OcrPage() {
                 </div>
               )}
 
-              <div className="prescription-workbench">
+              <div className="prescription-workbench" id="reception-section-prescription">
                 <div className="prescription-workbench-header">
                   <div>
                     <span className="section-kicker">処方内容</span>
@@ -2321,7 +2371,9 @@ export default function OcrPage() {
                 prescribedDrugCode={modalPrescribedCode}
               />
 
-              <OcrRawTextArea isProcessing={isProcessing} ocrResult={ocrResult} />
+              {(!!image || isProcessing || !!ocrResult) && (
+                <OcrRawTextArea isProcessing={isProcessing} ocrResult={ocrResult} />
+              )}
 
               <div className="form-actions mt-auto">
                 <button className="btn-secondary" onClick={handleReset}>キャンセル</button>
@@ -2551,6 +2603,9 @@ export default function OcrPage() {
           border-radius: 8px;
           padding: 0.45rem 0.6rem;
           background: #ffffff;
+          font-family: inherit;
+          text-align: left;
+          cursor: pointer;
         }
 
         .readiness-item span {
@@ -2587,27 +2642,40 @@ export default function OcrPage() {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 1.25rem;
+          gap: 1rem;
           overflow-y: auto;
           padding-right: 0.5rem;
           min-width: 0;
         }
 
+        /* 生年月日・保険者番号・負担割合は同じ行に収まる分だけ並べ、狭い画面では2列→1列に落とす。
+           (以前は flex-direction: column のまま flex-basis: 160px が高さになり、欄ごとに160pxの空白ができていた) */
         .form-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 1rem;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+          gap: 0.85rem 1rem;
+          align-items: start;
         }
 
         .form-row > .form-group {
-          flex: 1 1 160px;
           min-width: 0;
+          width: auto;
         }
 
         .form-group {
           display: flex;
           flex-direction: column;
           gap: 0.4rem;
+          margin-bottom: 0;
+        }
+
+        .form-group label {
+          display: flex;
+          align-items: baseline;
+          gap: 0.15rem;
+          margin-bottom: 0;
+          min-height: 1.4em;
+          line-height: 1.4;
         }
 
         .form-group input[type='date'] {
@@ -2632,8 +2700,10 @@ export default function OcrPage() {
           border: 1px solid var(--border);
           border-radius: var(--radius-md);
           font-family: inherit;
-          font-size: 0.9rem;
+          font-size: var(--fs-md);
           background: #ffffff;
+          min-width: 0;
+          box-sizing: border-box;
         }
 
         .form-group textarea {
@@ -2653,6 +2723,65 @@ export default function OcrPage() {
         .form-group textarea:focus-visible {
           outline: 2px solid var(--primary);
           outline-offset: 1px;
+        }
+
+        .intake-tools {
+          border: 1px solid #bfdbfe;
+          border-radius: var(--radius-md);
+          background: #f5f9ff;
+        }
+
+        .intake-tools-toggle {
+          width: 100%;
+          min-height: 48px;
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          padding: 0.5rem 0.8rem;
+          border: 0;
+          border-radius: var(--radius-md);
+          background: transparent;
+          color: #1e40af;
+          font-family: inherit;
+          font-size: var(--fs-md);
+          font-weight: 800;
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .intake-tools-title {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+
+        .intake-tools-toggle :global(.chevron) {
+          flex: 0 0 auto;
+          transition: transform var(--transition-fast);
+        }
+
+        .intake-tools-toggle :global(.chevron.open) {
+          transform: rotate(180deg);
+        }
+
+        .intake-tools-body {
+          display: grid;
+          gap: 0.85rem;
+          padding: 0 0.8rem 0.8rem;
+        }
+
+        .intake-tools-body[hidden] {
+          display: none;
+        }
+
+        .reception-section-anchor,
+        #reception-section-patient,
+        #reception-section-provider,
+        #reception-section-prescription {
+          scroll-margin-top: 84px;
+        }
+
+        .form-section-title.section-first {
+          margin-top: 0;
         }
 
         .reception-tool-row {
@@ -3472,13 +3601,30 @@ export default function OcrPage() {
             height: 260px;
           }
 
-          .provider-grid,
-          .form-row {
-            grid-template-columns: 1fr;
-            flex-direction: column;
+          /* 医療機関名だけ1行、コード/診療科/医師名/処方日/調剤日は2列に並べて縦の長さを抑える */
+          .provider-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .input-readiness-strip,
+          /* 狭い画面はページ全体がスクロールするので、フォーム内側のスクロール枠は外す
+             (残すと下に固定する操作ボタンが枠の中で止まる) */
+          .ocr-form {
+            overflow: visible;
+            padding-right: 0;
+          }
+
+          /* DOM順は コード・名称・診療科・医師・処方日・調剤日。
+             名称を先頭の全幅にし、普段あまり触らないコードは最後に回す */
+          .provider-grid > .form-group:nth-child(2) {
+            grid-column: 1 / -1;
+            order: -1;
+          }
+
+          .provider-grid > .form-group:nth-child(1) {
+            grid-column: 1 / -1;
+            order: 10;
+          }
+
           .prescription-workbench-header {
             grid-template-columns: 1fr;
             flex-direction: column;
@@ -3508,6 +3654,7 @@ export default function OcrPage() {
             grid-template-columns: 0.9fr 1.6fr;
             gap: var(--space-2);
             padding: 0.65rem var(--space-2);
+            padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
             width: 100%;
             box-sizing: border-box;
           }
@@ -3538,6 +3685,75 @@ export default function OcrPage() {
           .manual-entry-card {
             padding: 1.25rem 1rem;
             min-height: 120px;
+          }
+
+          .editor-column {
+            padding: 0.75rem;
+          }
+
+          /* 入れ子のカード(受付カード > 処方内容 > Rp > 薬品)が枠と余白を重ねて、
+             320px幅では薬品名の入力欄が200pxほどに痩せる。処方内容の外枠は外して平らにする */
+          .prescription-workbench {
+            padding: 0;
+            border: 0;
+            background: transparent;
+          }
+
+          .column-label {
+            margin-bottom: 0.65rem;
+          }
+
+          /* 入力状況は3つ横並びのまま(縦に積むと3段ぶん押し下げる) */
+          .input-readiness-strip {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.35rem;
+            margin-bottom: 0.65rem;
+          }
+
+          .readiness-item {
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 0.05rem;
+            padding: 0.4rem 0.55rem;
+          }
+
+          /* マイナ読取とオンライン資格確認は横2つ、状態表示は全幅 */
+          .reception-tool-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .reception-tool-row :global(button) {
+            min-height: 44px;
+            padding-inline: 0.5rem;
+            font-size: var(--fs-sm);
+            white-space: normal;
+          }
+
+          .reception-tool-row .status-chip {
+            grid-column: 1 / -1;
+          }
+
+          .form-group input,
+          .form-group select {
+            min-height: 44px;
+          }
+
+          /* 日付欄の最小幅(PC用の165px)を外さないと、2列のとき右へはみ出す */
+          .form-group input[type='date'] {
+            min-width: 0;
+            width: 100%;
+          }
+
+          /* 生年月日と負担割合を同じ行に、保険者番号は全幅の次行にする */
+          .form-row > .form-group.flex-1 {
+            order: 3;
+            grid-column: 1 / -1;
+          }
+
+          .ocr-form {
+            padding-right: 0;
           }
         }
 

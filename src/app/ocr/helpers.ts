@@ -180,7 +180,15 @@ export const isGeneralNameDrug = (drug: DrugMasterRecord) => (
   drug.name.includes('【般】') || drug.code.endsWith('ZZZ')
 );
 
-export const sortDrugSuggestions = (drugs: DrugMasterRecord[], query: string) => {
+// 並び順: 在庫あり → 最近選んだ薬 → (一般名/銘柄の希望) → 入力に近い順 → 名前が短い順 → 名前順。
+// 名前が短い順を挟むのは、「アムロ」と打ったときに OD錠10mg の銘柄違いだけが先頭8件を埋めて、
+// 基本の「アムロジピン錠5mg」が候補に出ない並びを避けるため。
+export const sortDrugSuggestions = (
+  drugs: DrugMasterRecord[],
+  query: string,
+  recentCodes: readonly string[] = []
+) => {
+  const recentRank = new Map(recentCodes.map((code, index) => [code, index]));
   const preferGeneral = query.includes('【般】');
   const normalizedQuery = query
     .toLowerCase()
@@ -200,11 +208,22 @@ export const sortDrugSuggestions = (drugs: DrugMasterRecord[], query: string) =>
     const stockDiff = (b.stockQuantity || 0) - (a.stockQuantity || 0);
     if (stockDiff !== 0) return stockDiff;
 
+    const aRecent = recentRank.get(a.code);
+    const bRecent = recentRank.get(b.code);
+    if (aRecent !== undefined || bRecent !== undefined) {
+      if (aRecent === undefined) return 1;
+      if (bRecent === undefined) return -1;
+      if (aRecent !== bRecent) return aRecent - bRecent;
+    }
+
     const generalDiff = Number(isGeneralNameDrug(a) !== preferGeneral) - Number(isGeneralNameDrug(b) !== preferGeneral);
     if (generalDiff !== 0) return generalDiff;
 
     const rankDiff = matchRank(a) - matchRank(b);
     if (rankDiff !== 0) return rankDiff;
+
+    const lengthDiff = a.name.length - b.name.length;
+    if (lengthDiff !== 0) return lengthDiff;
 
     return a.name.localeCompare(b.name, 'ja');
   });

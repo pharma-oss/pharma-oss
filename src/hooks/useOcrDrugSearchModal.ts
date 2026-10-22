@@ -9,6 +9,7 @@ import {
   isNoSubstitutionValue
 } from '@/app/ocr/helpers';
 import type { Prescription } from '@/app/ocr/types';
+import { pushDrugRecent } from '@/lib/drug_recents';
 
 interface UseOcrDrugSearchModalOptions {
   setPrescriptions: React.Dispatch<React.SetStateAction<Prescription[]>>;
@@ -89,6 +90,9 @@ export function useOcrDrugSearchModal({ setPrescriptions }: UseOcrDrugSearchModa
   }, []);
 
   const handleModalSelect = useCallback((drug: Drug, changeReason: string) => {
+    if (modalTargetField === 'prescribed') {
+      pushDrugRecent({ code: drug.code, name: formatDrugDisplayName(drug.name) });
+    }
     if (editingRowId) {
       setPrescriptions((prev) => applyDrugSelectionToPrescriptions({
         prescriptions: prev,

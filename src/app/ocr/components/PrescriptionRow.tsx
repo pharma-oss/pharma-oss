@@ -1,8 +1,20 @@
-import React from 'react';
-import { Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, Trash2 } from 'lucide-react';
 import type { Prescription, PrescriptionFieldValue } from '../types';
 import { PrescribedDrugInput } from './PrescribedDrugInput';
 import { DispensedDrugInput } from './DispensedDrugInput';
+import { StepperField } from './StepperField';
+
+// 一包化・粉砕・レセ摘・特管・剤上書きのうち、いま設定されている数(スマホで畳んだ「オプション」に件数を出す)
+export function countActiveRowOptions(prescription: Pick<Prescription, 'isIppoka' | 'isCrushed' | 'showReceiptRemark' | 'tokkanType' | 'billingAgentGroupKey'>): number {
+  return [
+    prescription.isIppoka,
+    prescription.isCrushed,
+    prescription.showReceiptRemark,
+    prescription.tokkanType && prescription.tokkanType !== 'none',
+    prescription.billingAgentGroupKey?.trim()
+  ].filter(Boolean).length;
+}
 
 export interface PrescriptionRowProps {
   prescription: Prescription;
@@ -25,6 +37,9 @@ export const PrescriptionRow = React.memo(({
   onToggleReceiptRemark,
   onDelete
 }: PrescriptionRowProps) => {
+  const activeOptionCount = countActiveRowOptions(prescription);
+  const [isOptionsOpen, setIsOptionsOpen] = useState(activeOptionCount > 0);
+
   return (
     <div className="prescription-row-container">
       <div className="prescription-row">
@@ -40,14 +55,15 @@ export const PrescriptionRow = React.memo(({
         </div>
         <div className="field-stack amount-stack">
           <span className="field-label">1日量</span>
-          <input
-            type="text"
-            className="amount"
-            aria-label={`1日量 ${index + 1}`}
+          <StepperField
+            value={prescription.amount}
+            onChange={(next) => onChange(prescription.id, 'amount', next, index)}
+            ariaLabel={`1日量 ${index + 1}`}
+            inputClassName="amount"
             placeholder="1"
             maxLength={10}
-            value={prescription.amount}
-            onChange={(e) => onChange(prescription.id, 'amount', e.target.value, index)}
+            step={1}
+            inputProps={{ 'data-amount-input': prescription.id }}
           />
         </div>
         <div className="field-stack unit-stack">
@@ -75,6 +91,18 @@ export const PrescriptionRow = React.memo(({
         </div>
       </div>
       <div className="prescription-flags">
+        <button
+          type="button"
+          className="options-toggle"
+          aria-expanded={isOptionsOpen}
+          onClick={() => setIsOptionsOpen((open) => !open)}
+        >
+          <span className="options-title">オプション</span>
+          <span className="options-hint">一包化・特管など</span>
+          {activeOptionCount > 0 && <span className="options-count">{activeOptionCount}</span>}
+          <ChevronDown size={16} aria-hidden="true" className={isOptionsOpen ? 'chevron open' : 'chevron'} />
+        </button>
+        <div className={`flag-group ${isOptionsOpen ? 'is-open' : ''}`}>
         <label className="flag-chip">
           <input
             type="checkbox"
@@ -121,6 +149,7 @@ export const PrescriptionRow = React.memo(({
             onChange={(e) => onChange(prescription.id, 'billingAgentGroupKey', e.target.value, index)}
           />
         </label>
+        </div>
         {prescription.changeReason && (
           <div className="change-reason-display">
             変更理由: {prescription.changeReason}
@@ -289,6 +318,14 @@ export const PrescriptionRow = React.memo(({
           gap: 0.45rem;
         }
 
+        .flag-group {
+          display: contents;
+        }
+
+        .options-toggle {
+          display: none;
+        }
+
         .flag-chip {
           min-height: 28px;
           display: inline-flex;
@@ -425,8 +462,130 @@ export const PrescriptionRow = React.memo(({
         }
 
         @media (max-width: 720px) {
+          /* 薬品名は1行まるごと、1日量と単位は横に並べる(縦に3段積むと1行が画面を占領する) */
           .prescription-row {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+            gap: 0.6rem;
+          }
+
+          .prescription-row-index {
+            display: none;
+          }
+
+          .drug-stack {
+            grid-column: 1 / -1;
+          }
+
+          .prescription-row :global(input.amount),
+          .prescription-row :global(input.unit-text) {
+            min-height: 44px;
+          }
+
+          .prescription-row :global(input.amount) {
+            text-align: center;
+          }
+
+          .options-toggle {
+            order: 1;
+            min-width: 0;
+            flex: 1 1 0;
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0 0.65rem;
+            border: 1px dashed #cbd5e1;
+            border-radius: 6px;
+            background: #f8fafc;
+            color: var(--text-muted);
+            font-size: var(--fs-sm);
+            font-weight: 700;
+            cursor: pointer;
+            text-align: left;
+          }
+
+          .options-toggle[aria-expanded='true'] {
+            border-style: solid;
+            background: #ffffff;
+          }
+
+          .options-title {
+            flex: none;
+            white-space: nowrap;
+          }
+
+          .options-hint {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: var(--fs-xs);
+            font-weight: 600;
+            color: var(--text-ghost);
+            white-space: nowrap;
+          }
+
+          .options-count {
+            min-width: 20px;
+            height: 20px;
+            padding: 0 0.3rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: var(--primary);
+            color: #ffffff;
+            font-size: var(--fs-2xs);
+            font-weight: 800;
+          }
+
+          .options-toggle :global(.chevron) {
+            margin-left: auto;
+            transition: transform var(--transition-fast);
+          }
+
+          .options-toggle :global(.chevron.open) {
+            transform: rotate(180deg);
+          }
+
+          /* 畳んでいる間は一包化などのチップを出さない(開くと従来どおり折り返して並ぶ) */
+          .flag-group {
+            display: none;
+            order: 3;
+            flex: 1 1 100%;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+          }
+
+          .flag-group.is-open {
+            display: flex;
+          }
+
+          .flag-chip,
+          .agent-override-chip {
+            min-height: 40px;
+          }
+
+          .flag-chip input {
+            width: 18px;
+            height: 18px;
+          }
+
+          .tokkan-chip select {
+            min-height: 32px;
+            font-size: var(--fs-sm);
+          }
+
+          .change-reason-display {
+            order: 4;
+            flex: 1 1 100%;
+          }
+
+          .btn-trash {
+            order: 2;
+            flex: 0 0 auto;
+            width: 44px;
+            min-height: 40px;
+            margin-left: 0;
           }
 
           .prescription-row-sub,

@@ -1,10 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, type DosageCategory } from '@/lib/dosage_category';
 import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from '@/lib/master-data/usage_master';
+import type { ElectronicUsageOption } from '@/lib/master-data/types';
+import {
+  QUICK_DAYS,
+  buildQuickUsageOptions,
+  formatQuickUsageLabel,
+  pushUsageRecent,
+  readUsageRecents
+} from '@/lib/usage_quick_picks';
 import type { PrescriptionGroup, PrescriptionFieldValue } from '../types';
 import { getGroupDosageCategory } from '../helpers';
 import { PrescriptionRow } from './PrescriptionRow';
+import { StepperField } from './StepperField';
 import { UsageSearchModal } from './UsageSearchModal';
 
 export interface PrescriptionGroupEditorProps {
@@ -38,6 +47,23 @@ export const PrescriptionGroupEditor = React.memo(({
 }: PrescriptionGroupEditorProps) => {
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const { category: dosageCategory, isManual: isManualDosageCategory } = getGroupDosageCategory(group);
+
+  // 「最近使った用法」は端末ごと(localStorage)。マウント後に読むので、サーバー描画では定番だけが並ぶ。
+  const [recentUsageLabels, setRecentUsageLabels] = useState<string[]>([]);
+  useEffect(() => {
+    setRecentUsageLabels(readUsageRecents(dosageCategory));
+  }, [dosageCategory]);
+
+  const quickUsageOptions = useMemo(() => buildQuickUsageOptions({
+    category: dosageCategory,
+    options: ELECTRONIC_USAGE_OPTIONS,
+    recentLabels: recentUsageLabels
+  }), [dosageCategory, recentUsageLabels]);
+
+  const applyUsageOption = (option: ElectronicUsageOption) => {
+    onRpFieldChange(group.rpId, 'usage', option.label);
+    setRecentUsageLabels(pushUsageRecent(dosageCategory, option.label));
+  };
 
   const hasUsageCategoryMismatch = useMemo(() => {
     if (!group.usage?.trim()) return false;
@@ -83,7 +109,7 @@ export const PrescriptionGroupEditor = React.memo(({
             </span>
           )}
         </div>
-        <div className="rp-actions">
+        <div className="rp-actions rp-actions-header">
           <button
             type="button"
             className="btn-mini"
@@ -126,7 +152,30 @@ export const PrescriptionGroupEditor = React.memo(({
         />
       ))}
 
+      {/* スマホでは「追加」を薬品リストの末尾(次に指が向かう場所)に置く。PCでは見出し側のボタンを使う */}
+      <div className="rp-actions rp-actions-footer">
+        <button
+          type="button"
+          className="btn-add-drug"
+          onClick={() => onAddDrugToRp(group.rpId)}
+          aria-label={`Rp ${groupIndex + 1} に薬品を追加`}
+        >
+          <Plus size={18} aria-hidden="true" />
+          薬品を追加
+        </button>
+        <button
+          type="button"
+          className="btn-add-rp"
+          onClick={() => onAddRpAfter(group.rpId)}
+          aria-label={`Rp ${groupIndex + 1} の次にRpを追加`}
+        >
+          <Plus size={18} aria-hidden="true" />
+          次のRp
+        </button>
+      </div>
+
       <div className="rp-prescription-footer">
+        <div className="rp-footer-fields">
         <div className="rp-usage-field">
           <span>用法</span>
           <div className="usage-selector-wrap">
@@ -135,7 +184,7 @@ export const PrescriptionGroupEditor = React.memo(({
               className="usage usage-readonly"
               readOnly
               aria-label={`Rp ${groupIndex + 1} 用法`}
-              placeholder="「用法を選ぶ」から選択"
+              placeholder="タップして用法を選ぶ"
               value={group.usage}
               onClick={() => setIsUsageModalOpen(true)}
             />
@@ -172,21 +221,70 @@ export const PrescriptionGroupEditor = React.memo(({
             onChange={(e) => onRpFieldChange(group.rpId, 'usageSupplementText', e.target.value)}
           />
         </label>
-        <label className="rp-days-field">
+        <div className="rp-days-field">
           <span>日数</span>
           <div className="days-input-wrap">
-            <input
-              type="text"
-              className="days"
-              aria-label={`Rp ${groupIndex + 1} 日数`}
+            <StepperField
+              value={group.days}
+              onChange={(next) => onRpFieldChange(group.rpId, 'days', next)}
+              ariaLabel={`Rp ${groupIndex + 1} 日数`}
+              inputClassName="days"
+              inputMode="numeric"
               placeholder="14"
               maxLength={3}
-              value={group.days}
-              onChange={(e) => onRpFieldChange(group.rpId, 'days', e.target.value)}
+              min={0}
+              max={365}
+              step={1}
             />
             <strong>日分</strong>
           </div>
-        </label>
+        </div>
+        </div>
+
+        <div className="rp-quick-picks">
+          {quickUsageOptions.length > 0 && (
+            <div className="quick-pick-row" role="group" aria-label={`Rp ${groupIndex + 1} よく使う用法`}>
+              <span className="quick-pick-label">よく使う用法</span>
+              <div className="quick-pick-chips usage-chips">
+                {quickUsageOptions.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    className={`quick-chip ${group.usage === option.label ? 'is-selected' : ''}`}
+                    aria-pressed={group.usage === option.label}
+                    title={option.label.replace(/\u3000/g, ' ')}
+                    onClick={() => applyUsageOption(option)}
+                  >
+                    {formatQuickUsageLabel(option.label)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="quick-chip quick-chip-more"
+                  onClick={() => setIsUsageModalOpen(true)}
+                >
+                  ほかを検索
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="quick-pick-row" role="group" aria-label={`Rp ${groupIndex + 1} 日数のよく使う値`}>
+            <span className="quick-pick-label">よく使う日数</span>
+            <div className="quick-pick-chips">
+              {QUICK_DAYS.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  className={`quick-chip quick-chip-days ${group.days === String(days) ? 'is-selected' : ''}`}
+                  aria-pressed={group.days === String(days)}
+                  onClick={() => onRpFieldChange(group.rpId, 'days', String(days))}
+                >
+                  {days}日
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {isUsageModalOpen && (
@@ -194,7 +292,7 @@ export const PrescriptionGroupEditor = React.memo(({
           isOpen={isUsageModalOpen}
           onClose={() => setIsUsageModalOpen(false)}
           onSelect={(option) => {
-            onRpFieldChange(group.rpId, 'usage', option.label);
+            applyUsageOption(option);
             setIsUsageModalOpen(false);
           }}
           dosageCategory={dosageCategory}
@@ -392,14 +490,92 @@ export const PrescriptionGroupEditor = React.memo(({
 
         .rp-prescription-footer {
           display: grid;
-          grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 116px;
-          align-items: end;
+          grid-template-columns: minmax(0, 1fr);
           gap: 0.65rem;
           margin-top: 0.65rem;
           padding: 0.65rem;
           border: 1px solid #dbe4ef;
           border-radius: 8px;
           background: #f8fafc;
+        }
+
+        .rp-footer-fields {
+          display: grid;
+          grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 116px;
+          align-items: end;
+          gap: 0.65rem;
+        }
+
+        /* 選んだ用法・「用法を選ぶ」・クリアが1行に収まるよう、用法は1段目を全幅で使う */
+        .rp-usage-field {
+          grid-column: 1 / -1;
+        }
+
+        .rp-supplement-field {
+          grid-column: 1 / 3;
+        }
+
+        .rp-quick-picks {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0.5rem;
+          min-width: 0;
+        }
+
+        .quick-pick-row {
+          display: grid;
+          grid-template-columns: 5.5rem minmax(0, 1fr);
+          align-items: start;
+          gap: 0.5rem;
+        }
+
+        .quick-pick-label {
+          padding-top: 0.45rem;
+          color: var(--text-muted);
+          font-size: var(--fs-xs);
+          font-weight: 800;
+        }
+
+        .quick-pick-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+          min-width: 0;
+        }
+
+        .quick-chip {
+          min-height: 34px;
+          padding: 0.25rem 0.7rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 999px;
+          background: #ffffff;
+          color: var(--text-main);
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          line-height: 1.3;
+          text-align: left;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+
+        .quick-chip:hover {
+          border-color: var(--primary);
+          color: var(--primary-dark);
+        }
+
+        .quick-chip.is-selected {
+          border-color: var(--primary);
+          background: var(--primary);
+          color: #ffffff;
+        }
+
+        .quick-chip-more {
+          border-style: dashed;
+          color: var(--text-muted);
+        }
+
+        .rp-actions-footer {
+          display: none;
         }
 
         .rp-usage-field,
@@ -520,9 +696,25 @@ export const PrescriptionGroupEditor = React.memo(({
           color: var(--text-main);
         }
 
-        .rp-prescription-footer input.days {
+        .rp-prescription-footer :global(input.days) {
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          min-height: 38px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: #ffffff;
+          color: var(--text-main);
+          font-size: var(--fs-md);
+          padding: 0.45rem 0.6rem;
           text-align: right;
           font-weight: 800;
+        }
+
+        .rp-prescription-footer :global(input.days:focus) {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px rgb(37 99 235 / 0.12);
         }
 
         .rp-prescription-footer input:focus,
@@ -533,10 +725,23 @@ export const PrescriptionGroupEditor = React.memo(({
         }
 
         @media (max-width: 720px) {
+          .rp-group {
+            padding: 0.65rem;
+            border-left-width: 4px;
+          }
+
           .rp-group-header {
             align-items: flex-start;
             flex-direction: column;
             gap: 0.5rem;
+          }
+
+          .rp-heading {
+            flex-wrap: wrap;
+          }
+
+          .rp-category-mismatch-badge {
+            margin-left: 0;
           }
 
           .rp-actions {
@@ -544,13 +749,114 @@ export const PrescriptionGroupEditor = React.memo(({
             justify-content: flex-end;
           }
 
+          /* 追加ボタンは薬品リストの末尾に置くので、見出し側は隠す */
+          .rp-actions-header {
+            display: none;
+          }
+
+          .rp-actions-footer {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.1rem;
+          }
+
+          .btn-add-drug,
+          .btn-add-rp {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            border-radius: 6px;
+            font-size: var(--fs-sm);
+            font-weight: 800;
+            white-space: nowrap;
+            cursor: pointer;
+          }
+
+          .btn-add-drug {
+            border: 1px solid var(--primary);
+            background: var(--primary-light);
+            color: var(--primary-dark);
+          }
+
+          .btn-add-rp {
+            border: 1px dashed #94a3b8;
+            background: #ffffff;
+            color: var(--text-muted);
+          }
+
           .prescription-row-header {
             display: none;
           }
 
+          .rp-footer-fields {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .rp-supplement-field {
+            grid-column: auto;
+          }
+
           .rp-prescription-footer {
-            grid-template-columns: 1fr;
-            padding: 0.5rem;
+            padding: 0.55rem;
+          }
+
+          /* 1fr だと列の最小幅が中身(横に長く並べたチップ)になり、画面より広がってしまう */
+          .quick-pick-row {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0.3rem;
+          }
+
+          .quick-pick-label {
+            padding-top: 0;
+          }
+
+          .quick-chip {
+            min-height: 40px;
+            padding: 0.3rem 0.8rem;
+          }
+
+          /* 用法は候補が多いので、縦に並べず横にスクロールさせて画面の高さを使わない */
+          .usage-chips {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            margin-inline: -0.55rem;
+            padding: 0.1rem 0.55rem 0.4rem;
+            scroll-snap-type: x proximity;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .usage-chips .quick-chip {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+          }
+
+          /* 用法欄そのものが押せて、チップ列の「ほかを検索」でも開けるので、広い「用法を選ぶ」ボタンは出さない */
+          .btn-select-usage {
+            display: none;
+          }
+
+          /* 選んだ用法は長い(「１日３回朝昼夕食後　服用」)ので、欄を全幅にして読み切れるようにし、
+             クリアは下に小さく置く */
+          .usage-selector-wrap {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .btn-clear-usage {
+            width: auto;
+            min-height: 36px;
+            justify-self: end;
+          }
+
+          .rp-prescription-footer :global(input.days) {
+            min-height: 44px;
+            text-align: center;
+          }
+
+          .rp-prescription-footer input {
+            min-height: 44px;
           }
 
           .usage-selector-wrap {
@@ -565,13 +871,17 @@ export const PrescriptionGroupEditor = React.memo(({
         }
 
         @media (max-width: 480px) {
+          /* 「用法を選ぶ」ボタンは出さず、欄のタップ・チップ列から開く */
           .usage-selector-wrap {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr);
           }
 
-          .btn-select-usage,
+          .btn-select-usage {
+            display: none;
+          }
+
           .btn-clear-usage {
-            width: 100%;
+            width: auto;
             justify-content: center;
           }
         }

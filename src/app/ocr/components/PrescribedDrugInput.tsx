@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search } from 'lucide-react';
 import { useDatabase } from '@/db/DatabaseProvider';
-import { searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
+import { findDrugMasterRecordByCode, searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
+import { pushDrugRecent, readDrugRecents, type RecentDrug } from '@/lib/drug_recents';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import type { Prescription, PrescriptionFieldValue } from '../types';
 import {
@@ -12,6 +14,9 @@ import {
   isNoSubstitutionValue,
   NO_SUBSTITUTION_LABEL
 } from '../helpers';
+
+// 候補を出し始める文字数。カナ2文字(例: アム)から出す。1文字だと件数が多すぎて選べない。
+export const MIN_SUGGEST_QUERY_LENGTH = 2;
 
 export interface PrescribedDrugInputProps {
   prescription: Prescription;
@@ -75,12 +80,24 @@ export const PrescribedDrugInput = React.memo(({
   const [suggestions, setSuggestions] = useState<DrugMasterRecord[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  // 候補は「いま打っている文字」でだけ検索する。選んだ直後や、QR・前回処方で薬品名が入ったときに
+  // 同じ名前で再検索して候補が開き直る(選んだ候補が次の入力欄に被さる)のを避ける。
+  const [typedQuery, setTypedQuery] = useState('');
+  // 薬品欄が空のまま開いたときに出す「最近選んだ薬品」。マウント後に端末の保存分を読む。
+  const [recentDrugs, setRecentDrugs] = useState<RecentDrug[]>([]);
+  const [showRecents, setShowRecents] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRecentDrugs(readDrugRecents());
+  }, []);
 
   const { id: prescriptionId, dispensedDrug, unitText, unitCode } = prescription;
   const prescribedUnitCode = prescription.electronicUnitConversion?.prescribedUnitCode;
   const prescribedUnitText = prescription.electronicUnitConversion?.prescribedUnitText;
   const selectDrug = useCallback((drug: DrugMasterRecord) => {
+    setRecentDrugs(pushDrugRecent({ code: drug.code, name: formatDrugDisplayName(drug.name) }));
+    setShowRecents(false);
     const updates = calculatePrescribedDrugSelectUpdates(drug, {
       dispensedDrug,
       unitText,
@@ -90,21 +107,27 @@ export const PrescribedDrugInput = React.memo(({
     for (const update of updates) {
       onChange(prescriptionId, update.field, update.value, index);
     }
+    setTypedQuery('');
+    setSuggestions([]);
     setShowDropdown(false);
+    // 薬品を選んだら、続けて1日量を打てるように入力欄へ進める(スマホでは候補を選ぶたびに入力欄を探させない)
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>(`[data-amount-input="${prescriptionId}"]`)?.focus();
+    }, 0);
   }, [index, onChange, prescriptionId, dispensedDrug, unitText, unitCode, prescribedUnitCode, prescribedUnitText]);
 
   useEffect(() => {
     let isMounted = true;
-    const query = prescription.drugName.trim().toLowerCase();
+    const query = typedQuery.trim().toLowerCase();
 
-    if (query.length < 3) {
+    if (query.length < MIN_SUGGEST_QUERY_LENGTH) {
       setSuggestions([]);
       return;
     }
 
     searchDrugMaster(query, 200).then((nextSuggestions) => attachStockQuantities(db, nextSuggestions)).then((nextSuggestions) => {
       if (!isMounted) return;
-      setSuggestions(sortDrugSuggestions(nextSuggestions, prescription.drugName).slice(0, 8));
+      setSuggestions(sortDrugSuggestions(nextSuggestions, typedQuery, readDrugRecents().map((recent) => recent.code)).slice(0, 8));
       setShowDropdown(nextSuggestions.length > 0);
       setFocusedIndex(-1);
     }).catch((error) => {
@@ -113,16 +136,21 @@ export const PrescribedDrugInput = React.memo(({
     });
 
     return () => { isMounted = false; };
-  }, [db, prescription.drugName]);
+  }, [db, typedQuery]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
+        setShowRecents(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside as unknown as EventListener);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside as unknown as EventListener);
+    };
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -151,19 +179,28 @@ export const PrescribedDrugInput = React.memo(({
 
     if (e.key === 'Escape') {
       setShowDropdown(false);
+      setShowRecents(false);
       e.preventDefault();
     }
   };
 
   return (
     <div className="prescribed-drug-container" ref={containerRef}>
+      <div className="drug-input-row">
       <input
         type="text"
         className="drug-name"
         aria-label={`処方薬品名 ${index + 1}`}
-        placeholder="3文字以上で薬品候補..."
+        placeholder="薬品名を入力（2文字から候補）"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        enterKeyHint="search"
         value={prescription.drugName}
         onChange={(e) => {
+          setTypedQuery(e.target.value);
+          setShowRecents(false);
           onChange(prescription.id, 'drugName', e.target.value, index);
           onChange(prescription.id, 'drugCode', '', index);
           onChange(prescription.id, 'yjCode', '', index);
@@ -174,9 +211,42 @@ export const PrescribedDrugInput = React.memo(({
         }}
         onFocus={() => {
           if (suggestions.length > 0) setShowDropdown(true);
+          else if (!prescription.drugName.trim() && recentDrugs.length > 0) setShowRecents(true);
         }}
         onKeyDown={handleKeyDown}
       />
+      <button
+        type="button"
+        className="drug-search-button"
+        aria-label={`処方薬品 ${index + 1} を詳細検索`}
+        title="薬品を詳細検索"
+        onClick={() => {
+          setShowDropdown(false);
+          onOpenDrugSearch(prescription.id, prescription.drugName, 'prescribed');
+        }}
+      >
+        <Search size={18} aria-hidden="true" />
+      </button>
+      </div>
+      {showRecents && !showDropdown && recentDrugs.length > 0 && (
+        <ul className="drug-dropdown recent-dropdown" aria-label="最近選んだ薬品">
+          <li className="dropdown-heading" aria-hidden="true">最近選んだ薬品</li>
+          {recentDrugs.slice(0, 8).map((recent) => (
+            <li
+              key={recent.code}
+              onClick={async () => {
+                const record = await findDrugMasterRecordByCode(recent.code);
+                if (record) selectDrug(record);
+                else setShowRecents(false);
+              }}
+            >
+              <div className="drug-suggestion-main">
+                <span className="drug-suggestion-name">{recent.name}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {showDropdown && suggestions.length > 0 && (
         <ul className="drug-dropdown prescribed-dropdown">
           {suggestions.map((drug, i) => (
@@ -218,7 +288,33 @@ export const PrescribedDrugInput = React.memo(({
           min-width: 0;
         }
 
+        .drug-input-row {
+          display: flex;
+          align-items: stretch;
+          gap: 0.4rem;
+        }
+
+        .drug-search-button {
+          flex: 0 0 auto;
+          width: 38px;
+          min-height: 38px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: #ffffff;
+          color: var(--text-muted);
+          cursor: pointer;
+        }
+
+        .drug-search-button:hover {
+          border-color: var(--primary);
+          color: var(--primary);
+        }
+
         .drug-name {
+          flex: 1 1 auto;
           width: 100%;
           min-height: 38px;
           border: 1px solid var(--border);
@@ -278,9 +374,10 @@ export const PrescribedDrugInput = React.memo(({
         }
 
         .drug-suggestion-name {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
           overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
           font-weight: 700;
           line-height: 1.35;
         }
@@ -312,6 +409,39 @@ export const PrescribedDrugInput = React.memo(({
           color: var(--primary);
           font-weight: 800;
           text-align: center;
+        }
+
+        .drug-dropdown li.dropdown-heading {
+          padding: 0.3rem 0.6rem;
+          color: var(--text-muted);
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          cursor: default;
+        }
+
+        .drug-dropdown li.dropdown-heading:hover {
+          background: transparent;
+        }
+
+        @media (max-width: 720px) {
+          /* 指で押せる大きさ(44px)を確保する */
+          .drug-name,
+          .drug-search-button {
+            min-height: 44px;
+          }
+
+          .drug-search-button {
+            width: 44px;
+          }
+
+          .drug-dropdown {
+            max-height: min(55vh, 340px);
+          }
+
+          .drug-dropdown li {
+            min-height: 44px;
+            padding: 0.6rem 0.65rem;
+          }
         }
       `}</style>
     </div>

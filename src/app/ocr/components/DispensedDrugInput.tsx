@@ -173,7 +173,7 @@ export const DispensedDrugInput = React.memo(({
         readOnly
         className="dispensed-drug-name"
         aria-label={`調剤薬品名 ${index + 1}`}
-        placeholder="クリックまたはEnterで薬品検索..."
+        placeholder="タップして選択（先発・後発の変更）"
         value={prescription.dispensedDrug}
         onClick={() => {
           setShowDropdown(true);
