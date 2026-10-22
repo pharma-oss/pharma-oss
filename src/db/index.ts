@@ -31,6 +31,15 @@ import {
   getReferenceDataSeedFailures,
   type ReferenceDataSeedTarget
 } from './reference_data_seed_notice';
+import {
+  resolveDbPassword as resolveDbPasswordHelper,
+  getOrCreateLocalDbPassword as getOrCreateLocalDbPasswordHelper,
+  LOCAL_DB_PASSWORD_KEY,
+  generateRandomPassword,
+  DbKeyStorageUnavailableError,
+  getDatabaseErrorCardViewState,
+  type DatabaseErrorCardViewState
+} from './db_password';
 
 import { isDevelopment, getDbPassword } from '@/lib/env';
 
@@ -66,39 +75,14 @@ function assertBulkWriteSuccess(result: BulkWriteResultLike, label: string) {
 // var, generate a random key on first run and persist it in this browser
 // profile only (unique per install, never leaves the device, never committed
 // to source).
-const LOCAL_DB_PASSWORD_KEY = 'pharmacy_os_local_db_password';
-
-function generateRandomPassword(): string {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 function getOrCreateLocalDbPassword(): string {
-    try {
-        const existing = window.localStorage.getItem(LOCAL_DB_PASSWORD_KEY);
-        if (existing) return existing;
-        const generated = generateRandomPassword();
-        window.localStorage.setItem(LOCAL_DB_PASSWORD_KEY, generated);
-        return generated;
-    } catch (e) {
-        // localStorage unavailable (private browsing lockdown, etc.): fall back to an
-        // in-memory-only random key. Data will not be readable across reloads in that
-        // case, which is safer than reusing a fixed key.
-        console.error('Failed to persist local DB encryption key; using a session-only key.', e);
-        return generateRandomPassword();
-    }
+    const storage = typeof window !== 'undefined' ? window.localStorage : null;
+    return getOrCreateLocalDbPasswordHelper(storage, generateRandomPassword);
 }
 
 function resolveDbPassword(): string {
-    const configured = getDbPassword();
-    if (configured) return configured;
-    console.warn(
-        'NEXT_PUBLIC_DB_PASSWORD is not set. Using a randomly generated, ' +
-        'per-install encryption key stored in this browser profile. Set ' +
-        'NEXT_PUBLIC_DB_PASSWORD explicitly before production use — see README.md.'
-    );
-    return getOrCreateLocalDbPassword();
+    const storage = typeof window !== 'undefined' ? window.localStorage : null;
+    return resolveDbPasswordHelper(getDbPassword(), storage, generateRandomPassword);
 }
 
 // 旧バージョンは env 未設定時にこの固定文字列で暗号化していた。読み取り互換のためだけに
@@ -732,4 +716,10 @@ export {
     recordReferenceDataSeedFailure,
     type ReferenceDataSeedTarget
 } from './reference_data_seed_notice';
+
+export {
+    DbKeyStorageUnavailableError,
+    getDatabaseErrorCardViewState,
+    type DatabaseErrorCardViewState
+} from './db_password';
 

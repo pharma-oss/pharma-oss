@@ -6,6 +6,7 @@ import type { PharmacyDatabase } from './types';
 import type { OnboardingE2ESeedResult } from '@/lib/onboarding_e2e_seed';
 import type { ReturnCorrectionE2ESeedResult } from '@/lib/return_correction_e2e_seed';
 import { isProduction } from '@/lib/env';
+import { getDatabaseErrorCardViewState } from './db_password';
 
 export { useDatabase } from './DatabaseContext';
 
@@ -19,7 +20,7 @@ declare global {
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<PharmacyDatabase | null>(null);
-  const [dbError, setDbError] = useState<string | null>(null);
+  const [dbError, setDbError] = useState<unknown | null>(null);
   const [satelliteSyncing, setSatelliteSyncing] = useState(false);
 
   useEffect(() => {
@@ -62,8 +63,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('Database initialization failed:', error);
-        const message = error instanceof Error ? error.message : '不明なエラー';
-        setDbError(message);
+        setDbError(error);
       }
     };
     init();
@@ -102,14 +102,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, [db]);
 
   if (dbError) {
+    const errorCard = getDatabaseErrorCardViewState(dbError);
     return (
       <div className="db-fullscreen-container">
         <div role="alert" className="db-alert-card">
-          <h1 className="db-card-title">ローカルデータベースを開けません</h1>
-          <p className="db-card-desc">
-            患者データ保護のため、アプリは自動削除や自動初期化を実行していません。バックアップの有無を確認し、管理者の復旧手順に従ってください。
-          </p>
-          <p className="db-error-text">エラー: {dbError}</p>
+          <h1 className="db-card-title">{errorCard.title}</h1>
+          <p className="db-card-desc">{errorCard.description}</p>
+          <p className="db-error-text">エラー: {errorCard.errorMessage}</p>
         </div>
         <style jsx>{`
           .db-fullscreen-container {
