@@ -207,7 +207,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       });
       if (outcome.shouldWarn && outcome.warningMessage) {
         hasWarnedSeedFailureRef.current.add(target);
-        toast.warning(outcome.warningMessage);
+        toast.warning(outcome.warningMessage, { duration: 20000 });
       }
     });
 
