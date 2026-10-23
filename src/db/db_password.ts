@@ -99,6 +99,7 @@ export function resolveDbPasswordWithWindow(
 export interface DatabaseErrorCardViewState {
   title: string;
   description: string;
+  errorLabel: '詳細' | 'エラー';
   errorMessage: string | null;
 }
 
@@ -113,7 +114,8 @@ export function getDatabaseErrorCardViewState(error: unknown): DatabaseErrorCard
     return {
       title: 'ローカルデータベースを開けません',
       description: DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION,
-      errorMessage: error.causeName ? `詳細: ${error.causeName}` : null
+      errorLabel: '詳細',
+      errorMessage: error.causeName
     };
   }
 
@@ -122,6 +124,7 @@ export function getDatabaseErrorCardViewState(error: unknown): DatabaseErrorCard
   return {
     title: 'ローカルデータベースを開けません',
     description: DB_DEFAULT_ERROR_DESCRIPTION,
+    errorLabel: 'エラー',
     errorMessage: message
   };
 }

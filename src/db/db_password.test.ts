@@ -219,7 +219,8 @@ describe('db_password contracts', () => {
     it('returns formatted detail message when causeName is present and null when absent', () => {
       const withCause = new DbKeyStorageUnavailableError(new DOMException('quota', 'QuotaExceededError'));
       const stateWithCause = getDatabaseErrorCardViewState(withCause);
-      assert.strictEqual(stateWithCause.errorMessage, '詳細: QuotaExceededError');
+      assert.strictEqual(stateWithCause.errorLabel, '詳細');
+      assert.strictEqual(stateWithCause.errorMessage, 'QuotaExceededError');
 
       const withoutCause = new DbKeyStorageUnavailableError();
       const stateWithoutCause = getDatabaseErrorCardViewState(withoutCause);
@@ -246,6 +247,42 @@ describe('db_password contracts', () => {
       assert.strictEqual(state.description, DB_DEFAULT_ERROR_DESCRIPTION);
       assert.ok(state.description.includes('患者データ保護のため'));
       assert.strictEqual(state.errorMessage, 'RxError (DB1): Password mismatch');
+    });
+
+    it('sets errorLabel to 詳細 for DbKeyStorageUnavailableError with cause or without cause', () => {
+      const withCause = new DbKeyStorageUnavailableError(new Error('fail'));
+      const stateWithCause = getDatabaseErrorCardViewState(withCause);
+      assert.strictEqual(stateWithCause.errorLabel, '詳細');
+      assert.strictEqual(stateWithCause.errorMessage, 'Error');
+
+      const withoutCause = new DbKeyStorageUnavailableError();
+      const stateWithoutCause = getDatabaseErrorCardViewState(withoutCause);
+      assert.strictEqual(stateWithoutCause.errorLabel, '詳細');
+      assert.strictEqual(stateWithoutCause.errorMessage, null);
+    });
+
+    it('sets errorLabel to エラー for generic errors (Error, string, unknown value)', () => {
+      const err = new Error('generic db crash');
+      const stateErr = getDatabaseErrorCardViewState(err);
+      assert.strictEqual(stateErr.errorLabel, 'エラー');
+      assert.strictEqual(stateErr.errorMessage, 'generic db crash');
+
+      const strErr = 'simple string error';
+      const stateStr = getDatabaseErrorCardViewState(strErr);
+      assert.strictEqual(stateStr.errorLabel, 'エラー');
+      assert.strictEqual(stateStr.errorMessage, 'simple string error');
+
+      const unknownErr = { code: 500 };
+      const stateUnknown = getDatabaseErrorCardViewState(unknownErr);
+      assert.strictEqual(stateUnknown.errorLabel, 'エラー');
+      assert.strictEqual(stateUnknown.errorMessage, '不明なエラー');
+    });
+
+    it('preserves errorLabel as エラー when generic Error message starts with 詳細:', () => {
+      const trickyErr = new Error('詳細: injected error message');
+      const state = getDatabaseErrorCardViewState(trickyErr);
+      assert.strictEqual(state.errorLabel, 'エラー');
+      assert.strictEqual(state.errorMessage, '詳細: injected error message');
     });
   });
 });

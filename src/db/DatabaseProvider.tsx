@@ -110,9 +110,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           <p className="db-card-desc">{errorCard.description}</p>
           {errorCard.errorMessage && (
             <p className="db-error-text">
-              {errorCard.errorMessage.startsWith('詳細:')
-                ? errorCard.errorMessage
-                : `エラー: ${errorCard.errorMessage}`}
+              {`${errorCard.errorLabel}: ${errorCard.errorMessage}`}
             </p>
           )}
         </div>
