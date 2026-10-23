@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, FileSearch, CheckCircle, Trash2, Loader2, CreditCard, Search, Plus, Hospital, Printer, AlertTriangle, ShieldCheck, History, QrCode, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMynaReaderAvailability } from '@/hooks/useMynaReaderAvailability';
+import { getMynaReaderButtonView } from '@/lib/myna_read_display';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, Drug, InsuranceEligibilityStatus, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
@@ -231,8 +233,10 @@ export default function OcrPage() {
   // 電子処方箋は接続モジュールが無く未実装。実装済みになるまで、関連のボタンは「未実装」で押せなくする。
   const electronicPrescriptionImplemented = isFeatureImplemented('electronicPrescription');
   const electronicPrescriptionUnavailableReason = FEATURE_AVAILABILITY.electronicPrescription.unavailableReason;
-  // マイナ読取・オンライン資格確認も、連携の仕様が未入手で未実装。押せなくして保険情報は手入力にする。
-  const mynaCardReaderImplemented = isFeatureImplemented('mynaCardReader');
+  // マイナ読取は、接続先(資格確認端末の連携フォルダ等)が設定されているときだけ押せる。
+  // オンライン資格確認は、連携の仕様が未入手で未実装。押せなくして保険情報は手入力にする。
+  const mynaReaderState = useMynaReaderAvailability();
+  const mynaReadButton = getMynaReaderButtonView(mynaReaderState, 'マイナ読取');
   const onlineEligibilityImplemented = isFeatureImplemented('onlineEligibility');
 
   useEffect(() => {
@@ -1985,15 +1989,13 @@ export default function OcrPage() {
                   type="button"
                   className="btn-secondary flex-center gap-2"
                   onClick={handleMynaRead}
-                  disabled={isReadingMyna || !mynaCardReaderImplemented}
-                  aria-disabled={isReadingMyna || !mynaCardReaderImplemented}
-                  title={mynaCardReaderImplemented ? undefined : FEATURE_AVAILABILITY.mynaCardReader.unavailableReason}
+                  disabled={isReadingMyna || mynaReadButton.disabled}
+                  aria-disabled={isReadingMyna || mynaReadButton.disabled}
+                  title={mynaReadButton.title}
                   data-testid="myna-read-button"
                 >
                   {isReadingMyna ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                  {isReadingMyna
-                    ? '読取中...'
-                    : mynaCardReaderImplemented ? 'マイナ読取で自動入力' : labelWithAvailability('mynaCardReader', 'マイナ読取')}
+                  {isReadingMyna ? '読取中...' : mynaReadButton.label}
                 </button>
                 <button
                   type="button"
@@ -2007,9 +2009,15 @@ export default function OcrPage() {
                   {eligibilityStatus === 'checking' ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
                   {labelWithAvailability('onlineEligibility', 'オンライン資格確認')}
                 </button>
-                {(!mynaCardReaderImplemented || !onlineEligibilityImplemented) && (
+                {(mynaReadButton.disabled || !onlineEligibilityImplemented) && (
                   <p className="field-hint reception-tool-note" data-testid="reception-tool-unimplemented-note">
-                    マイナ読取・オンライン資格確認は未実装です。保険者番号・負担割合は手入力してください。
+                    {[
+                      mynaReaderState.status === 'ready' && !mynaReaderState.available
+                        ? `マイナ読取は使えません(${mynaReaderState.reason || '接続先が未設定です'})`
+                        : '',
+                      !onlineEligibilityImplemented ? 'オンライン資格確認は未実装です' : ''
+                    ].filter(Boolean).join('。')}
+                    {mynaReaderState.status === 'checking' && onlineEligibilityImplemented ? '' : '。保険者番号・負担割合は手入力してください。'}
                   </p>
                 )}
                 {eligibilityMessage && (

@@ -20,13 +20,13 @@ export const FEATURE_AVAILABILITY = {
     implemented: false,
     unavailableReason: '電子処方箋管理サービスと接続するモジュールがまだ無く、取得できません。紙の処方箋か、処方箋QRで受付してください。'
   },
-  mynaCardReader: {
-    label: 'マイナ読取',
-    // 読取結果を受け取って画面に入れる処理はあるが、カードや資格確認端末から実際に情報を取り出す部分が無い
-    // (連携の仕様書はオンライン資格確認の医療機関等ONSにあり、まだ入手できていない)。
-    // 開発用のデモデータを返す設定だけが動く状態なので、現場では押せなくする。
+  // マイナ読取(保険情報・氏名・生年月日)は、資格確認端末の連携フォルダを読む形で実装した。使えるかどうかは
+  // 接続先の設定で決まるので、ここには置かない(GET /api/myna/status と useMynaReaderAvailability を参照)。
+  mynaClinicalImport: {
+    label: 'マイナ取込（特定健診・薬剤履歴）',
+    // 特定健診・薬剤情報のXML(YZK/TKK系)は、資格確認結果とは別の電文で、形式を確かめられる資料が無い。
     implemented: false,
-    unavailableReason: 'マイナ読取は、連携の仕様が未入手のため実装できていません。保険情報は手入力してください。'
+    unavailableReason: 'マイナからの特定健診情報・薬剤履歴の取込は、連携の仕様が未入手のため実装できていません。'
   },
   onlineEligibility: {
     label: 'オンライン資格確認',

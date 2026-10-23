@@ -126,6 +126,8 @@ export interface ExternalConnectorLastAttemptReport {
 export interface MynaCardReaderReadinessInput {
   mode?: string;
   endpoint?: string;
+  /** 資格確認端末の連携フォルダが設定されているか(パスそのものは載せない) */
+  folderConfigured?: boolean;
   allowMockFallback?: boolean;
   timeoutMs?: number;
   lastAttempt?: ExternalConnectorLastAttemptInput;
@@ -570,7 +572,7 @@ function applyElectronicPrescriptionPreflightMetadata(
 }
 
 export function buildMynaCardReaderReadiness(input: MynaCardReaderReadinessInput = {}): ExternalConnectorReadinessCheck {
-  const mode = normalizeMode(input.mode, ['auto', 'bridge', 'mock'], 'auto');
+  const mode = normalizeMode(input.mode, ['auto', 'bridge', 'mock', 'folder'], 'auto');
   const config = buildConfig(mode, input.endpoint, input.timeoutMs, undefined, input.allowMockFallback !== false);
   const evidence: string[] = [];
   const requiredActions: string[] = [];
@@ -579,7 +581,18 @@ export function buildMynaCardReaderReadiness(input: MynaCardReaderReadinessInput
 
   if (mode === 'invalid') {
     status = 'blocked';
-    requiredActions.push('MYNA_CARD_READER_MODE を auto / bridge / mock のいずれかに直す');
+    requiredActions.push('MYNA_CARD_READER_MODE を auto / bridge / mock / folder のいずれかに直す');
+  } else if (mode === 'folder' || (mode === 'auto' && !config.endpointConfigured && input.folderConfigured)) {
+    if (!input.folderConfigured) {
+      status = 'blocked';
+      evidence.push('資格確認端末の連携フォルダは未設定です');
+      requiredActions.push('MYNA_CARD_READER_FOLDER に資格確認結果XMLのフォルダを設定する');
+    } else {
+      // 形式は公開されている無料ソフトの実装から読み取ったもので、公式仕様書・実機での突合が済んでいない
+      status = 'attention';
+      evidence.push('資格確認端末の連携フォルダが設定されています');
+      requiredActions.push('実機が出力した資格確認結果ファイルで読み取りを確認し、公式の外部インターフェイス仕様書と突合する');
+    }
   } else if (mode === 'mock') {
     if (config.mockFallbackAllowed) {
       status = 'demo';

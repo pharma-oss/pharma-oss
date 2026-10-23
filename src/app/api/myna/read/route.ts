@@ -7,6 +7,8 @@ export async function GET() {
   try {
     const result = await readMynaCard({
       endpoint: env.mynaCardReaderEndpoint || undefined,
+      folderPath: env.mynaCardReaderFolder || undefined,
+      folderMaxAgeMinutes: env.mynaCardReaderFolderMaxAgeMinutes,
       mode: env.mynaCardReaderMode as MynaCardReaderMode,
       allowMockFallback: env.nodeEnv !== 'production' && env.mynaCardReaderAllowMock,
       timeoutMs: env.mynaCardReaderTimeoutMs

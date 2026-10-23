@@ -17,6 +17,8 @@ import type {
   PatientMergePlan,
   PatientMergeExecutionPlan
 } from '@/lib/patient_merge';
+import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
+import { buildMynaReadConfirmationMessage, pickReceptionInsuranceNumber } from '@/lib/myna_read_display';
 
 export type PatientCandidate = Patient & { doc?: any };
 export type PatientMergeReview = {
@@ -153,12 +155,23 @@ export function useOcrPatientEligibility({
     setMynaMessage('');
     try {
       const response = await fetch('/api/myna/read');
-      if (!response.ok) throw new Error('マイナ読取に失敗しました。');
-      const data = await response.json();
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        // サーバーの説明(フォルダが空・古い結果・ファイルが読めない等)をそのまま見せる
+        throw new Error(typeof payload?.message === 'string' && payload.message ? payload.message : 'マイナ読取に失敗しました。');
+      }
+      const data = payload as MynaCardReaderResult;
+
+      // 直近に資格確認した人の結果を読むので、反映する前に、目の前の患者のものかを人が確かめる
+      if (data.readerSource !== 'mock' && !window.confirm(buildMynaReadConfirmationMessage(data))) {
+        setMynaMessage('マイナ読取の内容は受付欄に入れませんでした。');
+        return;
+      }
 
       setPatientName(data.name || '');
       setPatientBirthDate(data.birthDate || '');
-      setInsuranceNumber(data.insuranceInfo?.number || '');
+      // 受付欄の「保険者番号」には保険者番号(数字)を入れる。記号・番号は入れない
+      setInsuranceNumber(pickReceptionInsuranceNumber(data.insuranceInfo));
       if (data.insuranceInfo?.burdenRatio) {
         setBurdenRatio(String(data.insuranceInfo.burdenRatio));
       }
@@ -169,8 +182,9 @@ export function useOcrPatientEligibility({
       toast.success(data.readerSource === 'mock' ? 'デモ用のマイナ読取内容を反映しました。' : 'マイナ読取内容を反映しました。');
     } catch (error) {
       console.error('Failed to read MyNa data:', error);
-      setMynaMessage('マイナ読取に失敗しました。カードリーダー接続を確認してください。');
-      toast.error('マイナ読取に失敗しました。');
+      const message = error instanceof Error && error.message ? error.message : 'マイナ読取に失敗しました。';
+      setMynaMessage(message);
+      toast.error(message);
     } finally {
       setIsReadingMyna(false);
     }

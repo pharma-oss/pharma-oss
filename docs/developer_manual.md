@@ -118,6 +118,8 @@ npm run eligibility:field-readiness
 
 `online-eligibility-field-readiness.json`、CSV、入力テンプレートを出力します。ダミー、検証用データ、患者情報混入、必須証跡の未完了は合格として扱いません。保留判定では成果物を残して終了コード1になります。
 
+マイナ読取は、資格確認端末の連携フォルダにある資格確認結果XML（`OQSsiquc01res_face_*.xml`）を読む実装です（`src/lib/myna_face_folder_reader.ts`、解析は `src/lib/onshi_qualification_xml.ts`）。設定は `MYNA_CARD_READER_MODE=folder`（または `auto` で接続先なし）と `MYNA_CARD_READER_FOLDER`、使える時間は `MYNA_CARD_READER_FOLDER_MAX_AGE_MINUTES`（既定10分）。画面のボタンを押せるかは `GET /api/myna/status` が決め、開発用デモ（`mock`）は「使えない」扱いです。**形式の出どころ**: 公式の外部インターフェイス仕様書は医療機関等ONS（登録制・非公開）で未入手のため、公開されている無料ソフトの実装と実サンプルから項目名・コード表・日付形式を読み取りました（hangilc/myclinic-ts の `packages/onshi-result`、YUKI-ENT/MynaReception の `docs`。どちらもライセンス表記が無いのでコードは写していません）。接続準備診断は、フォルダ設定済みでも `attention` のままにし、実機の出力ファイルでの確認と公式仕様書との突合が済むまで本番可にしません。特定健診情報・薬剤履歴（YZK/TKK系の電文）と、オンライン資格確認の照会は、形式を確かめられる資料が無く未実装です（`src/lib/feature_availability.ts`）。
+
 電子処方箋の導入計画は `docs/electronic_prescription_rollout_plan.md` にまとめます。公式運用試験レビューは、接続準備診断JSONと現地確認証跡JSONを分けて入力します。接続準備診断では `ELECTRONIC_PRESCRIPTION_MODE=connector`、`ELECTRONIC_PRESCRIPTION_CONNECTOR_KIND=qualification_terminal|web_api`、`ELECTRONIC_PRESCRIPTION_CAPABILITIES` を設定し、処方箋受付、署名検証、重複投薬等チェック、受付取消、調剤結果登録、調剤結果取消・変更、リフィル、紙処方箋情報提供ファイルの必須機能を申告します。現地確認証跡には、本番接続モジュール、受付内容照合、引換番号、「処方内容（控え）」を処方箋原本として扱わない確認、重複投薬等チェック、取消・変更、調剤結果登録、障害時手順の結果を入れます。患者氏名、生年月日、保険番号、電子処方箋ID、引換番号、薬品名、医療機関名、接続URL、認証情報、通信本文は入れないでください。
 
 ```bash

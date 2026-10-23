@@ -13,11 +13,15 @@ describe('feature availability', () => {
     assert.ok(FEATURE_AVAILABILITY.electronicPrescription.unavailableReason.length > 0);
   });
 
-  it('marks the Myna card reader and online eligibility as not implemented too', () => {
-    assert.equal(isFeatureImplemented('mynaCardReader'), false);
+  it('marks the Myna clinical import and online eligibility as not implemented too', () => {
+    assert.equal(isFeatureImplemented('mynaClinicalImport'), false);
     assert.equal(isFeatureImplemented('onlineEligibility'), false);
-    assert.equal(labelWithAvailability('mynaCardReader', 'マイナ読取'), 'マイナ読取（未実装）');
+    assert.equal(labelWithAvailability('mynaClinicalImport', '特定健診・薬剤履歴を取込'), '特定健診・薬剤履歴を取込（未実装）');
     assert.equal(labelWithAvailability('onlineEligibility', 'オンライン資格確認'), 'オンライン資格確認（未実装）');
+  });
+
+  it('does not list the Myna card read, whose availability depends on the configured connection', () => {
+    assert.equal('mynaCardReader' in FEATURE_AVAILABILITY, false);
   });
 
   it('adds the 未実装 marker to a label only for features that are not implemented', () => {

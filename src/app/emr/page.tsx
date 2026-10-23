@@ -1783,13 +1783,13 @@ useEffect(() => {
               {mynaClinicalImports.length > 0 && (
                 <span className="status-chip compact confirmed">{mynaClinicalImports.length}件</span>
               )}
-              {!isFeatureImplemented('mynaCardReader') && (
+              {!isFeatureImplemented('mynaClinicalImport') && (
                 <span className="status-chip compact warning" data-testid="myna-import-unimplemented-badge">{UNIMPLEMENTED_BADGE_LABEL}</span>
               )}
             </div>
             {mynaClinicalImports.length === 0 ? (
               <span className="text-muted aside-empty-text">
-                {isFeatureImplemented('mynaCardReader')
+                {isFeatureImplemented('mynaClinicalImport')
                   ? '特定健診情報・薬剤履歴はまだ取り込まれていません。'
                   : '特定健診情報・薬剤履歴の取込は未実装です。'}
               </span>

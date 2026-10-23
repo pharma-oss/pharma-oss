@@ -69,8 +69,12 @@ export interface AppEnvConfig {
   onlineEligibilityLastAttemptErrorCode?: string;
 
   // マイナカードリーダー
-  mynaCardReaderMode: 'mock' | 'live' | 'disabled';
+  mynaCardReaderMode: 'mock' | 'live' | 'disabled' | 'auto' | 'bridge' | 'folder';
   mynaCardReaderEndpoint: string;
+  /** 資格確認端末の連携フォルダ。資格確認結果XML(OQSsiquc01res_face_*.xml)をここから読む。 */
+  mynaCardReaderFolder: string;
+  /** 連携フォルダの結果を使える時間(分)。 */
+  mynaCardReaderFolderMaxAgeMinutes: number;
   mynaCardReaderAllowMock: boolean;
   mynaCardReaderTimeoutMs: number;
   mynaCardReaderLastAttemptOutcome?: string;
@@ -188,6 +192,8 @@ export function parseEnvConfig(env: Record<string, string | undefined> = process
     // マイナカードリーダー
     mynaCardReaderMode: (env.MYNA_CARD_READER_MODE as AppEnvConfig['mynaCardReaderMode']) || 'mock',
     mynaCardReaderEndpoint: env.MYNA_CARD_READER_ENDPOINT || '',
+    mynaCardReaderFolder: env.MYNA_CARD_READER_FOLDER || '',
+    mynaCardReaderFolderMaxAgeMinutes: parseNumber(env.MYNA_CARD_READER_FOLDER_MAX_AGE_MINUTES, 10)!,
     mynaCardReaderAllowMock: env.MYNA_CARD_READER_ALLOW_MOCK !== 'false',
     mynaCardReaderTimeoutMs: parseNumber(env.MYNA_CARD_READER_TIMEOUT_MS, 10000)!,
     mynaCardReaderLastAttemptOutcome: env.MYNA_CARD_READER_LAST_ATTEMPT_OUTCOME,

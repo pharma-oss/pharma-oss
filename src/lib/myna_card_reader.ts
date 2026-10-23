@@ -1,7 +1,7 @@
 import type { Patient, VisitMynaMedicationHistoryItem, VisitMynaSpecificHealthCheckup } from '@/db/types';
 
-export type MynaCardReaderSource = 'bridge' | 'mock';
-export type MynaCardReaderMode = 'auto' | 'bridge' | 'mock';
+export type MynaCardReaderSource = 'bridge' | 'mock' | 'folder';
+export type MynaCardReaderMode = 'auto' | 'bridge' | 'mock' | 'folder';
 
 export interface MynaCardReaderPatientData {
   name: string;
@@ -25,6 +25,10 @@ export interface MynaCardReaderResult extends MynaCardReaderPatientData {
 
 export interface MynaCardReaderConfig {
   endpoint?: string;
+  /** 資格確認端末の連携フォルダ(資格確認結果XMLを読む)。環境変数 MYNA_CARD_READER_FOLDER。 */
+  folderPath?: string;
+  /** 連携フォルダの結果を使える時間(分)。既定10分。 */
+  folderMaxAgeMinutes?: number;
   mode?: MynaCardReaderMode;
   allowMockFallback?: boolean;
   timeoutMs?: number;
@@ -328,6 +332,66 @@ export async function readMynaCardFromBridge(config: MynaCardReaderConfig): Prom
   }
 }
 
+// ファイルを読むモジュールは、ブラウザ向けのコードに混ざらないよう必要になったときだけ読み込む
+async function readMynaCardFromConfiguredFolder(config: MynaCardReaderConfig): Promise<MynaCardReaderResult> {
+  const { readMynaCardFromFolder } = await import('./myna_face_folder_reader');
+  return readMynaCardFromFolder({
+    folderPath: config.folderPath,
+    maxAgeMinutes: config.folderMaxAgeMinutes,
+    now: config.now
+  });
+}
+
+export interface MynaReaderAvailability {
+  available: boolean;
+  source: 'folder' | 'bridge' | null;
+  /** 使えないときに画面へ出す理由 */
+  reason?: string;
+}
+
+/**
+ * 設定から、マイナ読取のボタンを押せる状態かを決める(画面のボタンを有効にするかどうか)。
+ * 開発用のデモデータ(mock)は、現場で本物と取り違えないよう「使えない」扱いにする。
+ */
+export function resolveMynaReaderAvailability(config: {
+  mode?: string;
+  endpoint?: string;
+  folderPath?: string;
+}): MynaReaderAvailability {
+  const mode = (config.mode || 'auto').trim().toLowerCase();
+  const hasFolder = !!config.folderPath?.trim();
+  const hasEndpoint = !!config.endpoint?.trim();
+
+  if (mode === 'disabled') {
+    return { available: false, source: null, reason: 'マイナ読取は無効に設定されています。' };
+  }
+  if (mode === 'mock') {
+    return {
+      available: false,
+      source: null,
+      reason: 'マイナ読取はデモ用の設定です。資格確認端末の連携フォルダ(MYNA_CARD_READER_FOLDER)を設定してください。'
+    };
+  }
+  if (mode === 'folder') {
+    return hasFolder
+      ? { available: true, source: 'folder' }
+      : { available: false, source: null, reason: '資格確認端末の連携フォルダ(MYNA_CARD_READER_FOLDER)が未設定です。' };
+  }
+  if (mode === 'bridge') {
+    return hasEndpoint
+      ? { available: true, source: 'bridge' }
+      : { available: false, source: null, reason: 'カードリーダー連携サービスの接続先(MYNA_CARD_READER_ENDPOINT)が未設定です。' };
+  }
+  // auto / live: 接続先があればそれ、無ければ連携フォルダ
+  if (hasEndpoint) return { available: true, source: 'bridge' };
+  if (hasFolder) return { available: true, source: 'folder' };
+  return {
+    available: false,
+    source: null,
+    reason: 'マイナ読取の接続先が未設定です。資格確認端末の連携フォルダ(MYNA_CARD_READER_FOLDER)を設定してください。'
+  };
+}
+
 export async function readMynaCard(config: MynaCardReaderConfig = {}): Promise<MynaCardReaderResult> {
   const mode = config.mode || 'auto';
   const allowMockFallback = config.allowMockFallback !== false;
@@ -341,8 +405,14 @@ export async function readMynaCard(config: MynaCardReaderConfig = {}): Promise<M
     }
     return buildMockMynaCardReaderResult(config.now);
   }
+  if (mode === 'folder') {
+    return readMynaCardFromConfiguredFolder(config);
+  }
   if (mode === 'bridge' || config.endpoint) {
     return readMynaCardFromBridge(config);
+  }
+  if (mode === 'auto' && config.folderPath?.trim()) {
+    return readMynaCardFromConfiguredFolder(config);
   }
   if (!allowMockFallback) {
     throw new MynaCardReaderError(

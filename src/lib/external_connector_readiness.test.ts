@@ -344,6 +344,17 @@ test('buildElectronicPrescriptionReadiness blocks plaintext non-loopback endpoin
   assert.ok(check.requiredActions.some((action) => action.includes('https')));
 });
 
+test('buildMynaCardReaderReadiness keeps a configured folder at attention until the real device output is checked', () => {
+  const folder = buildMynaCardReaderReadiness({ mode: 'folder', folderConfigured: true });
+  assert.strictEqual(folder.status, 'attention');
+  assert.ok(folder.requiredActions.some((action) => action.includes('実機')));
+  const auto = buildMynaCardReaderReadiness({ mode: 'auto', folderConfigured: true });
+  assert.strictEqual(auto.status, 'attention');
+  const missing = buildMynaCardReaderReadiness({ mode: 'folder', folderConfigured: false });
+  assert.strictEqual(missing.status, 'blocked');
+  assert.ok(missing.requiredActions.some((action) => action.includes('MYNA_CARD_READER_FOLDER')));
+});
+
 test('buildMynaCardReaderReadiness marks auto without endpoint as demo operation', () => {
   const check = buildMynaCardReaderReadiness({ mode: 'auto' });
 

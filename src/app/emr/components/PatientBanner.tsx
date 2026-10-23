@@ -14,7 +14,8 @@ import { extractInitialQuestionnaireOcrDraft } from '@/lib/initial_questionnaire
 import {
   type MynaReadInsuranceDisplay,
   formatPatientInsuranceInfo,
-  buildMynaReadInsuranceDisplay
+  buildMynaReadInsuranceDisplay,
+  getMynaReaderButtonView
 } from '@/lib/myna_read_display';
 import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
 import {
@@ -35,6 +36,7 @@ import {
 } from '@/lib/patient_copayment_support';
 import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
 import { FEATURE_AVAILABILITY, isFeatureImplemented, labelWithAvailability } from '@/lib/feature_availability';
+import { useMynaReaderAvailability } from '@/hooks/useMynaReaderAvailability';
 
 export interface PatientBannerProps {
   patientAlerts: Alert[];
@@ -154,8 +156,11 @@ export const PatientBanner = React.memo(function PatientBanner({
 
   const [isReading, setIsReading] = useState(false);
   const [isReadingClinical, setIsReadingClinical] = useState(false);
-  // マイナ読取は連携の仕様が未入手で未実装。ボタンは「未実装」表示にして押せなくする。
-  const mynaCardReaderImplemented = isFeatureImplemented('mynaCardReader');
+  // マイナ読取は、接続先(資格確認端末の連携フォルダ等)が設定されているときだけ押せる。
+  const mynaReaderState = useMynaReaderAvailability();
+  const mynaReadButton = getMynaReaderButtonView(mynaReaderState, 'マイナ読取');
+  // 特定健診・薬剤履歴の取込は、連携の仕様が未入手で未実装
+  const mynaClinicalImportImplemented = isFeatureImplemented('mynaClinicalImport');
   const [mynaReadDisplay, setMynaReadDisplay] = useState<MynaReadInsuranceDisplay | null>(null);
   const [mynaClinicalMessage, setMynaClinicalMessage] = useState('');
   const patientInsuranceInfo = formatPatientInsuranceInfo(patientData?.insuranceInfo);
@@ -470,6 +475,8 @@ export const PatientBanner = React.memo(function PatientBanner({
 
       const nextDisplay = buildMynaReadInsuranceDisplay({
         patientInsuranceInfo: patientData.insuranceInfo,
+        // 直近に資格確認した人の結果を読むので、選択中の患者本人かも確かめる
+        patient: { name: patientData.name, kana: patientData.kana, birthDate: patientData.birthDate },
         readerResult: payload as MynaCardReaderResult
       });
       setMynaReadDisplay(nextDisplay);
@@ -524,7 +531,8 @@ export const PatientBanner = React.memo(function PatientBanner({
       const importRecord: VisitMynaClinicalImport = {
         importId: `myna_${Date.now()}`,
         importedAt: now,
-        readerSource: payload.readerSource,
+        // 連携フォルダの結果には特定健診・薬剤履歴が無く、ここへ来る前に止まる。保存の型は bridge / mock のまま
+        readerSource: payload.readerSource === 'mock' ? 'mock' : 'bridge',
         readerCheckedAt: payload.readerCheckedAt,
         specificHealthCheckups: healthCheckups,
         medicationHistory,
@@ -630,22 +638,22 @@ export const PatientBanner = React.memo(function PatientBanner({
           ))}
           <span
             className="btn-tooltip-wrapper"
-            data-disabled={isReading || !patientData || !mynaCardReaderImplemented}
-            title={!mynaCardReaderImplemented
-              ? FEATURE_AVAILABILITY.mynaCardReader.unavailableReason
+            data-disabled={isReading || !patientData || mynaReadButton.disabled}
+            title={mynaReadButton.disabled && mynaReadButton.title
+              ? mynaReadButton.title
               : isReading ? '読み取り中...' : !patientData ? '患者を選択してください' : ''}
           >
             <button
               className="btn-myna"
               onClick={handleMynaRead}
-              disabled={isReading || !patientData || !mynaCardReaderImplemented}
+              disabled={isReading || !patientData || mynaReadButton.disabled}
               aria-label="マイナンバーカードを読み取る"
               data-testid="myna-read-button"
             >
               {isReading ? (
                 <><Loader2 size={14} className="spin" aria-hidden="true" /> 読取中...</>
               ) : (
-                <><CreditCard size={14} aria-hidden="true" /> {labelWithAvailability('mynaCardReader', 'マイナ読取')}</>
+                <><CreditCard size={14} aria-hidden="true" /> {mynaReadButton.label}</>
               )}
             </button>
           </span>
@@ -838,16 +846,16 @@ export const PatientBanner = React.memo(function PatientBanner({
                   type="button"
                   className="btn-secondary flex align-center gap-2"
                   onClick={handleMynaClinicalImport}
-                  disabled={isReadingClinical || !patientData || !mynaCardReaderImplemented}
-                  title={mynaCardReaderImplemented ? undefined : FEATURE_AVAILABILITY.mynaCardReader.unavailableReason}
+                  disabled={isReadingClinical || !patientData || !mynaClinicalImportImplemented}
+                  title={mynaClinicalImportImplemented ? undefined : FEATURE_AVAILABILITY.mynaClinicalImport.unavailableReason}
                   data-testid="myna-clinical-import-button"
                 >
                   {isReadingClinical ? <Loader2 size={16} className="spin" /> : <History size={16} />}
-                  {isReadingClinical ? '取込中...' : labelWithAvailability('mynaCardReader', '特定健診・薬剤履歴を取込')}
+                  {isReadingClinical ? '取込中...' : labelWithAvailability('mynaClinicalImport', '特定健診・薬剤履歴を取込')}
                 </button>
-                {!mynaCardReaderImplemented && (
+                {!mynaClinicalImportImplemented && (
                   <span className="myna-clinical-message" data-testid="myna-clinical-unimplemented-note">
-                    {FEATURE_AVAILABILITY.mynaCardReader.unavailableReason}
+                    {FEATURE_AVAILABILITY.mynaClinicalImport.unavailableReason}
                   </span>
                 )}
                 {mynaClinicalMessage && (

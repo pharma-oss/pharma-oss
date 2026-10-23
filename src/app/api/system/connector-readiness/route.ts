@@ -9,6 +9,7 @@ export async function GET() {
     mynaCardReader: {
       mode: env.mynaCardReaderMode,
       endpoint: env.mynaCardReaderEndpoint || undefined,
+      folderConfigured: !!env.mynaCardReaderFolder,
       allowMockFallback: env.nodeEnv !== 'production' && env.mynaCardReaderAllowMock,
       timeoutMs: env.mynaCardReaderTimeoutMs,
       lastAttempt: env.mynaCardReaderLastAttemptOutcome ? {

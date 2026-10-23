@@ -33,12 +33,12 @@ describe('electronic prescription is shown as not implemented on the reception p
     assert.equal(notice.includes('handleElectronicPrescriptionApply'), false);
   });
 
-  it('disables the Myna read and online eligibility buttons and tells staff to type insurance by hand', () => {
+  it('turns the Myna read button on only when its connection is configured, and keeps online eligibility off', () => {
     const myna = content.slice(content.indexOf('data-testid="myna-read-button"') - 400, content.indexOf('data-testid="myna-read-button"'));
-    assert.ok(myna.includes('disabled={isReadingMyna || !mynaCardReaderImplemented}'), 'the Myna button must be disabled');
+    assert.ok(myna.includes('disabled={isReadingMyna || mynaReadButton.disabled}'), 'the Myna button follows the availability state');
+    assert.ok(content.includes('useMynaReaderAvailability()'));
     const eligibility = content.slice(content.indexOf('data-testid="online-eligibility-button"') - 600, content.indexOf('data-testid="online-eligibility-button"'));
     assert.ok(eligibility.includes('!onlineEligibilityImplemented ||'), 'the eligibility button must be disabled');
-    assert.ok(content.includes("labelWithAvailability('mynaCardReader'"));
     assert.ok(content.includes("labelWithAvailability('onlineEligibility', 'オンライン資格確認')"));
     assert.ok(content.includes('reception-tool-unimplemented-note'));
   });
