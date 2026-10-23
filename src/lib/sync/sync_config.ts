@@ -72,18 +72,32 @@ export function parseRole(value: string | undefined): PharmacySyncRole | null {
   return role === 'hub' || role === 'satellite' || role === 'standalone' ? role : null;
 }
 
+// `new URL()` は IPv4 を 10進ドット表記へ正規化して返す(例: http://0x7f.1 → 127.0.0.1)。
+// 前方一致で判定すると `127.0.0.1.example.com` や `10.example.com` のような「名前」を
+// ループバック/LANと取り違え、患者データを平文HTTPのまま外部へ送れてしまう。必ず4つの数値として読む。
+function parseIPv4(host: string): [number, number, number, number] | null {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!match) return null;
+  const octets = match.slice(1).map(Number);
+  if (octets.some((octet) => octet > 255)) return null;
+  return octets as [number, number, number, number];
+}
+
 function isLoopbackHost(host: string): boolean {
-  return host === 'localhost' || host === '::1' || host.startsWith('127.');
+  // URL.hostname の IPv6 は角括弧つきで返る
+  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
+  return parseIPv4(host)?.[0] === 127;
 }
 
 function isPrivateLanHost(host: string): boolean {
-  if (host.endsWith('.local') || host.startsWith('10.') || host.startsWith('192.168.')) return true;
-  const parts = host.split('.').map(Number);
-  return parts.length === 4
-    && parts.every(Number.isInteger)
-    && parts[0] === 172
-    && parts[1] >= 16
-    && parts[1] <= 31;
+  // mDNS 名(例: main-hub.local)は同一リンク内でしか解決されない
+  if (host.endsWith('.local')) return true;
+  const octets = parseIPv4(host);
+  if (!octets) return false;
+  const [first, second] = octets;
+  return first === 10
+    || (first === 192 && second === 168)
+    || (first === 172 && second >= 16 && second <= 31);
 }
 
 export function isAllowedHubEndpoint(endpoint: string, transportEncryption: PharmacySyncTransportEncryption): boolean {

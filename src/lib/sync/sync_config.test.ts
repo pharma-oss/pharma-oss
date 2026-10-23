@@ -125,3 +125,30 @@ test('isAllowedHubEndpoint rejects non-http(s) protocols', () => {
   assert.equal(isAllowedHubEndpoint('ftp://localhost:3000', 'none'), false);
   assert.equal(isAllowedHubEndpoint('not-a-url', 'none'), false);
 });
+
+test('isAllowedHubEndpoint does not mistake a hostname that merely starts with 127. or 10. for loopback or LAN', () => {
+  // 名前の前方が数字でも、4つの数値ではないものは外部ホストとして扱う
+  assert.equal(isAllowedHubEndpoint('http://127.0.0.1.example.com:3000', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('http://127.example.com', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('https://10.example.com', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('https://192.168.example.com', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('http://192.168.1.10.example.com', 'aes-gcm'), false);
+  assert.equal(isAllowedHubEndpoint('http://10.0.0.5.nip.io:3000', 'aes-gcm'), false);
+});
+
+test('isAllowedHubEndpoint reads loopback and private LAN addresses as numbers', () => {
+  assert.equal(isAllowedHubEndpoint('http://127.1.2.3:3000', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('http://[::1]:3000', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('https://10.0.0.5:3443', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('https://172.16.0.1:3443', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('https://172.31.255.254:3443', 'none'), true);
+  // 172.16.0.0/12 の外、グローバルアドレス
+  assert.equal(isAllowedHubEndpoint('https://172.15.0.1:3443', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('https://172.32.0.1:3443', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('https://8.8.8.8:3443', 'none'), false);
+  assert.equal(isAllowedHubEndpoint('http://8.8.8.8:3000', 'aes-gcm'), false);
+  // new URL() が 10進ドットへ正規化する別表記も、実体がループバックなら許可、そうでなければ拒否
+  assert.equal(isAllowedHubEndpoint('http://0x7f.1:3000', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('http://2130706433:3000', 'none'), true);
+  assert.equal(isAllowedHubEndpoint('http://0x08.8.8.8:3000', 'aes-gcm'), false);
+});
