@@ -9,6 +9,7 @@ import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, FacilitySettings, InsuranceEligibilityStatus, PrescriptionItem, PublicInsurance, SoapRecord as DbSoapRecord, SoapStructuredAssessment, TracingReportStatus, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport, VisitTracingReport } from '@/db/types';
 import { evaluateUsageWarning, evaluateUsageWarningCondition } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
+import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
 import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
@@ -1782,10 +1783,15 @@ useEffect(() => {
               {mynaClinicalImports.length > 0 && (
                 <span className="status-chip compact confirmed">{mynaClinicalImports.length}件</span>
               )}
+              {!isFeatureImplemented('mynaCardReader') && (
+                <span className="status-chip compact warning" data-testid="myna-import-unimplemented-badge">{UNIMPLEMENTED_BADGE_LABEL}</span>
+              )}
             </div>
             {mynaClinicalImports.length === 0 ? (
               <span className="text-muted aside-empty-text">
-                特定健診情報・薬剤履歴はまだ取り込まれていません。
+                {isFeatureImplemented('mynaCardReader')
+                  ? '特定健診情報・薬剤履歴はまだ取り込まれていません。'
+                  : '特定健診情報・薬剤履歴の取込は未実装です。'}
               </span>
             ) : (
               <div className="myna-clinical-list">

@@ -257,7 +257,7 @@ export default function Dashboard() {
       <section className="operations-grid" aria-label="運用キュー">
         <OperationTile
           icon={FileCheck2}
-          label="電子処方箋・QR"
+          label="処方箋受付"
           value={pendingCount}
           subLabel="受付待ち"
           tone="blue"

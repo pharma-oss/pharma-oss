@@ -35,6 +35,16 @@ test('PatientBanner renders initial fallback state without crashing and contains
   assert.ok(html.includes('マイナ読取'), 'Must expose myna card reader button');
 });
 
+test('PatientBanner shows the Myna read button as 未実装 and keeps it disabled', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => {} })
+  );
+  const mynaButton = html.match(/<button[^>]*data-testid="myna-read-button"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+  assert.ok(mynaButton.length > 0, 'the Myna button must be rendered');
+  assert.ok(/\sdisabled(=""|\s|>)/.test(mynaButton), 'the Myna button must be disabled while it is not implemented');
+  assert.ok(mynaButton.includes('マイナ読取（未実装）'), 'the label must say it is not implemented');
+});
+
 test('PatientBanner disables the edit action while no patient is loaded, so the edit modal cannot open for an unselected patient', () => {
   const html = renderToStaticMarkup(
     React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => {} })

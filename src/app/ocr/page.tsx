@@ -8,6 +8,12 @@ import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Alert, Drug, InsuranceEligibilityStatus, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
+import {
+  FEATURE_AVAILABILITY,
+  UNIMPLEMENTED_BADGE_LABEL,
+  isFeatureImplemented,
+  labelWithAvailability
+} from '@/lib/feature_availability';
 import { parseFlexibleDateInput } from '@/lib/date_input';
 import {
   buildPatientCandidateMatches,
@@ -222,6 +228,12 @@ export default function OcrPage() {
   const [isManualEntry, setIsManualEntry] = useState(false);
   // QR・電子処方箋の取り込み欄。普段は畳み、電子処方箋で受付を選んだときや取得結果が出たときに開く。
   const [isIntakeToolsOpen, setIsIntakeToolsOpen] = useState(false);
+  // 電子処方箋は接続モジュールが無く未実装。実装済みになるまで、関連のボタンは「未実装」で押せなくする。
+  const electronicPrescriptionImplemented = isFeatureImplemented('electronicPrescription');
+  const electronicPrescriptionUnavailableReason = FEATURE_AVAILABILITY.electronicPrescription.unavailableReason;
+  // マイナ読取・オンライン資格確認も、連携の仕様が未入手で未実装。押せなくして保険情報は手入力にする。
+  const mynaCardReaderImplemented = isFeatureImplemented('mynaCardReader');
+  const onlineEligibilityImplemented = isFeatureImplemented('onlineEligibility');
 
   useEffect(() => {
     // ⚡ Bolt: Defer heavy OCR engine initialization to idle time.
@@ -1516,15 +1528,27 @@ export default function OcrPage() {
               type="button"
               className="manual-entry-card glass"
               data-testid="electronic-prescription-entry"
+              disabled={!electronicPrescriptionImplemented}
+              aria-disabled={!electronicPrescriptionImplemented}
               onClick={() => {
+                if (!electronicPrescriptionImplemented) return;
                 setIsManualEntry(true);
                 setIsIntakeToolsOpen(true);
                 setElectronicPrescriptionMessage('引換番号または処方箋IDを入力して取得してください。');
               }}
             >
               <FileSearch size={42} aria-hidden="true" />
-              <span className="manual-entry-title">電子処方箋で受付</span>
-              <span className="manual-entry-subtitle">yakurekiの接続モジュールから取得して確認します。</span>
+              <span className="manual-entry-title">
+                電子処方箋で受付
+                {!electronicPrescriptionImplemented && (
+                  <span className="unimplemented-badge" data-testid="electronic-prescription-entry-badge">{UNIMPLEMENTED_BADGE_LABEL}</span>
+                )}
+              </span>
+              <span className="manual-entry-subtitle">
+                {electronicPrescriptionImplemented
+                  ? 'yakurekiの接続モジュールから取得して確認します。'
+                  : electronicPrescriptionUnavailableReason}
+              </span>
             </button>
 
             <PrescriptionQrReader
@@ -1609,7 +1633,9 @@ export default function OcrPage() {
                   data-testid="intake-tools-toggle"
                 >
                   <QrCode size={18} aria-hidden="true" />
-                  <span className="intake-tools-title">QR・電子処方箋から取り込む</span>
+                  <span className="intake-tools-title">
+                    {electronicPrescriptionImplemented ? 'QR・電子処方箋から取り込む' : '処方箋QRから取り込む'}
+                  </span>
                   {appliedElectronicPrescription && (
                     <span className="status-chip compact confirmed">反映済み {appliedElectronicPrescriptionIds.length}件</span>
                   )}
@@ -1622,223 +1648,252 @@ export default function OcrPage() {
                     disabled={isProcessing || isSaving}
                   />
 
-                  <section
-                    className="electronic-prescription-panel"
-                    data-testid="electronic-prescription-panel"
-                    aria-label="電子処方箋受付"
-                  >
-                    <div className="electronic-prescription-header">
-                      <div>
-                        <span className="section-kicker">電子処方箋</span>
-                        <strong>取得内容を確認して受付</strong>
+                  {!electronicPrescriptionImplemented ? (
+                    <section
+                      className="electronic-prescription-panel is-unimplemented"
+                      data-testid="electronic-prescription-panel"
+                      aria-label="電子処方箋受付（未実装）"
+                    >
+                      <div className="electronic-prescription-header">
+                        <div>
+                          <span className="section-kicker">電子処方箋</span>
+                          <strong>電子処方箋での受付</strong>
+                        </div>
+                        <span className="status-chip warning" data-testid="electronic-prescription-unimplemented-badge">
+                          {UNIMPLEMENTED_BADGE_LABEL}
+                        </span>
                       </div>
-                      <span className={`status-chip ${electronicPrescriptionStatus}`}>
-                        {appliedElectronicPrescription
-                          ? `反映済み ${appliedElectronicPrescriptionIds.length}件`
-                          : electronicPrescriptionStatus === 'confirmed'
-                            ? '取得済み'
-                          : electronicPrescriptionStatus === 'checking'
-                            ? '取得中'
-                            : electronicPrescriptionStatus === 'warning'
-                              ? '要確認'
-                              : electronicPrescriptionStatus === 'unavailable'
-                                ? '未接続'
-                                : '未取得'}
-                      </span>
-                    </div>
-                    <div className="electronic-prescription-controls">
-                      <div
-                        className="electronic-prescription-key-kind"
-                        role="radiogroup"
-                        aria-label="電子処方箋取得キー種別"
-                        data-testid="electronic-prescription-key-kind"
-                      >
-                        <button
-                          type="button"
-                          className={electronicPrescriptionKeyKind === 'exchange_number' ? 'active' : ''}
-                          aria-pressed={electronicPrescriptionKeyKind === 'exchange_number'}
-                          onClick={() => {
-                            setElectronicPrescriptionKeyKind('exchange_number');
-                            setPendingElectronicPrescription(null);
-                            setElectronicPrescriptionPaperOriginalConfirmed(false);
-                          }}
-                          data-testid="electronic-prescription-key-kind-exchange"
-                        >
-                          引換番号
-                        </button>
-                        <button
-                          type="button"
-                          className={electronicPrescriptionKeyKind === 'prescription_id' ? 'active' : ''}
-                          aria-pressed={electronicPrescriptionKeyKind === 'prescription_id'}
-                          onClick={() => {
-                            setElectronicPrescriptionKeyKind('prescription_id');
-                            setPendingElectronicPrescription(null);
-                            setElectronicPrescriptionPaperOriginalConfirmed(false);
-                          }}
-                          data-testid="electronic-prescription-key-kind-prescription-id"
-                        >
-                          処方箋ID
-                        </button>
-                      </div>
-                      <label htmlFor="electronicPrescriptionKey">引換番号・処方箋ID</label>
-                      <input
-                        id="electronicPrescriptionKey"
-                        type="text"
-                        maxLength={80}
-                        value={electronicPrescriptionKey}
-                        onChange={(e) => {
-                          setElectronicPrescriptionKey(e.target.value);
-                          setPendingElectronicPrescription(null);
-                          setElectronicPrescriptionPaperOriginalConfirmed(false);
-                        }}
-                        placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '半角数字6〜16桁' : '英数字・ハイフン'}
-                        data-testid="electronic-prescription-key"
-                      />
-                      <label htmlFor="electronicPrescriptionInsuredNumber">
-                        被保険者番号{electronicPrescriptionKeyKind === 'exchange_number' ? '（必須）' : '（任意照合）'}
-                      </label>
-                      <input
-                        id="electronicPrescriptionInsuredNumber"
-                        type="text"
-                        maxLength={40}
-                        value={electronicPrescriptionInsuredNumber}
-                        onChange={(event) => {
-                          setElectronicPrescriptionInsuredNumber(event.target.value);
-                          setPendingElectronicPrescription(null);
-                          setElectronicPrescriptionPaperOriginalConfirmed(false);
-                        }}
-                        placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '引換番号での取得時に入力' : '患者照合に使う場合だけ入力'}
-                        data-testid="electronic-prescription-insured-number"
-                      />
+                      <p className="electronic-prescription-note">{electronicPrescriptionUnavailableReason}</p>
                       <button
                         type="button"
                         className="btn-secondary flex-center gap-2"
-                        onClick={() => handleElectronicPrescriptionFetch(patientBirthDate)}
-                        disabled={isFetchingElectronicPrescription}
+                        disabled
+                        aria-disabled="true"
                         data-testid="electronic-prescription-fetch"
                       >
-                        {isFetchingElectronicPrescription ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                        {isFetchingElectronicPrescription ? '取得中...' : '取得して確認'}
+                        <Search size={16} aria-hidden="true" />
+                        {labelWithAvailability('electronicPrescription', '取得して確認')}
                       </button>
-                    </div>
-                    <p className="electronic-prescription-note">
-                      引換番号での取得には被保険者番号が必要です。接続先未設定時は取得せず、デモ応答も本番受付へ反映しません。
-                    </p>
-                    {electronicPrescriptionMessage && (
-                      <div className={`electronic-prescription-message ${electronicPrescriptionStatus}`}>
-                        {electronicPrescriptionMessage}
-                      </div>
-                    )}
-                    {pendingElectronicPrescription?.prescription && electronicPrescriptionApplyDecision && (
-                      <div className="electronic-prescription-review" data-testid="electronic-prescription-review">
-                        <dl>
-                          <div>
-                            <dt>文書</dt>
-                            <dd>
-                              {pendingElectronicPrescription.prescription.documentKind === 'electronic_prescription'
-                                ? '電子処方箋'
-                                : pendingElectronicPrescription.prescription.documentKind === 'prescription_information'
-                                  ? '処方箋情報提供ファイル'
-                                  : '判定不能'}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>電子署名</dt>
-                            <dd>{pendingElectronicPrescription.prescription.signatureVerification?.status || '未確認'}</dd>
-                          </div>
-                          <div>
-                            <dt>有効期限</dt>
-                            <dd>{pendingElectronicPrescription.prescription.validUntil || '不明'}</dd>
-                          </div>
-                          <div>
-                            <dt>重複確認</dt>
-                            <dd>{pendingElectronicPrescription.duplicateCheck?.status || 'not_checked'}</dd>
-                          </div>
-                          {pendingElectronicPrescription.prescription.refill && (
-                            <div>
-                              <dt>リフィル</dt>
-                              <dd>
-                                {pendingElectronicPrescription.prescription.refill.currentCount}
-                                /{pendingElectronicPrescription.prescription.refill.totalCount}回目
-                              </dd>
-                            </div>
-                          )}
-                        </dl>
-                        {(
-                          pendingElectronicPrescription.prescription.items.some((item) => item.unitConversion || item.usageSupplementText)
-                          || (pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.length || 0) > 0
-                          || (pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.length || 0) > 0
-                          || !!pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription
-                        ) && (
-                          <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
-                            <strong>処方補足情報</strong>
-                            <ul>
-                              {pendingElectronicPrescription.prescription.items.flatMap((item) => [
-                                ...(item.unitConversion ? [
-                                  `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
-                                ] : []),
-                                ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
-                              ]).map((text) => <li key={text}>{text}</li>)}
-                              {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
-                                <li key={`comment-${comment}`}>処方コメント: {comment}</li>
-                              ))}
-                              {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
-                                <li key={`lab-${result.testName}-${index}`}>
-                                  検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
-                                  {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
-                                </li>
-                              ))}
-                              {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
-                                <li>
-                                  麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                        )}
-                        {pendingElectronicPrescription.prescription.documentKind === 'prescription_information' && (
-                          <label className="electronic-prescription-original-check">
-                            <input
-                              type="checkbox"
-                              checked={electronicPrescriptionPaperOriginalConfirmed}
-                              onChange={(event) => setElectronicPrescriptionPaperOriginalConfirmed(event.target.checked)}
-                            />
-                            <span>紙の処方箋原本を受領し、取得内容と照合しました</span>
-                          </label>
-                        )}
-                        <div className={`electronic-prescription-decision ${electronicPrescriptionApplyDecision.status}`}>
-                          <strong>{electronicPrescriptionApplyDecision.statusLabel}</strong>
-                          <span>{electronicPrescriptionApplyDecision.message}</span>
+                    </section>
+                  ) : (
+                    <section
+                      className="electronic-prescription-panel"
+                      data-testid="electronic-prescription-panel"
+                      aria-label="電子処方箋受付"
+                    >
+                      <div className="electronic-prescription-header">
+                        <div>
+                          <span className="section-kicker">電子処方箋</span>
+                          <strong>取得内容を確認して受付</strong>
                         </div>
+                        <span className={`status-chip ${electronicPrescriptionStatus}`}>
+                          {appliedElectronicPrescription
+                            ? `反映済み ${appliedElectronicPrescriptionIds.length}件`
+                            : electronicPrescriptionStatus === 'confirmed'
+                              ? '取得済み'
+                            : electronicPrescriptionStatus === 'checking'
+                              ? '取得中'
+                              : electronicPrescriptionStatus === 'warning'
+                                ? '要確認'
+                                : electronicPrescriptionStatus === 'unavailable'
+                                  ? '未接続'
+                                  : '未取得'}
+                        </span>
+                      </div>
+                      <div className="electronic-prescription-controls">
+                        <div
+                          className="electronic-prescription-key-kind"
+                          role="radiogroup"
+                          aria-label="電子処方箋取得キー種別"
+                          data-testid="electronic-prescription-key-kind"
+                        >
+                          <button
+                            type="button"
+                            className={electronicPrescriptionKeyKind === 'exchange_number' ? 'active' : ''}
+                            aria-pressed={electronicPrescriptionKeyKind === 'exchange_number'}
+                            onClick={() => {
+                              setElectronicPrescriptionKeyKind('exchange_number');
+                              setPendingElectronicPrescription(null);
+                              setElectronicPrescriptionPaperOriginalConfirmed(false);
+                            }}
+                            data-testid="electronic-prescription-key-kind-exchange"
+                          >
+                            引換番号
+                          </button>
+                          <button
+                            type="button"
+                            className={electronicPrescriptionKeyKind === 'prescription_id' ? 'active' : ''}
+                            aria-pressed={electronicPrescriptionKeyKind === 'prescription_id'}
+                            onClick={() => {
+                              setElectronicPrescriptionKeyKind('prescription_id');
+                              setPendingElectronicPrescription(null);
+                              setElectronicPrescriptionPaperOriginalConfirmed(false);
+                            }}
+                            data-testid="electronic-prescription-key-kind-prescription-id"
+                          >
+                            処方箋ID
+                          </button>
+                        </div>
+                        <label htmlFor="electronicPrescriptionKey">引換番号・処方箋ID</label>
+                        <input
+                          id="electronicPrescriptionKey"
+                          type="text"
+                          maxLength={80}
+                          value={electronicPrescriptionKey}
+                          onChange={(e) => {
+                            setElectronicPrescriptionKey(e.target.value);
+                            setPendingElectronicPrescription(null);
+                            setElectronicPrescriptionPaperOriginalConfirmed(false);
+                          }}
+                          placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '半角数字6〜16桁' : '英数字・ハイフン'}
+                          data-testid="electronic-prescription-key"
+                        />
+                        <label htmlFor="electronicPrescriptionInsuredNumber">
+                          被保険者番号{electronicPrescriptionKeyKind === 'exchange_number' ? '（必須）' : '（任意照合）'}
+                        </label>
+                        <input
+                          id="electronicPrescriptionInsuredNumber"
+                          type="text"
+                          maxLength={40}
+                          value={electronicPrescriptionInsuredNumber}
+                          onChange={(event) => {
+                            setElectronicPrescriptionInsuredNumber(event.target.value);
+                            setPendingElectronicPrescription(null);
+                            setElectronicPrescriptionPaperOriginalConfirmed(false);
+                          }}
+                          placeholder={electronicPrescriptionKeyKind === 'exchange_number' ? '引換番号での取得時に入力' : '患者照合に使う場合だけ入力'}
+                          data-testid="electronic-prescription-insured-number"
+                        />
                         <button
                           type="button"
-                          className="btn-primary flex-center gap-2"
-                          onClick={handleElectronicPrescriptionApply}
-                          disabled={!electronicPrescriptionApplyDecision.canApply || pendingElectronicPrescriptionAlreadyApplied}
-                          data-testid="electronic-prescription-apply"
+                          className="btn-secondary flex-center gap-2"
+                          onClick={() => handleElectronicPrescriptionFetch(patientBirthDate)}
+                          disabled={isFetchingElectronicPrescription}
+                          data-testid="electronic-prescription-fetch"
                         >
-                          <CheckCircle size={16} />
-                          {pendingElectronicPrescriptionAlreadyApplied
-                            ? 'この処方箋は反映済み'
-                            : appliedElectronicPrescription
-                              ? '同日処方として追加'
-                              : '処方入力へ反映'}
+                          {isFetchingElectronicPrescription ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                          {isFetchingElectronicPrescription ? '取得中...' : '取得して確認'}
                         </button>
                       </div>
-                    )}
-                    {displayedElectronicPrescriptionWarnings.length > 0 && (
-                      <ul className="electronic-prescription-warnings">
-                        {displayedElectronicPrescriptionWarnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {electronicPrescriptionIntegrityHash && (
-                      <div className="electronic-prescription-hash">
-                        取得内容SHA-256: {electronicPrescriptionIntegrityHash.slice(0, 16)}...
-                      </div>
-                    )}
-                  </section>
+                      <p className="electronic-prescription-note">
+                        引換番号での取得には被保険者番号が必要です。接続先未設定時は取得せず、デモ応答も本番受付へ反映しません。
+                      </p>
+                      {electronicPrescriptionMessage && (
+                        <div className={`electronic-prescription-message ${electronicPrescriptionStatus}`}>
+                          {electronicPrescriptionMessage}
+                        </div>
+                      )}
+                      {pendingElectronicPrescription?.prescription && electronicPrescriptionApplyDecision && (
+                        <div className="electronic-prescription-review" data-testid="electronic-prescription-review">
+                          <dl>
+                            <div>
+                              <dt>文書</dt>
+                              <dd>
+                                {pendingElectronicPrescription.prescription.documentKind === 'electronic_prescription'
+                                  ? '電子処方箋'
+                                  : pendingElectronicPrescription.prescription.documentKind === 'prescription_information'
+                                    ? '処方箋情報提供ファイル'
+                                    : '判定不能'}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>電子署名</dt>
+                              <dd>{pendingElectronicPrescription.prescription.signatureVerification?.status || '未確認'}</dd>
+                            </div>
+                            <div>
+                              <dt>有効期限</dt>
+                              <dd>{pendingElectronicPrescription.prescription.validUntil || '不明'}</dd>
+                            </div>
+                            <div>
+                              <dt>重複確認</dt>
+                              <dd>{pendingElectronicPrescription.duplicateCheck?.status || 'not_checked'}</dd>
+                            </div>
+                            {pendingElectronicPrescription.prescription.refill && (
+                              <div>
+                                <dt>リフィル</dt>
+                                <dd>
+                                  {pendingElectronicPrescription.prescription.refill.currentCount}
+                                  /{pendingElectronicPrescription.prescription.refill.totalCount}回目
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                          {(
+                            pendingElectronicPrescription.prescription.items.some((item) => item.unitConversion || item.usageSupplementText)
+                            || (pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.length || 0) > 0
+                            || (pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.length || 0) > 0
+                            || !!pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription
+                          ) && (
+                            <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
+                              <strong>処方補足情報</strong>
+                              <ul>
+                                {pendingElectronicPrescription.prescription.items.flatMap((item) => [
+                                  ...(item.unitConversion ? [
+                                    `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
+                                  ] : []),
+                                  ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
+                                ]).map((text) => <li key={text}>{text}</li>)}
+                                {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
+                                  <li key={`comment-${comment}`}>処方コメント: {comment}</li>
+                                ))}
+                                {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
+                                  <li key={`lab-${result.testName}-${index}`}>
+                                    検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
+                                    {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
+                                  </li>
+                                ))}
+                                {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
+                                  <li>
+                                    麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                          {pendingElectronicPrescription.prescription.documentKind === 'prescription_information' && (
+                            <label className="electronic-prescription-original-check">
+                              <input
+                                type="checkbox"
+                                checked={electronicPrescriptionPaperOriginalConfirmed}
+                                onChange={(event) => setElectronicPrescriptionPaperOriginalConfirmed(event.target.checked)}
+                              />
+                              <span>紙の処方箋原本を受領し、取得内容と照合しました</span>
+                            </label>
+                          )}
+                          <div className={`electronic-prescription-decision ${electronicPrescriptionApplyDecision.status}`}>
+                            <strong>{electronicPrescriptionApplyDecision.statusLabel}</strong>
+                            <span>{electronicPrescriptionApplyDecision.message}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-primary flex-center gap-2"
+                            onClick={handleElectronicPrescriptionApply}
+                            disabled={!electronicPrescriptionApplyDecision.canApply || pendingElectronicPrescriptionAlreadyApplied}
+                            data-testid="electronic-prescription-apply"
+                          >
+                            <CheckCircle size={16} />
+                            {pendingElectronicPrescriptionAlreadyApplied
+                              ? 'この処方箋は反映済み'
+                              : appliedElectronicPrescription
+                                ? '同日処方として追加'
+                                : '処方入力へ反映'}
+                          </button>
+                        </div>
+                      )}
+                      {displayedElectronicPrescriptionWarnings.length > 0 && (
+                        <ul className="electronic-prescription-warnings">
+                          {displayedElectronicPrescriptionWarnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {electronicPrescriptionIntegrityHash && (
+                        <div className="electronic-prescription-hash">
+                          取得内容SHA-256: {electronicPrescriptionIntegrityHash.slice(0, 16)}...
+                        </div>
+                      )}
+                    </section>
+                  )}
                 </div>
               </section>
 
@@ -1930,20 +1985,33 @@ export default function OcrPage() {
                   type="button"
                   className="btn-secondary flex-center gap-2"
                   onClick={handleMynaRead}
-                  disabled={isReadingMyna}
+                  disabled={isReadingMyna || !mynaCardReaderImplemented}
+                  aria-disabled={isReadingMyna || !mynaCardReaderImplemented}
+                  title={mynaCardReaderImplemented ? undefined : FEATURE_AVAILABILITY.mynaCardReader.unavailableReason}
+                  data-testid="myna-read-button"
                 >
                   {isReadingMyna ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                  {isReadingMyna ? '読取中...' : 'マイナ読取で自動入力'}
+                  {isReadingMyna
+                    ? '読取中...'
+                    : mynaCardReaderImplemented ? 'マイナ読取で自動入力' : labelWithAvailability('mynaCardReader', 'マイナ読取')}
                 </button>
                 <button
                   type="button"
                   className="btn-secondary flex-center gap-2"
                   onClick={handleEligibilityCheck}
-                  disabled={!normalizeInsuranceNumber(insuranceNumber) || eligibilityStatus === 'checking'}
+                  disabled={!onlineEligibilityImplemented || !normalizeInsuranceNumber(insuranceNumber) || eligibilityStatus === 'checking'}
+                  aria-disabled={!onlineEligibilityImplemented || !normalizeInsuranceNumber(insuranceNumber) || eligibilityStatus === 'checking'}
+                  title={onlineEligibilityImplemented ? undefined : FEATURE_AVAILABILITY.onlineEligibility.unavailableReason}
+                  data-testid="online-eligibility-button"
                 >
                   {eligibilityStatus === 'checking' ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                  オンライン資格確認
+                  {labelWithAvailability('onlineEligibility', 'オンライン資格確認')}
                 </button>
+                {(!mynaCardReaderImplemented || !onlineEligibilityImplemented) && (
+                  <p className="field-hint reception-tool-note" data-testid="reception-tool-unimplemented-note">
+                    マイナ読取・オンライン資格確認は未実装です。保険者番号・負担割合は手入力してください。
+                  </p>
+                )}
                 {eligibilityMessage && (
                   <span
                     className={`status-chip ${eligibilityStatus}`}
@@ -2486,6 +2554,41 @@ export default function OcrPage() {
           font-weight: 700;
         }
 
+        .manual-entry-card:disabled {
+          cursor: not-allowed;
+          background: #f1f5f9;
+          color: var(--text-muted);
+        }
+
+        .manual-entry-card:disabled:hover {
+          border-color: var(--border);
+          transform: none;
+          box-shadow: none;
+        }
+
+        .unimplemented-badge {
+          display: inline-block;
+          margin-left: 0.5rem;
+          padding: 0.1rem 0.5rem;
+          border: 1px solid #fed7aa;
+          border-radius: 999px;
+          background: #fff7ed;
+          color: #c2410c;
+          font-size: var(--fs-xs);
+          font-weight: 800;
+          vertical-align: middle;
+          white-space: nowrap;
+        }
+
+        .electronic-prescription-panel.is-unimplemented {
+          border-color: #e2e8f0;
+          background: #f8fafc;
+        }
+
+        .electronic-prescription-panel.is-unimplemented .electronic-prescription-note {
+          color: var(--text-muted);
+        }
+
         .manual-entry-subtitle {
           color: var(--text-muted);
           font-size: 0.88rem;
@@ -2789,6 +2892,11 @@ export default function OcrPage() {
           flex-wrap: wrap;
           align-items: center;
           gap: 0.5rem;
+        }
+
+        .reception-tool-note {
+          flex: 1 1 100%;
+          margin: 0;
         }
 
         .status-chip {
@@ -3731,7 +3839,8 @@ export default function OcrPage() {
             white-space: normal;
           }
 
-          .reception-tool-row .status-chip {
+          .reception-tool-row .status-chip,
+          .reception-tool-row .reception-tool-note {
             grid-column: 1 / -1;
           }
 
