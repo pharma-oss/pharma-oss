@@ -6,6 +6,7 @@ import {
   getOrCreateLocalDbPassword,
   resolveDbPassword,
   resolveDbPasswordWithWindow,
+  sanitizeDatabaseErrorMessage,
   getDatabaseErrorCardViewState,
   DB_KEY_STORAGE_UNAVAILABLE_DESCRIPTION,
   DB_DEFAULT_ERROR_DESCRIPTION,
@@ -284,5 +285,87 @@ describe('db_password contracts', () => {
       assert.strictEqual(state.errorLabel, 'エラー');
       assert.strictEqual(state.errorMessage, '詳細: injected error message');
     });
+
+    it('sanitizes Parameters and hashes when generic Error or string with Parameters is provided', () => {
+      const fakeHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      const rxdbMessage = `Error code: DB1\nFix: Align passwords\n--------------------\nParameters:\npasswordHash: "${fakeHash}"`;
+
+      const stateFromError = getDatabaseErrorCardViewState(new Error(rxdbMessage));
+      assert.strictEqual(stateFromError.errorLabel, 'エラー');
+      assert.ok(stateFromError.errorMessage?.includes('Error code: DB1'));
+      assert.strictEqual(stateFromError.errorMessage?.includes('Parameters'), false);
+      assert.strictEqual(stateFromError.errorMessage?.includes(fakeHash), false);
+
+      const stateFromString = getDatabaseErrorCardViewState(rxdbMessage);
+      assert.strictEqual(stateFromString.errorLabel, 'エラー');
+      assert.ok(stateFromString.errorMessage?.includes('Error code: DB1'));
+      assert.strictEqual(stateFromString.errorMessage?.includes('Parameters'), false);
+      assert.strictEqual(stateFromString.errorMessage?.includes(fakeHash), false);
+    });
+  });
+
+  describe('sanitizeDatabaseErrorMessage', () => {
+    const fakeHash1 = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const fakeHash2 = 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+
+    it('strips hyphen line and Parameters block in RxDB 17.4.0 format while preserving body with Error code: DB1', () => {
+      const rxdbMessage = `
+Error message: RxDocument.prepare(): another instance on this adapter has a different password
+Error code: DB1
+Fix: Ensure that all instances use the same password.
+--------------------
+Parameters:
+passwordHash: "${fakeHash1}"
+existingPasswordHash: "${fakeHash2}"
+`;
+      const sanitized = sanitizeDatabaseErrorMessage(rxdbMessage);
+      assert.ok(sanitized.includes('Error message: RxDocument.prepare()'));
+      assert.ok(sanitized.includes('Error code: DB1'));
+      assert.ok(sanitized.includes('Fix: Ensure that all instances use the same password.'));
+      assert.strictEqual(sanitized.includes('--------------------'), false);
+      assert.strictEqual(sanitized.includes('Parameters:'), false);
+      assert.strictEqual(sanitized.includes('passwordHash'), false);
+      assert.strictEqual(sanitized.includes('existingPasswordHash'), false);
+      assert.strictEqual(sanitized.includes(fakeHash1), false);
+      assert.strictEqual(sanitized.includes(fakeHash2), false);
+    });
+
+    it('preserves generic error messages without Parameters unchanged', () => {
+      const plainMessage = 'RxError (DB1): Password mismatch without parameters';
+      const sanitized = sanitizeDatabaseErrorMessage(plainMessage);
+      assert.strictEqual(sanitized, plainMessage);
+    });
+
+    it('strips from Parameters line when hyphen line is absent and line begins with Parameters:', () => {
+      const messageWithoutHyphens = `Generic database error
+Parameters:
+someKey: "someValue"
+extraKey: 12345`;
+      const sanitized = sanitizeDatabaseErrorMessage(messageWithoutHyphens);
+      assert.strictEqual(sanitized, 'Generic database error');
+      assert.strictEqual(sanitized.includes('Parameters:'), false);
+      assert.strictEqual(sanitized.includes('someKey'), false);
+    });
+
+    it('replaces 64 or more hexadecimal characters outside Parameters with [省略]', () => {
+      const messageWithHex = `Corrupted block at ${fakeHash1} in storage ${fakeHash2}aa`;
+      const sanitized = sanitizeDatabaseErrorMessage(messageWithHex);
+      assert.strictEqual(sanitized, 'Corrupted block at [省略] in storage [省略]');
+      assert.strictEqual(sanitized.includes(fakeHash1), false);
+      assert.strictEqual(sanitized.includes(fakeHash2), false);
+    });
+
+    it('returns 不明なエラー when message consists solely of Parameters block and becomes empty', () => {
+      const paramsOnly = `--------------------\nParameters:\npasswordHash: "${fakeHash1}"`;
+      const sanitized = sanitizeDatabaseErrorMessage(paramsOnly);
+      assert.strictEqual(sanitized, '不明なエラー');
+
+      const paramsOnlyNoHyphen = `Parameters:\nsomeKey: "val"`;
+      assert.strictEqual(sanitizeDatabaseErrorMessage(paramsOnlyNoHyphen), '不明なエラー');
+
+      const whitespaceOnly = '   \n\n\t  ';
+      assert.strictEqual(sanitizeDatabaseErrorMessage(whitespaceOnly), '不明なエラー');
+    });
   });
 });
+
