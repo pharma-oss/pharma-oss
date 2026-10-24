@@ -110,6 +110,8 @@ function createMockSyncPanelViewProps(overrides: Partial<TerminalSyncPanelViewPr
     satelliteHealth: null,
     busy: false,
     standbyList: [],
+    standbyListErrorMessage: null,
+    standbyRegistrationBlocked: false,
     selectedStandby: '',
     setSelectedStandby: () => {},
     newStandbyEndpoint: '',
@@ -271,6 +273,44 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('同期競合レビュー'), 'Should render conflict section');
     assert.ok(html.includes('患者 / ID pt-100'), 'Should translate collection name to Japanese');
     assert.ok(html.includes('確認済みにする'), 'Should render resolve button');
+  });
+
+  it('renders standby allowlist error state, role="alert", disabled registration inputs, and heading with "読み込めません"', () => {
+    const errorMsg = 'この端末に保存された予備機リストを読み込めませんでした（ブラウザの保存領域にアクセスできません）。';
+    const props = createMockSyncPanelViewProps({
+      role: 'satellite',
+      standbyList: [],
+      standbyListErrorMessage: errorMsg,
+      standbyRegistrationBlocked: true,
+      isHubReachable: true
+    });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    // エラーあり＝文言と role="alert" があり
+    assert.ok(html.includes('role="alert"'), 'Should render role="alert" for error message');
+    assert.ok(html.includes(errorMsg), 'Should render the error message text');
+    // 『登録済みの予備機はありません』が無く
+    assert.ok(!html.includes('登録済みの予備機はありません'), 'Should NOT render empty notice when error exists');
+    // 見出しに『読み込めません』がある
+    assert.ok(html.includes('事前承認済み 予備Hubリスト (読み込めません)'), 'Should render heading with 読み込めません');
+    // blocked＝登録ボタンと入力欄が disabled
+    assert.ok(html.includes('disabled') && html.includes('placeholder="https://standby-hub.local:3000"'), 'Input must be disabled when blocked');
+    assert.ok(html.includes('disabled') && html.includes('登録 (HMAC署名発行)'), 'Register button must be disabled when blocked');
+  });
+
+  it('renders normal empty standby notice when there is no error', () => {
+    const props = createMockSyncPanelViewProps({
+      role: 'satellite',
+      standbyList: [],
+      standbyListErrorMessage: null,
+      standbyRegistrationBlocked: false,
+      isHubReachable: true
+    });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    assert.ok(html.includes('事前承認済み 予備Hubリスト (0件)'), 'Should render normal heading with (0件)');
+    assert.ok(html.includes('登録済みの予備機はありません。メイン端末とのオンライン接続中に予備機 URL を登録してください。'), 'Should render normal empty text');
+    assert.ok(!html.includes('事前承認済み 予備Hubリスト (読み込めません)'), 'Should not render error heading');
   });
 });
 

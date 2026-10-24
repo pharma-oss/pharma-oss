@@ -15,10 +15,12 @@ import {
   getStandbyHubAllowlist,
   resolveStandbyEndpointRegistrationOutcome,
   resolveOfflineAuthSaveWarningOutcome,
+  resolveStandbyAllowlistViewState,
   OFFLINE_AUTH_CACHE_KEY,
   REVOCATION_TOMBSTONE_KEY,
   STANDBY_HUB_ALLOWLIST_KEY,
-  type StandbyHubEntry
+  type StandbyHubEntry,
+  type StandbyHubAllowlistResult
 } from './satellite_offline_auth';
 import { hashPassword } from '../auth';
 import type { User } from '@/db/types';
@@ -367,7 +369,7 @@ test('13. saveStandbyHubAllowlist returns true on success, false on exception, a
   // 成功時: true を返し、値が保存される
   const saveSuccess = saveStandbyHubAllowlist(initialEntries);
   assert.strictEqual(saveSuccess, true);
-  assert.deepStrictEqual(getStandbyHubAllowlist(), initialEntries);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: initialEntries });
 
   // 失敗時: setItem が例外を投げた場合、false を返し既存の値が変わらない
   (globalThis as any).window.localStorage.setItem = () => {
@@ -379,7 +381,7 @@ test('13. saveStandbyHubAllowlist returns true on success, false on exception, a
   ];
   const saveFailure = saveStandbyHubAllowlist(newEntries);
   assert.strictEqual(saveFailure, false);
-  assert.deepStrictEqual(getStandbyHubAllowlist(), initialEntries);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: initialEntries });
 
   // window が無いときは false
   delete (globalThis as any).window;
@@ -497,6 +499,104 @@ test('16. resolveOfflineAuthSaveWarningOutcome notifies once on satellite failur
   });
   assert.strictEqual(noopResult.shouldWarn, false);
   assert.strictEqual(noopResult.warningMessage, null);
+});
+
+test('17. getStandbyHubAllowlist distinguishes valid, empty, unreadable, and corrupted states', () => {
+  // 1. 値なし (null / 空文字): { ok: true, entries: [] }
+  let store = setupMockLocalStorage();
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: [] });
+  store[STANDBY_HUB_ALLOWLIST_KEY] = '   ';
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: [] });
+
+  // 2. 有効な 1 件: { ok: true, entries: [...] }
+  const validEntry: StandbyHubEntry = {
+    endpoint: 'https://standby.local:3000',
+    issuedAt: '2026-10-24T00:00:00.000Z',
+    signature: 'valid_sig_123'
+  };
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify([validEntry]);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: [validEntry] });
+
+  // 3. getItem が例外: { ok: false, reason: 'unreadable' }
+  (globalThis as any).window.localStorage.getItem = () => {
+    throw new Error('SecurityError: storage access denied');
+  };
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'unreadable' });
+
+  // 4. 壊れた JSON: { ok: false, reason: 'corrupted' }
+  store = setupMockLocalStorage();
+  store[STANDBY_HUB_ALLOWLIST_KEY] = '{"broken":invalid_json}';
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 5. 配列でない JSON: { ok: false, reason: 'corrupted' }
+  store[STANDBY_HUB_ALLOWLIST_KEY] = '{"endpoint":"https://standby.local:3000"}';
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+  store[STANDBY_HUB_ALLOWLIST_KEY] = '12345';
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 6. 要素が壊れた配列: { ok: false, reason: 'corrupted' }
+  // 6a. 非オブジェクト要素
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify([null]);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify(['string-only']);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 6b. endpoint が文字列でない
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify([
+    { endpoint: 12345, issuedAt: '2026-10-24T00:00:00.000Z', signature: 'sig' }
+  ]);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 6c. issuedAt が文字列でない
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify([
+    { endpoint: 'https://standby.local:3000', issuedAt: 12345, signature: 'sig' }
+  ]);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 6d. signature が文字列でない
+  store[STANDBY_HUB_ALLOWLIST_KEY] = JSON.stringify([
+    { endpoint: 'https://standby.local:3000', issuedAt: '2026-10-24T00:00:00.000Z', signature: null }
+  ]);
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: false, reason: 'corrupted' });
+
+  // 7. window が未定義: { ok: true, entries: [] }
+  delete (globalThis as any).window;
+  assert.deepStrictEqual(getStandbyHubAllowlist(), { ok: true, entries: [] });
+});
+
+test('18. resolveStandbyAllowlistViewState determines entries, errorMessage, and registrationBlocked for all 3 states', () => {
+  const validEntry: StandbyHubEntry = {
+    endpoint: 'https://standby.local:3000',
+    issuedAt: '2026-10-24T00:00:00.000Z',
+    signature: 'valid_sig_123'
+  };
+
+  // 1. ok 状態
+  const okResult: StandbyHubAllowlistResult = { ok: true, entries: [validEntry] };
+  const okState = resolveStandbyAllowlistViewState(okResult);
+  assert.deepStrictEqual(okState.entries, [validEntry]);
+  assert.strictEqual(okState.errorMessage, null);
+  assert.strictEqual(okState.registrationBlocked, false);
+
+  // 2. unreadable 状態
+  const unreadableResult: StandbyHubAllowlistResult = { ok: false, reason: 'unreadable' };
+  const unreadableState = resolveStandbyAllowlistViewState(unreadableResult);
+  assert.deepStrictEqual(unreadableState.entries, []);
+  assert.strictEqual(unreadableState.registrationBlocked, true);
+  assert.strictEqual(
+    unreadableState.errorMessage,
+    'この端末に保存された予備機リストを読み込めませんでした（ブラウザの保存領域にアクセスできません）。登録済みの予備機が消えたとは限らないため、新しい予備機の登録は止めています。ブラウザの保存領域（localStorage）の利用を許可して、ページを再読み込みしてください。'
+  );
+
+  // 3. corrupted 状態
+  const corruptedResult: StandbyHubAllowlistResult = { ok: false, reason: 'corrupted' };
+  const corruptedState = resolveStandbyAllowlistViewState(corruptedResult);
+  assert.deepStrictEqual(corruptedState.entries, []);
+  assert.strictEqual(corruptedState.registrationBlocked, false);
+  assert.strictEqual(
+    corruptedState.errorMessage,
+    'この端末に保存された予備機リストが壊れていて、読み込めませんでした。メイン端末とオンラインで接続しているときに、予備機の URL を登録し直してください（登録し直すと、壊れたリストは新しい内容に置き換わります）。'
+  );
 });
 
 

@@ -3,7 +3,13 @@ import { toast } from 'sonner';
 import { Laptop, KeyRound, ShieldOff, RefreshCw, Copy, CheckCircle2, AlertTriangle, AlertOctagon, Clock, Database, Server, Radio, ShieldCheck, ArrowRightLeft } from 'lucide-react';
 import { resolveClientSyncIdentity, type ClientSyncRole } from '@/lib/sync/client_role';
 import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
-import { getStandbyHubAllowlist, saveStandbyHubAllowlist, resolveStandbyEndpointRegistrationOutcome, type StandbyHubEntry } from '@/lib/sync/satellite_offline_auth';
+import {
+  getStandbyHubAllowlist,
+  saveStandbyHubAllowlist,
+  resolveStandbyEndpointRegistrationOutcome,
+  resolveStandbyAllowlistViewState,
+  type StandbyHubEntry
+} from '@/lib/sync/satellite_offline_auth';
 import {
   fetchStandbyHubState,
   isSameStandbyEndpoint,
@@ -73,6 +79,8 @@ export default function TerminalSyncPanel() {
   const [satelliteHealth, setSatelliteHealth] = useState<SatelliteQueueHealth | null>(null);
   const [busy, setBusy] = useState(false);
   const [standbyList, setStandbyList] = useState<StandbyHubEntry[]>([]);
+  const [standbyListErrorMessage, setStandbyListErrorMessage] = useState<string | null>(null);
+  const [standbyRegistrationBlocked, setStandbyRegistrationBlocked] = useState<boolean>(false);
   const [selectedStandby, setSelectedStandby] = useState<string>('');
   const [newStandbyEndpoint, setNewStandbyEndpoint] = useState<string>('');
   const [isHubReachable, setIsHubReachable] = useState<boolean>(true);
@@ -89,7 +97,11 @@ export default function TerminalSyncPanel() {
     setRole(identity.role);
     if (identity.role === 'satellite') {
       setSatelliteHealth(getSatelliteQueueHealth());
-      setStandbyList(getStandbyHubAllowlist());
+      const allowlistResult = getStandbyHubAllowlist();
+      const allowlistViewState = resolveStandbyAllowlistViewState(allowlistResult);
+      setStandbyList(allowlistViewState.entries);
+      setStandbyListErrorMessage(allowlistViewState.errorMessage);
+      setStandbyRegistrationBlocked(allowlistViewState.registrationBlocked);
       const [hubState, reachable] = await Promise.all([
         fetchStandbyHubState(),
         fetch('/api/sync/status')
@@ -128,6 +140,9 @@ export default function TerminalSyncPanel() {
   }, [refresh]);
 
   const handleRegisterStandbyEndpoint = async () => {
+    if (standbyRegistrationBlocked) {
+      return;
+    }
     if (!isAdmin) {
       toast.error('予備機の登録には管理者権限が必要です。');
       return;
@@ -166,6 +181,8 @@ export default function TerminalSyncPanel() {
       }
 
       setStandbyList(updated);
+      setStandbyListErrorMessage(null);
+      setStandbyRegistrationBlocked(false);
       setNewStandbyEndpoint('');
       toast.success(`予備機エンドポイント「${newEntry.endpoint}」を承認済みリストに登録しました。`);
       if (db) {
@@ -460,6 +477,8 @@ export default function TerminalSyncPanel() {
       satelliteHealth={satelliteHealth}
       busy={busy}
       standbyList={standbyList}
+      standbyListErrorMessage={standbyListErrorMessage}
+      standbyRegistrationBlocked={standbyRegistrationBlocked}
       selectedStandby={selectedStandby}
       setSelectedStandby={setSelectedStandby}
       newStandbyEndpoint={newStandbyEndpoint}
@@ -496,6 +515,8 @@ export interface TerminalSyncPanelViewProps {
   satelliteHealth: SatelliteQueueHealth | null;
   busy: boolean;
   standbyList: StandbyHubEntry[];
+  standbyListErrorMessage: string | null;
+  standbyRegistrationBlocked: boolean;
   selectedStandby: string;
   setSelectedStandby: (v: string) => void;
   newStandbyEndpoint: string;
@@ -530,6 +551,8 @@ export function TerminalSyncPanelView({
     satelliteHealth,
     busy,
     standbyList,
+    standbyListErrorMessage,
+    standbyRegistrationBlocked,
     selectedStandby,
     setSelectedStandby,
     newStandbyEndpoint,
@@ -730,9 +753,15 @@ export function TerminalSyncPanelView({
           {/* 予備機リスト */}
           <div className="standby-hub-section">
             <h4 className="standby-hub-subheading">
-              事前承認済み 予備Hubリスト ({standbyList.length}件)
+              {standbyListErrorMessage
+                ? '事前承認済み 予備Hubリスト (読み込めません)'
+                : `事前承認済み 予備Hubリスト (${standbyList.length}件)`}
             </h4>
-            {standbyList.length === 0 ? (
+            {standbyListErrorMessage ? (
+              <p role="alert" className="standby-hub-error-desc text-danger">
+                {standbyListErrorMessage}
+              </p>
+            ) : standbyList.length === 0 ? (
               <p className="text-muted standby-hub-empty-desc">
                 登録済みの予備機はありません。メイン端末とのオンライン接続中に予備機 URL を登録してください。
               </p>
@@ -792,14 +821,14 @@ export function TerminalSyncPanelView({
                   placeholder="https://standby-hub.local:3000"
                   value={newStandbyEndpoint}
                   onChange={(e) => setNewStandbyEndpoint(e.target.value)}
-                  disabled={busy || !isAdmin}
+                  disabled={busy || !isAdmin || standbyRegistrationBlocked}
                   className="standby-hub-input"
                 />
                 <button
                   type="button"
                   className="btn-secondary flex items-center gap-1.5"
                   onClick={() => void handleRegisterStandbyEndpoint()}
-                  disabled={busy || !newStandbyEndpoint.trim() || !isAdmin}
+                  disabled={busy || !newStandbyEndpoint.trim() || !isAdmin || standbyRegistrationBlocked}
                 >
                   <ShieldCheck size={14} aria-hidden="true" />
                   <span>登録 (HMAC署名発行)</span>
@@ -1347,6 +1376,11 @@ export function TerminalSyncPanelView({
         }
         .standby-hub-empty-desc {
           font-size: var(--fs-xs);
+        }
+        .standby-hub-error-desc {
+          font-size: var(--fs-xs);
+          line-height: 1.7;
+          margin: 0;
         }
         .standby-hub-list {
           display: flex;

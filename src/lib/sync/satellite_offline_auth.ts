@@ -26,6 +26,16 @@ export type OfflineAuthCacheResult =
   | { ok: true; users: User[]; cachedAt: string; expiresAt: string }
   | { ok: false; reason: 'expired' | 'revoked' | 'empty' | 'corrupted' };
 
+export type StandbyHubAllowlistResult =
+  | { ok: true; entries: StandbyHubEntry[] }
+  | { ok: false; reason: 'unreadable' | 'corrupted' };
+
+export interface StandbyAllowlistViewState {
+  entries: StandbyHubEntry[];
+  errorMessage: string | null;
+  registrationBlocked: boolean;
+}
+
 function getPersistentEncKey(): string {
   if (typeof window === 'undefined') return 'mock_satellite_key';
   try {
@@ -267,16 +277,71 @@ export function verifyStandbyHubHmac(entry: StandbyHubEntry, terminalToken: stri
 /**
  * 予備機候補リストを localStorage から取得する
  */
-export function getStandbyHubAllowlist(): StandbyHubEntry[] {
-  if (typeof window === 'undefined') return [];
+export function getStandbyHubAllowlist(): StandbyHubAllowlistResult {
+  if (typeof window === 'undefined') return { ok: true, entries: [] };
+  let raw: string | null = null;
   try {
-    const raw = window.localStorage.getItem(STANDBY_HUB_ALLOWLIST_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    raw = window.localStorage.getItem(STANDBY_HUB_ALLOWLIST_KEY);
   } catch {
-    return [];
+    return { ok: false, reason: 'unreadable' };
   }
+  if (!raw || !raw.trim()) return { ok: true, entries: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, reason: 'corrupted' };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { ok: false, reason: 'corrupted' };
+  }
+
+  for (const item of parsed) {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      typeof (item as Record<string, unknown>).endpoint !== 'string' ||
+      typeof (item as Record<string, unknown>).issuedAt !== 'string' ||
+      typeof (item as Record<string, unknown>).signature !== 'string'
+    ) {
+      return { ok: false, reason: 'corrupted' };
+    }
+  }
+
+  return { ok: true, entries: parsed as StandbyHubEntry[] };
+}
+
+/**
+ * 予備機候補リストの取得結果から画面表示状態を決定する純粋関数
+ */
+export function resolveStandbyAllowlistViewState(
+  result: StandbyHubAllowlistResult
+): StandbyAllowlistViewState {
+  if (result.ok) {
+    return {
+      entries: result.entries,
+      errorMessage: null,
+      registrationBlocked: false
+    };
+  }
+
+  if (result.reason === 'unreadable') {
+    return {
+      entries: [],
+      errorMessage:
+        'この端末に保存された予備機リストを読み込めませんでした（ブラウザの保存領域にアクセスできません）。登録済みの予備機が消えたとは限らないため、新しい予備機の登録は止めています。ブラウザの保存領域（localStorage）の利用を許可して、ページを再読み込みしてください。',
+      registrationBlocked: true
+    };
+  }
+
+  return {
+    entries: [],
+    errorMessage:
+      'この端末に保存された予備機リストが壊れていて、読み込めませんでした。メイン端末とオンラインで接続しているときに、予備機の URL を登録し直してください（登録し直すと、壊れたリストは新しい内容に置き換わります）。',
+    registrationBlocked: false
+  };
 }
 
 /**
