@@ -136,6 +136,29 @@ function createMockSyncPanelViewProps(overrides: Partial<TerminalSyncPanelViewPr
   };
 }
 
+function extractStandbyRegistrationOpeningTag(
+  rawHtml: string,
+  target: 'input' | 'button'
+): string {
+  const cleanHtml = rawHtml.replace(/<style[\s\S]*?<\/style>/g, '');
+  const marker =
+    target === 'input'
+      ? 'placeholder="https://standby-hub.local:3000"'
+      : '登録 (HMAC署名発行)';
+  const tagPrefix = target === 'input' ? '<input' : '<button';
+
+  const markerIndex = cleanHtml.indexOf(marker);
+  assert.ok(markerIndex !== -1, `Marker "${marker}" was not found in rendered HTML`);
+
+  const tagStartIndex = cleanHtml.lastIndexOf(tagPrefix, markerIndex);
+  assert.ok(tagStartIndex !== -1, `Opening tag "${tagPrefix}" preceding marker "${marker}" was not found`);
+
+  const tagEndIndex = cleanHtml.indexOf('>', tagStartIndex);
+  assert.ok(tagEndIndex !== -1, `Closing bracket ">" for tag "${tagPrefix}" was not found`);
+
+  return cleanHtml.slice(tagStartIndex, tagEndIndex + 1);
+}
+
 describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
   it('exports TerminalSyncPanel and TerminalSyncPanelView as callable React component functions', () => {
     assert.equal(typeof TerminalSyncPanel, 'function');
@@ -275,7 +298,7 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('確認済みにする'), 'Should render resolve button');
   });
 
-  it('renders standby allowlist error state, role="alert", disabled registration inputs, and heading with "読み込めません"', () => {
+  it('renders standby allowlist error state, role="alert", and heading with "読み込めません"', () => {
     const errorMsg = 'この端末に保存された予備機リストを読み込めませんでした（ブラウザの保存領域にアクセスできません）。';
     const props = createMockSyncPanelViewProps({
       role: 'satellite',
@@ -293,9 +316,84 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     assert.ok(!html.includes('登録済みの予備機はありません'), 'Should NOT render empty notice when error exists');
     // 見出しに『読み込めません』がある
     assert.ok(html.includes('事前承認済み 予備Hubリスト (読み込めません)'), 'Should render heading with 読み込めません');
-    // blocked＝登録ボタンと入力欄が disabled
-    assert.ok(html.includes('disabled') && html.includes('placeholder="https://standby-hub.local:3000"'), 'Input must be disabled when blocked');
-    assert.ok(html.includes('disabled') && html.includes('登録 (HMAC署名発行)'), 'Register button must be disabled when blocked');
+  });
+
+  it('disables the standby registration input and button when registration is blocked', () => {
+    const errorMsg = 'この端末に保存された予備機リストを読み込めませんでした（ブラウザの保存領域にアクセスできません）。';
+    const props = createMockSyncPanelViewProps({
+      role: 'satellite',
+      isHubReachable: true,
+      isAdmin: true,
+      busy: false,
+      standbyList: [],
+      newStandbyEndpoint: 'https://standby-hub.local:3000',
+      standbyRegistrationBlocked: true,
+      standbyListErrorMessage: errorMsg
+    });
+    const html = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, props));
+
+    const inputTag = extractStandbyRegistrationOpeningTag(html, 'input');
+    const buttonTag = extractStandbyRegistrationOpeningTag(html, 'button');
+
+    assert.ok(
+      inputTag.includes('disabled=""'),
+      `Input tag must include disabled="" when registration is blocked. Tag: ${inputTag}`
+    );
+    assert.ok(
+      buttonTag.includes('disabled=""'),
+      `Register button tag must include disabled="" when registration is blocked. Tag: ${buttonTag}`
+    );
+  });
+
+  it('keeps the standby registration input and button enabled when registration is not blocked, with or without an error message', () => {
+    // 1) standbyListErrorMessage が null の場合
+    const propsNoError = createMockSyncPanelViewProps({
+      role: 'satellite',
+      isHubReachable: true,
+      isAdmin: true,
+      busy: false,
+      standbyList: [],
+      newStandbyEndpoint: 'https://standby-hub.local:3000',
+      standbyRegistrationBlocked: false,
+      standbyListErrorMessage: null
+    });
+    const htmlNoError = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, propsNoError));
+    const inputTagNoError = extractStandbyRegistrationOpeningTag(htmlNoError, 'input');
+    const buttonTagNoError = extractStandbyRegistrationOpeningTag(htmlNoError, 'button');
+
+    assert.ok(
+      !inputTagNoError.includes('disabled'),
+      `Input tag must not include disabled when registration is not blocked (errorMessage is null). Tag: ${inputTagNoError}`
+    );
+    assert.ok(
+      !buttonTagNoError.includes('disabled'),
+      `Register button tag must not include disabled when registration is not blocked (errorMessage is null). Tag: ${buttonTagNoError}`
+    );
+
+    // 2) standbyListErrorMessage に壊れた旨の文言を渡した場合（corrupted は再登録が唯一の復旧）
+    const corruptedMsg = 'この端末に保存された予備機リストが壊れていて、読み込めませんでした。';
+    const propsCorrupted = createMockSyncPanelViewProps({
+      role: 'satellite',
+      isHubReachable: true,
+      isAdmin: true,
+      busy: false,
+      standbyList: [],
+      newStandbyEndpoint: 'https://standby-hub.local:3000',
+      standbyRegistrationBlocked: false,
+      standbyListErrorMessage: corruptedMsg
+    });
+    const htmlCorrupted = renderToStaticMarkup(React.createElement(TerminalSyncPanelView, propsCorrupted));
+    const inputTagCorrupted = extractStandbyRegistrationOpeningTag(htmlCorrupted, 'input');
+    const buttonTagCorrupted = extractStandbyRegistrationOpeningTag(htmlCorrupted, 'button');
+
+    assert.ok(
+      !inputTagCorrupted.includes('disabled'),
+      `Input tag must not include disabled when registration is not blocked (corrupted error). Tag: ${inputTagCorrupted}`
+    );
+    assert.ok(
+      !buttonTagCorrupted.includes('disabled'),
+      `Register button tag must not include disabled when registration is not blocked (corrupted error). Tag: ${buttonTagCorrupted}`
+    );
   });
 
   it('renders normal empty standby notice when there is no error', () => {
