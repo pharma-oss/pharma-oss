@@ -160,6 +160,62 @@ describe('DrugMasterSettingsTab contracts and renderToStaticMarkup', () => {
     assert.ok(html.includes('事務 太郎（事務）には「医薬品マスタ更新」の権限がありません'), 'Permission denied notice should be rendered');
   });
 
+  it('keeps action controls and tooltip wrappers disabled only when permission is denied once file conditions are met', () => {
+    const clerkUser: User = {
+      userId: 'user-clerk-1',
+      name: '事務 太郎',
+      role: 'clerk'
+    };
+    const readyProps = {
+      currentUser: clerkUser,
+      canImportDrugMasterFromSourceUrl: true,
+      file: { name: 'master.csv' },
+      rollbackFile: { name: 'rollback.json' }
+    };
+
+    const deniedProps = createMockDrugMasterSettingsProps({
+      ...readyProps,
+      canUpdateDrugMaster: false
+    });
+    const htmlDenied = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, deniedProps as any));
+
+    // 権限なしの 6 個はアップロード・URL取込・ロールバック・重複点検・薬価改定入力・検索ボタン、data-disabled の 3 個は取込・アップロード・ロールバックのラッパー
+    const disabledTagsDenied = listDisabledOpeningTags(htmlDenied);
+    assert.equal(
+      disabledTagsDenied.length,
+      6,
+      `Action controls must have 6 disabled elements when canUpdateDrugMaster is false:\n${disabledTagsDenied.join('\n')}`
+    );
+
+    const dataDisabledTagsDenied = listDataDisabledOpeningTags(htmlDenied);
+    assert.equal(
+      dataDisabledTagsDenied.length,
+      3,
+      `Tooltip wrappers must have 3 data-disabled="true" elements when canUpdateDrugMaster is false:\n${dataDisabledTagsDenied.join('\n')}`
+    );
+
+    const permittedProps = createMockDrugMasterSettingsProps({
+      ...readyProps,
+      canUpdateDrugMaster: true
+    });
+    const htmlPermitted = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, permittedProps as any));
+
+    // 状態条件を満たしているため、権限あり時は disabled なコントロールと data-disabled なラッパーが 0 個になる
+    const disabledTagsPermitted = listDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      disabledTagsPermitted.length,
+      0,
+      `Action controls must have 0 disabled elements when canUpdateDrugMaster is true:\n${disabledTagsPermitted.join('\n')}`
+    );
+
+    const dataDisabledTagsPermitted = listDataDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      dataDisabledTagsPermitted.length,
+      0,
+      `Tooltip wrappers must have 0 data-disabled="true" elements when canUpdateDrugMaster is true:\n${dataDisabledTagsPermitted.join('\n')}`
+    );
+  });
+
   it('renders duplicate groups, merge candidate selectors, and conflict warnings when report is present', () => {
     const mockGroup: DrugDuplicateGroup = {
       groupId: 'dup-group-amlo',

@@ -18,6 +18,8 @@ import {
 } from '@/lib/audit_integrity';
 import { buildOperationalClosingMonthlyReview } from '@/lib/operational_closing_review';
 import { buildAiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
+import type { DispensingUkeSpecificationPdfAllFieldCompletionGate } from '@/lib/receipt/dispensing_uke_spec_pdf';
+import { DISPENSING_UKE_RECORD_SPEC_SOURCE } from '@/lib/receipt/dispensing_uke_validation';
 
 function createMockAuditSettingsProps(overrides: Record<string, unknown> = {}) {
   const dummyUser: User = {
@@ -310,5 +312,67 @@ describe('OfficialAuditSettingsTab renderToStaticMarkup contracts', () => {
       `Action buttons must have only 4 state-disabled controls when canViewOfficialAudit is true:\n${permittedTags.join('\n')}`
     );
   });
+
+  it('keeps trigger buttons disabled only when permission is denied once specification inspection conditions are met', () => {
+    const dummyGate: DispensingUkeSpecificationPdfAllFieldCompletionGate = {
+      ok: true,
+      statusLabel: 'OK',
+      source: DISPENSING_UKE_RECORD_SPEC_SOURCE,
+      expectedRecordTypeCount: 1,
+      parsedRecordTypeCount: 1,
+      expectedRecordTypes: ['RE'],
+      parsedRecordTypes: ['RE'],
+      missingRecordTypes: [],
+      parsedFieldCount: 10,
+      definedFieldCount: 10,
+      remainingFieldCount: 0,
+      remainingRecordTypes: [],
+      parseIssueCount: 0,
+      blockerCount: 0,
+      blockers: []
+    };
+
+    const readyProps = {
+      dispensingUkeSpecCompletionGate: dummyGate,
+      dispensingUkeSpecPdfText: 'text'
+    };
+
+    const deniedProps = createMockOfficialAuditSettingsProps({
+      ...readyProps,
+      canViewOfficialAudit: false
+    });
+    const htmlDenied = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, deniedProps as any));
+
+    // 権限なしの 9 個は全トリガー・出力ボタンが無効化
+    const disabledTagsDenied = listDisabledOpeningTags(htmlDenied);
+    assert.equal(
+      disabledTagsDenied.length,
+      9,
+      `Action buttons must have 9 disabled elements when canViewOfficialAudit is false:\n${disabledTagsDenied.join('\n')}`
+    );
+
+    const permittedProps = createMockOfficialAuditSettingsProps({
+      ...readyProps,
+      canViewOfficialAudit: true
+    });
+    const htmlPermitted = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, permittedProps as any));
+
+    // 権限ありの 2 個はデータ未ロード起因の CSV 出力ボタン（claim-points-drift-csv-button と dosage-category-conflict-csv-button）
+    const disabledTagsPermitted = listDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      disabledTagsPermitted.length,
+      2,
+      `Action buttons must have 2 state-disabled controls when canViewOfficialAudit is true:\n${disabledTagsPermitted.join('\n')}`
+    );
+    assert.ok(
+      disabledTagsPermitted.some((tag) => tag.includes('data-testid="claim-points-drift-csv-button"')),
+      `Must include claim-points-drift-csv-button in permitted disabled controls:\n${disabledTagsPermitted.join('\n')}`
+    );
+    assert.ok(
+      disabledTagsPermitted.some((tag) => tag.includes('data-testid="dosage-category-conflict-csv-button"')),
+      `Must include dosage-category-conflict-csv-button in permitted disabled controls:\n${disabledTagsPermitted.join('\n')}`
+    );
+  });
 });
+
 

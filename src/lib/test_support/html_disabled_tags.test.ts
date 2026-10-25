@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   stripStyleBlocks,
   listDisabledOpeningTags,
-  listDataDisabledOpeningTags
+  listDataDisabledOpeningTags,
+  findOpeningTag
 } from './html_disabled_tags';
 
 describe('html_disabled_tags helper functions', () => {
@@ -53,6 +54,8 @@ describe('html_disabled_tags helper functions', () => {
         <input type="text" aria-disabled="true" aria-disabled="" />
         <div disabled="" className="non-form-element">Not a form control</div>
         <span data-disabled="true">Span</span>
+        <button type="button" disabled="true" className="btn-disabled-true">Non-standard boolean string</button>
+        <input type="text" disabled="disabled" className="input-disabled-str" />
       </div>
     `;
     const tags = listDisabledOpeningTags(html);
@@ -83,6 +86,7 @@ describe('html_disabled_tags helper functions', () => {
           <button type="button">Inside</button>
         </div>
         <span data-disabled="false">False data-disabled</span>
+        <span foo-data-disabled="true">Non-matching prefix</span>
         <button type="button" data-disabled="true" className="btn-with-data">Button</button>
       </div>
     `;
@@ -91,4 +95,41 @@ describe('html_disabled_tags helper functions', () => {
     assert.ok(tags[0].startsWith('<div') && tags[0].includes('className="wrapper-1"'));
     assert.ok(tags[1].startsWith('<button') && tags[1].includes('className="btn-with-data"'));
   });
+
+  it('findOpeningTag finds opening tag preceding marker for given tag name', () => {
+    const html = '<div className="container"><button type="button" className="btn-target" disabled="">Click</button></div>';
+    const tag = findOpeningTag(html, 'className="btn-target"', 'button');
+    assert.equal(tag, '<button type="button" className="btn-target" disabled="">');
+  });
+
+  it('findOpeningTag extracts self-closing input tags correctly', () => {
+    const html = '<div className="wrap"><input type="text" className="usage usage-readonly" readOnly placeholder="choose" /></div>';
+    const tag = findOpeningTag(html, 'className="usage usage-readonly"', 'input');
+    assert.equal(tag, '<input type="text" className="usage usage-readonly" readOnly placeholder="choose" />');
+  });
+
+  it('findOpeningTag throws error when marker is not found in HTML', () => {
+    const html = '<div><input type="text" className="usage" /></div>';
+    assert.throws(
+      () => findOpeningTag(html, 'non-existent-marker', 'input'),
+      /Marker "non-existent-marker" not found in HTML \(target tag: <input>\)/
+    );
+  });
+
+  it('findOpeningTag throws error when opening tag does not precede marker', () => {
+    const html = '<div><span className="info-marker">Text</span></div>';
+    assert.throws(
+      () => findOpeningTag(html, 'className="info-marker"', 'input'),
+      /Opening tag "<input>" preceding marker "className="info-marker"" not found in HTML/
+    );
+  });
+
+  it('findOpeningTag throws error when marker only exists inside style block', () => {
+    const html = '<div><style jsx>{`.btn-style-only { color: blue; }`}</style><button className="btn-normal">OK</button></div>';
+    assert.throws(
+      () => findOpeningTag(html, '.btn-style-only', 'button'),
+      /Marker "\.btn-style-only" not found in HTML \(target tag: <button>\)/
+    );
+  });
 });
+

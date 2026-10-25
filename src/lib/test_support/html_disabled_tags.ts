@@ -23,3 +23,21 @@ export function listDataDisabledOpeningTags(html: string): string[] {
   const matches = stripped.match(ANY_TAG_PATTERN) || [];
   return matches.filter((tag) => /\sdata-disabled="true"(?=[\s/>]|$)/.test(tag));
 }
+
+export function findOpeningTag(html: string, marker: string, tagName: string): string {
+  const stripped = stripStyleBlocks(html);
+  const markerIndex = stripped.indexOf(marker);
+  if (markerIndex === -1) {
+    throw new Error(`Marker "${marker}" not found in HTML (target tag: <${tagName}>)`);
+  }
+  const tagPrefix = `<${tagName}`;
+  const tagStartIndex = stripped.lastIndexOf(tagPrefix, markerIndex);
+  if (tagStartIndex === -1) {
+    throw new Error(`Opening tag "<${tagName}>" preceding marker "${marker}" not found in HTML`);
+  }
+  const tagEndIndex = stripped.indexOf('>', tagStartIndex);
+  if (tagEndIndex === -1) {
+    throw new Error(`Malformed HTML: closing ">" for "<${tagName}>" preceding marker "${marker}" not found`);
+  }
+  return stripped.slice(tagStartIndex, tagEndIndex + 1);
+}

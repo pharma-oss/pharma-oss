@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PrescriptionGroupEditor } from './PrescriptionGroupEditor';
 import type { PrescriptionGroup } from '../types';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 
 const mockGroup: PrescriptionGroup = {
   rpId: 'rp-1',
@@ -75,8 +76,12 @@ test('PrescriptionGroupEditor renders usage selector button and readonly input w
   // datalist は撤去されていること
   assert.equal(html.includes('<datalist'), false, 'datalist が撤去されていること');
 
-  // 用法欄は readonly input として描画されること
-  assert.ok(html.includes('readonly=""') || html.includes('readonly'), '用法欄が readonly であること');
+  // 用法欄の input 開始タグを特定し、readonly="" 属性（React は readOnly="" としてシリアライズ）が付与されていることを検証
+  const usageInputTag = findOpeningTag(html, 'class="usage usage-readonly"', 'input');
+  assert.ok(
+    usageInputTag.includes('readOnly=""') || usageInputTag.includes('readonly=""'),
+    `Usage input opening tag must have readonly="":\n${usageInputTag}`
+  );
   assert.ok(html.includes('用法を選ぶ'), '「用法を選ぶ」ボタンが存在すること');
 
   // value に 3桁コード+空白（例: "001 "）が含まれないこと
