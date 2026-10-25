@@ -131,5 +131,10 @@ describe('html_disabled_tags helper functions', () => {
       /Marker "\.btn-style-only" not found in HTML \(target tag: <button>\)/
     );
   });
-});
 
+  it('findOpeningTag returns the nearest preceding opening tag and not the first tag or subsequent tags', () => {
+    const html = '<div><button id="btn-1" className="btn-first">First</button><button id="btn-2" data-testid="target-btn">Target</button><button id="btn-3" className="btn-last">Last</button></div>';
+    const tag = findOpeningTag(html, 'data-testid="target-btn"', 'button');
+    assert.equal(tag, '<button id="btn-2" data-testid="target-btn">');
+  });
+});
