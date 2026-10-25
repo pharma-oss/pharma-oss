@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import React from 'react';
+import { listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import { DrugInfoClaimTools } from './components/DrugInfoClaimTools';
 
 test('DrugInfoClaimTools contracts and style encapsulation', () => {
@@ -128,5 +129,17 @@ test('DrugInfoClaimTools true HTML rendering and input controls', () => {
     })
   );
 
-  assert.ok(htmlDisabled.includes('disabled=""'), 'canEditBilling: false 時に disabled 属性が付与されること');
+  // canEditBilling: false 時は 15 個が無効化（一包化・粉砕・調製・薬管・検査薬チェックボックス、加算セレクト、レセ特記事項入力欄等）、true 時は 0 個
+  const disabledTags = listDisabledOpeningTags(htmlDisabled);
+  assert.strictEqual(
+    disabledTags.length,
+    15,
+    `All claim controls must be disabled when canEditBilling is false:\n${disabledTags.join('\n')}`
+  );
+  const editableDisabledTags = listDisabledOpeningTags(htmlEditable);
+  assert.strictEqual(
+    editableDisabledTags.length,
+    0,
+    `No claim controls should be disabled when canEditBilling is true:\n${editableDisabledTags.join('\n')}`
+  );
 });

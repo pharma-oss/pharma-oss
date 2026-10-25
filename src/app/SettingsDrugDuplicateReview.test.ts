@@ -2,6 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  listDisabledOpeningTags,
+  listDataDisabledOpeningTags
+} from '@/lib/test_support/html_disabled_tags';
 import DrugMasterSettingsTab from '@/components/settings/DrugMasterSettingsTab';
 import type { User } from '@/db/types';
 import type {
@@ -116,9 +120,43 @@ describe('DrugMasterSettingsTab contracts and renderToStaticMarkup', () => {
     });
     const html = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, props as any));
 
-    // Scan button and wrappers should be disabled with permission notice
-    assert.ok(html.includes('disabled=""'), 'Action buttons should be disabled');
-    assert.ok(html.includes('data-disabled="true"'), 'Tooltip wrappers should indicate disabled state');
+    // canUpdateDrugMaster: false 時は 6 個（true 時は未選択・状態起因の 3 個）が無効化（マスタ取込・URL取込・ロールバック・重複点検・薬価改定など）
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      6,
+      `Action controls must be disabled when canUpdateDrugMaster is false:\n${disabledTags.join('\n')}`
+    );
+    const htmlPermitted = renderToStaticMarkup(
+      React.createElement(
+        DrugMasterSettingsTab,
+        createMockDrugMasterSettingsProps({ currentUser: clerkUser, canUpdateDrugMaster: true }) as any
+      )
+    );
+    const permittedDisabledTags = listDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      permittedDisabledTags.length,
+      3,
+      `Action controls must have 3 disabled elements when canUpdateDrugMaster is true:\n${permittedDisabledTags.join('\n')}`
+    );
+
+    // data-disabled="true": false 時は 3 個（権限不足ツールチップラッパー）、true 時も未選択・状態起因の 3 個
+    const dataDisabledTags = listDataDisabledOpeningTags(html);
+    assert.equal(
+      dataDisabledTags.length,
+      3,
+      `Tooltip wrappers must have 3 data-disabled="true" when canUpdateDrugMaster is false:\n${dataDisabledTags.join('\n')}`
+    );
+    assert.ok(
+      dataDisabledTags.every((tag) => tag.includes('「医薬品マスタ更新」の権限がありません')),
+      'All 3 data-disabled wrappers must explain permission denied'
+    );
+    const permittedDataDisabledTags = listDataDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      permittedDataDisabledTags.length,
+      3,
+      `Tooltip wrappers must have 3 state-disabled data-disabled="true" when canUpdateDrugMaster is true:\n${permittedDataDisabledTags.join('\n')}`
+    );
     assert.ok(html.includes('事務 太郎（事務）には「医薬品マスタ更新」の権限がありません'), 'Permission denied notice should be rendered');
   });
 

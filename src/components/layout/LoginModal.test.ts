@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import { LoginModal } from './LoginModal';
 import type { User } from '@/db/types';
 
@@ -97,7 +98,44 @@ describe('LoginModal component contracts and render tests', () => {
       })
     );
 
-    assert.ok(html.includes('disabled=""'), 'Action buttons should be disabled during verification');
+    // isVerifying: true 時は 3 個のボタン（送信・パスキー・キャンセル）が無効化され、false 時は 0 個
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      3,
+      `Action buttons must be disabled during verification:\n${disabledTags.join('\n')}`
+    );
+    assert.ok(
+      disabledTags.some((tag) => tag.includes('btn-login-submit')),
+      'Submit button must be disabled'
+    );
+    assert.ok(
+      disabledTags.some((tag) => tag.includes('btn-login-passkey')),
+      'Passkey button must be disabled'
+    );
+    assert.ok(
+      disabledTags.some((tag) => tag.includes('btn-login-cancel')),
+      'Cancel button must be disabled'
+    );
+
+    const htmlNotVerifying = renderToStaticMarkup(
+      React.createElement(LoginModal, {
+        selectedUser: userWithPasskey,
+        passwordInput: 'my-pass',
+        loginError: '',
+        isVerifying: false,
+        onPasswordInputChange: () => {},
+        onPasswordSubmit: () => {},
+        onPasskeyClick: () => {},
+        onCancel: () => {}
+      })
+    );
+    const notVerifyingTags = listDisabledOpeningTags(htmlNotVerifying);
+    assert.equal(
+      notVerifyingTags.length,
+      0,
+      `Action buttons must not be disabled when isVerifying is false:\n${notVerifyingTags.join('\n')}`
+    );
     assert.ok(html.includes('animate-spin'), 'Should display spinning loader during verification');
   });
 });

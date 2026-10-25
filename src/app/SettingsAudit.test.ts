@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import AuditSettingsTab from '@/components/settings/AuditSettingsTab';
 import BackupSettingsTab from '@/components/settings/BackupSettingsTab';
 import DrugMasterSettingsTab from '@/components/settings/DrugMasterSettingsTab';
@@ -166,8 +167,22 @@ describe('AuditSettingsTab renderToStaticMarkup contracts', () => {
     });
     const html = renderToStaticMarkup(React.createElement(AuditSettingsTab, props as any));
 
-    // Export buttons should be disabled and title should contain permission denied message
-    assert.ok(html.includes('disabled=""'), 'Action buttons should be disabled');
+    // canViewAuditLogs: false 時は 9 個の操作が無効化され、true 時は 0 個が無効（CSV/JSON/台帳エクスポート・改ざん検証・診断レポート等）
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      9,
+      `Action controls must be disabled when canViewAuditLogs is false:\n${disabledTags.join('\n')}`
+    );
+    const htmlPermitted = renderToStaticMarkup(
+      React.createElement(AuditSettingsTab, createMockAuditSettingsProps({ currentUser: clerkUser, canViewAuditLogs: true }) as any)
+    );
+    const permittedTags = listDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      permittedTags.length,
+      0,
+      `Action controls must not be disabled when canViewAuditLogs is true:\n${permittedTags.join('\n')}`
+    );
     assert.ok(html.includes('事務 次郎（事務）には「監査ログ閲覧」の権限がありません'), 'Permission denied notice should be rendered');
   });
 });
@@ -278,7 +293,22 @@ describe('OfficialAuditSettingsTab renderToStaticMarkup contracts', () => {
     });
     const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
 
-    assert.ok(html.includes('disabled=""'), 'Action buttons should be disabled when canViewOfficialAudit is false');
+    // canViewOfficialAudit: false 時は 9 個が無効化、true 時はデータ未ロード起因の 4 個だけが無効（差分の 5 個が権限で制御されるボタン）
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      9,
+      `Action buttons must be disabled when canViewOfficialAudit is false:\n${disabledTags.join('\n')}`
+    );
+    const htmlPermitted = renderToStaticMarkup(
+      React.createElement(OfficialAuditSettingsTab, createMockOfficialAuditSettingsProps({ canViewOfficialAudit: true }) as any)
+    );
+    const permittedTags = listDisabledOpeningTags(htmlPermitted);
+    assert.equal(
+      permittedTags.length,
+      4,
+      `Action buttons must have only 4 state-disabled controls when canViewOfficialAudit is true:\n${permittedTags.join('\n')}`
+    );
   });
 });
 
