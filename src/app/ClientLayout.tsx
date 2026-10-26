@@ -25,7 +25,7 @@ import { usePWA } from '@/hooks/usePWA';
 import { useSessionLock } from '@/hooks/useSessionLock';
 
 const navItems = [
-  { href: '/', label: 'ダッシュボード', icon: LayoutDashboard },
+  { href: '/app', label: 'ダッシュボード', icon: LayoutDashboard },
   { href: '/ocr', label: '処方箋OCR', icon: Scan },
   { href: '/emr', label: '薬歴入力', icon: FileText },
   { href: '/inventory', label: '在庫管理', icon: Package },
@@ -832,12 +832,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     };
   }, []);
 
+  if (pathname === '/') {
+    return <>{children}</>;
+  }
+
   return (
     <>
       <DatabaseProvider>
           <div className="layout-wrapper">
             <aside className="sidebar">
-              <div className="brand">
+              <Link href="/app" className="brand">
                 <div className="logo-spark" aria-hidden="true">
                   <CapsuleGlyph size={24} />
                 </div>
@@ -845,7 +849,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   <h1>pharma-oss</h1>
                   <span>薬局業務支援</span>
                 </div>
-              </div>
+              </Link>
 
               <nav className="side-nav" aria-label="メインナビゲーション">
                 {navItems.map((item) => {

@@ -481,7 +481,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
         </p>
         <div className="empty-actions">
           <a className="btn-secondary" href="/ocr">処方箋OCRで受付を開始</a>
-          <a className="btn-secondary" href="/">ダッシュボードで受付を確認</a>
+          <a className="btn-secondary" href="/app">ダッシュボードで受付を確認</a>
         </div>
         <style jsx>{`
           .soap-editor-empty {
