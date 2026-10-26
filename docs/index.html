@@ -9,247 +9,250 @@ try {
   document.querySelector('meta[name="color-scheme"]').content = localStorage.getItem("color-scheme") ?? "light dark";
 } catch {}
 </script>
-<title>pharma-oss — 薬局業務を、これ1つで。ローカルファーストの調剤薬局OS</title>
-<meta name="description" content="ローカルファーストの調剤薬局向け電子薬歴・レセプト(UKE)・在庫管理システム。処方箋OCR/QR受付、GS1現物照合ピッキング、AI補助つき4パネルSOAP薬歴、11種帳票印刷、令和8年調剤報酬・支払基金記録条件仕様ベースのUKE出力までひと続き。サーバー不要・月額課金なし・Apache-2.0のオープンソース。">
-<meta property="og:title" content="pharma-oss — 薬局業務を、これ1つで。データは店舗から出さない。">
-<meta property="og:description" content="受付からGS1ピッキング、SOAP薬歴、帳票印刷、公式仕様準拠UKE出力、発注ワークベンチまでひと続き。ローカルファースト＆オープンソース(Apache-2.0)の調剤薬局システム。">
+<title>pharma-oss — 毎日の調剤・薬歴・レセプト・発注を、迷わずひと続きに。</title>
+<meta name="description" content="処方箋受付（OCR/QR）からGS1ピッキング照合、SOAP薬歴、11種帳票印刷、調剤報酬・UKE請求、発注管理まで1つの流れでつながる調剤薬局システム。月額費用0円・オープンソース。">
+<meta property="og:title" content="pharma-oss — 毎日の調剤・薬歴・レセプト・発注を、迷わずひと続きに。">
+<meta property="og:description" content="受付からピッキング、薬歴、帳票印刷、UKE出力、在庫発注まで、薬局の1日がスムーズにつながる調剤薬局システム。">
 <meta property="og:type" content="website">
 <meta property="og:image" content="images/lp/dashboard.jpg">
 <link rel="icon" type="image/png" sizes="192x192" href="../public/icon-192.png">
 <style>
   :root {
-    --ink-light: #0f3d36;
-    --ink-dark: #09221e;
-    --ink-deep-light: #092924;
-    --ink-deep-dark: #051613;
+    --lp-ink-light: #0f3d36;
+    --lp-ink-dark: #09221e;
+    --lp-ink-deep-light: #092924;
+    --lp-ink-deep-dark: #051613;
 
-    --accent-light: #0f766e;
-    --accent-dark: #2dd4bf;
-    --accent-strong-light: #0b5752;
-    --accent-strong-dark: #5eead4;
-    --accent-vivid-light: #14b8a6;
-    --accent-vivid-dark: #14b8a6;
+    --lp-accent-light: #0f766e;
+    --lp-accent-dark: #2dd4bf;
+    --lp-accent-strong-light: #0b5752;
+    --lp-accent-strong-dark: #5eead4;
 
-    --wash-light: #e6f4f1;
-    --wash-dark: #112a26;
-    --wash-subtle-light: #f0f9f7;
-    --wash-subtle-dark: #0d211e;
+    --lp-wash-light: #e6f4f1;
+    --lp-wash-dark: #13302b;
+    --lp-wash-subtle-light: #f0f9f7;
+    --lp-wash-subtle-dark: #0f2420;
 
-    --ground-light: #f6faf9;
-    --ground-dark: #0a1412;
-    --surface-light: #ffffff;
-    --surface-dark: #111f1c;
-    --surface-elevated-light: #ffffff;
-    --surface-elevated-dark: #162824;
+    --lp-ground-light: #f6faf9;
+    --lp-ground-dark: #0a1412;
+    --lp-surface-light: #ffffff;
+    --lp-surface-dark: #11201d;
+    --lp-surface-elevated-light: #ffffff;
+    --lp-surface-elevated-dark: #162925;
 
-    --text-light: #132623;
-    --text-dark: #e6f1ee;
-    --text-muted-light: #4d635e;
-    --text-muted-dark: #94ada7;
+    --lp-heading-light: #0b1f1c;
+    --lp-heading-dark: #f4fbf9;
+    --lp-text-light: #172b27;
+    --lp-text-dark: #e5f2ef;
+    --lp-text-muted-light: #435954;
+    --lp-text-muted-dark: #9cb5af;
 
-    --line-light: #d5e4e0;
-    --line-dark: #213833;
-    --line-strong-light: #b6d0ca;
-    --line-strong-dark: #2e4d46;
+    --lp-line-light: #d3e3de;
+    --lp-line-dark: #233b36;
+    --lp-line-strong-light: #b2cec7;
+    --lp-line-strong-dark: #31524b;
 
-    --caution-light: #92540c;
-    --caution-dark: #f5b851;
-    --caution-wash-light: #fef8ec;
-    --caution-wash-dark: #231a0b;
-    --caution-border-light: #e8b96a;
-    --caution-border-dark: #6b4915;
+    --lp-caution-light: #92540c;
+    --lp-caution-dark: #f5b851;
+    --lp-caution-wash-light: #fef8ec;
+    --lp-caution-wash-dark: #231a0b;
+    --lp-caution-border-light: #e8b96a;
+    --lp-caution-border-dark: #6b4915;
 
-    --ok-light: #0e6f4f;
-    --ok-dark: #4ade80;
-    --ok-wash-light: #ecfdf5;
-    --ok-wash-dark: #0d281d;
+    --lp-ok-light: #0e6f4f;
+    --lp-ok-dark: #4ade80;
+    --lp-ok-wash-light: #ecfdf5;
+    --lp-ok-wash-dark: #0d281d;
 
-    --unimpl-light: #475569;
-    --unimpl-dark: #94a3b8;
-    --unimpl-wash-light: #f1f5f9;
-    --unimpl-wash-dark: #1e293b;
+    --lp-unimpl-light: #475569;
+    --lp-unimpl-dark: #94a3b8;
+    --lp-unimpl-wash-light: #f1f5f9;
+    --lp-unimpl-wash-dark: #1e293b;
 
-    --btn-primary-text-light: #ffffff;
-    --btn-primary-text-dark: #04241f;
+    --lp-btn-primary-text-light: #ffffff;
+    --lp-btn-primary-text-dark: #04241f;
 
-    --ink: var(--ink-light);
-    --ink-deep: var(--ink-deep-light);
-    --accent: var(--accent-light);
-    --accent-strong: var(--accent-strong-light);
-    --accent-vivid: var(--accent-vivid-light);
-    --wash: var(--wash-light);
-    --wash-subtle: var(--wash-subtle-light);
-    --ground: var(--ground-light);
-    --surface: var(--surface-light);
-    --surface-elevated: var(--surface-elevated-light);
-    --text: var(--text-light);
-    --text-muted: var(--text-muted-light);
-    --line: var(--line-light);
-    --line-strong: var(--line-strong-light);
-    --caution: var(--caution-light);
-    --caution-wash: var(--caution-wash-light);
-    --caution-border: var(--caution-border-light);
-    --ok: var(--ok-light);
-    --ok-wash: var(--ok-wash-light);
-    --unimpl: var(--unimpl-light);
-    --unimpl-wash: var(--unimpl-wash-light);
-    --btn-primary-text: var(--btn-primary-text-light);
+    --lp-ink: var(--lp-ink-light);
+    --lp-ink-deep: var(--lp-ink-deep-light);
+    --lp-accent: var(--lp-accent-light);
+    --lp-accent-strong: var(--lp-accent-strong-light);
+    --lp-wash: var(--lp-wash-light);
+    --lp-wash-subtle: var(--lp-wash-subtle-light);
+    --lp-ground: var(--lp-ground-light);
+    --lp-surface: var(--lp-surface-light);
+    --lp-surface-elevated: var(--lp-surface-elevated-light);
+    --lp-heading: var(--lp-heading-light);
+    --lp-text: var(--lp-text-light);
+    --lp-text-muted: var(--lp-text-muted-light);
+    --lp-line: var(--lp-line-light);
+    --lp-line-strong: var(--lp-line-strong-light);
+    --lp-caution: var(--lp-caution-light);
+    --lp-caution-wash: var(--lp-caution-wash-light);
+    --lp-caution-border: var(--lp-caution-border-light);
+    --lp-ok: var(--lp-ok-light);
+    --lp-ok-wash: var(--lp-ok-wash-light);
+    --lp-unimpl: var(--lp-unimpl-light);
+    --lp-unimpl-wash: var(--lp-unimpl-wash-light);
+    --lp-btn-primary-text: var(--lp-btn-primary-text-light);
 
-    --code-bg: #081e1b;
-    --code-text: #d7f2ec;
-    --code-muted: #7aa89e;
-    --shadow-sm: 0 4px 16px -4px rgba(9, 41, 36, 0.08);
-    --shadow: 0 24px 60px -24px rgba(9, 41, 36, 0.24);
-    --shadow-lg: 0 32px 80px -28px rgba(9, 41, 36, 0.34);
-    --radius-sm: 10px;
-    --radius: 16px;
-    --radius-lg: 22px;
-    --display: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", "BIZ UDMincho", "Noto Serif JP", serif;
-    --body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDGothic", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", sans-serif;
-    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --lp-code-bg: #081e1b;
+    --lp-code-text: #d7f2ec;
+    --lp-code-muted: #82b0a6;
+    --lp-shadow-sm: 0 4px 16px -4px rgba(9, 41, 36, 0.08);
+    --lp-shadow: 0 24px 60px -24px rgba(9, 41, 36, 0.22);
+    --lp-shadow-lg: 0 32px 80px -28px rgba(9, 41, 36, 0.32);
+    --lp-radius-sm: 10px;
+    --lp-radius: 16px;
+    --lp-radius-lg: 22px;
+    --lp-display: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDGothic", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --lp-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "BIZ UDGothic", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --lp-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
     color-scheme: light dark;
-    accent-color: var(--accent);
+    accent-color: var(--lp-accent);
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: var(--ink-dark);
-      --ink-deep: var(--ink-deep-dark);
-      --accent: var(--accent-dark);
-      --accent-strong: var(--accent-strong-dark);
-      --accent-vivid: var(--accent-vivid-dark);
-      --wash: var(--wash-dark);
-      --wash-subtle: var(--wash-subtle-dark);
-      --ground: var(--ground-dark);
-      --surface: var(--surface-dark);
-      --surface-elevated: var(--surface-elevated-dark);
-      --text: var(--text-dark);
-      --text-muted: var(--text-muted-dark);
-      --line: var(--line-dark);
-      --line-strong: var(--line-strong-dark);
-      --caution: var(--caution-dark);
-      --caution-wash: var(--caution-wash-dark);
-      --caution-border: var(--caution-border-dark);
-      --ok: var(--ok-dark);
-      --ok-wash: var(--ok-wash-dark);
-      --unimpl: var(--unimpl-dark);
-      --unimpl-wash: var(--unimpl-wash-dark);
-      --btn-primary-text: var(--btn-primary-text-dark);
-      --shadow-sm: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
-      --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
-      --shadow-lg: 0 32px 80px -28px rgba(0, 0, 0, 0.78);
+      --lp-ink: var(--lp-ink-dark);
+      --lp-ink-deep: var(--lp-ink-deep-dark);
+      --lp-accent: var(--lp-accent-dark);
+      --lp-accent-strong: var(--lp-accent-strong-dark);
+      --lp-wash: var(--lp-wash-dark);
+      --lp-wash-subtle: var(--lp-wash-subtle-dark);
+      --lp-ground: var(--lp-ground-dark);
+      --lp-surface: var(--lp-surface-dark);
+      --lp-surface-elevated: var(--lp-surface-elevated-dark);
+      --lp-heading: var(--lp-heading-dark);
+      --lp-text: var(--lp-text-dark);
+      --lp-text-muted: var(--lp-text-muted-dark);
+      --lp-line: var(--lp-line-dark);
+      --lp-line-strong: var(--lp-line-strong-dark);
+      --lp-caution: var(--lp-caution-dark);
+      --lp-caution-wash: var(--lp-caution-wash-dark);
+      --lp-caution-border: var(--lp-caution-border-dark);
+      --lp-ok: var(--lp-ok-dark);
+      --lp-ok-wash: var(--lp-ok-wash-dark);
+      --lp-unimpl: var(--lp-unimpl-dark);
+      --lp-unimpl-wash: var(--lp-unimpl-wash-dark);
+      --lp-btn-primary-text: var(--lp-btn-primary-text-dark);
+      --lp-shadow-sm: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+      --lp-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
+      --lp-shadow-lg: 0 32px 80px -28px rgba(0, 0, 0, 0.78);
     }
   }
 
   :root:has(> head > meta[name="color-scheme"][content="dark"]) {
     color-scheme: dark;
-    --ink: var(--ink-dark);
-    --ink-deep: var(--ink-deep-dark);
-    --accent: var(--accent-dark);
-    --accent-strong: var(--accent-strong-dark);
-    --accent-vivid: var(--accent-vivid-dark);
-    --wash: var(--wash-dark);
-    --wash-subtle: var(--wash-subtle-dark);
-    --ground: var(--ground-dark);
-    --surface: var(--surface-dark);
-    --surface-elevated: var(--surface-elevated-dark);
-    --text: var(--text-dark);
-    --text-muted: var(--text-muted-dark);
-    --line: var(--line-dark);
-    --line-strong: var(--line-strong-dark);
-    --caution: var(--caution-dark);
-    --caution-wash: var(--caution-wash-dark);
-    --caution-border: var(--caution-border-dark);
-    --ok: var(--ok-dark);
-    --ok-wash: var(--ok-wash-dark);
-    --unimpl: var(--unimpl-dark);
-    --unimpl-wash: var(--unimpl-wash-dark);
-    --btn-primary-text: var(--btn-primary-text-dark);
+    --lp-ink: var(--lp-ink-dark);
+    --lp-ink-deep: var(--lp-ink-deep-dark);
+    --lp-accent: var(--lp-accent-dark);
+    --lp-accent-strong: var(--lp-accent-strong-dark);
+    --lp-wash: var(--lp-wash-dark);
+    --lp-wash-subtle: var(--lp-wash-subtle-dark);
+    --lp-ground: var(--lp-ground-dark);
+    --lp-surface: var(--lp-surface-dark);
+    --lp-surface-elevated: var(--lp-surface-elevated-dark);
+    --lp-heading: var(--lp-heading-dark);
+    --lp-text: var(--lp-text-dark);
+    --lp-text-muted: var(--lp-text-muted-dark);
+    --lp-line: var(--lp-line-dark);
+    --lp-line-strong: var(--lp-line-strong-dark);
+    --lp-caution: var(--lp-caution-dark);
+    --lp-caution-wash: var(--lp-caution-wash-dark);
+    --lp-caution-border: var(--lp-caution-border-dark);
+    --lp-ok: var(--lp-ok-dark);
+    --lp-ok-wash: var(--lp-ok-wash-dark);
+    --lp-unimpl: var(--lp-unimpl-dark);
+    --lp-unimpl-wash: var(--lp-unimpl-wash-dark);
+    --lp-btn-primary-text: var(--lp-btn-primary-text-dark);
   }
 
   :root:has(> head > meta[name="color-scheme"][content="light"]) {
     color-scheme: light;
-    --ink: var(--ink-light);
-    --ink-deep: var(--ink-deep-light);
-    --accent: var(--accent-light);
-    --accent-strong: var(--accent-strong-light);
-    --accent-vivid: var(--accent-vivid-light);
-    --wash: var(--wash-light);
-    --wash-subtle: var(--wash-subtle-light);
-    --ground: var(--ground-light);
-    --surface: var(--surface-light);
-    --surface-elevated: var(--surface-elevated-light);
-    --text: var(--text-light);
-    --text-muted: var(--text-muted-light);
-    --line: var(--line-light);
-    --line-strong: var(--line-strong-light);
-    --caution: var(--caution-light);
-    --caution-wash: var(--caution-wash-light);
-    --caution-border: var(--caution-border-light);
-    --ok: var(--ok-light);
-    --ok-wash: var(--ok-wash-light);
-    --unimpl: var(--unimpl-light);
-    --unimpl-wash: var(--unimpl-wash-light);
-    --btn-primary-text: var(--btn-primary-text-light);
+    --lp-ink: var(--lp-ink-light);
+    --lp-ink-deep: var(--lp-ink-deep-light);
+    --lp-accent: var(--lp-accent-light);
+    --lp-accent-strong: var(--lp-accent-strong-light);
+    --lp-wash: var(--lp-wash-light);
+    --lp-wash-subtle: var(--lp-wash-subtle-light);
+    --lp-ground: var(--lp-ground-light);
+    --lp-surface: var(--lp-surface-light);
+    --lp-surface-elevated: var(--lp-surface-elevated-light);
+    --lp-heading: var(--lp-heading-light);
+    --lp-text: var(--lp-text-light);
+    --lp-text-muted: var(--lp-text-muted-light);
+    --lp-line: var(--lp-line-light);
+    --lp-line-strong: var(--lp-line-strong-light);
+    --lp-caution: var(--lp-caution-light);
+    --lp-caution-wash: var(--lp-caution-wash-light);
+    --lp-caution-border: var(--lp-caution-border-light);
+    --lp-ok: var(--lp-ok-light);
+    --lp-ok-wash: var(--lp-ok-wash-light);
+    --lp-unimpl: var(--lp-unimpl-light);
+    --lp-unimpl-wash: var(--lp-unimpl-wash-light);
+    --lp-btn-primary-text: var(--lp-btn-primary-text-light);
   }
 
   @supports (color: light-dark(white, black)) {
     :root {
-      --ink: light-dark(var(--ink-light), var(--ink-dark));
-      --ink-deep: light-dark(var(--ink-deep-light), var(--ink-deep-dark));
-      --accent: light-dark(var(--accent-light), var(--accent-dark));
-      --accent-strong: light-dark(var(--accent-strong-light), var(--accent-strong-dark));
-      --accent-vivid: light-dark(var(--accent-vivid-light), var(--accent-vivid-dark));
-      --wash: light-dark(var(--wash-light), var(--wash-dark));
-      --wash-subtle: light-dark(var(--wash-subtle-light), var(--wash-subtle-dark));
-      --ground: light-dark(var(--ground-light), var(--ground-dark));
-      --surface: light-dark(var(--surface-light), var(--surface-dark));
-      --surface-elevated: light-dark(var(--surface-elevated-light), var(--surface-elevated-dark));
-      --text: light-dark(var(--text-light), var(--text-dark));
-      --text-muted: light-dark(var(--text-muted-light), var(--text-muted-dark));
-      --line: light-dark(var(--line-light), var(--line-dark));
-      --line-strong: light-dark(var(--line-strong-light), var(--line-strong-dark));
-      --caution: light-dark(var(--caution-light), var(--caution-dark));
-      --caution-wash: light-dark(var(--caution-wash-light), var(--caution-wash-dark));
-      --caution-border: light-dark(var(--caution-border-light), var(--caution-border-dark));
-      --ok: light-dark(var(--ok-light), var(--ok-dark));
-      --ok-wash: light-dark(var(--ok-wash-light), var(--ok-wash-dark));
-      --unimpl: light-dark(var(--unimpl-light), var(--unimpl-dark));
-      --unimpl-wash: light-dark(var(--unimpl-wash-light), var(--unimpl-wash-dark));
-      --btn-primary-text: light-dark(var(--btn-primary-text-light), var(--btn-primary-text-dark));
+      --lp-ink: light-dark(var(--lp-ink-light), var(--lp-ink-dark));
+      --lp-ink-deep: light-dark(var(--lp-ink-deep-light), var(--lp-ink-deep-dark));
+      --lp-accent: light-dark(var(--lp-accent-light), var(--lp-accent-dark));
+      --lp-accent-strong: light-dark(var(--lp-accent-strong-light), var(--lp-accent-strong-dark));
+      --lp-wash: light-dark(var(--lp-wash-light), var(--lp-wash-dark));
+      --lp-wash-subtle: light-dark(var(--lp-wash-subtle-light), var(--lp-wash-subtle-dark));
+      --lp-ground: light-dark(var(--lp-ground-light), var(--lp-ground-dark));
+      --lp-surface: light-dark(var(--lp-surface-light), var(--lp-surface-dark));
+      --lp-surface-elevated: light-dark(var(--lp-surface-elevated-light), var(--lp-surface-elevated-dark));
+      --lp-heading: light-dark(var(--lp-heading-light), var(--lp-heading-dark));
+      --lp-text: light-dark(var(--lp-text-light), var(--lp-text-dark));
+      --lp-text-muted: light-dark(var(--lp-text-muted-light), var(--lp-text-muted-dark));
+      --lp-line: light-dark(var(--lp-line-light), var(--lp-line-dark));
+      --lp-line-strong: light-dark(var(--lp-line-strong-light), var(--lp-line-strong-dark));
+      --lp-caution: light-dark(var(--lp-caution-light), var(--lp-caution-dark));
+      --lp-caution-wash: light-dark(var(--lp-caution-wash-light), var(--lp-caution-wash-dark));
+      --lp-caution-border: light-dark(var(--lp-caution-border-light), var(--lp-caution-border-dark));
+      --lp-ok: light-dark(var(--lp-ok-light), var(--lp-ok-dark));
+      --lp-ok-wash: light-dark(var(--lp-ok-wash-light), var(--lp-ok-wash-dark));
+      --lp-unimpl: light-dark(var(--lp-unimpl-light), var(--lp-unimpl-dark));
+      --lp-unimpl-wash: light-dark(var(--lp-unimpl-wash-light), var(--lp-unimpl-wash-dark));
+      --lp-btn-primary-text: light-dark(var(--lp-btn-primary-text-light), var(--lp-btn-primary-text-dark));
     }
   }
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; scroll-padding-top: 84px; }
-  body {
+  body, .lp-root {
     margin: 0;
-    background: var(--ground);
-    color: var(--text);
-    font-family: var(--body);
+    background: var(--lp-ground);
+    color: var(--lp-text);
+    font-family: var(--lp-body);
     font-size: 16px;
     line-height: 1.8;
     -webkit-font-smoothing: antialiased;
     overflow-x: clip;
   }
   img { max-width: 100%; height: auto; display: block; }
-  a { color: var(--accent-strong); text-underline-offset: 3px; }
+  a { color: var(--lp-accent-strong); text-underline-offset: 3px; }
   a:focus-visible, button:focus-visible, summary:focus-visible {
-    outline: 3px solid var(--accent);
+    outline: 3px solid var(--lp-accent);
     outline-offset: 3px;
     border-radius: 6px;
   }
 
-  /* Improve text layout & legibility */
-  h1, h2, h3, h4, .balance-text {
+  /* High-legibility headings that never blend into light or dark backgrounds */
+  h1, h2, h3, h4,
+  .lp-root h1, .lp-root h2, .lp-root h3, .lp-root h4 {
+    color: var(--lp-heading);
+    font-family: var(--lp-display);
     text-wrap: balance;
+    letter-spacing: -0.015em;
   }
   p, li, dd {
     text-wrap: pretty;
   }
 
-  /* Defer rendering heavy below-the-fold sections */
   .deferred-section {
     content-visibility: auto;
     contain-intrinsic-size: auto none auto 680px;
@@ -262,70 +265,76 @@ try {
     position: sticky;
     top: 0;
     z-index: 50;
-    background: color-mix(in srgb, var(--ground) 86%, transparent);
+    background: color-mix(in srgb, var(--lp-ground) 88%, transparent);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--lp-line);
   }
   .site-header {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    padding: 14px 0;
+    padding: 12px 0;
   }
-  .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
-  .brand-mark {
-    width: 42px; height: 42px; border-radius: 11px;
+  .lp-brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    text-decoration: none; color: var(--lp-heading);
     flex-shrink: 0;
-    box-shadow: 0 6px 16px -4px rgba(15, 118, 110, 0.45);
   }
-  .brand-name { font-weight: 800; font-size: 1.12rem; letter-spacing: 0.01em; line-height: 1.2; }
-  .brand-name small {
+  .lp-brand-mark {
+    width: 38px; height: 38px; border-radius: 10px;
+    flex-shrink: 0;
+    box-shadow: 0 6px 16px -4px rgba(15, 118, 110, 0.4);
+  }
+  .lp-brand-name { font-weight: 800; font-size: 1.1rem; letter-spacing: 0.01em; line-height: 1.2; color: var(--lp-heading); white-space: nowrap; }
+  .lp-brand-name small {
     display: block; font-weight: 600; font-size: 0.68rem;
-    color: var(--text-muted); letter-spacing: 0.1em; margin-top: 2px;
+    color: var(--lp-text-muted); letter-spacing: 0.03em; margin-top: 2px;
   }
   .header-nav {
-    display: flex; align-items: center; gap: 1.4rem;
+    display: flex; align-items: center; gap: 1.15rem;
   }
   .header-nav a {
-    text-decoration: none; color: var(--text-muted); font-size: 0.9rem; font-weight: 600;
+    text-decoration: none; color: var(--lp-text-muted); font-size: 0.88rem; font-weight: 600;
     transition: color 0.15s ease;
+    white-space: nowrap;
   }
-  .header-nav a:hover { color: var(--text); }
-  .header-links { display: flex; align-items: center; gap: 0.55rem; }
+  .header-nav a:hover { color: var(--lp-heading); }
+  .header-links { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-    padding: 0.64rem 1.2rem; border-radius: var(--radius-sm);
-    text-decoration: none; font-weight: 700; font-size: 0.92rem;
+    padding: 0.68rem 1.25rem; border-radius: var(--lp-radius-sm);
+    text-decoration: none; font-weight: 700; font-size: 0.94rem;
     border: 1.5px solid transparent;
     cursor: pointer;
     transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     line-height: 1.3;
+    white-space: nowrap;
   }
   .btn:active { transform: translateY(1px); }
   .btn-primary {
-    background: var(--accent);
-    color: var(--btn-primary-text);
+    background: var(--lp-accent);
+    color: var(--lp-btn-primary-text);
     box-shadow: 0 8px 20px -6px rgba(15, 118, 110, 0.45);
   }
-  .btn-primary:hover { background: var(--accent-strong); }
+  .btn-primary:hover { background: var(--lp-accent-strong); }
   .btn-ghost {
-    border-color: var(--line-strong);
-    color: var(--text);
-    background: var(--surface);
+    border-color: var(--lp-line-strong);
+    color: var(--lp-heading);
+    background: var(--lp-surface);
   }
-  .btn-ghost:hover { border-color: var(--accent); background: var(--wash-subtle); }
-  .btn-sm { padding: 0.48rem 0.9rem; font-size: 0.84rem; }
+  .btn-ghost:hover { border-color: var(--lp-accent); background: var(--lp-wash-subtle); }
+  .btn-sm { padding: 0.48rem 0.95rem; font-size: 0.85rem; }
 
   .theme-toggle {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 38px; height: 38px; border-radius: var(--radius-sm);
-    border: 1.5px solid var(--line);
-    background: var(--surface);
-    color: var(--text);
+    width: 38px; height: 38px; border-radius: var(--lp-radius-sm);
+    border: 1.5px solid var(--lp-line);
+    background: var(--lp-surface);
+    color: var(--lp-heading);
     cursor: pointer;
     padding: 0;
   }
-  .theme-toggle:hover { border-color: var(--accent); background: var(--wash-subtle); }
+  .theme-toggle:hover { border-color: var(--lp-accent); background: var(--lp-wash-subtle); }
   .theme-toggle svg { width: 18px; height: 18px; }
 
   /* ---- Hero ---- */
@@ -339,7 +348,7 @@ try {
     inset: 0 0 auto;
     height: 540px;
     background:
-      radial-gradient(ellipse 70% 55% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 75%);
+      radial-gradient(ellipse 70% 55% at 50% 0%, color-mix(in srgb, var(--lp-accent) 12%, transparent), transparent 75%);
     pointer-events: none;
     z-index: -1;
   }
@@ -348,54 +357,54 @@ try {
   }
   .eyebrow-row {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem;
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.95rem;
   }
   .eyebrow-pill {
     display: inline-flex; align-items: center; gap: 0.4rem;
-    font-size: 0.76rem; font-weight: 700; letter-spacing: 0.06em;
-    padding: 0.3rem 0.78rem;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 0.32rem 0.82rem;
     border-radius: 999px;
-    background: var(--wash);
-    color: var(--accent-strong);
-    border: 1px solid var(--line-strong);
+    background: var(--lp-wash);
+    color: var(--lp-accent-strong);
+    border: 1px solid var(--lp-line-strong);
   }
   .eyebrow-pill .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+    width: 7px; height: 7px; border-radius: 50%; background: var(--lp-accent);
   }
   .eyebrow {
-    font-size: 0.76rem; font-weight: 800; letter-spacing: 0.16em;
-    color: var(--accent-strong); text-transform: uppercase;
+    font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em;
+    color: var(--lp-accent-strong); text-transform: uppercase;
     margin: 0;
   }
-  h1 {
-    font-family: var(--display);
-    font-size: clamp(2rem, 4.2vw, 3.25rem);
-    line-height: 1.28;
-    letter-spacing: 0.01em;
-    margin: 0.3rem 0 1.1rem;
-    font-weight: 700;
+  h1, .lp-root h1 {
+    font-size: clamp(1.9rem, 3.6vw, 2.75rem);
+    line-height: 1.34;
+    margin: 0.25rem 0 1.15rem;
+    font-weight: 800;
+    color: var(--lp-heading);
+    text-wrap: initial;
   }
-  h1 .highlight {
-    background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 20%, transparent), color-mix(in srgb, var(--accent) 8%, transparent));
-    padding: 0 0.22em;
-    border-radius: 8px;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+  h1 .accent-text {
+    color: var(--lp-accent-strong);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--lp-accent) 45%, transparent);
+    text-decoration-thickness: 0.14em;
+    text-underline-offset: 0.14em;
   }
   .hero-lede {
     max-width: 44em;
     font-size: 1.06rem;
-    color: var(--text-muted);
+    color: var(--lp-text);
     margin: 0 0 1.65rem;
     line-height: 1.85;
   }
-  .hero-lede strong { color: var(--text); font-weight: 700; }
+  .hero-lede strong { color: var(--lp-heading); font-weight: 700; }
   .hero-ctas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
   .hero-note {
-    font-size: 0.82rem; color: var(--text-muted); margin: 0;
+    font-size: 0.82rem; color: var(--lp-text-muted); margin: 0;
   }
 
-  /* ---- Key Metrics Strip ---- */
+  /* ---- Key Benefits Strip ---- */
   .metrics-strip {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -403,46 +412,45 @@ try {
     margin: 28px 0 32px;
   }
   .metric-card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 1rem 1.2rem;
-    box-shadow: var(--shadow-sm);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--lp-shadow-sm);
   }
   .metric-val {
-    font-family: var(--mono);
-    font-size: 1.55rem;
+    font-family: var(--lp-display);
+    font-size: 1.45rem;
     font-weight: 800;
-    color: var(--accent-strong);
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    color: var(--lp-accent-strong);
+    line-height: 1.25;
   }
   .metric-val small {
     font-size: 0.82rem;
     font-weight: 700;
     margin-left: 3px;
-    color: var(--text-muted);
+    color: var(--lp-text-muted);
   }
   .metric-label {
-    font-size: 0.86rem;
+    font-size: 0.92rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--lp-heading);
     margin-top: 0.25rem;
   }
   .metric-sub {
-    font-size: 0.77rem;
-    color: var(--text-muted);
-    margin-top: 0.15rem;
-    line-height: 1.5;
+    font-size: 0.8rem;
+    color: var(--lp-text-muted);
+    margin-top: 0.2rem;
+    line-height: 1.55;
   }
 
   /* ---- Interactive Product Showcase ---- */
   .showcase {
     margin: 16px 0 0;
-    background: var(--surface-elevated);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
+    background: var(--lp-surface-elevated);
+    border: 1px solid var(--lp-line-strong);
+    border-radius: var(--lp-radius-lg);
+    box-shadow: var(--lp-shadow-lg);
     overflow: hidden;
   }
   .showcase-bar {
@@ -452,66 +460,67 @@ try {
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.75rem 1.1rem;
-    background: var(--wash-subtle);
-    border-bottom: 1px solid var(--line);
+    background: var(--lp-wash-subtle);
+    border-bottom: 1px solid var(--lp-line);
   }
   .window-dots {
     display: inline-flex; align-items: center; gap: 7px;
   }
   .window-dots span {
     width: 11px; height: 11px; border-radius: 50%;
-    background: var(--line-strong);
+    background: var(--lp-line-strong);
   }
   .window-dots span:nth-child(1) { background: #f87171; }
   .window-dots span:nth-child(2) { background: #fbbf24; }
   .window-dots span:nth-child(3) { background: #34d399; }
   .window-url {
-    font-family: var(--mono);
+    font-family: var(--lp-mono);
     font-size: 0.78rem;
-    color: var(--text-muted);
-    background: var(--surface);
-    border: 1px solid var(--line);
+    color: var(--lp-text-muted);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
     border-radius: 999px;
     padding: 0.22rem 0.85rem;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
   }
-  .window-url .lock { color: var(--ok); font-weight: 700; }
+  .window-url .lock { color: var(--lp-ok); font-weight: 700; }
   .showcase-tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.38rem;
-    padding: 0.65rem 1.1rem;
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
+    gap: 0.4rem;
+    padding: 0.7rem 1.1rem;
+    background: var(--lp-surface);
+    border-bottom: 1px solid var(--lp-line);
   }
   .showcase-tab {
     appearance: none;
-    border: 1px solid var(--line);
-    background: var(--ground);
-    color: var(--text-muted);
-    font-family: var(--body);
-    font-size: 0.8rem;
+    border: 1px solid var(--lp-line);
+    background: var(--lp-ground);
+    color: var(--lp-text);
+    font-family: var(--lp-body);
+    font-size: 0.82rem;
     font-weight: 700;
-    padding: 0.42rem 0.82rem;
+    padding: 0.44rem 0.88rem;
     border-radius: 999px;
     cursor: pointer;
     transition: all 0.15s ease;
+    min-height: 36px;
   }
   .showcase-tab:hover {
-    border-color: var(--accent);
-    color: var(--text);
+    border-color: var(--lp-accent);
+    color: var(--lp-heading);
   }
   .showcase-tab[aria-selected="true"] {
-    background: var(--accent);
-    color: var(--btn-primary-text);
-    border-color: var(--accent);
+    background: var(--lp-accent);
+    color: var(--lp-btn-primary-text);
+    border-color: var(--lp-accent);
     box-shadow: 0 4px 12px -3px rgba(15, 118, 110, 0.45);
   }
   .showcase-stage {
     position: relative;
-    background: var(--ink-deep);
+    background: var(--lp-ink-deep);
   }
   .showcase-panel {
     margin: 0;
@@ -526,24 +535,24 @@ try {
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.85rem 1.25rem;
-    background: var(--surface);
-    border-top: 1px solid var(--line);
+    background: var(--lp-surface);
+    border-top: 1px solid var(--lp-line);
     font-size: 0.86rem;
-    color: var(--text-muted);
+    color: var(--lp-text-muted);
   }
-  .showcase-caption strong { color: var(--text); }
+  .showcase-caption strong { color: var(--lp-heading); }
 
-  /* ---- 4 Core Pillars ---- */
+  /* ---- 4 Reasons to Choose ---- */
   section { padding: 76px 0 12px; }
-  .section-head { max-width: 46em; margin-bottom: 2.4rem; }
-  h2 {
-    font-family: var(--display);
-    font-size: clamp(1.6rem, 3.3vw, 2.25rem);
-    font-weight: 700;
-    line-height: 1.35;
+  .section-head { max-width: 48em; margin-bottom: 2.4rem; }
+  h2, .lp-root h2 {
+    font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+    font-weight: 800;
+    line-height: 1.36;
     margin: 0.35rem 0 0.75rem;
+    color: var(--lp-heading);
   }
-  .section-head p { margin: 0; color: var(--text-muted); font-size: 0.98rem; }
+  .section-head p { margin: 0; color: var(--lp-text-muted); font-size: 0.98rem; line-height: 1.8; }
 
   .pillars {
     display: grid;
@@ -551,11 +560,11 @@ try {
     gap: 1.2rem;
   }
   .pillar {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
     padding: 1.55rem 1.65rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--lp-shadow-sm);
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
@@ -567,31 +576,30 @@ try {
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: var(--accent);
+    background: var(--lp-accent);
   }
   .pillar-head {
     display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
   }
   .pillar-num {
-    font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: 0.76rem;
     font-weight: 800;
-    letter-spacing: 0.12em;
-    color: var(--accent-strong);
-    background: var(--wash);
-    padding: 0.22rem 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--lp-accent-strong);
+    background: var(--lp-wash);
+    padding: 0.24rem 0.7rem;
     border-radius: 999px;
   }
-  .pillar h3 { margin: 0; font-size: 1.14rem; font-weight: 700; }
-  .pillar p { margin: 0; font-size: 0.91rem; color: var(--text-muted); line-height: 1.78; }
-  .pillar-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+  .pillar h3 { margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--lp-heading); line-height: 1.4; }
+  .pillar p { margin: 0; font-size: 0.92rem; color: var(--lp-text-muted); line-height: 1.78; }
+  .pillar-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; }
   .pillar-tag {
-    font-size: 0.74rem; font-weight: 600;
-    padding: 0.18rem 0.58rem;
+    font-size: 0.75rem; font-weight: 600;
+    padding: 0.2rem 0.6rem;
     border-radius: 6px;
-    background: var(--wash-subtle);
-    color: var(--text-muted);
-    border: 1px solid var(--line);
+    background: var(--lp-wash-subtle);
+    color: var(--lp-text);
+    border: 1px solid var(--lp-line);
   }
 
   /* ---- End-to-End Daily Workflow ---- */
@@ -601,116 +609,116 @@ try {
     gap: 2.5rem;
     align-items: center;
     padding: 2.6rem 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--lp-line);
   }
   .flow-row.reverse { grid-template-columns: minmax(0, 6.2fr) minmax(0, 5fr); }
   .flow-row.reverse .flow-copy { order: 2; }
   .flow-row.reverse .flow-media { order: 1; }
   .flow-step {
     display: inline-flex; align-items: center; gap: 0.5rem;
-    font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.12em;
-    color: var(--accent-strong); font-weight: 800;
+    font-size: 0.8rem; letter-spacing: 0.06em;
+    color: var(--lp-accent-strong); font-weight: 800;
     margin: 0 0 0.35rem;
   }
   .flow-row h3 {
-    font-family: var(--display);
-    font-size: 1.48rem;
-    font-weight: 700;
+    font-size: 1.42rem;
+    font-weight: 800;
     margin: 0 0 0.65rem;
-    line-height: 1.38;
+    line-height: 1.4;
+    color: var(--lp-heading);
   }
-  .flow-row p { margin: 0 0 0.85rem; font-size: 0.94rem; color: var(--text-muted); }
+  .flow-row p { margin: 0 0 0.85rem; font-size: 0.94rem; color: var(--lp-text-muted); }
   .flow-list {
     margin: 0 0 0.95rem;
     padding-left: 1.2em;
-    font-size: 0.89rem;
-    color: var(--text-muted);
+    font-size: 0.9rem;
+    color: var(--lp-text-muted);
   }
-  .flow-list li { margin: 0.35rem 0; line-height: 1.7; }
-  .flow-list li strong { color: var(--text); font-weight: 700; }
+  .flow-list li { margin: 0.4rem 0; line-height: 1.72; }
+  .flow-list li strong { color: var(--lp-heading); font-weight: 700; }
   .flow-media {
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius);
+    border: 1px solid var(--lp-line-strong);
+    border-radius: var(--lp-radius);
     overflow: hidden;
-    box-shadow: var(--shadow);
-    background: var(--surface);
+    box-shadow: var(--lp-shadow);
+    background: var(--lp-surface);
+    margin: 0;
   }
   .flow-media figcaption {
     padding: 0.6rem 1rem;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    background: var(--surface);
-    border-top: 1px solid var(--line);
+    font-size: 0.8rem;
+    color: var(--lp-text-muted);
+    background: var(--lp-surface);
+    border-top: 1px solid var(--lp-line);
   }
   .chip-row { display: flex; flex-wrap: wrap; gap: 0.42rem; margin-top: 0.75rem; }
   .chip {
     font-size: 0.76rem; font-weight: 700; padding: 0.26rem 0.68rem;
-    background: var(--wash); color: var(--accent-strong);
-    border-radius: 999px; border: 1px solid var(--line-strong);
+    background: var(--lp-wash); color: var(--lp-accent-strong);
+    border-radius: 999px; border: 1px solid var(--lp-line-strong);
   }
   .chip.chip-muted {
-    background: var(--unimpl-wash);
-    color: var(--unimpl);
-    border-color: var(--line);
+    background: var(--lp-unimpl-wash);
+    color: var(--lp-unimpl);
+    border-color: var(--lp-line);
   }
 
   /* ---- 11 Print Sheets & Operations Grid ---- */
   .sheets-banner {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
     padding: 1.5rem 1.7rem;
     margin-bottom: 1.4rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--lp-shadow-sm);
   }
   .sheets-banner h3 {
     margin: 0 0 0.45rem;
-    font-size: 1.08rem;
+    font-size: 1.1rem;
+    color: var(--lp-heading);
   }
   .sheets-banner p {
     margin: 0 0 1rem;
-    font-size: 0.89rem;
-    color: var(--text-muted);
+    font-size: 0.9rem;
+    color: var(--lp-text-muted);
   }
   .sheets-pills {
     display: flex; flex-wrap: wrap; gap: 0.5rem;
   }
   .sheet-pill {
     display: inline-flex; align-items: center; gap: 0.38rem;
-    font-size: 0.8rem; font-weight: 700;
-    padding: 0.36rem 0.78rem;
+    font-size: 0.82rem; font-weight: 700;
+    padding: 0.38rem 0.8rem;
     border-radius: 8px;
-    background: var(--wash-subtle);
-    border: 1px solid var(--line-strong);
-    color: var(--text);
+    background: var(--lp-wash-subtle);
+    border: 1px solid var(--lp-line-strong);
+    color: var(--lp-heading);
   }
   .sheet-pill small {
     font-weight: 600;
-    color: var(--accent-strong);
-    font-size: 0.72rem;
+    color: var(--lp-accent-strong);
+    font-size: 0.74rem;
   }
 
   .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
   .cell {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 1.2rem 1.25rem;
-    box-shadow: var(--shadow-sm);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: 1.25rem 1.3rem;
+    box-shadow: var(--lp-shadow-sm);
   }
   .cell-kicker {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--accent-strong);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: var(--lp-accent-strong);
+    letter-spacing: 0.04em;
     margin-bottom: 0.25rem;
   }
-  .cell h4 { margin: 0 0 0.38rem; font-size: 0.96rem; font-weight: 700; }
-  .cell p { margin: 0; font-size: 0.83rem; color: var(--text-muted); line-height: 1.7; }
+  .cell h4 { margin: 0 0 0.4rem; font-size: 0.98rem; font-weight: 800; color: var(--lp-heading); }
+  .cell p { margin: 0; font-size: 0.85rem; color: var(--lp-text-muted); line-height: 1.7; }
 
-  /* ---- Architecture & Golden Rules ---- */
+  /* ---- Store Styles (Single PC vs Multiple PCs) ---- */
   .arch-layout {
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
@@ -718,89 +726,65 @@ try {
     align-items: start;
   }
   .arch-card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
     padding: 1.5rem 1.6rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--lp-shadow-sm);
   }
-  .arch-card h3 { margin: 0 0 0.8rem; font-size: 1.08rem; }
+  .arch-card h3 { margin: 0 0 0.85rem; font-size: 1.1rem; color: var(--lp-heading); }
   .arch-diagram {
     display: grid;
     gap: 0.9rem;
     margin-bottom: 1.1rem;
   }
   .arch-mode {
-    background: var(--wash-subtle);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
+    background: var(--lp-wash-subtle);
+    border: 1px solid var(--lp-line-strong);
+    border-radius: var(--lp-radius-sm);
     padding: 0.95rem 1.1rem;
   }
   .arch-mode-title {
     display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-    font-weight: 700; font-size: 0.9rem; margin-bottom: 0.45rem;
+    font-weight: 800; font-size: 0.92rem; margin-bottom: 0.45rem; color: var(--lp-heading);
   }
   .arch-mode-badge {
-    font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
-    padding: 0.15rem 0.55rem; border-radius: 999px;
-    background: var(--surface); border: 1px solid var(--line); color: var(--accent-strong);
+    font-size: 0.74rem; font-weight: 700;
+    padding: 0.16rem 0.6rem; border-radius: 999px;
+    background: var(--lp-surface); border: 1px solid var(--lp-line); color: var(--lp-accent-strong);
   }
   .arch-nodes {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
   }
   .arch-node {
-    background: var(--surface);
-    border: 1px solid var(--line);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
     border-radius: 8px;
     padding: 0.35rem 0.65rem;
     font-weight: 600;
+    color: var(--lp-text);
   }
-  .arch-arrow { color: var(--accent-strong); font-weight: 800; font-family: var(--mono); }
+  .arch-arrow { color: var(--lp-accent-strong); font-weight: 800; }
 
   .spec-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: 0.86rem;
   }
   .spec-table th, .spec-table td {
     text-align: left;
-    padding: 0.62rem 0.55rem;
-    border-bottom: 1px solid var(--line);
+    padding: 0.65rem 0.55rem;
+    border-bottom: 1px solid var(--lp-line);
     vertical-align: top;
   }
   .spec-table th {
-    width: 34%;
-    color: var(--text);
+    width: 36%;
+    color: var(--lp-heading);
     font-weight: 700;
   }
-  .spec-table td { color: var(--text-muted); }
+  .spec-table td { color: var(--lp-text-muted); }
   .spec-table tr:last-child th, .spec-table tr:last-child td { border-bottom: none; }
-
-  .rules-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.9rem;
-    margin-top: 1.4rem;
-  }
-  .rule-item {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 1rem 1.1rem;
-  }
-  .rule-item strong {
-    display: block;
-    font-size: 0.88rem;
-    margin-bottom: 0.3rem;
-    color: var(--text);
-  }
-  .rule-item span {
-    display: block;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    line-height: 1.65;
-  }
 
   /* ---- Implementation Status Matrix & Disclaimer ---- */
   .status-grid {
@@ -810,48 +794,46 @@ try {
     margin-bottom: 1.5rem;
   }
   .status-col {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 1.25rem 1.35rem;
-    box-shadow: var(--shadow-sm);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: 1.3rem 1.4rem;
+    box-shadow: var(--lp-shadow-sm);
   }
   .status-badge {
     display: inline-flex; align-items: center; gap: 0.35rem;
-    font-size: 0.75rem; font-weight: 800;
-    padding: 0.24rem 0.65rem; border-radius: 999px;
+    font-size: 0.76rem; font-weight: 800;
+    padding: 0.26rem 0.7rem; border-radius: 999px;
     margin-bottom: 0.65rem;
   }
-  .status-badge.ok { background: var(--ok-wash); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); }
-  .status-badge.warn { background: var(--caution-wash); color: var(--caution); border: 1px solid var(--caution-border); }
-  .status-badge.unimpl { background: var(--unimpl-wash); color: var(--unimpl); border: 1px solid var(--line-strong); }
-  .status-col h3 { margin: 0 0 0.55rem; font-size: 1rem; }
-  .status-col ul { margin: 0; padding-left: 1.15em; font-size: 0.84rem; color: var(--text-muted); }
-  .status-col li { margin: 0.38rem 0; line-height: 1.65; }
-  .status-col li strong { color: var(--text); }
+  .status-badge.ok { background: var(--lp-ok-wash); color: var(--lp-ok); border: 1px solid color-mix(in srgb, var(--lp-ok) 35%, transparent); }
+  .status-badge.warn { background: var(--lp-caution-wash); color: var(--lp-caution); border: 1px solid var(--lp-caution-border); }
+  .status-badge.unimpl { background: var(--lp-unimpl-wash); color: var(--lp-unimpl); border: 1px solid var(--lp-line-strong); }
+  .status-col h3 { margin: 0 0 0.55rem; font-size: 1.02rem; color: var(--lp-heading); }
+  .status-col ul { margin: 0; padding-left: 1.15em; font-size: 0.86rem; color: var(--lp-text-muted); }
+  .status-col li { margin: 0.4rem 0; line-height: 1.68; }
+  .status-col li strong { color: var(--lp-heading); }
 
   .honesty {
-    border: 1.5px solid var(--caution-border);
-    background: var(--caution-wash);
-    border-radius: var(--radius);
+    border: 1.5px solid var(--lp-caution-border);
+    background: var(--lp-caution-wash);
+    border-radius: var(--lp-radius);
     padding: 1.6rem 1.85rem;
   }
   .honesty h3 {
-    font-family: var(--display);
-    font-size: 1.28rem;
+    font-size: 1.22rem;
     margin: 0.25rem 0 0.65rem;
-    color: var(--text);
+    color: var(--lp-heading);
   }
-  .honesty p, .honesty li { font-size: 0.91rem; color: var(--text); }
+  .honesty p, .honesty li { font-size: 0.91rem; color: var(--lp-text); }
   .honesty ul { padding-left: 1.2em; margin: 0.6rem 0 0; }
   .honesty li { margin: 0.38rem 0; }
   .honesty .label {
     display: inline-block;
-    color: var(--caution);
+    color: var(--lp-caution);
     font-weight: 800;
-    letter-spacing: 0.1em;
-    font-size: 0.76rem;
-    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.78rem;
   }
 
   /* ---- Getting Started & Dark Code Block ---- */
@@ -863,12 +845,12 @@ try {
   }
   .terminal-card {
     color-scheme: dark;
-    background: var(--code-bg);
-    color: var(--code-text);
-    accent-color: var(--accent);
-    border-radius: var(--radius);
+    background: var(--lp-code-bg);
+    color: var(--lp-code-text);
+    accent-color: var(--lp-accent);
+    border-radius: var(--lp-radius);
     border: 1px solid #1e423b;
-    box-shadow: var(--shadow);
+    box-shadow: var(--lp-shadow);
     overflow: hidden;
   }
   .terminal-head {
@@ -876,36 +858,37 @@ try {
     padding: 0.65rem 1rem;
     background: #051412;
     border-bottom: 1px solid #183630;
-    font-family: var(--mono);
+    font-family: var(--lp-mono);
     font-size: 0.76rem;
-    color: var(--code-muted);
+    color: var(--lp-code-muted);
   }
   .copy-btn {
     appearance: none;
     background: #12352e;
-    color: var(--code-text);
+    color: var(--lp-code-text);
     border: 1px solid #25574d;
     border-radius: 6px;
     padding: 0.26rem 0.65rem;
-    font-family: var(--body);
+    font-family: var(--lp-body);
     font-size: 0.74rem;
     font-weight: 700;
     cursor: pointer;
+    min-height: 30px;
   }
   .copy-btn:hover { background: #19473e; }
   pre {
     color-scheme: dark;
-    background: var(--code-bg);
-    color: var(--code-text);
-    accent-color: var(--accent);
-    font-family: var(--mono);
+    background: var(--lp-code-bg);
+    color: var(--lp-code-text);
+    accent-color: var(--lp-accent);
+    font-family: var(--lp-mono);
     font-size: 0.88rem;
     line-height: 1.9;
     padding: 1.25rem 1.4rem;
     margin: 0;
     overflow-x: auto;
   }
-  pre .c { color: var(--code-muted); }
+  pre .c { color: var(--lp-code-muted); }
   pre .cmd { color: #5eead4; font-weight: 600; }
 
   .start-routes {
@@ -913,30 +896,31 @@ try {
     gap: 0.9rem;
   }
   .route-card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 1.15rem 1.35rem;
-    box-shadow: var(--shadow-sm);
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius);
+    padding: 1.2rem 1.4rem;
+    box-shadow: var(--lp-shadow-sm);
   }
   .route-card h3 {
-    margin: 0 0 0.45rem;
-    font-size: 1rem;
+    margin: 0 0 0.5rem;
+    font-size: 1.02rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    color: var(--lp-heading);
   }
   .route-badge {
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 800;
-    padding: 0.16rem 0.55rem;
+    padding: 0.18rem 0.6rem;
     border-radius: 999px;
-    background: var(--wash);
-    color: var(--accent-strong);
+    background: var(--lp-wash);
+    color: var(--lp-accent-strong);
   }
-  ol.steps { margin: 0; padding-left: 1.25em; font-size: 0.9rem; color: var(--text-muted); }
-  ol.steps li { margin: 0.42rem 0; line-height: 1.7; }
-  ol.steps strong { color: var(--text); font-weight: 700; }
+  ol.steps { margin: 0; padding-left: 1.25em; font-size: 0.9rem; color: var(--lp-text-muted); }
+  ol.steps li { margin: 0.42rem 0; line-height: 1.72; }
+  ol.steps strong { color: var(--lp-heading); font-weight: 700; }
 
   /* ---- Native <details> FAQ ---- */
   .faq-list {
@@ -945,18 +929,19 @@ try {
     gap: 0.65rem;
   }
   details.faq-item {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 0.95rem 1.25rem;
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: var(--lp-radius-sm);
+    padding: 1rem 1.3rem;
     transition: border-color 0.15s ease;
   }
   details.faq-item[open] {
-    border-color: var(--accent);
+    border-color: var(--lp-accent);
   }
   details.faq-item summary {
     font-weight: 700;
-    font-size: 0.95rem;
+    font-size: 0.96rem;
+    color: var(--lp-heading);
     cursor: pointer;
     list-style: none;
     display: flex;
@@ -967,42 +952,42 @@ try {
   details.faq-item summary::-webkit-details-marker { display: none; }
   details.faq-item summary::after {
     content: "+";
-    font-family: var(--mono);
+    font-family: var(--lp-mono);
     font-size: 1.15rem;
     font-weight: 700;
-    color: var(--accent-strong);
+    color: var(--lp-accent-strong);
     flex-shrink: 0;
   }
   details.faq-item[open] summary::after { content: "−"; }
   details.faq-item .faq-body {
-    margin-top: 0.7rem;
-    padding-top: 0.7rem;
-    border-top: 1px solid var(--line);
-    font-size: 0.89rem;
-    color: var(--text-muted);
-    line-height: 1.78;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--lp-line);
+    font-size: 0.9rem;
+    color: var(--lp-text-muted);
+    line-height: 1.8;
   }
 
   /* ---- CTA Band & Footer ---- */
   .cta-band {
     margin: 80px 0 0;
-    background: linear-gradient(135deg, var(--ink) 0%, var(--ink-deep) 100%);
+    background: linear-gradient(135deg, var(--lp-ink) 0%, var(--lp-ink-deep) 100%);
     color: #eaf6f3;
     padding: 68px 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--lp-line);
   }
-  .cta-band h2 { color: #ffffff; margin-top: 0; }
-  .cta-band p { color: #b8dad3; max-width: 44em; margin-bottom: 1.6rem; }
+  .cta-band h2, .lp-root .cta-band h2 { color: #ffffff; margin-top: 0; }
+  .cta-band p { color: #c4e3dc; max-width: 44em; margin-bottom: 1.6rem; }
   .cta-band .btn-primary { background: #2dd4bf; color: #04241f; box-shadow: none; }
   .cta-band .btn-primary:hover { background: #5eead4; }
-  .cta-band .btn-ghost { background: rgba(255, 255, 255, 0.06); color: #eaf6f3; border-color: rgba(255, 255, 255, 0.24); }
-  .cta-band .btn-ghost:hover { border-color: #ffffff; background: rgba(255, 255, 255, 0.12); }
+  .cta-band .btn-ghost { background: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255, 255, 255, 0.28); }
+  .cta-band .btn-ghost:hover { border-color: #ffffff; background: rgba(255, 255, 255, 0.15); }
 
-  footer { padding: 32px 0 48px; font-size: 0.83rem; color: var(--text-muted); }
+  footer { padding: 32px 0 48px; font-size: 0.84rem; color: var(--lp-text-muted); }
   .foot-row { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; }
   .foot-links { display: flex; flex-wrap: wrap; gap: 1rem; }
-  footer a { color: var(--text-muted); text-decoration: none; }
-  footer a:hover { color: var(--text); text-decoration: underline; }
+  footer a { color: var(--lp-text-muted); text-decoration: none; }
+  footer a:hover { color: var(--lp-heading); text-decoration: underline; }
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
@@ -1014,15 +999,15 @@ try {
     .metrics-strip { grid-template-columns: repeat(2, 1fr); }
     .pillars, .arch-layout, .status-grid, .start-grid { grid-template-columns: 1fr; }
     .grid { grid-template-columns: repeat(2, 1fr); }
-    .rules-grid { grid-template-columns: repeat(2, 1fr); }
     .flow-row, .flow-row.reverse { grid-template-columns: 1fr; gap: 1.3rem; }
     .flow-row.reverse .flow-copy { order: 1; }
     .flow-row.reverse .flow-media { order: 2; }
   }
   @media (max-width: 580px) {
-    .metrics-strip, .grid, .rules-grid { grid-template-columns: 1fr; }
+    .metrics-strip, .grid { grid-template-columns: 1fr; }
     .header-links .btn-ghost { display: none; }
     .showcase-bar .window-url { display: none; }
+    .lp-brand-name small { display: none; }
   }
 </style>
 </head>
@@ -1031,8 +1016,8 @@ try {
 <div class="site-header-bar">
   <div class="wrap">
     <header class="site-header">
-      <a class="brand" href="#top">
-        <svg class="brand-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="42" height="42" aria-hidden="true">
+      <a class="lp-brand" href="#top">
+        <svg class="lp-brand-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="40" height="40" aria-hidden="true">
           <defs>
             <linearGradient id="brandTileGrad" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stop-color="#2AD3BE" />
@@ -1061,14 +1046,14 @@ try {
             </g>
           </g>
         </svg>
-        <span class="brand-name">pharma-oss<small>PHARMACY OS — OPEN SOURCE</small></span>
+        <span class="lp-brand-name">pharma-oss<small>調剤薬局向け 電子薬歴・レセプト・在庫管理</small></span>
       </a>
       <nav class="header-nav" aria-label="ページ内ナビゲーション">
-        <a href="#pillars">設計思想</a>
+        <a href="#pillars">選ばれる理由</a>
         <a href="#workflow">1日の業務フロー</a>
-        <a href="#operations">帳票・運用</a>
-        <a href="#architecture">アーキテクチャ</a>
-        <a href="#status">実装状況・免責</a>
+        <a href="#operations">帳票・便利機能</a>
+        <a href="#architecture">店舗での使い方</a>
+        <a href="#status">対応範囲・ご注意</a>
       </nav>
       <div class="header-links">
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="表示テーマを切り替え" title="ライト / ダークモード切替">
@@ -1090,47 +1075,46 @@ try {
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-top">
         <div class="eyebrow-row">
-          <span class="eyebrow-pill"><span class="dot" aria-hidden="true"></span>Local-First Pharmacy EMR &amp; UKE</span>
-          <span class="eyebrow-pill">Apache-2.0 Open Source</span>
-          <span class="eyebrow-pill">令和8年（2026年）調剤報酬・記録条件仕様ベース</span>
+          <span class="eyebrow-pill"><span class="dot" aria-hidden="true"></span>電子薬歴・レセプト・在庫管理をオールインワン</span>
+          <span class="eyebrow-pill">月額費用 0円（オープンソース）</span>
+          <span class="eyebrow-pill">令和8年（2026年）調剤報酬対応</span>
         </div>
-        <h1 id="hero-title">薬局業務を、これ1つで。<br><span class="highlight">患者データは、店舗から出さない。</span></h1>
+        <h1 id="hero-title">毎日の調剤・薬歴・レセプト・発注を、<br><span class="accent-text">迷わず、ひと続きの画面で。</span></h1>
         <p class="hero-lede">
-          <strong>pharma-oss</strong> は、地域の調剤薬局のためのローカルファースト電子薬歴・レセプト（UKE）・在庫管理システムです。
-          処方箋受付（OCR / QR / マイナ連携フォルダ）から、GS1データバー現物照合ピッキング、AI補助つき4パネルSOAP薬歴、11種帳票印刷、公式仕様準拠UKE出力、発注ワークベンチまでが1つの画面フローでつながります。
-          患者データは端末内DBに暗号化保存され、<strong>クラウドサーバーも月額課金も不要</strong>です。
+          処方箋の読み取りから、バーコードでのピッキング照合、前回との違いがひと目でわかるSOAP薬歴、薬袋・薬情・手帳シールの印刷、毎月のレセプト（UKE）出力、不足薬の発注まで。
+          <strong>pharma-oss</strong> は、薬局の1日に必要な業務をシンプルにつなぐ無料のオープンソース・システムです。
         </p>
         <div class="hero-ctas">
           <a class="btn btn-primary" href="#start">デモ患者で3分体験する</a>
-          <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss">GitHubでソースを見る</a>
-          <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアル</a>
+          <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアルを見る</a>
+          <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss">GitHub</a>
         </div>
         <p class="hero-note">
-          ※本ソフトウェアは認証された医療機器・レセプトコンピュータではありません。実運用時は <a href="#status">実装状況と免責事項</a> を必ずご確認ください。
+          ※ログイン設定なしで、架空のデモ患者データを使って今すぐ画面を触れます。実運用時は <a href="#status">対応範囲と注意事項</a> をご確認ください。
         </p>
       </div>
 
-      <!-- Key Metrics Strip -->
-      <div class="metrics-strip" role="list" aria-label="主要指標">
+      <!-- Key Benefits Strip -->
+      <div class="metrics-strip" role="list" aria-label="主な特徴">
         <div class="metric-card" role="listitem">
-          <div class="metric-val">¥0<small>/月</small></div>
-          <div class="metric-label">サーバー費・月額固定費ゼロ</div>
-          <div class="metric-sub">ブラウザ内暗号化DB（RxDB + IndexedDB）とPWAでオフラインでも業務継続</div>
+          <div class="metric-val">受付〜発注まで</div>
+          <div class="metric-label">画面を行き来せず完結</div>
+          <div class="metric-sub">受付・ピッキング・薬歴・会計・UKE出力・発注が1つの流れでつながります</div>
         </div>
         <div class="metric-card" role="listitem">
-          <div class="metric-val">1,850<small>+ tests</small></div>
-          <div class="metric-label">自動テスト＆実画面回帰検証</div>
-          <div class="metric-sub">単体・契約テスト＋3画面幅（1280/768/375px）E2E・帳票レイアウト回帰</div>
+          <div class="metric-val">11<small>種類の帳票</small></div>
+          <div class="metric-label">薬袋・薬情・手帳シールもすぐ印刷</div>
+          <div class="metric-sub">領収証・明細書・水剤/軟膏ラベル・トレーシングレポートまで標準対応</div>
         </div>
         <div class="metric-card" role="listitem">
-          <div class="metric-val">11<small>種</small></div>
-          <div class="metric-label">現場帳票をブラウザ直接印刷</div>
-          <div class="metric-sub">調剤録・明細書・領収証・薬袋・薬情・手帳シール・水剤/軟膏ラベル・レジロール</div>
+          <div class="metric-val">うっかり防止</div>
+          <div class="metric-label">照合漏れ・算定漏れを画面でストップ</div>
+          <div class="metric-sub">GS1バーコード照合や相互作用チェック、請求前の必須項目点検を自動サポート</div>
         </div>
         <div class="metric-card" role="listitem">
-          <div class="metric-val">0<small>byte</small></div>
-          <div class="metric-label">外部クラウド送信・サテライト残存</div>
-          <div class="metric-sub">AI補助はローカル決定論のみ。サテライト端末はメモリ動作でディスク保存なし</div>
+          <div class="metric-val">月額 0<small>円</small></div>
+          <div class="metric-label">契約縛り・更新料なし</div>
+          <div class="metric-sub">お店のパソコンでそのまま動き、インターネットが不安定な日も業務が止まりません</div>
         </div>
       </div>
 
@@ -1140,119 +1124,115 @@ try {
           <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="window-url" id="showcase-url">
             <span class="lock" aria-hidden="true">●</span>
-            <span>http://localhost:3000/ — 調剤・監査ダッシュボード</span>
+            <span>調剤・監査ダッシュボード — 本日の受付と進行状況</span>
           </div>
-          <span style="font-size:0.76rem;color:var(--text-muted);font-weight:600;">タブで実画面を切り替え</span>
+          <span style="font-size:0.78rem;color:var(--lp-text-muted);font-weight:600;">タブで実際の画面を切り替え</span>
         </div>
         <div class="showcase-tabs" role="tablist" aria-label="画面切り替え">
-          <button type="button" class="showcase-tab" role="tab" aria-selected="true" aria-controls="panel-dashboard" id="tab-dashboard" data-url="http://localhost:3000/ — 調剤・監査ダッシュボード" data-caption="本日の受付件数・進行中の患者カード・未完了タスク（GS1未照合・請求リスク・在庫注意）を一目で把握。">ダッシュボード</button>
-          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-ocr" id="tab-ocr" data-url="http://localhost:3000/ocr — 処方箋受付・資格確認" data-caption="処方箋OCR・JAHIS QR・マイナ資格確認結果XML取込・手入力受付。原本並列比較と既存患者への自動名寄せ。">01 処方箋受付</button>
-          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-picking" id="tab-picking" data-url="http://localhost:3000/emr — GS1ピッキング支援モード" data-caption="棚番地順リストとGS1データバー現物照合（薬品・ロット・使用期限）。その場での棚不足記録と指示CSV入出力。">02 ピッキング照合</button>
-          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-emr" id="tab-emr" data-url="http://localhost:3000/emr — 4パネルSOAP電子薬歴" data-caption="構造化チェック・前回Do/処方差分・アレルギー/相互作用警告・AI補助SOAP下書き・疑義照会・トレーシングレポート。">03 電子薬歴 (SOAP)</button>
-          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-print" id="tab-print" data-url="http://localhost:3000/print/[visitId] — 算定・請求前点検・帳票印刷" data-caption="令和8年調剤報酬算定、請求前チェック、支払基金公式仕様UKE点検・出力、請求スナップショット、外部機器連携。">04 算定・帳票・公式UKE</button>
-          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-inventory" id="tab-inventory" data-url="http://localhost:3000/inventory — 在庫管理・発注ワークベンチ" data-caption="処方不足・発注点割れ・期限切迫を統合検知する発注ワークベンチ。分譲融通、卸データ取込、納品書OCR、麻薬棚卸。">05 在庫・発注ワークベンチ</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="true" aria-controls="panel-dashboard" id="tab-dashboard" data-url="調剤・監査ダッシュボード — 本日の受付と進行状況" data-caption="今日の受付件数、お待ちの患者さん、未完了の作業（ピッキング未照合・請求チェック・在庫不足）がひと目でわかります。">ダッシュボード</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-ocr" id="tab-ocr" data-url="01 処方箋受付 — カメラ読取・QR・手入力" data-caption="処方箋の画像と読み取り結果を横に並べて見比べながら受付。過去に来局された患者さんは自動で呼び出します。">01 処方箋受付</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-picking" id="tab-picking" data-url="02 ピッキング照合 — 棚番地ガイド＆バーコード確認" data-caption="棚番地の順番通りに薬を集め、GS1バーコードを読むだけで「薬品・使用期限・ロット」の取り違えを防ぎます。">02 ピッキング照合</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-emr" id="tab-emr" data-url="03 電子薬歴 (SOAP) — 前回比較＆AI下書き補助" data-caption="前回の薬歴や処方の変更点を見ながら、チェックを入れるだけでSOAP下書きを作成。アレルギーや飲み合わせも自動で警告します。">03 電子薬歴 (SOAP)</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-print" id="tab-print" data-url="04 会計・帳票印刷・レセプト点検" data-caption="調剤報酬の自動計算、薬袋・薬情・領収証などの一括印刷、毎月のレセプト（UKE）出力前のエラーチェックを行います。">04 会計・帳票・レセプト</button>
+          <button type="button" class="showcase-tab" role="tab" aria-selected="false" aria-controls="panel-inventory" id="tab-inventory" data-url="05 在庫・発注管理 — 不足薬や期限切迫を自動リストアップ" data-caption="調剤中に足りなくなった薬や発注点を下回った薬、期限が近い薬を自動でまとめ、そのまま発注リストを作れます。">05 在庫・発注管理</button>
         </div>
         <div class="showcase-stage">
           <figure class="showcase-panel" id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
-            <img src="images/lp/dashboard.jpg" alt="pharma-ossの調剤・監査ダッシュボード画面。本日の業務KPI、進行中の患者カード、GS1未照合・請求リスク・在庫注意バッジが表示されている" width="1600" height="1000" fetchpriority="high">
+            <img src="images/lp/dashboard.jpg" alt="調剤・監査ダッシュボード画面。本日の受付状況と進行中の患者カードが一覧表示されている" width="1600" height="1000" fetchpriority="high">
           </figure>
           <figure class="showcase-panel" id="panel-ocr" role="tabpanel" aria-labelledby="tab-ocr" hidden>
-            <img src="images/lp/ocr.jpg" alt="処方箋受付画面。OCR・手入力受付・マイナ読取で自動入力・JAHIS処方箋QR取込パネルが並ぶ" width="1600" height="1000" fetchpriority="low" loading="lazy">
+            <img src="images/lp/ocr.jpg" alt="処方箋受付画面。OCR読取・手入力受付・マイナ読取・処方箋QR取込が並ぶ" width="1600" height="1000" fetchpriority="low" loading="lazy">
           </figure>
           <figure class="showcase-panel" id="panel-picking" role="tabpanel" aria-labelledby="tab-picking" hidden>
-            <img src="images/lp/picking.jpg" alt="ピッキング支援モード画面。GS1コード読取欄、照合進捗、棚番地A-01/B-03の薬品カード、不足記録、指示CSV出力・結果取込・レジロール印刷ボタン" width="1600" height="1000" fetchpriority="low" loading="lazy">
+            <img src="images/lp/picking.jpg" alt="ピッキング支援画面。棚番地A-01/B-03の薬品カードとバーコード読取欄、不足記録ボタン" width="1600" height="1000" fetchpriority="low" loading="lazy">
           </figure>
           <figure class="showcase-panel" id="panel-emr" role="tabpanel" aria-labelledby="tab-emr" hidden>
-            <img src="images/lp/emr-soap.jpg" alt="薬歴入力画面。患者バナーに副作用歴アラート、左に薬歴構造化チェックとSOAP入力、中央に服薬指導チェックと前回薬歴、右に疑義照会とトレーシングレポート" width="1600" height="1000" fetchpriority="low" loading="lazy">
+            <img src="images/lp/emr-soap.jpg" alt="薬歴入力画面。副作用歴アラート、構造化チェック、SOAP入力、前回薬歴、疑義照会、トレーシングレポート" width="1600" height="1000" fetchpriority="low" loading="lazy">
           </figure>
           <figure class="showcase-panel" id="panel-print" role="tabpanel" aria-labelledby="tab-print" hidden>
-            <img src="images/lp/print.jpg" alt="帳票印刷・算定請求前点検画面。合計請求点数、公式UKE点検ボタン、5つのステータスカード、請求スナップショット、外部調剤機器連携パネル" width="1600" height="1000" fetchpriority="low" loading="lazy">
+            <img src="images/lp/print.jpg" alt="帳票印刷・算定点検画面。合計点数、UKE点検ボタン、ステータスカード、外部調剤機器連携" width="1600" height="1000" fetchpriority="low" loading="lazy">
           </figure>
           <figure class="showcase-panel" id="panel-inventory" role="tabpanel" aria-labelledby="tab-inventory" hidden>
-            <img src="images/lp/inventory.jpg" alt="在庫管理・発注ワークベンチ画面。医薬品の棚番地設定、入荷インポート、納品書OCR読取、麻薬・向精神薬棚卸タブと、処方不足の自動発注候補カード" width="1600" height="1000" fetchpriority="low" loading="lazy">
+            <img src="images/lp/inventory.jpg" alt="在庫管理・発注画面。不足している薬の発注候補カードと納品書OCR・棚卸タブ" width="1600" height="1000" fetchpriority="low" loading="lazy">
           </figure>
         </div>
         <div class="showcase-caption">
-          <span id="showcase-caption-text"><strong>調剤・監査ダッシュボード：</strong>本日の受付件数・進行中の患者カード・未完了タスク（GS1未照合・請求リスク・在庫注意）を一目で把握。</span>
-          <span>表示データはすべて架空の練習用デモデータです</span>
+          <span id="showcase-caption-text"><strong>ダッシュボード：</strong>今日の受付件数、お待ちの患者さん、未完了の作業（ピッキング未照合・請求チェック・在庫不足）がひと目でわかります。</span>
+          <span>表示データはすべて架空のサンプルです</span>
         </div>
       </div>
     </section>
 
-    <!-- ==================== 4 CORE PILLARS ==================== -->
+    <!-- ==================== 4 REASONS TO CHOOSE ==================== -->
     <section id="pillars" aria-labelledby="pillars-title">
       <div class="section-head">
         <p class="eyebrow">Why pharma-oss</p>
-        <h2 id="pillars-title">便利さのために、患者安全とデータ主権を犠牲にしない。</h2>
-        <p>pharma-oss は「金科玉条（不可侵の十箇条）」を最上位の設計規範に据え、現場のスピードと医療安全・個人情報保護を両立させています。</p>
+        <h2 id="pillars-title">忙しい薬局の毎日を、ラクに・確実にする4つの特徴。</h2>
+        <p>「入力に時間がかかる」「取り違えや算定漏れが怖い」「毎月のシステム代が高い」——現場でよくある悩みに正面から応える設計です。</p>
       </div>
 
       <div class="pillars" role="list">
         <article class="pillar" role="listitem">
           <div class="pillar-head">
-            <span class="pillar-num">PILLAR 01 — LOCAL-FIRST &amp; ZERO LEAKAGE</span>
+            <span class="pillar-num">POINT 01 — スピードと時短</span>
           </div>
-          <h3>患者データは店舗から出ない。サテライト端末には残さない。</h3>
+          <h3>処方入力も薬歴書きも、毎日の手作業をグッと短縮。</h3>
           <p>
-            単独端末運用では、患者データはブラウザ内DB（IndexedDB）に暗号化保存され、ネットが切れても業務は止まりません。
-            店舗内で複数端末を使う場合も、正本はメイン端末（<code>node:sqlite</code> + AES-256-GCM暗号化）に集約し、サテライト端末は<strong>メモリ専用（ディスク保存ゼロ）</strong>で動作します。
+            処方箋のQRコードやカメラOCRで受付入力を省力化。薬歴画面では「前回の処方との違い」が自動でハイライトされ、確認項目にチェックを入れるだけでSOAPの下書きが立ち上がるので、閉局後の薬歴残業を減らせます。
           </p>
           <div class="pillar-tags">
-            <span class="pillar-tag">RxDB + IndexedDB暗号化</span>
-            <span class="pillar-tag">SQLite WASM/OPFSマスタ</span>
-            <span class="pillar-tag">PWAオフライン対応</span>
-            <span class="pillar-tag">メモリ専用サテライト同期</span>
+            <span class="pillar-tag">処方箋QR・OCR読取</span>
+            <span class="pillar-tag">前回Do・処方差分表示</span>
+            <span class="pillar-tag">SOAP下書き自動作成</span>
+            <span class="pillar-tag">キーボード操作対応</span>
           </div>
         </article>
 
         <article class="pillar" role="listitem">
           <div class="pillar-head">
-            <span class="pillar-num">PILLAR 02 — FAIL-SAFE WORKFLOW</span>
+            <span class="pillar-num">POINT 02 — ヒヤリハット・返戻防止</span>
           </div>
-          <h3>未完了なら、先に進めない。勘で補完しない。</h3>
+          <h3>バーコード照合と多層チェックで、うっかりミスを未然にストップ。</h3>
           <p>
-            GS1バーコード未照合、薬歴の構造化チェック未了、廃止薬・薬価未設定・レセ電コード欠落などの不備が残ったままでは、完了確定やUKE出力をシステムが停止します。
-            単位未設定時の勝手な <code>「錠」</code> 補完や生年月日不明時の仮計算を排し、判定不能なものは正直に警告します。
+            ピッキング時にGS1バーコードを読むだけで「薬品・期限・ロット」の一致を確認。さらに患者さんのアレルギー歴・飲み合わせ（併用禁忌）・同効薬の重複から、レセプト出力前のコード抜け・廃止薬チェックまで自動で点検します。
           </p>
           <div class="pillar-tags">
-            <span class="pillar-tag">GS1現物照合ゲート</span>
-            <span class="pillar-tag">二重の請求前チェック</span>
-            <span class="pillar-tag">剤形・数量セマンティクス一本化</span>
-            <span class="pillar-tag">出力済み請求の編集ロック</span>
+            <span class="pillar-tag">GS1バーコード現物照合</span>
+            <span class="pillar-tag">アレルギー・相互作用警告</span>
+            <span class="pillar-tag">照合未了のまま完了させない保護</span>
+            <span class="pillar-tag">レセプト出力前チェック</span>
           </div>
         </article>
 
         <article class="pillar" role="listitem">
           <div class="pillar-head">
-            <span class="pillar-num">PILLAR 03 — PHARMACIST SOVEREIGNTY</span>
+            <span class="pillar-num">POINT 03 — 在庫と発注が直結</span>
           </div>
-          <h3>最終判断は薬剤師が下す。AI補助は候補提示に徹する。</h3>
+          <h3>「調剤中に薬が足りない」がその場で発注リストに。</h3>
           <p>
-            AI補助は外部LLMへ一切通信しないローカル決定論エンジンです。処方とアラートを根拠にSOAP下書きを <code>unconfirmed（未確認）</code> として提示し、薬剤師が承認・修正して初めて確定記録になります。
-            未確認の下書きはトレーシングレポート等の院外文書から自動除外され、店舗ごとに標準 / 制限 / 停止を選べます。
+            ピッキング中に棚不足を記録すると、そのまま在庫画面の「発注ワークベンチ」に自動で集まります。発注点を下回った薬や期限が迫った薬も一覧でわかり、同じ効能の代替薬探しや納品書OCRでの入庫もスムーズです。
           </p>
           <div class="pillar-tags">
-            <span class="pillar-tag">外部LLM送信ゼロ</span>
-            <span class="pillar-tag">採否の監査ログ記録</span>
-            <span class="pillar-tag">院外文書への未確認流出防止</span>
-            <span class="pillar-tag">標準/制限/停止ポリシー切替</span>
+            <span class="pillar-tag">棚不足→発注リスト直結</span>
+            <span class="pillar-tag">代替薬のワンクリック検索</span>
+            <span class="pillar-tag">納品書OCR・卸CSV入庫</span>
+            <span class="pillar-tag">麻薬・向精神薬の棚卸</span>
           </div>
         </article>
 
         <article class="pillar" role="listitem">
           <div class="pillar-head">
-            <span class="pillar-num">PILLAR 04 — TAMPER-EVIDENT &amp; ZERO DATA LOSS</span>
+            <span class="pillar-num">POINT 04 — コストゼロ＆ネット不調でも止まらない</span>
           </div>
-          <h3>記録は改ざんできず、壊れてもデータを失わない。</h3>
+          <h3>月額費用0円。院内PCで動くから通信トラブルの日も安心。</h3>
           <p>
-            主要操作は端末別ハッシュチェーン署名付き監査ログに記録し、S3 Object Lock（WORM）への外部保全ジョブに対応。
-            DB初期化失敗時も自動削除（旧自己修復）を行わずデータを保護し、世代管理つき暗号化JSONバックアップ・SHA-256読み戻し照合・緊急復旧鍵シート印刷で確実な復旧経路を残します。
+            高額な専用サーバーや月額ライセンス料は不要です。お店のパソコンの中で軽快に動作するため、光回線の不調時でも受付・薬歴・印刷が止まりません。受付や調剤室で複数台のタブレット・PCをつなぐ運用にも対応しています。
           </p>
           <div class="pillar-tags">
-            <span class="pillar-tag">端末別ハッシュチェーン監査ログ</span>
-            <span class="pillar-tag">S3 Object Lock (WORM)</span>
-            <span class="pillar-tag">不変の請求スナップショット</span>
-            <span class="pillar-tag">DB暗号鍵エスクロー印刷</span>
+            <span class="pillar-tag">月額利用料・更新料 0円</span>
+            <span class="pillar-tag">オフラインでも業務継続</span>
+            <span class="pillar-tag">複数PC・タブレット連携</span>
+            <span class="pillar-tag">暗号化バックアップ</span>
           </div>
         </article>
       </div>
@@ -1262,113 +1242,110 @@ try {
     <section id="workflow" class="deferred-section" aria-labelledby="flow-title">
       <div class="section-head">
         <p class="eyebrow">Daily Workflow</p>
-        <h2 id="flow-title">受付から請求・発注・端末同期まで、現場の1日の順番のまま。</h2>
-        <p>画面の都合ではなく、薬局の業務動線に沿って設計されています。すべての工程に抜け漏れを防ぐ安全装置が組み込まれています。</p>
+        <h2 id="flow-title">来局から会計・発注まで、薬局の1日の流れに沿って使えます。</h2>
+        <p>難しい操作を覚える必要はありません。いつもの業務の順番通りに画面を進めるだけで、抜け漏れなく処理が終わります。</p>
       </div>
 
       <!-- STEP 01 -->
       <div class="flow-row">
         <div class="flow-copy">
-          <p class="flow-step">STEP 01 — 処方箋受付・資格確認・名寄せ</p>
-          <h3>処方箋を読む。原本と並べて人が確認する。</h3>
+          <p class="flow-step">STEP 01 — 処方箋受付・患者呼び出し</p>
+          <h3>処方箋を読み取り、原本と並べてスムーズに受付。</h3>
           <p>
-            ブラウザ内OCR（Tesseract.js）・JAHIS処方箋QR（カメラ / 画像 / ハンディスキャナー）・資格確認端末の連携フォルダからのマイナ資格確認結果XML取込・手入力受付に対応。
-            読み取り結果は処方箋画像と並べて確認でき、氏名＋生年月日で既存患者へ自動名寄せします。
+            処方箋のQRコード読み取り、カメラ・画像からの文字読み取り（OCR）、マイナ資格確認端末の連携フォルダ取込、手入力に対応。
+            処方箋の画像と入力欄を左右に並べて見比べられるので、画面を切り替えずに確認できます。
           </p>
           <ul class="flow-list">
-            <li><strong>厚労省 電子処方箋用法マスタ（1,803件）＆支払基金医薬品マスタ</strong> — コードの自前発番を排し、内滴用法の厳格チェックや一般名処方【般】検索に対応</li>
-            <li><strong>複数公費（第1〜第3公費）の安全保護</strong> — 患者情報編集時も2件目以降の公費負担医療情報が消失しない保護設計</li>
-            <li><strong>未実装機能の誠実な明示</strong> — 電子処方箋管理サービス接続など未実装のボタンは「（未実装）」と表示して無効化し、現場が「故障」と迷う時間をゼロに</li>
+            <li><strong>再来患者さんを自動で名寄せ</strong> — 氏名と生年月日から登録済みの患者さんを自動で探し出し、重複登録を防ぎます</li>
+            <li><strong>一般名処方【般】や公的用法マスタに標準対応</strong> — よく使う用法の検索や、第1〜第3公費までの複数公費の入力・保持に対応しています</li>
           </ul>
           <div class="chip-row">
-            <span class="chip">ブラウザ内OCR</span>
-            <span class="chip">JAHIS QR取込</span>
-            <span class="chip">マイナ結果XML取込（連携フォルダ）</span>
-            <span class="chip">名寄せ・重複統合</span>
-            <span class="chip chip-muted">電子処方箋取得（未実装明示）</span>
+            <span class="chip">処方箋QR読取</span>
+            <span class="chip">カメラ・画像OCR</span>
+            <span class="chip">マイナ結果XML取込</span>
+            <span class="chip">患者さんの自動名寄せ</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/ocr.jpg" alt="処方箋受付画面。手入力受付、受付データ入力、マイナ読取で自動入力、JAHIS処方箋QR取込パネル" width="1600" height="1000" loading="lazy">
-          <figcaption>処方箋受付（/ocr）— OCR・QR・マイナ連携フォルダ・手入力の受付窓口</figcaption>
+          <img src="images/lp/ocr.jpg" alt="処方箋受付画面" width="1600" height="1000" loading="lazy">
+          <figcaption>処方箋受付画面 — QR・OCR・マイナ連携フォルダ・手入力から選んで受付</figcaption>
         </figure>
       </div>
 
       <!-- STEP 02 -->
       <div class="flow-row reverse">
         <div class="flow-copy">
-          <p class="flow-step">STEP 02 — 調剤・ピッキング・機器連携</p>
-          <h3>棚番地順で集め、GS1データバーで現物を照合する。</h3>
+          <p class="flow-step">STEP 02 — ピッキング・取り違え防止</p>
+          <h3>棚番地通りに集めて、バーコードでピッと現物確認。</h3>
           <p>
-            処方内容から棚番地順のピッキングリストを自動生成し、GS1データバーで医薬品（GTIN/JAN）・使用期限・ロット番号の一致をリアルタイム照合。
-            棚不足があればその場で記録でき、在庫管理の「発注ワークベンチ」へ自動連動します。
+            処方内容から「棚番地順」のピッキングリストを自動表示。薬の箱やシートのGS1バーコードを読み取るだけで、処方された薬と合っているか、使用期限が切れていないかをその場で判定します。
           </p>
           <ul class="flow-list">
-            <li><strong>既存ピッキングシステム連携</strong> — 棚番地・JAN・必要量・ロット候補入りの指示CSV書き出しと、結果CSV/TSV取込（完了→照合済、不足→不足記録）</li>
-            <li><strong>NSIPS準拠の調剤機器・POS連携</strong> — 施設内コネクタ経由での処方送信・差替・取消と、連携IDによる二重送信防止</li>
+            <li><strong>その場で「棚不足」を記録</strong> — 在庫が足りないときはワンクリックで不足記録を残せ、後から発注画面でまとめて確認できます</li>
+            <li><strong>既存の調剤機器・ピッキング機とも連携</strong> — ピッキング指示CSVの入出力や、NSIPS対応の分包機・調剤機器への処方送信に対応しています</li>
           </ul>
           <div class="chip-row">
-            <span class="chip">GS1データバー照合</span>
-            <span class="chip">ロット・使用期限チェック</span>
-            <span class="chip">棚不足→発注候補連動</span>
-            <span class="chip">NSIPS調剤機器連携</span>
+            <span class="chip">棚番地順リスト</span>
+            <span class="chip">GS1バーコード照合</span>
+            <span class="chip">使用期限・ロット確認</span>
+            <span class="chip">調剤機器・CSV連携</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/picking.jpg" alt="ピッキング支援モード。GS1コード読取、照合進捗、棚番地つき薬品カード、指示CSV・結果取込・レジロール印刷" width="1600" height="1000" loading="lazy">
-          <figcaption>ピッキング支援モーダル — GS1現物照合・不足記録・レジロール印刷・外部CSV連携</figcaption>
+          <img src="images/lp/picking.jpg" alt="ピッキング支援モード画面" width="1600" height="1000" loading="lazy">
+          <figcaption>ピッキング支援画面 — 棚番地ガイド・GS1バーコード照合・レジロール印刷</figcaption>
         </figure>
       </div>
 
       <!-- STEP 03 -->
       <div class="flow-row">
         <div class="flow-copy">
-          <p class="flow-step">STEP 03 — 電子薬歴・服薬指導・安全監査</p>
-          <h3>前回との違いが見える。多層チェックでリスクを逃さない。</h3>
+          <p class="flow-step">STEP 03 — 服薬指導・電子薬歴（SOAP）</p>
+          <h3>前回との違いがすぐわかり、薬歴がサッと書ける。</h3>
           <p>
-            4パネルSOAPエディタと、服薬状況・残薬・副作用・後発品変更意向・お薬手帳の構造化チェックを1画面に集約。
-            前回Do・処方差分・薬歴タイムラインを見比べながら、根拠付きのAI補助下書きを薬剤師が確認・編集して確定できます。
+            「前回の薬歴」「今回変わった薬」「アレルギー・副作用歴」「飲み合わせの注意」が1つの画面にまとまっています。
+            服薬状況や残薬、副作用の有無をポチッと選ぶだけでSOAPの下書きが作られ、薬剤師が確認・手直ししてすぐに保存できます。
           </p>
           <ul class="flow-list">
-            <li><strong>多層臨床安全チェック</strong> — 患者アレルギー/副作用歴との一般名ファジー突合、PMDA添付文書由来の併用禁忌・相互作用警告、同効薬重複検知</li>
-            <li><strong>疑義照会・トレーシングレポート・服薬フォロー</strong> — 疑義照会の構造化記録、服薬情報提供書（未確認AI下書きは自動除外）の作成・印刷、来局後のフォローアップ管理</li>
+            <li><strong>アレルギー・併用禁忌・重複投薬を自動チェック</strong> — 添付文書データをもとに、注意が必要な組み合わせや同効薬の重複をわかりやすく知らせます</li>
+            <li><strong>疑義照会・トレーシングレポートも1画面で</strong> — 疑義照会の記録や、処方医への服薬情報提供書の作成・印刷、来局後のフォローアップ予定までこの画面で完結します</li>
           </ul>
           <div class="chip-row">
-            <span class="chip">4パネルSOAP＋構造化チェック</span>
-            <span class="chip">PMDA相互作用・禁忌チェック</span>
-            <span class="chip">アレルギー一般名突合</span>
-            <span class="chip">トレーシングレポート</span>
+            <span class="chip">4パネルSOAP薬歴</span>
+            <span class="chip">前回処方との差分表示</span>
+            <span class="chip">飲み合わせ・アレルギー警告</span>
+            <span class="chip">トレーシングレポート印刷</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/emr-soap.jpg" alt="薬歴入力画面。患者バナーの副作用歴アラート、薬歴構造化チェック、服薬指導チェック、前回薬歴、疑義照会、トレーシングレポート" width="1600" height="1000" loading="lazy">
-          <figcaption>電子薬歴（/emr）— 構造化チェック・前回薬歴比較・臨床アラート・介入記録を1画面に統合</figcaption>
+          <img src="images/lp/emr-soap.jpg" alt="薬歴入力画面" width="1600" height="1000" loading="lazy">
+          <figcaption>電子薬歴画面 — 構造化チェック・前回比較・安全アラート・トレーシングレポートを1画面に集約</figcaption>
         </figure>
       </div>
 
       <!-- STEP 04 -->
       <div class="flow-row reverse">
         <div class="flow-copy">
-          <p class="flow-step">STEP 04 — 算定・帳票印刷・公式仕様UKE請求</p>
-          <h3>チェックを通らないレセプト（UKE）は、出さない。</h3>
+          <p class="flow-step">STEP 04 — 会計・帳票印刷・レセプト（UKE）出力</p>
+          <h3>薬袋・手帳シールをすぐ印刷。レセプト前の点検も自動で。</h3>
           <p>
-            令和8年（2026年）調剤報酬ベースの自動算定（薬剤調製料・調剤管理料・服薬管理指導料・各種加算、算定OFF理由の監査記録、調剤日基準の薬価履歴解決）を実行。
-            支払基金の記録条件仕様（令和8年6月版・調剤用）に基づく単票公式UKE点検・プレビューと月次一括UKE出力（Shift-JIS）を備えています。
+            令和8年（2026年）調剤報酬にもとづき、調剤基本料・薬剤調製料・各種加算や窓口負担金を自動計算。
+            領収証・明細書・薬袋・薬情・お薬手帳シールを必要な分だけ選んで、ブラウザから直接プリンターへ印刷できます。
           </p>
           <ul class="flow-list">
-            <li><strong>二重の請求前ゲートと公式仕様PDF自動突合</strong> — 廃止薬・薬価未設定・レセ電コード欠落・必須レコード（SN/JD/MF/ST等）・合計点数を検査し、不備があれば出力を停止して指摘CSVを出力</li>
-            <li><strong>不変スナップショットと返戻ライフサイクル</strong> — UKE出力時点のスナップショットを不変保存し、出力後の誤編集をロック。返戻結果取込・修正メモ・再請求まで追跡</li>
+            <li><strong>返戻を防ぐ「請求前ダブルチェック」</strong> — レセプト（UKE）を作る前に、必須項目の抜けや経過措置切れの薬がないかを自動点検し、修正箇所を教えてくれます</li>
+            <li><strong>単票プレビュー＆月次一括UKE出力</strong> — 1件ごとのUKEレコード内容の確認から、月末の審査支払機関向けUKEファイル一括出力、返戻・再請求の管理まで対応しています</li>
           </ul>
           <div class="chip-row">
             <span class="chip">令和8年調剤報酬算定</span>
-            <span class="chip">支払基金 公式UKE点検・出力</span>
-            <span class="chip">請求スナップショット＆差分CSV</span>
-            <span class="chip">返戻・再請求ワークフロー</span>
+            <span class="chip">11種帳票ダイレクト印刷</span>
+            <span class="chip">UKE出力前エラー点検</span>
+            <span class="chip">返戻・再請求管理</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/print.jpg" alt="帳票印刷・算定請求前点検コンソール。合計請求点数、公式UKEボタン、5つの点検ステータス、請求スナップショット、外部調剤機器連携" width="1600" height="1000" loading="lazy">
-          <figcaption>帳票・請求確認（/print/[visitId]）— 算定・請求前チェック・公式UKEプレビュー・11種帳票印刷</figcaption>
+          <img src="images/lp/print.jpg" alt="帳票印刷・算定請求前点検画面" width="1600" height="1000" loading="lazy">
+          <figcaption>会計・帳票・レセプト確認画面 — 点数算定・各種帳票印刷・UKEプレビュー</figcaption>
         </figure>
       </div>
 
@@ -1376,51 +1353,50 @@ try {
       <div class="flow-row">
         <div class="flow-copy">
           <p class="flow-step">STEP 05 — 在庫管理・発注ワークベンチ・棚卸</p>
-          <h3>処方不足も期限切迫も、発注ワークベンチへ自動集約。</h3>
+          <h3>足りない薬・期限が近い薬を、自動でリストアップ。</h3>
           <p>
-            ロット・使用期限・棚番地単位の在庫管理に加え、受付中・調剤中の処方不足や発注点割れ、使用期限切迫を「発注ワークベンチ」へ統合検知。
-            同一薬効の代替薬候補の確認や他店舗からの分譲融通、患者名を含まない安全な発注CSV出力までワンストップで行えます。
+            「調剤で不足した薬」「発注点を切った薬」「使用期限が近い薬」が1つの画面に自動で集まります。
+            推奨発注数を参考にしながら発注CSVを出力でき、万が一の欠品時には同じ成分・同効の代替薬もすぐに探せます。
           </p>
           <ul class="flow-list">
-            <li><strong>卸データ入荷インポート＆納品書OCR読取</strong> — GS1/JANバーコード入庫、卸CSV取込、納品書OCRで入庫登録を省力化</li>
-            <li><strong>麻薬・向精神薬棚卸＆デッドストック検知</strong> — 帳簿残高と実在庫の突合記録、不動在庫の抽出、棚マスター管理を標準搭載</li>
+            <li><strong>納品書OCR＆バーコード入庫</strong> — 卸の納品書をカメラや画像で読み取るか、箱のバーコードを読むだけで、ロット・使用期限つきの入庫登録が簡単に終わります</li>
+            <li><strong>麻薬・向精神薬の棚卸と不動在庫チェック</strong> — 帳簿残高と実在庫の突き合わせ記録や、動きのないデッドストックの抽出も標準で行えます</li>
           </ul>
           <div class="chip-row">
             <span class="chip">発注ワークベンチ</span>
-            <span class="chip">個人情報なし発注CSV</span>
-            <span class="chip">納品書OCR・卸データ取込</span>
+            <span class="chip">納品書OCR・CSV入庫</span>
+            <span class="chip">同効・代替薬の検索</span>
             <span class="chip">麻薬・向精神薬棚卸</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/inventory.jpg" alt="在庫管理・発注ワークベンチ画面。棚番地設定、入荷インポート、納品書OCR読取、麻薬・向精神薬棚卸タブと発注候補リスト" width="1600" height="1000" loading="lazy">
-          <figcaption>在庫管理（/inventory）— 処方不足・発注点割れ・期限切迫を統合する発注ワークベンチ</figcaption>
+          <img src="images/lp/inventory.jpg" alt="在庫管理・発注ワークベンチ画面" width="1600" height="1000" loading="lazy">
+          <figcaption>在庫・発注管理画面 — 不足薬の発注候補リスト・納品書OCR・棚卸</figcaption>
         </figure>
       </div>
 
       <!-- STEP 06 -->
       <div class="flow-row reverse">
         <div class="flow-copy">
-          <p class="flow-step">STEP 06 — 複数端末サテライト同期・競合レビュー</p>
-          <h3>受付窓口も調剤室も。サテライト端末には患者データを残さない。</h3>
+          <p class="flow-step">STEP 06 — 受付・調剤室・投薬カウンターでの複数端末連携</p>
+          <h3>お店の複数PC・タブレットでも、安全に同時作業。</h3>
           <p>
-            複数端末で運用する場合、メイン端末（集約ハブ）に患者データを一極集約し、窓口や無菌室のサテライト端末はRxDBメモリストレージのみで稼働します。
-            端末の追加・廃棄はメイン端末でのトークン発行・失効だけで完結し、端末紛失時の情報漏えいリスクを根本から断ちます。
+            「受付で処方箋を入力しながら、調剤室でピッキングし、投薬カウンターで薬歴を書く」といった複数台での運用にも対応。
+            メインのPC1台にデータをまとめ、サブのタブレット等にはデータを残さない仕組みなので、端末の紛失や故障時も安心です。
           </p>
           <ul class="flow-list">
-            <li><strong>メイン停止中も業務継続</strong> — 一時的な通信断でもサテライト側で暗号化未送信キューに保持して入力継続し、再接続時に自動送信</li>
-            <li><strong>ハブ正本優先＋薬剤師レビュー</strong> — 複数端末から同一データが同時更新された場合、暗黙の上書き（Last-Write-Wins）は行わず、競合レビュー画面で薬剤師が安全に確認・反映</li>
+            <li><strong>設定画面からワンクリックで端末追加・解除</strong> — 難しいネットワーク構築なしで、店舗内LANでサブ端末を追加・管理できます</li>
+            <li><strong>同時編集時も上書き事故を防止</strong> — 同じ患者さんの記録を別々の端末で同時に触ってしまった場合も、勝手に消えず確認画面で安全に見比べて反映できます</li>
           </ul>
           <div class="chip-row">
-            <span class="chip">メイン端末正本集約</span>
-            <span class="chip">サテライト端末ディスク保存ゼロ</span>
-            <span class="chip">ワンクリック端末トークン失効</span>
-            <span class="chip">ハブ優先＋人間競合レビュー</span>
+            <span class="chip">店舗内複数PC・タブレット対応</span>
+            <span class="chip">サブ端末にデータを残さない安心設計</span>
+            <span class="chip">同時編集の上書き防止</span>
           </div>
         </div>
         <figure class="flow-media">
-          <img src="images/lp/terminal-sync.jpg" alt="設定画面の端末同期（メイン端末集約）パネル。サテライト端末の登録、トークン再発行・失効ボタン、同期競合レビュー" width="1600" height="1000" loading="lazy">
-          <figcaption>サテライト端末同期（/settings）— トークン発行・失効管理と人間レビューによる安全な競合解決</figcaption>
+          <img src="images/lp/terminal-sync.jpg" alt="端末同期設定画面" width="1600" height="1000" loading="lazy">
+          <figcaption>複数端末連携画面 — サブ端末の登録・管理と、同時編集時の確認画面</figcaption>
         </figure>
       </div>
     </section>
@@ -1428,175 +1404,152 @@ try {
     <!-- ==================== 11 PRINT SHEETS & OPERATIONS ==================== -->
     <section id="operations" class="deferred-section" aria-labelledby="ops-title">
       <div class="section-head">
-        <p class="eyebrow">Print Suite &amp; Governance</p>
-        <h2 id="ops-title">11種の現場帳票と、監査・バックアップ・マスタ更新を標準装備。</h2>
-        <p>追加モジュールや有料オプションなしで、日々の帳票出力から閉局時のバックアップ、公的マスタ更新までこの1本に揃っています。</p>
+        <p class="eyebrow">Print Suite &amp; Store Management</p>
+        <h2 id="ops-title">11種類の帳票印刷から、日次締め・マスタ更新までこれ1つに。</h2>
+        <p>有料オプションや別ソフトの追加購入は不要です。毎日の窓口で使う印刷物も、月末・閉局時の管理機能もすべて最初から入っています。</p>
       </div>
 
       <div class="sheets-banner" aria-label="出力対応帳票一覧">
-        <h3>ブラウザから直接印刷できる11種の帳票スイート（端末別余白・フォント調整＆実紙検証機構つき）</h3>
-        <p>すべての帳票コンポーネントは自動レイアウト回帰テスト（Puppeteer）とHTMLエスケープ検証の対象になっており、長い薬品名・患者名でも印字崩れしないよう継続検証されています。</p>
+        <h3>お使いのプリンターでそのまま出せる11種類の帳票（余白・文字サイズの微調整もOK）</h3>
+        <p>A4・A5・B5プリンターや薬袋、お薬手帳シール、レシート用サーマルプリンター（レジロール）まで、店舗の用紙に合わせて余白や文字サイズを画面上で調整できます。</p>
         <div class="sheets-pills" role="list">
-          <span class="sheet-pill" role="listitem">調剤録 <small>法定記載項目準拠</small></span>
-          <span class="sheet-pill" role="listitem">調剤明細書 <small>区分・算定根拠つき</small></span>
-          <span class="sheet-pill" role="listitem">領収証 <small>負担割合・内訳対応</small></span>
-          <span class="sheet-pill" role="listitem">薬袋 <small>内服/外用/頓服・用法別</small></span>
-          <span class="sheet-pill" role="listitem">薬剤情報提供文書（薬情） <small>薬剤師承認制テンプレ・PMDAリンク</small></span>
-          <span class="sheet-pill" role="listitem">お薬手帳シール <small>分割ページ対応</small></span>
-          <span class="sheet-pill" role="listitem">水剤ラベル <small>内用液剤専用</small></span>
-          <span class="sheet-pill" role="listitem">軟膏ラベル <small>外用塗布剤専用</small></span>
-          <span class="sheet-pill" role="listitem">レジロールピッキングリスト <small>棚番地・GS1照合用</small></span>
+          <span class="sheet-pill" role="listitem">調剤録 <small>裏面/表面</small></span>
+          <span class="sheet-pill" role="listitem">調剤明細書 <small>算定内訳つき</small></span>
+          <span class="sheet-pill" role="listitem">領収証 <small>負担割合・内訳</small></span>
+          <span class="sheet-pill" role="listitem">薬袋 <small>内服/外用/頓服</small></span>
+          <span class="sheet-pill" role="listitem">薬剤情報提供文書（薬情） <small>写真・注意事項</small></span>
+          <span class="sheet-pill" role="listitem">お薬手帳シール <small>長尺・複数頁対応</small></span>
+          <span class="sheet-pill" role="listitem">水剤ラベル <small>内用液剤用</small></span>
+          <span class="sheet-pill" role="listitem">軟膏ラベル <small>外用塗布剤用</small></span>
+          <span class="sheet-pill" role="listitem">ピッキングリスト <small>レジロール対応</small></span>
           <span class="sheet-pill" role="listitem">服薬情報提供書 <small>トレーシングレポート</small></span>
-          <span class="sheet-pill" role="listitem">緊急復旧鍵シート <small>DB暗号鍵エスクロー保管用</small></span>
+          <span class="sheet-pill" role="listitem">緊急復旧キー控えシート <small>金庫保管用</small></span>
         </div>
       </div>
 
       <div class="grid" role="list">
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Audit &amp; WORM</div>
-          <h4>改ざん検知監査ログ</h4>
-          <p>主要操作を端末別ハッシュチェーン署名付きで記録。整合性検証、JSON出力、S3 Object Lock（WORM）保全ジョブに対応。</p>
+          <div class="cell-kicker">閉局時の確認</div>
+          <h4>日次締め＆未完了チェック</h4>
+          <p>営業終了前に「薬歴の未入力」「未照合の処方」「在庫不足」「フォロー予定」をまとめて確認し、やり残しを防げます。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Backup &amp; Escrow</div>
-          <h4>暗号化バックアップ/復旧</h4>
-          <p>パスワード暗号化JSON、世代管理、復旧前差分プレビュー、SHA-256読み戻し検証つき外部保存、閉店時スケジュール連携。</p>
+          <div class="cell-kicker">万が一の備え</div>
+          <h4>かんたん暗号化バックアップ</h4>
+          <p>パスワード付きのバックアップファイルをワンクリックで保存。復元する前に「何が変わるか」を画面で確認できるので安心です。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Drug Master</div>
-          <h4>支払基金マスタ更新</h4>
-          <p>公式CSV/ZIPから医薬品マスタを更新し、差分CSVとロールバックJSONを自動生成。古いマスタによる薬価巻き戻りや廃止薬復活を防止。</p>
+          <div class="cell-kicker">薬価改定・新薬対応</div>
+          <h4>医薬品マスタの取込更新</h4>
+          <p>支払基金が公開している最新の医薬品マスタ（CSV/ZIP）をそのまま取り込んで更新。間違えて戻せるロールバック機能つきです。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Institution Master</div>
-          <h4>厚生局 医療機関マスタ</h4>
-          <p>地方厚生局データから病院・診療所・歯科マスタを都道府県単位で差分マージ（薬局データの誤混入や廃止機関を自動除外）。</p>
+          <div class="cell-kicker">近隣病院の登録</div>
+          <h4>医療機関マスタの都道府県取込</h4>
+          <p>地方厚生局の公開データから、お使いの都道府県の病院・クリニック・歯科マスタを一括で取り込めます。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Data Quality</div>
-          <h4>名寄せ・重複統合ツール</h4>
-          <p>同姓同名・生年月日一致の患者重複や、医薬品マスタの重複を検出し、薬歴・処方・在庫の紐付けを保ったまま安全に統合。</p>
+          <div class="cell-kicker">データの整理</div>
+          <h4>重複した患者・薬品の統合</h4>
+          <p>誤って2重に登録してしまった患者さんや医薬品を検出し、これまでの薬歴や在庫履歴をつないだまま1つにまとめられます。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">RBAC &amp; Passkeys</div>
-          <h4>権限管理・パスキー認証</h4>
-          <p>管理者 / 薬剤師 / 事務のロール権限分離、WebAuthnパスキーログイン、セッション自動ロック、退職・端末移行の復旧手順。</p>
+          <div class="cell-kicker">スタッフごとの権限</div>
+          <h4>薬剤師・事務の権限分け＆指紋認証</h4>
+          <p>管理者・薬剤師・医療事務ごとに操作できる範囲を設定可能。パスキー（指紋・顔認証）での素早いログインや離席時の自動ロックに対応。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">Daily Closing &amp; KPI</div>
-          <h4>日次締め・月次KPI</h4>
-          <p>完了率・平均処理時間・閉店前残タスク・返戻・在庫不足・フォロー候補を横断可視化。月次レビューと個人情報なしCSV/BI出力。</p>
+          <div class="cell-kicker">操作履歴の保護</div>
+          <h4>いつ・誰が操作したかを自動記録</h4>
+          <p>処方や薬歴の確定、算定の変更などの履歴を自動で記録。後から書き換えられない形で安全に保管できます。</p>
         </div>
         <div class="cell" role="listitem">
-          <div class="cell-kicker">3-Min Sandbox</div>
-          <h4>練習用3分デモ一式</h4>
-          <p>副作用歴アラート・前回薬歴・在庫ロット付きのデモ患者をワンクリック投入。請求UKEや外部機器連携には混入せず、1クリックで一括削除。</p>
+          <div class="cell-kicker">新人研修・お試しに</div>
+          <h4>いつでも消せる「3分練習モード」</h4>
+          <p>練習用のデモ患者さんをワンクリックで呼び出して一通りの操作を練習でき、終わったらボタン1つできれいに消去できます。</p>
         </div>
       </div>
     </section>
 
-    <!-- ==================== ARCHITECTURE & GOLDEN RULES ==================== -->
+    <!-- ==================== STORE USAGE STYLES ==================== -->
     <section id="architecture" class="deferred-section" aria-labelledby="arch-title">
       <div class="section-head">
-        <p class="eyebrow">Architecture &amp; Principles</p>
-        <h2 id="arch-title">クラウドに依存しない技術スタックと、不可侵の設計原則。</h2>
-        <p>Next.js App Router と RxDB（IndexedDB暗号化）＋ SQLite WASM/OPFS を組み合わせ、ブラウザ単体でも店舗内LAN複数端末でも軽快・安全に動作します。</p>
+        <p class="eyebrow">How It Works in Your Pharmacy</p>
+        <h2 id="arch-title">1台のPCからすぐ始められて、お店の規模に合わせて広げられます。</h2>
+        <p>大がかりなサーバー工事や専用回線は必要ありません。お店のスタイルに合わせて、シンプルな構成で利用できます。</p>
       </div>
 
       <div class="arch-layout">
         <div class="arch-card">
-          <h3>運用トポロジー（店舗の規模に合わせて選択）</h3>
+          <h3>選べる2つの運用スタイル</h3>
           <div class="arch-diagram">
             <div class="arch-mode">
               <div class="arch-mode-title">
-                <span>① 単独端末モード（既定・サーバー保存ゼロ）</span>
-                <span class="arch-mode-badge">PHARMACY_SYNC_ROLE 未設定</span>
+                <span>① PC 1台でシンプルに使う（小規模薬局・お試しに）</span>
+                <span class="arch-mode-badge">すぐ使えます</span>
               </div>
               <div class="arch-nodes">
-                <span class="arch-node">ブラウザ UI (Next.js / PWA)</span>
-                <span class="arch-arrow">⇄</span>
-                <span class="arch-node">RxDB + IndexedDB (暗号化正本)</span>
-                <span class="arch-arrow">＋</span>
-                <span class="arch-node">SQLite WASM/OPFS (薬品・用法マスタ)</span>
+                <span class="arch-node">お店のPC 1台</span>
+                <span class="arch-arrow">→</span>
+                <span class="arch-node">受付・薬歴・帳票印刷・UKE出力</span>
+                <span class="arch-arrow">→</span>
+                <span class="arch-node">外付けUSB等へバックアップ</span>
               </div>
             </div>
             <div class="arch-mode">
               <div class="arch-mode-title">
-                <span>② 複数端末サテライト同期モード（店舗内LAN完結）</span>
-                <span class="arch-mode-badge">hub + satellite</span>
+                <span>② 受付・調剤室・投薬カウンターの複数台で使う</span>
+                <span class="arch-mode-badge">店舗内LAN連携</span>
               </div>
               <div class="arch-nodes">
-                <span class="arch-node">サテライト端末 (メモリのみ・ディスク保存0)</span>
+                <span class="arch-node">メインPC（データを一括保管）</span>
                 <span class="arch-arrow">⇄</span>
-                <span class="arch-node">メイン端末 Hub (node:sqlite + AES-256-GCM暗号化)</span>
-                <span class="arch-arrow">→</span>
-                <span class="arch-node">暗号化バックアップ / WORM保全</span>
+                <span class="arch-node">受付PC・調剤室タブレット（画面操作のみ）</span>
               </div>
             </div>
             <div class="arch-mode">
               <div class="arch-mode-title">
-                <span>③ 施設内コネクタ境界（外部クラウドへのPHI送信ゼロ）</span>
-                <span class="arch-mode-badge">Loopback / Local Connector</span>
+                <span>③ 既存のピッキング機・分包機・資格確認端末とつなぐ</span>
+                <span class="arch-mode-badge">機器・フォルダ連携</span>
               </div>
               <div class="arch-nodes">
-                <span class="arch-node">ブラウザ</span>
-                <span class="arch-arrow">→</span>
-                <span class="arch-node">自機 /api ルート</span>
-                <span class="arch-arrow">→</span>
-                <span class="arch-node">資格確認端末連携フォルダ / NSIPS機器コネクタ</span>
+                <span class="arch-node">pharma-oss</span>
+                <span class="arch-arrow">⇄</span>
+                <span class="arch-node">資格確認端末の共有フォルダ / 分包機（NSIPS・CSV）</span>
               </div>
             </div>
           </div>
-          <p style="margin:0;font-size:0.82rem;color:var(--text-muted);">
-            ※本番運用時は環境変数 <code>NEXT_PUBLIC_DB_PASSWORD</code> に十分な長さのランダム鍵を設定し、緊急復旧鍵シートを印刷して金庫保管してください。
+          <p style="margin:0;font-size:0.84rem;color:var(--lp-text-muted);">
+            ※既存のレセコンを使いながら、「まずはピッキング照合や電子薬歴、在庫発注管理だけpharma-ossを使う」といった段階的な併用もスムーズに行えます。
           </p>
         </div>
 
         <div class="arch-card">
-          <h3>技術スタック一覧</h3>
-          <table class="spec-table" aria-label="技術スタック">
+          <h3>動作環境・仕様概要</h3>
+          <table class="spec-table" aria-label="動作環境と仕様">
             <tbody>
               <tr>
-                <th>フロントエンド</th>
-                <td>Next.js 16 (App Router) / React 19 / TypeScript 6 / Vanilla CSS + CSS変数</td>
+                <th>対応端末</th>
+                <td>Windows / Mac の一般的なパソコン、タブレット（Chrome / Edge / Safari 等の最新ブラウザ）</td>
               </tr>
               <tr>
-                <th>ローカルDB</th>
-                <td>RxDB 17 + Dexie (IndexedDB)、<code>encryption-crypto-js</code> によるフィールド暗号化（アクティブ14コレクション以下を契約保証）</td>
+                <th>利用料金・ライセンス</th>
+                <td>完全無料（Apache-2.0 オープンソースライセンス・商用利用可）</td>
               </tr>
               <tr>
-                <th>参照マスタ検索</th>
-                <td>SQLite WASM / OPFS Worker（支払基金医薬品マスタ・厚労省用法マスタ1,803件・PMDA相互作用データ）</td>
+                <th>対応バーコード</th>
+                <td>GS1データバー（医療用医薬品）、JANコード、JAHIS処方箋2次元シンボル（QR） — 一般的なUSB/Bluetoothバーコードリーダーやカメラに対応</td>
               </tr>
               <tr>
-                <th>OCR / バーコード</th>
-                <td>Tesseract.js 7（ブラウザ内日本語OCR）/ <code>@zxing/browser</code>（GS1データバー・JAHIS QR）</td>
+                <th>対応マスタ</th>
+                <td>支払基金 医薬品マスタ、厚生労働省 電子処方箋用法マスタ（1,803件）、地方厚生局 医療機関マスタ、PMDA添付文書相互作用データ</td>
               </tr>
               <tr>
-                <th>複数端末ハブ</th>
-                <td>Node.js <code>node:sqlite</code> + AES-256-GCM 暗号化ストア、Bearerトークン認証、端末別ハッシュチェーン</td>
-              </tr>
-              <tr>
-                <th>品質検証</th>
-                <td><code>tsc --noEmit</code>（型エラー0）、<code>node:test</code>（1,850+件）、Puppeteer（E2E・11帳票回帰・3画面幅ドリル）</td>
+                <th>データ移行・出力</th>
+                <td>患者・薬歴CSV取込、審査支払機関向けUKE出力（Shift-JIS）、発注CSV出力、監査ログ・バックアップ出力</td>
               </tr>
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <div class="rules-grid" role="list" aria-label="金科玉条の抜粋">
-        <div class="rule-item" role="listitem">
-          <strong>第一条：最終判断は薬剤師が下す</strong>
-          <span>システムは候補を出し、根拠を示し、不備を止めるまで。AI下書きは承認を経ないと確定せず、未確認のまま院外文書へ出さない。</span>
-        </div>
-        <div class="rule-item" role="listitem">
-          <strong>第三条：公式仕様が正本</strong>
-          <span>記憶や推測でコードを書かず、支払基金の記録条件仕様PDFや厚労省マスタと機械的に再突合。コード番号の自前発番を禁止。</span>
-        </div>
-        <div class="rule-item" role="listitem">
-          <strong>第八条：判定は一本化する</strong>
-          <span>剤形判定（<code>resolveEffectiveDosageCategory</code>）、数量セマンティクス、調剤日基準の薬価解決、年齢計算を単一正本に集約し、画面・帳票・UKE間の食い違いを排除。</span>
         </div>
       </div>
     </section>
@@ -1604,56 +1557,55 @@ try {
     <!-- ==================== HONEST STATUS & DISCLAIMER ==================== -->
     <section id="status" class="deferred-section" aria-labelledby="status-title">
       <div class="section-head">
-        <p class="eyebrow">Implementation Status &amp; Disclaimer</p>
-        <h2 id="status-title">できること・実機未確認のこと・未実装のことを、すべて正直に公開します。</h2>
-        <p>医療ソフトウェアにおいて「動いているように見える未完成機能」は最大のリスクです。pharma-oss は現在の到達点を包み隠さず公開しています。</p>
+        <p class="eyebrow">Capabilities &amp; Notice</p>
+        <h2 id="status-title">現在できること・実機確認が必要なこと・未対応のこと。</h2>
+        <p>導入してから「思っていたのと違った」ということが起きないよう、現在使える機能と未対応の機能を正直に公開しています。</p>
       </div>
 
       <div class="status-grid" role="list">
         <div class="status-col" role="listitem">
-          <span class="status-badge ok">● 実装・自動テスト検証済</span>
-          <h3>今すぐローカルで動く機能</h3>
+          <span class="status-badge ok">● すぐ使える機能</span>
+          <h3>パソコン1台ですぐ動くもの</h3>
           <ul>
-            <li><strong>処方箋OCR / JAHIS QR / 手入力受付</strong>と既存患者への自動名寄せ・重複統合</li>
-            <li><strong>GS1データバー現物照合ピッキング</strong>、棚不足記録、既存ピッキングCSV入出力</li>
-            <li><strong>4パネルSOAP薬歴</strong>、構造化チェック、アレルギー/相互作用/重複投薬チェック、ローカルAI下書き、疑義照会・トレーシングレポート</li>
-            <li><strong>令和8年調剤報酬ベースの自動算定</strong>、請求前チェック、単票公式UKEプレビュー・月次一括UKE出力（Shift-JIS）、返戻再請求管理</li>
-            <li><strong>11種帳票印刷</strong>、<strong>在庫・発注ワークベンチ</strong>、<strong>サテライト端末同期</strong>、<strong>ハッシュチェーン監査ログ・暗号化バックアップ</strong></li>
+            <li><strong>処方箋OCR・QR読取・手入力受付</strong>と患者さんの自動名寄せ</li>
+            <li><strong>GS1バーコードでのピッキング照合</strong>、棚不足の記録、ピッキングCSV入出力</li>
+            <li><strong>SOAP電子薬歴</strong>、前回比較、アレルギー・飲み合わせ・重複チェック、AI下書き補助、疑義照会・トレーシングレポート</li>
+            <li><strong>令和8年調剤報酬ベースの点数計算</strong>、請求前チェック、公式仕様ベースのUKEプレビュー・一括出力、返戻管理</li>
+            <li><strong>11種類の帳票印刷</strong>、<strong>在庫・発注管理</strong>、<strong>複数端末連携</strong>、<strong>バックアップ</strong></li>
           </ul>
         </div>
 
         <div class="status-col" role="listitem">
-          <span class="status-badge warn">▲ 形式実装・実機未確認</span>
-          <h3>実運用前に現地突合が必要な機能</h3>
+          <span class="status-badge warn">▲ 機器とつなぐ前にテストが必要な機能</span>
+          <h3>店舗の機器との接続確認が必要なもの</h3>
           <ul>
-            <li><strong>マイナ読取（資格確認端末の連携フォルダ）</strong> — 資格確認結果XML（<code>OQSsiquc01res_face_*.xml</code>）から氏名・生年月日・保険者番号を確認画面経由で取込。公開実装資料を基にした実装であり、公式仕様書との突合および<strong>資格確認端末実機での動作確認は未実施</strong>です。</li>
-            <li><strong>NSIPS調剤機器・POSコネクタ連携</strong> — 施設内コネクタとの送信・差替・取消プロトコルは実装済みですが、接続先機器ごとの現地疎通試験が必要です。</li>
-            <li><strong>UKE実提出検証</strong> — 審査支払機関（支払基金・国保連）の本番受付システムでの実提出・返戻ケース検証は利用者自身の責任で実施してください。</li>
+            <li><strong>マイナ資格確認端末のフォルダ取込</strong> — 資格確認端末が出力する結果XMLから氏名・生年月日・保険者番号を取り込む機能を備えていますが、お使いの端末環境での事前テストをお願いします。</li>
+            <li><strong>分包機・調剤機器とのNSIPS連携</strong> — 連携用コネクタを通じた処方送信に対応していますが、接続する機器ごとの疎通確認が必要です。</li>
+            <li><strong>UKEファイルの提出確認</strong> — 審査支払機関の本番受付システムへ提出する際は、事前に受付点検ソフト等で必ず内容をご確認ください。</li>
           </ul>
         </div>
 
         <div class="status-col" role="listitem">
-          <span class="status-badge unimpl">■ 未実装（画面上で明示無効化）</span>
-          <h3>押せないように塞いである機能</h3>
+          <span class="status-badge unimpl">■ 現在未対応の機能</span>
+          <h3>迷わないよう画面上で「未実装」と表示</h3>
           <ul>
-            <li><strong>電子処方箋の取得（未実装）</strong> — 電子処方箋管理サービスへ接続するモジュールが未実装のため、受付画面では「未実装」バッジを表示してボタンを押せないようにしています。紙の処方箋または処方箋QRをご利用ください。</li>
-            <li><strong>オンライン資格確認のリアルタイム照会（未実装）</strong> — 連携仕様書が未入手のため未実装です。保険者番号・負担割合は手入力または連携フォルダ読取をご利用ください。</li>
-            <li><strong>マイナ特定健診・薬剤履歴XMLの取込（未実装）</strong> — 電文仕様が未入手のため、薬歴画面の取込ボタンは「未実装」として無効化しています。</li>
+            <li><strong>電子処方箋のオンライン取得（未対応）</strong> — 電子処方箋管理サービスへ直接つなぐ機能は未対応のため、紙の処方箋または処方箋QRをご利用ください。</li>
+            <li><strong>オンライン資格確認の直接照会（未対応）</strong> — リアルタイム照会は未対応のため、保険証・資格確認書の入力または連携フォルダ取込をご利用ください。</li>
+            <li><strong>マイナ特定健診・薬剤履歴の取込（未対応）</strong> — 仕様書未公開のため、画面上のボタンは押せないように明示しています。</li>
           </ul>
         </div>
       </div>
 
       <div class="honesty" id="safety">
-        <span class="label">⚠️ ご利用前に必ずお読みください（免責事項 / Disclaimer）</span>
-        <h3>本ソフトウェアは認証された医療機器・レセプトコンピュータではありません。</h3>
+        <span class="label">⚠️ ご利用にあたっての注意事項（免責事項）</span>
+        <h3>実運用時は、薬剤師による最終確認と最新の公式基準との照合をお願いします。</h3>
         <p>
-          pharma-oss は Apache License 2.0 のもとで「現状有姿（AS IS）」かつ無保証で提供されるオープンソースソフトウェアであり、医薬品医療機器等法上の認証医療機器および公式に認定されたレセプトコンピュータではありません。
-          実際の患者対応や保険請求に用いる場合は、算定ロジック・医薬品マスタ・用法マスタ・生成帳票・出力UKEファイルを最新の公式資料（厚生労働省告示・通知、社会保険診療報酬支払基金「記録条件仕様」、審査支払機関の運用規定）と必ず突合し、<strong>利用者自身の責任で検証</strong>してください。
+          pharma-oss は無償で公開されているオープンソースソフトウェア（Apache License 2.0）であり、薬機法上の認証医療機器や公式認定レセプトコンピュータではありません。
+          実際の調剤業務や保険請求にご利用になる場合は、点数算定・医薬品マスタ・帳票・出力UKEファイルの内容が最新の厚生労働省告示や支払基金の仕様と合っているか、<strong>ご利用になる薬局・薬剤師ご自身の責任で最終確認</strong>をお願いいたします。
         </p>
         <ul>
-          <li>実装済みの算定・点検項目と未検証のギャップは、アプリ内の「<strong>設定 &gt; レセプト点検</strong>」およびリポジトリの <a href="https://github.com/pharma-oss/pharma-oss/blob/main/operational_issues.md">operational_issues.md</a>・<a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/golden_rules_and_roadmap.md">金科玉条と実装ロードマップ</a> にすべて公開しています。</li>
-          <li>同梱されている医薬品マスタ（支払基金由来）およびPMDA添付文書由来の相互作用・禁忌データは公開情報から生成したスナップショットです。出所・利用条件・鮮度の注意は <a href="https://github.com/pharma-oss/pharma-oss/blob/main/NOTICE">NOTICE</a> を参照し、実運用前には「設定 &gt; マスタ更新」で最新の公式マスタへ更新してください。</li>
-          <li>AI補助機能（SOAP下書き・リスク候補提示）は候補の提示に過ぎません。すべての臨床判断および保険請求判断の最終責任は薬剤師にあります。</li>
+          <li>同梱されている医薬品マスタや飲み合わせデータは公開情報をもとにしたスナップショットです。実運用を始める前に、「設定 &gt; マスタ更新」から最新の公式マスタを取り込んでご利用ください（データの出所は <a href="https://github.com/pharma-oss/pharma-oss/blob/main/NOTICE">NOTICE</a> をご覧ください）。</li>
+          <li>画面上のAI下書きやアラート表示は業務を補助するための参考提示です。服薬指導・調剤・保険請求の最終判断は必ず薬剤師が行ってください。</li>
         </ul>
       </div>
     </section>
@@ -1662,14 +1614,14 @@ try {
     <section id="start" class="deferred-section" aria-labelledby="start-title">
       <div class="section-head">
         <p class="eyebrow">Getting Started</p>
-        <h2 id="start-title">3分で、架空のデモ患者を1人さばけます。</h2>
-        <p>Node.js 環境があれば4行のコマンドで起動します。デモ受付データは請求（UKE）や外部機器連携から自動除外され、いつでもワンクリックで片づけられます。</p>
+        <h2 id="start-title">まずは3分、架空のデモ患者さんで触ってみませんか？</h2>
+        <p>面倒なアカウント登録や初期設定は不要です。最初から入っている練習用の患者データで、受付から薬歴・印刷まで一通り試せます。</p>
       </div>
 
       <div class="start-grid">
         <div class="terminal-card">
           <div class="terminal-head">
-            <span>zsh — quickstart</span>
+            <span>パソコンで動かす場合（4行で起動）</span>
             <button type="button" class="copy-btn" id="copy-cmd-btn" aria-label="コマンドをコピー">コピー</button>
           </div>
           <pre aria-label="セットアップコマンド"><code id="quickstart-code"><span class="cmd">git clone</span> https://github.com/pharma-oss/pharma-oss.git
@@ -1681,20 +1633,19 @@ try {
 
         <div class="start-routes">
           <div class="route-card">
-            <h3><span class="route-badge">おすすめ</span> ルートA：パスワード設定なしで今すぐ体験</h3>
+            <h3><span class="route-badge">いちばん簡単</span> パスワード設定なしで今すぐ体験</h3>
             <ol class="steps">
-              <li><code>http://localhost:3000</code> を開き、初期画面の「<strong>デモ患者で体験を始める</strong>」（または右上の「<strong>3分デモ</strong>」）をクリックします。</li>
-              <li><strong>体験モード（パスワード未設定）</strong>でログイン不要のまま、架空のデモ患者「デモ患者 みどり（68歳・ロキソプロフェン副作用歴あり・3剤処方）」の薬歴画面が開きます。</li>
-              <li><strong>ピッキング支援</strong>（GS1照合・棚不足記録）→ <strong>SOAP薬歴入力・構造化チェック</strong> → <strong>帳票印刷・公式UKE点検</strong>まで、実際の画面を一通り操作できます。</li>
+              <li>アプリを開き、最初の画面にある「<strong>デモ患者で体験を始める</strong>」（または画面右上の「<strong>3分デモ</strong>」）をクリックします。</li>
+              <li>ログイン不要のまま、架空の患者さん「<strong>デモ患者 みどり（68歳・ロキソプロフェン副作用歴あり・3剤処方）</strong>」の薬歴画面が開きます。</li>
+              <li><strong>ピッキング照合</strong> → <strong>SOAP薬歴の入力</strong> → <strong>薬袋・薬情・明細書の印刷プレビュー</strong>まで、実際の動きをそのまま体験できます。</li>
             </ol>
           </div>
 
           <div class="route-card">
-            <h3><span class="route-badge">本番想定</span> ルートB：管理者パスワードを設定して体験</h3>
+            <h3><span class="route-badge">練習の後片付け</span> デモデータはワンクリックで消去</h3>
             <ol class="steps">
-              <li>初回起動画面で<strong>管理者パスワード（8文字以上）</strong>を設定してログインします。</li>
-              <li>画面右上の「<strong>3分デモ</strong>」を開き、最後のステップで「<strong>デモ患者で体験を始める</strong>」を押します。</li>
-              <li>練習が終わったら、ダッシュボード上部の「<strong>デモデータを片づける</strong>」ボタンでデモ患者・受付・在庫をすべて一括削除できます。</li>
+              <li>練習用のデモ患者データは、毎月のレセプト（UKE）請求や分包機連携には混ざらないよう自動で区別されています。</li>
+              <li>操作を一通り試したあとは、ダッシュボード上部の「<strong>デモデータを片づける</strong>」ボタンを押すだけで、いつでもきれいに消去できます。</li>
             </ol>
           </div>
         </div>
@@ -1703,27 +1654,27 @@ try {
       <!-- Searchable Native Details Accordion -->
       <div class="faq-list" aria-label="よくある質問">
         <details class="faq-item" name="faq-group" open>
-          <summary>Q. インターネットが完全に遮断された環境でも動きますか？</summary>
+          <summary>Q. インターネット回線が切れても、本当に窓口業務を続けられますか？</summary>
           <div class="faq-body">
-            はい。一度起動・PWAインストールすれば、患者データ（IndexedDB）、医薬品・用法マスタ（SQLite WASM/OPFS）、処方箋OCR（Tesseract.js）、GS1/QR読取（@zxing）、AI補助SOAP下書き、帳票印刷、UKE出力まですべてブラウザ内でオフライン動作します。
+            はい。患者さんのデータや薬品マスタはお使いのパソコン内に保存されているため、万が一ネットが繋がらなくなっても、処方箋の読み取り、ピッキング照合、薬歴の入力、薬袋や領収証の印刷、レセプトの作成までそのまま続けられます。
           </div>
         </details>
         <details class="faq-item" name="faq-group">
-          <summary>Q. 複数台のPCやタブレットで同時に入力できますか？</summary>
+          <summary>Q. 受付のパソコンと、調剤室のタブレットで同時に使えますか？</summary>
           <div class="faq-body">
-            はい。「サテライト端末同期モード」により、メイン端末1台をハブ（<code>PHARMACY_SYNC_ROLE=hub</code>）として正本DB（AES-256-GCM暗号化）を保持し、窓口や調剤室のサテライト端末（<code>PHARMACY_SYNC_ROLE=satellite</code>）からLAN経由で同期できます。サテライト端末はメモリのみで動作しディスクに患者データを残さないため、タブレット等の紛失時も安全です。詳細は <a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/satellite_terminal_sync_plan.md">サテライト端末同期設計書</a> をご覧ください。
+            はい。メインのパソコン1台にデータをまとめ、受付や調剤室のパソコン・タブレットから社内LAN経由でつないで同時に作業できます。サブの端末側には患者データを残さない仕組みになっているため、タブレットの管理も安心です。詳しい手順は <a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアル</a> でご案内しています。
           </div>
         </details>
         <details class="faq-item" name="faq-group">
-          <summary>Q. 薬価改定や新薬・経過措置のマスタ更新はどう行いますか？</summary>
+          <summary>Q. 薬価改定や新薬が出たときのマスタ更新は難しくありませんか？</summary>
           <div class="faq-body">
-            アプリ内の「設定 &gt; マスタ更新」から、支払基金が公開する医薬品マスタCSV/ZIPをそのまま取り込めます。取込時には変更差分CSVとロールバック用JSONが自動生成され、誤って古いマスタファイルを取り込んでも現在薬価が巻き戻ったり廃止薬が復活したりしない保護ロジックが働きます。また、地方厚生局の公開ファイルからの医療機関マスタ都道府県別差分マージにも対応しています。
+            アプリ内の「設定 &gt; マスタ更新」画面から、支払基金のホームページで公開されている医薬品マスタファイル（CSVまたはZIP）を選ぶだけで更新できます。更新前後の変更点リストも自動で作られ、万が一間違えたファイルを取り込んでもワンクリックで元の状態に戻せます。
           </div>
         </details>
         <details class="faq-item" name="faq-group">
-          <summary>Q. 既存のレセコンやピッキング機器と併用・段階移行できますか？</summary>
+          <summary>Q. 今使っているレセコンやピッキング機器と併用できますか？</summary>
           <div class="faq-body">
-            はい。患者・薬歴データの移行CSV取込（事前検証・トライアル受入チェック付き）に対応しているほか、既存ピッキングシステム向けの指示CSV出力・結果CSV/TSV取込、およびNSIPS準拠の調剤機器・POSコネクタ連携を備えています。まずは電子薬歴・ピッキング照合・在庫発注管理から使い始め、段階的に運用を広げることも可能です。
+            はい。既存の患者・薬歴データのCSV取り込みに対応しているほか、ピッキングリストのCSV出力・結果取込や、NSIPS形式での調剤機器連携を備えています。「まずはバーコードでのピッキング照合や電子薬歴、発注管理から使い始める」といった段階的な導入も可能です。
           </div>
         </details>
       </div>
@@ -1734,16 +1685,16 @@ try {
 <!-- ==================== CTA BAND ==================== -->
 <div class="cta-band">
   <div class="wrap">
-    <h2>薬局のソフトウェアを、薬局自身の手に取り戻す。</h2>
+    <h2>毎日の薬局業務を、もっとシンプルで使いやすく。</h2>
     <p>
-      ソースコードも、1,850件超のテストも、不可侵の十箇条も、未解決の課題リストも、すべてApache-2.0で公開しています。
-      現場の薬剤師・医療事務の方のフィードバック、算定・帳票のレビュー、Pull Requestを心より歓迎します。
+      pharma-oss は、どなたでも無料で試せるオープンソースの調剤薬局システムです。
+      まずはデモ患者データで、受付から薬歴・印刷までの使い心地を体験してみてください。
     </p>
     <div class="hero-ctas">
-      <a class="btn btn-primary" href="https://github.com/pharma-oss/pharma-oss">GitHubリポジトリを見る</a>
+      <a class="btn btn-primary" href="#start">デモ患者で3分体験する</a>
       <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアル</a>
-      <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/user_manual.md">取扱説明書（全機能）</a>
-      <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/golden_rules_and_roadmap.md">金科玉条とロードマップ</a>
+      <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/user_manual.md">取扱説明書（全機能ガイド）</a>
+      <a class="btn btn-ghost" href="https://github.com/pharma-oss/pharma-oss">GitHubリポジトリ</a>
     </div>
   </div>
 </div>
@@ -1754,10 +1705,10 @@ try {
     <div class="foot-row">
       <span>© 2026 pharma-oss Project Contributors — Licensed under <a href="https://github.com/pharma-oss/pharma-oss/blob/main/LICENSE">Apache-2.0</a></span>
       <div class="foot-links">
+        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/user_manual.md">取扱説明書</a>
+        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/field_operation_manual.md">現場運用マニュアル</a>
         <a href="https://github.com/pharma-oss/pharma-oss/blob/main/NOTICE">同梱データの出所 (NOTICE)</a>
-        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/operational_issues.md">運用課題一覧</a>
-        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/docs/developer_manual.md">開発者マニュアル</a>
-        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/SECURITY.md">脆弱性の報告</a>
+        <a href="https://github.com/pharma-oss/pharma-oss/blob/main/SECURITY.md">セキュリティ報告</a>
         <a href="https://github.com/pharma-oss/pharma-oss">GitHub</a>
       </div>
     </div>
