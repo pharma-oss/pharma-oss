@@ -3,7 +3,10 @@ export interface PatientMatchCandidate {
   name: string;
   birthDate: string;
   insuranceInfo?: {
+    /** 患者登録では記号・番号、旧い受付では保険者番号が入っている */
     number?: string;
+    /** 保険者番号 */
+    provider?: string;
   };
   doc?: any;
 }
@@ -59,6 +62,13 @@ export function normalizeInsuranceNumber(value?: string): string {
   return toHalfWidth(value).replace(/[^\d]/g, '');
 }
 
+// 患者側の保険番号(保険者番号 provider と、旧い受付が入れていた number)のどちらかが一致するか
+function patientHasInsuranceNumber(patient: PatientMatchCandidate, normalizedInsuranceNumber: string): boolean {
+  if (!normalizedInsuranceNumber) return false;
+  return [patient.insuranceInfo?.number, patient.insuranceInfo?.provider]
+    .some((value) => normalizeInsuranceNumber(value) === normalizedInsuranceNumber);
+}
+
 export function findMatchingPatient<T extends PatientMatchCandidate>(
   candidates: T[],
   input: PatientMatchInput
@@ -77,8 +87,7 @@ export function findMatchingPatient<T extends PatientMatchCandidate>(
       return { patient, reason: 'birthdate_and_name' };
     }
 
-    const patientInsuranceNumber = normalizeInsuranceNumber(patient.insuranceInfo?.number);
-    if (normalizedInsuranceNumber && patientInsuranceNumber === normalizedInsuranceNumber) {
+    if (patientHasInsuranceNumber(patient, normalizedInsuranceNumber)) {
       return { patient, reason: 'insurance_and_name' };
     }
   }
@@ -137,7 +146,6 @@ export function buildPatientCandidateMatches<T extends PatientMatchCandidate>(
   for (const patient of candidates) {
     const reasons: PatientCandidateMatchReason[] = [];
     const patientName = normalizePatientName(patient.name);
-    const patientInsuranceNumber = normalizeInsuranceNumber(patient.insuranceInfo?.number);
 
     if (normalizedName && patientName === normalizedName) {
       addReason(reasons, 'exact_name');
@@ -149,7 +157,7 @@ export function buildPatientCandidateMatches<T extends PatientMatchCandidate>(
       addReason(reasons, 'birthdate');
     }
 
-    if (normalizedInsuranceNumber && patientInsuranceNumber === normalizedInsuranceNumber) {
+    if (patientHasInsuranceNumber(patient, normalizedInsuranceNumber)) {
       addReason(reasons, 'insurance_number');
     }
 

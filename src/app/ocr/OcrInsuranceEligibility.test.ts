@@ -5,8 +5,10 @@ import {
   filterReceptionEligibilityAlerts,
   buildCandidatePublicInsuranceSummary,
   getPatientCandidatePanelViewState,
+  getPatientRegistrationPrompt,
   PATIENT_CANDIDATES_EMPTY_NOTE,
   PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE,
+  PATIENT_CANDIDATES_PARTIAL_ONLY_NOTE,
   PATIENT_CANDIDATES_STALE_FETCH_ERROR_MESSAGE
 } from './helpers';
 
@@ -198,6 +200,34 @@ describe('OCR Reception Public Insurance & Eligibility helpers', () => {
           emptyNoteMessage: null
         }
       );
+    });
+  });
+  describe('getPatientRegistrationPrompt', () => {
+    const base = { candidateCount: 0, hasFetchError: false, hasQuery: true, hasOnlyPartialMatches: false };
+
+    it('検索したのに誰も該当しなければ、先に患者登録するよう案内する', () => {
+      assert.equal(getPatientRegistrationPrompt(base), PATIENT_CANDIDATES_EMPTY_NOTE);
+      assert.match(PATIENT_CANDIDATES_EMPTY_NOTE, /新規患者を登録/);
+    });
+
+    it('何も検索していないうちは案内しない', () => {
+      assert.equal(getPatientRegistrationPrompt({ ...base, hasQuery: false }), null);
+    });
+
+    it('該当した患者がみな一部の条件だけの一致なら、すべて一致する患者はいないと案内する', () => {
+      assert.equal(
+        getPatientRegistrationPrompt({ ...base, candidateCount: 2, hasOnlyPartialMatches: true }),
+        PATIENT_CANDIDATES_PARTIAL_ONLY_NOTE
+      );
+    });
+
+    it('すべての条件に一致する患者がいれば案内しない', () => {
+      assert.equal(getPatientRegistrationPrompt({ ...base, candidateCount: 1, hasOnlyPartialMatches: false }), null);
+    });
+
+    it('検索に失敗しているときは、見つからないのか分からないので案内しない', () => {
+      assert.equal(getPatientRegistrationPrompt({ ...base, hasFetchError: true }), null);
+      assert.equal(getPatientRegistrationPrompt({ ...base, candidateCount: 2, hasFetchError: true, hasOnlyPartialMatches: true }), null);
     });
   });
 });

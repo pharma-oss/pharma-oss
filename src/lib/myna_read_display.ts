@@ -132,6 +132,47 @@ export function pickReceptionInsuranceNumber(insuranceInfo?: MynaCardReaderResul
   return '';
 }
 
+/**
+ * 受付の「保険者番号」欄に入れた値を、患者マスターのどの項目へ書くか。
+ * 保険者番号の正しい置き場は provider(患者登録・薬歴の保険設定・レセプト出力と同じ)。
+ * 旧い受付は number に保険者番号を入れていたので、その形の患者(number が保険者番号らしく、provider が違う)は従来どおり number へ書く。
+ * 患者登録で入れた記号・番号(number)を、保険者番号で上書きしないための分け方。
+ * 受付欄の値が患者の登録値のままなら、何も書かない。
+ */
+export function buildReceptionInsuranceNumberPatch(
+  existing: Patient['insuranceInfo'] | undefined,
+  enteredInsuranceNumber: string
+): { provider?: string; number?: string } {
+  const entered = enteredInsuranceNumber.trim();
+  if (!entered) return {};
+  if (entered === pickReceptionInsuranceNumber(existing)) return {};
+  const isInsurerNumber = (value?: string) => !!value && /^\d{6,10}$/.test(value.trim());
+  if (!isInsurerNumber(existing?.provider) && isInsurerNumber(existing?.number)) return { number: entered };
+  return { provider: entered };
+}
+
+/** 受付欄の負担割合の初期値(3割) */
+export const DEFAULT_RECEPTION_BURDEN_RATIO = '30';
+
+/**
+ * 受付で患者を選んだときに、受付欄の「保険者番号」「負担割合」へ入れる値。
+ * 前に選んだ患者の保険者番号が残ったまま別の患者に保存されることがないよう、必ず選んだ患者の値に入れ替える
+ * (登録が無ければ空欄・3割)。直近のマイナ読取がこの患者本人のものなら、より新しいカードの値を使う。
+ * デモ読取(mock)は実値ではないので使わない。
+ */
+export function resolveReceptionInsuranceFields(
+  patient: Pick<Patient, 'name' | 'birthDate' | 'insuranceInfo'> & { kana?: string },
+  card?: MynaCardReaderResult | null
+): { insuranceNumber: string; burdenRatio: string } {
+  const cardIsThisPatient = !!card && card.readerSource !== 'mock' && checkMynaReadMatchesPatient(card, patient).matches;
+  const usableCard = cardIsThisPatient ? card : null;
+  const burdenRatio = usableCard?.insuranceInfo?.burdenRatio || patient.insuranceInfo?.burdenRatio;
+  return {
+    insuranceNumber: (usableCard && pickReceptionInsuranceNumber(usableCard.insuranceInfo)) || pickReceptionInsuranceNumber(patient.insuranceInfo),
+    burdenRatio: burdenRatio ? String(burdenRatio) : DEFAULT_RECEPTION_BURDEN_RATIO
+  };
+}
+
 // readerCheckedAt は UTC のISO文字列。画面には端末の時刻(日本時間)で見せないと、15時の受付が6時に見えてしまう
 function formatLocalDateTime(iso: string): string {
   const date = new Date(iso);
@@ -140,10 +181,10 @@ function formatLocalDateTime(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** 取り込む前に薬剤師が目で確認するための文面(患者の前で読み上げて照合できる項目だけ)。 */
-export function buildMynaReadConfirmationMessage(result: MynaCardReaderResult): string {
+/** 取り込む前に薬剤師が目で確認するための文面(患者の前で読み上げて照合できる項目だけ)。destination は入れ先の画面。 */
+export function buildMynaReadConfirmationMessage(result: MynaCardReaderResult, destination = '受付欄'): string {
   const lines = [
-    '次の内容を受付欄に入れます。目の前の患者のものか確認してください。',
+    `次の内容を${destination}に入れます。目の前の患者のものか確認してください。`,
     '',
     `氏名: ${result.name}${result.kana ? `（${result.kana}）` : ''}`,
     `生年月日: ${result.birthDate}`

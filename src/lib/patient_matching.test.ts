@@ -108,3 +108,30 @@ test('buildPatientCandidateMatches warns when insurance number matches but name 
   assert.ok(candidates.every((candidate) => candidate.reasons.includes('insurance_number')));
   assert.ok(candidates.every((candidate) => candidate.warning?.includes('保険番号は一致')));
 });
+
+test('insurance number matches both provider (保険者番号, set by patient registration) and number (set by the old reception)', () => {
+  const registered: Patient = {
+    patientId: 'p10',
+    name: '登録 一郎',
+    kana: '',
+    birthDate: '1975-05-05',
+    insuranceInfo: { provider: '06139999', number: '記号12 番号345', burdenRatio: 30 }
+  };
+  const legacy: Patient = {
+    patientId: 'p11',
+    name: '旧受付 二郎',
+    kana: '',
+    birthDate: '1976-06-06',
+    insuranceInfo: { number: '87654321', burdenRatio: 30 }
+  };
+  const both = [registered, legacy];
+
+  // 氏名が一致し、保険者番号(provider)も一致 -> 生年月日が無くても同一人物として扱える
+  assert.strictEqual(findMatchingPatient(both, { name: '登録一郎', insuranceNumber: '06139999' })?.patient.patientId, 'p10');
+  assert.strictEqual(findMatchingPatient(both, { name: '旧受付二郎', insuranceNumber: '87654321' })?.patient.patientId, 'p11');
+  assert.strictEqual(findMatchingPatient(both, { name: '登録一郎', insuranceNumber: '99999999' }), undefined);
+
+  const candidates = buildPatientCandidateMatches(both, { name: '', insuranceNumber: '06139999' });
+  assert.deepStrictEqual(candidates.map((candidate) => candidate.patient.patientId), ['p10']);
+  assert.ok(candidates[0].reasons.includes('insurance_number'));
+});

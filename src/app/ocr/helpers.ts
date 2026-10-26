@@ -337,7 +337,7 @@ export function buildCandidatePublicInsuranceSummary(
 }
 
 export const PATIENT_CANDIDATES_EMPTY_NOTE =
-  '一致する患者がいない場合は、名前・生年月日・保険者番号だけで簡易登録して取り揃えを開始します。';
+  '該当する患者がいません。初めての方は、先に「新規患者を登録」から患者登録をしてください。';
 
 export const PATIENT_CANDIDATES_FETCH_ERROR_MESSAGE =
   '患者候補の検索に失敗したため、既存患者との照合ができていません。再読み込みして確認してください。';
@@ -387,6 +387,26 @@ export function getPatientCandidatePanelViewState(params: {
     errorBannerMessage: null,
     emptyNoteMessage: PATIENT_CANDIDATES_EMPTY_NOTE
   };
+}
+
+export const PATIENT_CANDIDATES_PARTIAL_ONLY_NOTE =
+  '入力した条件すべてに一致する患者はいません。初めての方は、先に「新規患者を登録」から患者登録をしてください。';
+
+/**
+ * 検索しても探している患者が見つからないときに、新規患者の登録へ案内する文言。案内が要らないときは null。
+ * - 検索したのに誰も該当しない
+ * - 該当した患者がみな「一部の条件だけ」の一致(別人のおそれがあり、選ぶより新規登録が正しいことがある)
+ * 検索に失敗しているときは、見つからないのか調べられなかったのか分からないので案内しない。
+ */
+export function getPatientRegistrationPrompt(params: {
+  candidateCount: number;
+  hasFetchError: boolean;
+  hasQuery: boolean;
+  hasOnlyPartialMatches: boolean;
+}): string | null {
+  if (params.hasFetchError) return null;
+  if (params.candidateCount === 0) return params.hasQuery ? PATIENT_CANDIDATES_EMPTY_NOTE : null;
+  return params.hasOnlyPartialMatches ? PATIENT_CANDIDATES_PARTIAL_ONLY_NOTE : null;
 }
 
 export const PREVIOUS_DO_LOAD_ERROR_DISABLED_REASON =

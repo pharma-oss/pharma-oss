@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import type { Patient, Alert } from '@/db/types';
 import type { EligibilityStatus } from '@/app/ocr/helpers';
@@ -6,19 +6,24 @@ import {
   normalizeOnlineEligibilityResponse,
   type NormalizedOnlineEligibilityResult
 } from '@/lib/online_eligibility';
-import {
-  findMatchingPatient,
-  buildPatientCandidateMatches,
-  normalizeInsuranceNumber,
-  normalizePatientName,
-  type PatientCandidateMatch
-} from '@/lib/patient_matching';
+import { findMatchingPatient, normalizeInsuranceNumber } from '@/lib/patient_matching';
+import { buildPatientSearchQuery, searchPatients, type PatientSearchMatch } from '@/lib/patient_search';
+import { parseFlexibleDateInput } from '@/lib/date_input';
 import type {
   PatientMergePlan,
   PatientMergeExecutionPlan
 } from '@/lib/patient_merge';
 import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
-import { buildMynaReadConfirmationMessage, pickReceptionInsuranceNumber } from '@/lib/myna_read_display';
+import {
+  buildMynaReadConfirmationMessage,
+  DEFAULT_RECEPTION_BURDEN_RATIO,
+  pickReceptionInsuranceNumber,
+  resolveReceptionInsuranceFields
+} from '@/lib/myna_read_display';
+import { fetchMynaCardRead } from '@/lib/myna_read_client';
+
+/** 検索結果に出す患者の上限 */
+const PATIENT_SEARCH_RESULT_LIMIT = 8;
 
 export type PatientCandidate = Patient & { doc?: any };
 export type PatientMergeReview = {
@@ -29,6 +34,10 @@ export type PatientMergeReview = {
 
 interface UseOcrPatientEligibilityOptions {
   db: any;
+  /** 受付の検索欄に打った文字。氏名・フリガナ・生年月日(半角8桁など)を空白で区切って絞り込む。 */
+  patientSearchQuery: string;
+  setPatientSearchQuery: (query: string) => void;
+  /** 処方箋(OCR・QR・電子処方箋)やマイナ読取で分かった患者。一致する患者がいれば自動で選ぶ。選んだ後は、選んだ患者の値が入る。 */
   patientName: string;
   patientBirthDate: string;
   insuranceNumber: string;
@@ -41,6 +50,8 @@ interface UseOcrPatientEligibilityOptions {
 
 export function useOcrPatientEligibility({
   db,
+  patientSearchQuery,
+  setPatientSearchQuery,
   patientName,
   patientBirthDate,
   insuranceNumber,
@@ -50,9 +61,11 @@ export function useOcrPatientEligibility({
   setInsuranceNumber,
   setBurdenRatio
 }: UseOcrPatientEligibilityOptions) {
-  const [patientCandidates, setPatientCandidates] = useState<PatientCandidate[]>([]);
+  const [allPatients, setAllPatients] = useState<PatientCandidate[]>([]);
   const [hasPatientCandidatesFetchError, setHasPatientCandidatesFetchError] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  // 直近のマイナ読取の結果。患者が見つからないときの新規登録で、カナ・性別・記号番号まで引き継ぐ。
+  const [mynaReadResult, setMynaReadResult] = useState<MynaCardReaderResult | null>(null);
   const [patientMergeReview, setPatientMergeReview] = useState<PatientMergeReview | null>(null);
   const [isLoadingPatientMergeReview, setIsLoadingPatientMergeReview] = useState(false);
   const [isApplyingPatientMerge, setIsApplyingPatientMerge] = useState(false);
@@ -65,55 +78,52 @@ export function useOcrPatientEligibility({
   const [eligibilityMessage, setEligibilityMessage] = useState('');
   const [eligibilityResult, setEligibilityResult] = useState<NormalizedOnlineEligibilityResult | null>(null);
 
-  // 患者候補の自動検索
+  // 患者マスターを購読する。端末内の全患者を持っておき、検索は入力のたびに端末内で絞る
+  // (登録直後の患者や、同期で届いた患者もすぐ検索に出る)。
   useEffect(() => {
+    if (!db) return;
     let isMounted = true;
-    const loadCandidates = async () => {
-      if (!db || (!patientName && !patientBirthDate && !insuranceNumber)) {
-        setPatientCandidates([]);
-        setSelectedPatientId(null);
-        setHasPatientCandidatesFetchError(false);
-        return;
-      }
-
-      setHasPatientCandidatesFetchError(false);
-      try {
-        const patientDocs = await db.patients.find().exec();
-        const candidates = patientDocs.map((patientDoc: any) => ({
-          ...patientDoc.toJSON(),
-          doc: patientDoc
-        })) as PatientCandidate[];
-        const candidateMatches = buildPatientCandidateMatches(candidates, {
-          name: patientName,
-          birthDate: patientBirthDate,
-          insuranceNumber
-        }, 6);
-        const directMatch = findMatchingPatient(candidates, {
-          name: patientName,
-          birthDate: patientBirthDate,
-          insuranceNumber
-        });
-        const filtered = candidateMatches.map((match: PatientCandidateMatch<PatientCandidate>) => match.patient);
-
-        if (!isMounted) return;
-        setPatientCandidates(filtered);
-        setSelectedPatientId((current) => {
-          if (current && filtered.some((patient: PatientCandidate) => patient.patientId === current)) return current;
-          return directMatch?.patient.patientId || null;
-        });
-        setHasPatientCandidatesFetchError(false);
-      } catch (error) {
-        console.error('Failed to load patient candidates:', error);
-        if (isMounted) {
-          setHasPatientCandidatesFetchError(true);
-          toast.error('患者候補の検索に失敗しました。');
+    let subscription: { unsubscribe: () => void } | undefined;
+    try {
+      subscription = db.patients.find().$.subscribe({
+        next: (patientDocs: any[]) => {
+          if (!isMounted) return;
+          setAllPatients(patientDocs.map((patientDoc: any) => ({
+            ...patientDoc.toJSON(),
+            doc: patientDoc
+          })) as PatientCandidate[]);
+          setHasPatientCandidatesFetchError(false);
+        },
+        error: (error: unknown) => {
+          console.error('Failed to load patient candidates:', error);
+          if (isMounted) {
+            setHasPatientCandidatesFetchError(true);
+            toast.error('患者候補の検索に失敗しました。');
+          }
         }
-      }
+      });
+    } catch (error) {
+      console.error('Failed to load patient candidates:', error);
+      setHasPatientCandidatesFetchError(true);
+      toast.error('患者候補の検索に失敗しました。');
+    }
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
     };
+  }, [db]);
 
-    loadCandidates();
-    return () => { isMounted = false; };
-  }, [db, patientName, patientBirthDate, insuranceNumber]);
+  // 検索欄の文字に当てはまる患者(全部に当てはまる患者がいなければ、一部だけ当てはまる患者)
+  const patientMatches = useMemo<PatientSearchMatch<PatientCandidate>[]>(
+    () => searchPatients(allPatients, patientSearchQuery, PATIENT_SEARCH_RESULT_LIMIT),
+    [allPatients, patientSearchQuery]
+  );
+  const patientCandidates = useMemo(() => patientMatches.map((match) => match.patient), [patientMatches]);
+  // 選んだ患者は、検索欄を書き換えても、候補から外れても、最新の登録内容で持ち続ける
+  const selectedPatient = useMemo(
+    () => (selectedPatientId ? allPatients.find((patient) => patient.patientId === selectedPatientId) : undefined),
+    [allPatients, selectedPatientId]
+  );
 
   // 選択中患者のアラート取得
   useEffect(() => {
@@ -149,18 +159,54 @@ export function useOcrPatientEligibility({
     return () => { isMounted = false; };
   }, [db, selectedPatientId]);
 
-  // マイナ保険証読取
+  // 患者を選ぶ。氏名・生年月日・保険者番号・負担割合を、選んだ患者の登録内容に入れ替える
+  // (前に選んだ患者の保険者番号が残ったまま、別の患者に保存されることがないように)。
+  // 直近のマイナ読取がこの患者本人のものなら、より新しいカードの保険者番号・負担割合を使う。
+  const selectPatient = useCallback((patient: PatientCandidate) => {
+    const insuranceFields = resolveReceptionInsuranceFields(patient, mynaReadResult);
+    setSelectedPatientId(patient.patientId);
+    setPatientName(patient.name);
+    setPatientBirthDate(patient.birthDate);
+    setInsuranceNumber(insuranceFields.insuranceNumber);
+    setBurdenRatio(insuranceFields.burdenRatio);
+    setEligibilityStatus('unchecked');
+    setEligibilityResult(null);
+  }, [mynaReadResult, setBurdenRatio, setInsuranceNumber, setPatientBirthDate, setPatientName]);
+
+  // 処方箋・QR・マイナ読取で氏名と生年月日(または保険者番号)が分かり、その人が登録済みなら自動で選ぶ。
+  // 手で選んだ患者は上書きしない。
+  useEffect(() => {
+    if (selectedPatientId || !patientName.trim()) return;
+    const directMatch = findMatchingPatient(allPatients, {
+      name: patientName,
+      birthDate: patientBirthDate,
+      insuranceNumber
+    });
+    if (directMatch) selectPatient(directMatch.patient);
+  }, [allPatients, insuranceNumber, patientBirthDate, patientName, selectPatient, selectedPatientId]);
+
+  // 選び直す。選んだ患者と、受付欄・検索欄の患者の値を空にする。
+  const clearSelectedPatient = useCallback(() => {
+    setSelectedPatientId(null);
+    setPatientName('');
+    setPatientBirthDate('');
+    setInsuranceNumber('');
+    setBurdenRatio(DEFAULT_RECEPTION_BURDEN_RATIO);
+    setPatientSearchQuery('');
+    setMynaReadResult(null);
+    setMynaMessage('');
+    setEligibilityStatus('unchecked');
+    setEligibilityResult(null);
+    setPatientMergeReview(null);
+    setPatientMergeMessage('');
+  }, [setBurdenRatio, setInsuranceNumber, setPatientBirthDate, setPatientName, setPatientSearchQuery]);
+
+  // マイナ保険証読取。読み取った氏名と生年月日で患者を探す(登録済みなら自動で選ぶ。いなければ新規登録へ)。
   const handleMynaRead = useCallback(async () => {
     setIsReadingMyna(true);
     setMynaMessage('');
     try {
-      const response = await fetch('/api/myna/read');
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload) {
-        // サーバーの説明(フォルダが空・古い結果・ファイルが読めない等)をそのまま見せる
-        throw new Error(typeof payload?.message === 'string' && payload.message ? payload.message : 'マイナ読取に失敗しました。');
-      }
-      const data = payload as MynaCardReaderResult;
+      const data = await fetchMynaCardRead();
 
       // 直近に資格確認した人の結果を読むので、反映する前に、目の前の患者のものかを人が確かめる
       if (data.readerSource !== 'mock' && !window.confirm(buildMynaReadConfirmationMessage(data))) {
@@ -168,14 +214,17 @@ export function useOcrPatientEligibility({
         return;
       }
 
+      const birthDate = parseFlexibleDateInput(data.birthDate) || data.birthDate || '';
+      setMynaReadResult(data);
+      setSelectedPatientId(null);
       setPatientName(data.name || '');
-      setPatientBirthDate(data.birthDate || '');
+      setPatientBirthDate(birthDate);
+      setPatientSearchQuery(buildPatientSearchQuery({ name: data.name, birthDate }));
       // 受付欄の「保険者番号」には保険者番号(数字)を入れる。記号・番号は入れない
       setInsuranceNumber(pickReceptionInsuranceNumber(data.insuranceInfo));
       if (data.insuranceInfo?.burdenRatio) {
         setBurdenRatio(String(data.insuranceInfo.burdenRatio));
       }
-      setSelectedPatientId(null);
       setEligibilityStatus('unchecked');
       setEligibilityResult(null);
       setMynaMessage(data.readerMessage || 'マイナ読取内容を反映しました。');
@@ -188,7 +237,7 @@ export function useOcrPatientEligibility({
     } finally {
       setIsReadingMyna(false);
     }
-  }, [setBurdenRatio, setInsuranceNumber, setPatientBirthDate, setPatientName]);
+  }, [setBurdenRatio, setInsuranceNumber, setPatientBirthDate, setPatientName, setPatientSearchQuery]);
 
   // オンライン資格確認
   const handleEligibilityCheck = useCallback(async () => {
@@ -230,12 +279,16 @@ export function useOcrPatientEligibility({
   }, [burdenRatio, insuranceNumber, patientBirthDate, patientName, setBurdenRatio]);
 
   return {
+    patientMatches,
     patientCandidates,
-    setPatientCandidates,
     hasPatientCandidatesFetchError,
-    setHasPatientCandidatesFetchError,
     selectedPatientId,
     setSelectedPatientId,
+    selectedPatient,
+    selectPatient,
+    clearSelectedPatient,
+    mynaReadResult,
+    setMynaReadResult,
     patientMergeReview,
     setPatientMergeReview,
     isLoadingPatientMergeReview,
