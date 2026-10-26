@@ -64,8 +64,28 @@ describe('SettingsMedicationInfoTemplate contracts and pure helpers', () => {
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PatientMedicationInfoTemplate } from '@/db/types';
+import {
+  findOpeningTag,
+  listDisabledOpeningTags,
+  stripStyleBlocks
+} from '@/lib/test_support/html_disabled_tags';
 
-function createMockMedicationInfoTemplateProps(overrides: Record<string, unknown> = {}) {
+type MedicationInfoTemplateSettingsTabProps = React.ComponentProps<
+  typeof MedicationInfoTemplateSettingsTab
+>;
+
+const DISABLED_ATTR_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
+const ARIA_DISABLED_ATTR_PATTERN = /\saria-disabled="true"(?=[\s/>]|$)/;
+
+function listAriaDisabledOpeningTags(html: string): string[] {
+  const stripped = stripStyleBlocks(html);
+  const matches = stripped.match(/<[a-zA-Z0-9:-]+\b[^>]*>/g) || [];
+  return matches.filter((tag) => ARIA_DISABLED_ATTR_PATTERN.test(tag));
+}
+
+function createMockMedicationInfoTemplateProps(
+  overrides: Partial<MedicationInfoTemplateSettingsTabProps> = {}
+): MedicationInfoTemplateSettingsTabProps {
   const emptyForm = createEmptyMedicationInfoTemplateForm();
   return {
     invalidApprovedMedicationInfoTemplates: [],
@@ -105,10 +125,49 @@ function createMockMedicationInfoTemplateProps(overrides: Record<string, unknown
   };
 }
 
+interface MedicationInfoControlSpec {
+  name: string;
+  kind: 'disabled' | 'aria-disabled';
+  getOpeningTag: (html: string) => string;
+}
+
+const MEDICATION_INFO_CONTROL_SPECS: readonly MedicationInfoControlSpec[] = [
+  {
+    name: 'CSV書出ボタン (L264, medication-info-template-csv-export)',
+    kind: 'disabled',
+    getOpeningTag: (html) =>
+      findOpeningTag(html, 'data-testid="medication-info-template-csv-export"', 'button')
+  },
+  {
+    name: 'CSV下書き取込ラベル (L272, aria-disabled)',
+    kind: 'aria-disabled',
+    getOpeningTag: (html) =>
+      findOpeningTag(html, 'data-testid="medication-info-template-csv-input"', 'label')
+  },
+  {
+    name: 'CSV下書き取込ファイル入力 (L283, medication-info-template-csv-input)',
+    kind: 'disabled',
+    getOpeningTag: (html) =>
+      findOpeningTag(html, 'data-testid="medication-info-template-csv-input"', 'input')
+  },
+  {
+    name: '副作用/注意案一括反映ボタン (L301, medication-info-template-safety-draft)',
+    kind: 'disabled',
+    getOpeningTag: (html) =>
+      findOpeningTag(html, 'data-testid="medication-info-template-safety-draft"', 'button')
+  },
+  {
+    name: '注意案CSV出力ボタン (L313, medication-info-template-safety-draft-csv-export)',
+    kind: 'disabled',
+    getOpeningTag: (html) =>
+      findOpeningTag(html, 'data-testid="medication-info-template-safety-draft-csv-export"', 'button')
+  }
+];
+
 describe('MedicationInfoTemplateSettingsTab renderToStaticMarkup contracts', () => {
   it('renders header, filter buttons, and empty state when template list is empty', () => {
     const props = createMockMedicationInfoTemplateProps();
-    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props));
 
     assert.ok(html.includes('<h2>薬情テンプレ承認</h2>'), 'Should render tab h2 title');
     assert.ok(html.includes('data-testid="medication-info-template-section"'), 'Should render section testid');
@@ -141,7 +200,7 @@ describe('MedicationInfoTemplateSettingsTab renderToStaticMarkup contracts', () 
       selectedMedicationInfoTemplateId: 'pmit_DRUG-100_v1',
       selectedMedicationInfoTemplate: mockTemplate
     });
-    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props));
 
     assert.ok(html.includes('カロナール錠300 300mg'), 'Should render drug name');
     assert.ok(html.includes('620000100'), 'Should render drug code');
@@ -159,26 +218,136 @@ describe('MedicationInfoTemplateSettingsTab renderToStaticMarkup contracts', () 
       status: 'approved',
       createdAt: '2026-10-01T10:00:00Z',
       updatedAt: '2026-10-01T10:00:00Z'
-      // missing approvedAt and reviewerId -> invalid approved
     };
 
     const props = createMockMedicationInfoTemplateProps({
       invalidApprovedMedicationInfoTemplates: [invalidTemplate]
     });
-    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props));
 
     assert.ok(html.includes('data-testid="medication-info-invalid-approved-alert"'), 'Should render alert container');
     assert.ok(html.includes('承認条件を満たさず印刷に使われないテンプレが1件あります。'), 'Should render warning message with count');
   });
 
-  it('disables CSV buttons when canManageFacility is false', () => {
-    const props = createMockMedicationInfoTemplateProps({
+  it('keeps medication info template management controls disabled only when canManageFacility is false', () => {
+    const deniedProps = createMockMedicationInfoTemplateProps({
       canManageFacility: false
     });
-    const html = renderToStaticMarkup(React.createElement(MedicationInfoTemplateSettingsTab, props as any));
+    const deniedHtml = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, deniedProps)
+    );
 
-    assert.ok(/<button(?=[^>]*data-testid="medication-info-template-csv-export")(?=[^>]*disabled)[^>]*>/.test(html), 'CSV export button should be disabled');
-    assert.ok(/<input(?=[^>]*data-testid="medication-info-template-csv-input")(?=[^>]*disabled)[^>]*>/.test(html), 'CSV file input should be disabled');
+    const disabledDenied = listDisabledOpeningTags(deniedHtml);
+    assert.equal(
+      disabledDenied.length,
+      4,
+      `When canManageFacility is false, exactly 4 disabled="" form control tags must be present:\n${disabledDenied.join('\n')}`
+    );
+
+    const ariaDisabledDenied = listAriaDisabledOpeningTags(deniedHtml);
+    assert.equal(
+      ariaDisabledDenied.length,
+      1,
+      `When canManageFacility is false, exactly 1 aria-disabled="true" tag must be present:\n${ariaDisabledDenied.join('\n')}`
+    );
+
+    const permittedProps = createMockMedicationInfoTemplateProps({
+      canManageFacility: true
+    });
+    const permittedHtml = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, permittedProps)
+    );
+
+    const disabledPermitted = listDisabledOpeningTags(permittedHtml);
+    assert.equal(
+      disabledPermitted.length,
+      0,
+      `When canManageFacility is true and state is ready, 0 disabled="" tags must be present:\n${disabledPermitted.join('\n')}`
+    );
+
+    const ariaDisabledPermitted = listAriaDisabledOpeningTags(permittedHtml);
+    assert.equal(
+      ariaDisabledPermitted.length,
+      0,
+      `When canManageFacility is true and state is ready, 0 aria-disabled="true" tags must be present:\n${ariaDisabledPermitted.join('\n')}`
+    );
+
+    const deniedExtractedTags = MEDICATION_INFO_CONTROL_SPECS.map((spec) => ({
+      name: spec.name,
+      kind: spec.kind,
+      tag: spec.getOpeningTag(deniedHtml)
+    }));
+    const permittedExtractedTags = MEDICATION_INFO_CONTROL_SPECS.map((spec) => ({
+      name: spec.name,
+      kind: spec.kind,
+      tag: spec.getOpeningTag(permittedHtml)
+    }));
+
+    assert.equal(deniedExtractedTags.length, 5);
+    assert.equal(permittedExtractedTags.length, 5);
+
+    const checkDisabled = (tag: string, kind: MedicationInfoControlSpec['kind']): boolean => {
+      if (kind === 'disabled') return DISABLED_ATTR_PATTERN.test(tag);
+      return ARIA_DISABLED_ATTR_PATTERN.test(tag);
+    };
+
+    const deniedTagsDiagnostic = deniedExtractedTags
+      .map((item) => `[${item.kind}] ${item.tag}`)
+      .join('\n');
+    for (const item of deniedExtractedTags) {
+      assert.ok(
+        checkDisabled(item.tag, item.kind),
+        `Expected "${item.name}" to have ${item.kind} when canManageFacility is false:\n${item.tag}\nAll extracted tags:\n${deniedTagsDiagnostic}`
+      );
+    }
+
+    const permittedTagsDiagnostic = permittedExtractedTags
+      .map((item) => `[${item.kind}] ${item.tag}`)
+      .join('\n');
+    for (const item of permittedExtractedTags) {
+      assert.ok(
+        !checkDisabled(item.tag, item.kind),
+        `Expected "${item.name}" not to have ${item.kind} when canManageFacility is true:\n${item.tag}\nAll extracted tags:\n${permittedTagsDiagnostic}`
+      );
+    }
+  });
+
+  it('keeps safety draft buttons disabled during background processing even when permitted', () => {
+    const buildingProps = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      isBuildingMedicationInfoSafetyDraft: true
+    });
+    const buildingHtml = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, buildingProps)
+    );
+
+    const draftApplyButtonTag = findOpeningTag(
+      buildingHtml,
+      'data-testid="medication-info-template-safety-draft"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(draftApplyButtonTag),
+      `Expected safety draft apply button to be disabled when building draft:\n${draftApplyButtonTag}`
+    );
+
+    const exportingProps = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      isExportingMedicationInfoSafetyDraftCsv: true
+    });
+    const exportingHtml = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, exportingProps)
+    );
+
+    const draftCsvButtonTag = findOpeningTag(
+      exportingHtml,
+      'data-testid="medication-info-template-safety-draft-csv-export"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(draftCsvButtonTag),
+      `Expected safety draft csv export button to be disabled when exporting csv:\n${draftCsvButtonTag}`
+    );
   });
 });
 
