@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import { createRxDatabase, addRxPlugin } from 'rxdb';
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
@@ -244,6 +245,69 @@ test('LocationMaster component renders static markup with form inputs', () => {
   assert.ok(html.includes('棚番'));
   assert.ok(html.includes('A-01'));
   assert.ok(html.includes('一括作成'));
+});
+
+test('LocationMaster pins add location button as disabled and marks wrapper data-disabled when inputs are empty', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(LocationMaster, {
+      db: null,
+      locations: [],
+      drugs: []
+    })
+  );
+
+  const addBtnTag = findOpeningTag(html, '>追加</button>', 'button');
+  assert.ok(addBtnTag.includes('disabled=""'), `Add button must have disabled attribute when inputs are empty: ${addBtnTag}`);
+  assert.ok(html.includes('data-disabled="true"'), 'Tooltip wrapper must mark data-disabled="true" when input is empty');
+  assert.ok(html.includes('title="棚番地を入力してください"'), 'Tooltip title must explain reason for disabled state');
+});
+
+test('LocationMaster pins delete unused locations button as disabled when unusedLocations count is 0', () => {
+  // Case 1: No locations registered at all
+  const htmlEmpty = renderToStaticMarkup(
+    React.createElement(LocationMaster, {
+      db: null,
+      locations: [],
+      drugs: []
+    })
+  );
+  const deleteBtnTagEmpty = findOpeningTag(htmlEmpty, '未使用の棚番を一括削除', 'button');
+  assert.ok(deleteBtnTagEmpty.includes('disabled=""'), `Delete unused button must be disabled when locations list is empty: ${deleteBtnTagEmpty}`);
+
+  // Case 2: Locations exist but all of them are assigned to drugs
+  const htmlAllUsed = renderToStaticMarkup(
+    React.createElement(LocationMaster, {
+      db: null,
+      locations: [
+        { id: '1', part1: 'A', part2: '01', part3: '', displayText: 'A-01' },
+        { id: '2', part1: 'B', part2: '02', part3: '', displayText: 'B-02' }
+      ],
+      drugs: [
+        { location: 'A-01' } as any,
+        { location: 'B-02' } as any
+      ]
+    })
+  );
+  const deleteBtnTagAllUsed = findOpeningTag(htmlAllUsed, '未使用の棚番を一括削除', 'button');
+  assert.ok(deleteBtnTagAllUsed.includes('disabled=""'), `Delete unused button must be disabled when all locations are in use: ${deleteBtnTagAllUsed}`);
+});
+
+test('LocationMaster enables delete unused locations button when unassigned locations exist', () => {
+  const htmlUnusedExist = renderToStaticMarkup(
+    React.createElement(LocationMaster, {
+      db: null,
+      locations: [
+        { id: '1', part1: 'A', part2: '01', part3: '', displayText: 'A-01' },
+        { id: '2', part1: 'B', part2: '02', part3: '', displayText: 'B-02' }
+      ],
+      drugs: [
+        { location: 'A-01' } as any
+      ]
+    })
+  );
+  const deleteBtnTag = findOpeningTag(htmlUnusedExist, '未使用の棚番を一括削除', 'button');
+  assert.ok(!deleteBtnTag.includes('disabled'), `Delete unused button must be enabled when unassigned locations exist: ${deleteBtnTag}`);
+  assert.ok(htmlUnusedExist.includes('登録 2件 / 未使用 1件'), 'Location badge must reflect registered and unused count');
 });
 
 test('executeBulkLocationDelete handles empty list safely', async () => {
