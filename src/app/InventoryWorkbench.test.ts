@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { OrderWorkbench } from './inventory/components/OrderWorkbench';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { defaultReceivingDraft } from './inventory/types';
+import {
+  OrderWorkbench,
+  type OrderWorkbenchProps
+} from './inventory/components/OrderWorkbench';
 import {
   formatInventoryAmount,
   choosePrimarySupplier,
@@ -107,6 +114,123 @@ describe('InventoryWorkbench components and pure order helpers', () => {
     assert.equal(enhancedCandidate.substitutes.length, 1);
     assert.equal(enhancedCandidate.substitutes[0].availableAmount, 100);
     assert.equal(enhancedCandidate.expiryRisk.hasAttentionExpiring, true);
+  });
+});
+
+describe('OrderWorkbench UI disabled states and markup pinning', () => {
+  function createMockOrderWorkbenchProps(overrides: Partial<OrderWorkbenchProps> = {}): OrderWorkbenchProps {
+    return {
+      candidates: [],
+      orderedDrugIds: new Set<string>(),
+      hasRestoreError: false,
+      receivingDrafts: {},
+      receivingDrugId: '',
+      onRequestTransfer: () => {},
+      onToggleOrdered: () => {},
+      onUpdateReceivingDraft: () => {},
+      onRegisterReceivedStock: () => {},
+      onExportCsv: () => {},
+      onCopyMemo: () => {},
+      onExportReceivingChecklist: () => {},
+      onCopyReceivingMemo: () => {},
+      onClearOrdered: () => {},
+      ...overrides
+    };
+  }
+
+  const sampleCandidate: InventoryOrderRisk = {
+    drugId: 'd1',
+    drugName: 'ロキソニン錠60mg',
+    location: 'A-01',
+    supplierName: 'スズケン',
+    requiredAmount: 100,
+    availableAmount: 20,
+    shortageAmount: 80,
+    recommendedOrderAmount: 100,
+    affectedVisitCount: 2,
+    priority: 'high',
+    actionLabel: '至急発注'
+  };
+
+  it('pins all 4 operation buttons as disabled when candidates list is empty', () => {
+    const props = createMockOrderWorkbenchProps({ candidates: [] });
+    const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
+
+    const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
+    assert.ok(openMemoTag.includes('disabled=""'), `Expected open memo button to be disabled: ${openMemoTag}`);
+
+    const openCsvTag = findOpeningTag(html, '<span>CSV</span>', 'button');
+    assert.ok(openCsvTag.includes('disabled=""'), `Expected open CSV button to be disabled: ${openCsvTag}`);
+
+    const receivingMemoTag = findOpeningTag(html, '<span>入庫メモ</span>', 'button');
+    assert.ok(receivingMemoTag.includes('disabled=""'), `Expected receiving memo button to be disabled: ${receivingMemoTag}`);
+
+    const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
+    assert.ok(receivingChecklistTag.includes('disabled=""'), `Expected receiving checklist button to be disabled: ${receivingChecklistTag}`);
+  });
+
+  it('enables open memo and csv buttons while pinning receiving memo and checklist as disabled when un-ordered candidates exist', () => {
+    const props = createMockOrderWorkbenchProps({
+      candidates: [sampleCandidate],
+      orderedDrugIds: new Set()
+    });
+    const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
+
+    const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
+    assert.ok(!openMemoTag.includes('disabled'), `Expected open memo button to be enabled: ${openMemoTag}`);
+
+    const openCsvTag = findOpeningTag(html, '<span>CSV</span>', 'button');
+    assert.ok(!openCsvTag.includes('disabled'), `Expected open CSV button to be enabled: ${openCsvTag}`);
+
+    const receivingMemoTag = findOpeningTag(html, '<span>入庫メモ</span>', 'button');
+    assert.ok(receivingMemoTag.includes('disabled=""'), `Expected receiving memo button to be disabled: ${receivingMemoTag}`);
+
+    const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
+    assert.ok(receivingChecklistTag.includes('disabled=""'), `Expected receiving checklist button to be disabled: ${receivingChecklistTag}`);
+  });
+
+  it('enables receiving memo and checklist while pinning open memo and csv as disabled when all candidates are ordered', () => {
+    const props = createMockOrderWorkbenchProps({
+      candidates: [sampleCandidate],
+      orderedDrugIds: new Set(['d1'])
+    });
+    const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
+
+    const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
+    assert.ok(openMemoTag.includes('disabled=""'), `Expected open memo button to be disabled: ${openMemoTag}`);
+
+    const openCsvTag = findOpeningTag(html, '<span>CSV</span>', 'button');
+    assert.ok(openCsvTag.includes('disabled=""'), `Expected open CSV button to be disabled: ${openCsvTag}`);
+
+    const receivingMemoTag = findOpeningTag(html, '<span>入庫メモ</span>', 'button');
+    assert.ok(!receivingMemoTag.includes('disabled'), `Expected receiving memo button to be enabled: ${receivingMemoTag}`);
+
+    const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
+    assert.ok(!receivingChecklistTag.includes('disabled'), `Expected receiving checklist button to be enabled: ${receivingChecklistTag}`);
+  });
+
+  it('pins receiving submit button as disabled when receivingDrugId matches candidate during in-flight receiving', () => {
+    const inFlightProps = createMockOrderWorkbenchProps({
+      candidates: [sampleCandidate],
+      orderedDrugIds: new Set(['d1']),
+      receivingDrugId: 'd1',
+      receivingDrafts: { d1: defaultReceivingDraft(sampleCandidate) }
+    });
+    const inFlightHtml = renderToStaticMarkup(React.createElement(OrderWorkbench, inFlightProps));
+
+    const inFlightBtn = findOpeningTag(inFlightHtml, '<span>登録中...</span>', 'button');
+    assert.ok(inFlightBtn.includes('disabled=""'), `Expected in-flight receiving button to be disabled: ${inFlightBtn}`);
+
+    const idleProps = createMockOrderWorkbenchProps({
+      candidates: [sampleCandidate],
+      orderedDrugIds: new Set(['d1']),
+      receivingDrugId: '',
+      receivingDrafts: { d1: defaultReceivingDraft(sampleCandidate) }
+    });
+    const idleHtml = renderToStaticMarkup(React.createElement(OrderWorkbench, idleProps));
+
+    const idleBtn = findOpeningTag(idleHtml, '<span>入庫登録</span>', 'button');
+    assert.ok(!idleBtn.includes('disabled'), `Expected idle receiving button to be enabled: ${idleBtn}`);
   });
 });
 
