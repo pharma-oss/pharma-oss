@@ -11,10 +11,35 @@ import {
   stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
 
+const DISABLED_ATTR_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
+const TITLE_ATTR_PATTERN = /\stitle="([^"]*)"/;
+const BUTTON_BLOCK_PATTERN = /<button\b[^>]*>[\s\S]*?<\/button>/gi;
+const BUTTON_OPENING_TAG_PATTERN = /^<button\b[^>]*>/i;
+
 function extractOpeningTags(html: string, tagName: string): string[] {
   const stripped = stripStyleBlocks(html);
   const regex = new RegExp(`<${tagName}\\b[^>]*>`, 'gi');
   return stripped.match(regex) || [];
+}
+
+function extractTitleAttribute(tag: string): string | null {
+  const match = tag.match(TITLE_ATTR_PATTERN);
+  return match ? match[1] : null;
+}
+
+function findButtonOpeningTagBySpanText(html: string, spanText: string): string {
+  const stripped = stripStyleBlocks(html);
+  const buttonBlocks = stripped.match(BUTTON_BLOCK_PATTERN) || [];
+  const targetSpan = `<span>${spanText}</span>`;
+  const matchingBlocks = buttonBlocks.filter((block) => block.includes(targetSpan));
+  assert.equal(
+    matchingBlocks.length,
+    1,
+    `Expected exactly 1 <button> containing ${targetSpan}, got ${matchingBlocks.length}`
+  );
+  const openingMatch = matchingBlocks[0].match(BUTTON_OPENING_TAG_PATTERN);
+  assert.ok(openingMatch, `Failed to extract opening <button> tag for ${targetSpan}`);
+  return openingMatch[0];
 }
 
 interface ControlSpec {
@@ -133,41 +158,44 @@ const STAFF_MANAGEMENT_CONTROL_SPECS: ControlSpec[] = [
   }
 ];
 
+const MOCK_ADMIN_USER: User = {
+  userId: 'user-admin-1',
+  name: '管理者 一郎',
+  role: 'admin',
+  passwordHash: 'dummy-admin-hash',
+  salt: 'dummy-admin-salt',
+  passkeyCredentialId: 'passkey-admin-cred-1'
+};
+
+const MOCK_PHARMACIST_USER: User = {
+  userId: 'user-pharmacist-1',
+  name: '薬剤師 花子',
+  role: 'pharmacist',
+  passwordHash: 'dummy-pharm-hash',
+  salt: 'dummy-pharm-salt',
+  passkeyCredentialId: 'passkey-pharm-cred-2'
+};
+
+const MOCK_CLERK_USER: User = {
+  userId: 'user-clerk-1',
+  name: '事務 次郎',
+  role: 'clerk',
+  passwordHash: 'dummy-clerk-hash',
+  salt: 'dummy-clerk-salt'
+};
+
+const MOCK_STAFF_LIST: User[] = [MOCK_ADMIN_USER, MOCK_PHARMACIST_USER, MOCK_CLERK_USER];
+
 function createMockStaffSettingsProps(
   overrides: Partial<React.ComponentProps<typeof StaffSettingsTab>> = {}
 ): React.ComponentProps<typeof StaffSettingsTab> {
-  const adminUser: User = {
-    userId: 'user-admin-1',
-    name: '管理者 一郎',
-    role: 'admin',
-    passwordHash: 'dummy-admin-hash',
-    passkeyCredentialId: 'passkey-admin-cred-1'
-  };
-
-  const pharmacistUser: User = {
-    userId: 'user-pharmacist-1',
-    name: '薬剤師 花子',
-    role: 'pharmacist',
-    passwordHash: 'dummy-pharm-hash',
-    passkeyCredentialId: 'passkey-pharm-cred-2'
-  };
-
-  const clerkUser: User = {
-    userId: 'user-clerk-1',
-    name: '事務 次郎',
-    role: 'clerk',
-    passwordHash: 'dummy-clerk-hash'
-  };
-
-  const staffList: User[] = [adminUser, pharmacistUser, clerkUser];
-
   return {
-    currentUser: adminUser,
+    currentUser: MOCK_ADMIN_USER,
     canManageStaff: true,
     canViewAuditLogs: true,
     setIsAddStaffOpen: () => {},
     isOnboardingStaffSetup: true,
-    currentStaffRecord: adminUser,
+    currentStaffRecord: MOCK_ADMIN_USER,
     shouldPromptCurrentStaffPasskey: true,
     handleRegisterPasskey: async () => {},
     isAddStaffOpen: true,
@@ -198,7 +226,7 @@ function createMockStaffSettingsProps(
     staffRecoveryTargetUserId: 'user-pharmacist-1',
     setStaffRecoveryTargetUserId: () => {},
     isHandlingStaffRecovery: false,
-    staffList,
+    staffList: MOCK_STAFF_LIST,
     staffRecoveryReason: 'staff_retirement',
     setStaffRecoveryReason: () => {},
     staffRecoveryPassword: 'password123',
@@ -206,7 +234,7 @@ function createMockStaffSettingsProps(
     staffRecoveryNote: '',
     setStaffRecoveryNote: () => {},
     handleResetStaffRecoveryPassword: async () => {},
-    staffRecoveryTarget: pharmacistUser,
+    staffRecoveryTarget: MOCK_PHARMACIST_USER,
     handleClearStaffRecoveryPasskey: async () => {},
     handleRecordStaffRetirementCheck: async () => {},
     credentialedAdminCount: 2,
@@ -337,5 +365,184 @@ describe('StaffSettingsTab contracts', () => {
       !/\sdisabled=""(?=[\s/>]|$)/.test(permittedCsvTag),
       `Monthly review CSV button must not have disabled="" when canViewAuditLogs is true:\n${permittedCsvTag}`
     );
+  });
+
+  it('keeps recovery action buttons and last credentialed admin trash button disabled when preconditions unmet even when permitted', () => {
+    // 1) staffRecoveryPassword が 8文字未満のとき: パスワード再設定ボタンが無効かつ案内 title
+    const shortPasswordHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          staffRecoveryPassword: 'short'
+        })
+      )
+    );
+    const pwdTagShort = findButtonOpeningTagBySpanText(shortPasswordHtml, 'パスワード再設定');
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(pwdTagShort),
+      `Expected password reset button to be disabled when password is under 8 chars:\n${pwdTagShort}`
+    );
+    assert.equal(
+      extractTitleAttribute(pwdTagShort),
+      '8文字以上の新しいパスワードを入力してください'
+    );
+
+    // 有効時（8文字以上）は disabled でなく、title も案内なし
+    const validPasswordHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          staffRecoveryPassword: 'password123'
+        })
+      )
+    );
+    const pwdTagValid = findButtonOpeningTagBySpanText(validPasswordHtml, 'パスワード再設定');
+    assert.ok(!DISABLED_ATTR_PATTERN.test(pwdTagValid));
+    assert.equal(extractTitleAttribute(pwdTagValid), null);
+
+    // 2) staffRecoveryTarget に passkeyCredentialId がない（事務）とき: パスキー解除ボタンが無効かつ案内 title
+    const clerkTargetHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          staffRecoveryTarget: MOCK_CLERK_USER
+        })
+      )
+    );
+    const passkeyTagNoCred = findButtonOpeningTagBySpanText(clerkTargetHtml, 'パスキーを解除');
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(passkeyTagNoCred),
+      `Expected clear passkey button to be disabled when target has no passkey:\n${passkeyTagNoCred}`
+    );
+    assert.equal(
+      extractTitleAttribute(passkeyTagNoCred),
+      '解除するパスキーがありません'
+    );
+
+    // 有効時（薬剤師: passkeyCredentialId あり）は disabled でなく、title も案内なし
+    const pharmTargetHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          staffRecoveryTarget: MOCK_PHARMACIST_USER
+        })
+      )
+    );
+    const passkeyTagValid = findButtonOpeningTagBySpanText(pharmTargetHtml, 'パスキーを解除');
+    assert.ok(!DISABLED_ATTR_PATTERN.test(passkeyTagValid));
+    assert.equal(extractTitleAttribute(passkeyTagValid), null);
+
+    // 3) staffRecoveryTarget が null のとき: 復旧ボタン（パスワード再設定・パスキー解除・退職チェック）が無効
+    const noTargetHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          staffRecoveryTarget: null
+        })
+      )
+    );
+    const pwdTagNoTarget = findButtonOpeningTagBySpanText(noTargetHtml, 'パスワード再設定');
+    const passkeyTagNoTarget = findButtonOpeningTagBySpanText(noTargetHtml, 'パスキーを解除');
+    const retirementTagNoTarget = findButtonOpeningTagBySpanText(noTargetHtml, '退職前チェックを記録');
+    assert.ok(DISABLED_ATTR_PATTERN.test(pwdTagNoTarget));
+    assert.ok(DISABLED_ATTR_PATTERN.test(passkeyTagNoTarget));
+    assert.ok(DISABLED_ATTR_PATTERN.test(retirementTagNoTarget));
+
+    // 4) credentialedAdminCount が 1 のとき: 管理者一郎の削除ボタンのみ無効かつ案内 title
+    const lastAdminHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          credentialedAdminCount: 1
+        })
+      )
+    );
+    const adminTrashTag = findOpeningTag(lastAdminHtml, 'aria-label="管理者 一郎を削除"', 'button');
+    const pharmTrashTag = findOpeningTag(lastAdminHtml, 'aria-label="薬剤師 花子を削除"', 'button');
+    const clerkTrashTag = findOpeningTag(lastAdminHtml, 'aria-label="事務 次郎を削除"', 'button');
+
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(adminTrashTag),
+      `Expected last admin trash button to be disabled:\n${adminTrashTag}`
+    );
+    assert.equal(
+      extractTitleAttribute(adminTrashTag),
+      '最後の認証済み管理者は削除できません'
+    );
+    assert.ok(!DISABLED_ATTR_PATTERN.test(pharmTrashTag));
+    assert.equal(extractTitleAttribute(pharmTrashTag), 'スタッフアカウントを削除');
+    assert.ok(!DISABLED_ATTR_PATTERN.test(clerkTrashTag));
+    assert.equal(extractTitleAttribute(clerkTrashTag), 'スタッフアカウントを削除');
+  });
+
+  it('keeps controls disabled during in-flight submission and recovery operations even when permitted', () => {
+    // 1) isSubmittingStaff: true
+    const submittingHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          isSubmittingStaff: true
+        })
+      )
+    );
+    const cancelBtn = findOpeningTag(submittingHtml, 'btn-staff-cancel', 'button');
+    const saveBtn = findOpeningTag(submittingHtml, 'btn-staff-save', 'button');
+    assert.ok(DISABLED_ATTR_PATTERN.test(cancelBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(saveBtn));
+
+    // 2) isSavingRolePermissionPolicy: true
+    const savingPolicyHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          isSavingRolePermissionPolicy: true
+        })
+      )
+    );
+    const resetBtn = findOpeningTag(savingPolicyHtml, 'btn-role-reset', 'button');
+    const roleSaveBtn = findOpeningTag(savingPolicyHtml, 'btn-role-save', 'button');
+    assert.ok(DISABLED_ATTR_PATTERN.test(resetBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(roleSaveBtn));
+    const roleCheckboxes = extractOpeningTags(savingPolicyHtml, 'input').filter(
+      (tag) => tag.includes('type="checkbox"') && (tag.includes('aria-label="薬剤師の') || tag.includes('aria-label="事務の'))
+    );
+    assert.equal(roleCheckboxes.length, 24);
+    assert.ok(roleCheckboxes.every((tag) => DISABLED_ATTR_PATTERN.test(tag)));
+
+    // 3) isHandlingStaffRecovery: true
+    const handlingRecoveryHtml = renderToStaticMarkup(
+      React.createElement(
+        StaffSettingsTab,
+        createMockStaffSettingsProps({
+          canManageStaff: true,
+          isHandlingStaffRecovery: true
+        })
+      )
+    );
+    const recoverySelects = extractOpeningTags(handlingRecoveryHtml, 'select').filter(
+      (tag) => tag.includes('select-full-white') && !tag.includes('id="new-staff-role"')
+    );
+    assert.equal(recoverySelects.length, 2);
+    assert.ok(recoverySelects.every((tag) => DISABLED_ATTR_PATTERN.test(tag)));
+
+    const pwdInput = findOpeningTag(handlingRecoveryHtml, 'autoComplete="new-password"', 'input');
+    const noteTextarea = findOpeningTag(handlingRecoveryHtml, 'recovery-textarea', 'textarea');
+    const pwdActionBtn = findButtonOpeningTagBySpanText(handlingRecoveryHtml, 'パスワード再設定');
+    const passkeyActionBtn = findButtonOpeningTagBySpanText(handlingRecoveryHtml, 'パスキーを解除');
+    const retireActionBtn = findButtonOpeningTagBySpanText(handlingRecoveryHtml, '退職前チェックを記録');
+
+    assert.ok(DISABLED_ATTR_PATTERN.test(pwdInput));
+    assert.ok(DISABLED_ATTR_PATTERN.test(noteTextarea));
+    assert.ok(DISABLED_ATTR_PATTERN.test(pwdActionBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(passkeyActionBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(retireActionBtn));
   });
 });
