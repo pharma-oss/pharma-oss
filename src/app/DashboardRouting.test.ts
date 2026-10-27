@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import {
   ClaimRiskRow,
   ClaimWorkbenchRow,
@@ -23,7 +25,7 @@ import {
   formatClaimRuleAttentionForScreen
 } from '@/lib/dashboard_helpers';
 import type { OperationalAiPrediction } from '@/lib/operational_ai_prediction';
-import type { DashboardClaimWorkItem } from '@/lib/dashboard_tasks';
+import { EMPTY_COUNTS, type DashboardClaimWorkItem } from '@/lib/dashboard_tasks';
 
 describe('Dashboard component contracts and routing handlers', () => {
   describe('DashboardRows export contracts', () => {
@@ -259,6 +261,182 @@ describe('Dashboard component contracts and routing handlers', () => {
       const text = formatClaimRuleAttentionForScreen(report, cases);
       assert.ok(text.includes('特定加算'));
       assert.ok(text.includes('患者A'));
+    });
+  });
+
+  describe('ClaimWorkbenchSection UI disabled states and markup pinning', () => {
+    const sampleAcceptedItem: DashboardClaimWorkItem = {
+      visitId: 'v-accepted-1',
+      name: '佐藤花子',
+      patientId: 'p-1',
+      priority: 'normal',
+      priorityLabel: '受付済',
+      status: 'accepted',
+      statusLabel: '受付済',
+      issueDateLabel: '2026/10/01',
+      monthLabel: '2026年10月',
+      totalPoints: 1200,
+      prescriptionCount: 1,
+      latestEventLabel: '審査受付完了',
+      exportedFileName: 'RECEIPTC.UKE',
+      actionLabel: '入金確認後に締め'
+    };
+
+    const sampleRebillingItem: DashboardClaimWorkItem = {
+      visitId: 'v-rebilling-1',
+      name: '山田太郎',
+      patientId: 'p-2',
+      priority: 'medium',
+      priorityLabel: '再請求',
+      status: 'rebilling',
+      statusLabel: '再請求準備',
+      issueDateLabel: '2026/09/15',
+      monthLabel: '2026年9月',
+      totalPoints: 1800,
+      prescriptionCount: 2,
+      latestEventLabel: '月遅れ再請求準備',
+      exportedFileName: 'RECEIPTC.UKE',
+      actionLabel: '月遅れ/UKE再出力'
+    };
+
+    const sampleReturnedItem: DashboardClaimWorkItem = {
+      visitId: 'v-returned-1',
+      name: '田中一郎',
+      patientId: 'p-3',
+      priority: 'high',
+      priorityLabel: '返戻対応',
+      status: 'returned',
+      statusLabel: '返戻',
+      issueDateLabel: '2026/08/20',
+      monthLabel: '2026年8月',
+      totalPoints: 2400,
+      prescriptionCount: 3,
+      latestEventLabel: '返戻取込 (2026/09/10)',
+      exportedFileName: 'RECEIPTC.UKE',
+      actionLabel: '修正して再請求へ',
+      reason: '保険番号記載不備'
+    };
+
+    it('pins all export, review, closing, memo, and csv buttons as disabled when claim work items are empty', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ClaimWorkbenchSection, {
+          db: null,
+          claimWorkItems: [],
+          counts: EMPTY_COUNTS,
+          isLoading: false,
+          onOpenTask: () => {},
+          onRefresh: () => {}
+        })
+      );
+
+      const ukeBtn = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+      const officialUkeBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+      const officialReadinessBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+      const ruleReviewBtn = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+      const closeAcceptedBtn = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+      const memoBtn = findOpeningTag(html, '<span>請求メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+      const importBtn = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+
+      assert.ok(ukeBtn.includes('disabled=""'), 'Uke export button must be disabled when empty');
+      assert.ok(officialUkeBtn.includes('disabled=""'), 'Official uke button must be disabled when empty');
+      assert.ok(officialReadinessBtn.includes('disabled=""'), 'Official readiness button must be disabled when empty');
+      assert.ok(ruleReviewBtn.includes('disabled=""'), 'Rule review button must be disabled when empty');
+      assert.ok(closeAcceptedBtn.includes('disabled=""'), 'Close accepted button must be disabled when empty');
+      assert.ok(memoBtn.includes('disabled=""'), 'Memo button must be disabled when empty');
+      assert.ok(csvBtn.includes('disabled=""'), 'CSV button must be disabled when empty');
+      assert.ok(!importBtn.includes('disabled'), 'Import button should remain enabled when not in-flight');
+
+      assert.ok(html.includes('現在、月次請求で未締めの返戻・再請求ワークはありません。'));
+    });
+
+    it('enables closing, memo, and csv buttons while pinning export and review buttons as disabled for accepted items', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ClaimWorkbenchSection, {
+          db: null,
+          claimWorkItems: [sampleAcceptedItem],
+          counts: { ...EMPTY_COUNTS, claimWorkbenchCount: 1 },
+          isLoading: false,
+          onOpenTask: () => {},
+          onRefresh: () => {}
+        })
+      );
+
+      const ukeBtn = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+      const officialUkeBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+      const officialReadinessBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+      const ruleReviewBtn = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+      const closeAcceptedBtn = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+      const memoBtn = findOpeningTag(html, '<span>請求メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+
+      assert.ok(ukeBtn.includes('disabled=""'), 'Uke export button must be disabled when no rebilling item exists');
+      assert.ok(officialUkeBtn.includes('disabled=""'), 'Official uke button must be disabled when no rebilling item exists');
+      assert.ok(officialReadinessBtn.includes('disabled=""'), 'Official readiness button must be disabled when no rebilling item exists');
+      assert.ok(ruleReviewBtn.includes('disabled=""'), 'Rule review button must be disabled when no rebilling item exists');
+      assert.ok(!closeAcceptedBtn.includes('disabled'), 'Close accepted button must be enabled when accepted items exist');
+      assert.ok(!memoBtn.includes('disabled'), 'Memo button must be enabled when items exist');
+      assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled when items exist');
+
+      assert.ok(html.includes('受付済 1'));
+    });
+
+    it('enables export and review buttons while pinning close accepted button as disabled for rebilling items', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ClaimWorkbenchSection, {
+          db: null,
+          claimWorkItems: [sampleRebillingItem],
+          counts: { ...EMPTY_COUNTS, claimWorkbenchCount: 1, rebillingClaimCount: 1 },
+          isLoading: false,
+          onOpenTask: () => {},
+          onRefresh: () => {}
+        })
+      );
+
+      const ukeBtn = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+      const officialUkeBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+      const officialReadinessBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+      const ruleReviewBtn = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+      const closeAcceptedBtn = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+      const memoBtn = findOpeningTag(html, '<span>請求メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+
+      assert.ok(!ukeBtn.includes('disabled'), 'Uke export button must be enabled when rebilling items exist');
+      assert.ok(!officialUkeBtn.includes('disabled'), 'Official uke button must be enabled when rebilling items exist');
+      assert.ok(!officialReadinessBtn.includes('disabled'), 'Official readiness button must be enabled when rebilling items exist');
+      assert.ok(!ruleReviewBtn.includes('disabled'), 'Rule review button must be enabled when rebilling items exist');
+      assert.ok(closeAcceptedBtn.includes('disabled=""'), 'Close accepted button must be disabled when acceptedCount is 0');
+      assert.ok(!memoBtn.includes('disabled'), 'Memo button must be enabled when items exist');
+      assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled when items exist');
+
+      assert.ok(html.includes('再請求 1'));
+    });
+
+    it('pins all export, review, and close buttons as disabled while enabling memo and csv for returned items', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ClaimWorkbenchSection, {
+          db: null,
+          claimWorkItems: [sampleReturnedItem],
+          counts: { ...EMPTY_COUNTS, claimWorkbenchCount: 1, returnedClaimCount: 1 },
+          isLoading: false,
+          onOpenTask: () => {},
+          onRefresh: () => {}
+        })
+      );
+
+      const ukeBtn = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+      const officialUkeBtn = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+      const closeAcceptedBtn = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+      const memoBtn = findOpeningTag(html, '<span>請求メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+
+      assert.ok(ukeBtn.includes('disabled=""'), 'Uke export button must be disabled for returned-only items');
+      assert.ok(officialUkeBtn.includes('disabled=""'), 'Official uke button must be disabled for returned-only items');
+      assert.ok(closeAcceptedBtn.includes('disabled=""'), 'Close accepted button must be disabled when acceptedCount is 0');
+      assert.ok(!memoBtn.includes('disabled'), 'Memo button must be enabled');
+      assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled');
+
+      assert.ok(html.includes('返戻 1'));
     });
   });
 });
