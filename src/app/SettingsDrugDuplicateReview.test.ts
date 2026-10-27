@@ -543,4 +543,89 @@ describe('DrugMasterSettingsTab contracts and renderToStaticMarkup', () => {
     const applyDenied = findOpeningTag(htmlDenied, 'data-testid="drug-price-history-apply"', 'button');
     assert.ok(applyDenied.includes('disabled=""'), 'Apply price history button must be disabled when denied');
   });
+
+  it('keeps drug master upload button disabled during in-flight upload', () => {
+    const props = createMockDrugMasterSettingsProps({
+      canUpdateDrugMaster: true,
+      file: { name: 'master.csv' },
+      isUploading: true
+    });
+    const html = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, props as any));
+
+    const uploadBtn = findOpeningTag(html, '更新中...', 'button');
+    assert.ok(
+      uploadBtn.includes('disabled=""'),
+      `Expected upload button to be disabled during upload:\n${uploadBtn}`
+    );
+    assert.ok(html.includes('更新中...'), 'Upload button should show loading text');
+  });
+
+  it('keeps rollback button disabled during in-flight rollback', () => {
+    const props = createMockDrugMasterSettingsProps({
+      canUpdateDrugMaster: true,
+      rollbackFile: { name: 'rollback.json' },
+      isRollingBackDrugMaster: true
+    });
+    const html = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, props as any));
+
+    const rollbackBtn = findOpeningTag(html, 'ロールバック中...', 'button');
+    assert.ok(
+      rollbackBtn.includes('disabled=""'),
+      `Expected rollback button to be disabled during rollback:\n${rollbackBtn}`
+    );
+    assert.ok(html.includes('ロールバック中...'), 'Rollback button should show loading text');
+  });
+
+  it('keeps scan duplicates button disabled during in-flight duplicate scan', () => {
+    const props = createMockDrugMasterSettingsProps({
+      canUpdateDrugMaster: true,
+      isScanningDrugDuplicates: true
+    });
+    const html = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, props as any));
+
+    const scanBtn = findOpeningTag(html, 'data-testid="drug-duplicate-scan-button"', 'button');
+    assert.ok(
+      scanBtn.includes('disabled=""'),
+      `Expected scan duplicates button to be disabled during scan:\n${scanBtn}`
+    );
+    assert.ok(html.includes('点検中...'), 'Scan button should show loading text');
+  });
+
+  it('keeps apply price history button disabled during in-flight price history application', () => {
+    const mockDrug = {
+      code: '612340001',
+      name: 'アムロジピン錠5mg',
+      price: 10.1
+    };
+    const mockPlan: DrugPriceHistoryEditPlan = {
+      drugCode: '612340001',
+      drugName: 'アムロジピン錠5mg',
+      before: [],
+      after: [{ price: 10.1, effectiveFrom: '2026-04-01' }],
+      beforeCurrentPrice: 10.1,
+      afterCurrentPrice: 10.1,
+      issues: [],
+      changed: true,
+      canApply: true,
+      impact: [],
+      submittedCount: 0,
+      summary: '価格改定'
+    };
+    const props = createMockDrugMasterSettingsProps({
+      canUpdateDrugMaster: true,
+      priceHistoryDrug: mockDrug,
+      priceHistoryDraft: [{ effectiveFrom: '2026-04-01', price: '10.1' }],
+      drugPriceHistoryPlan: mockPlan,
+      isApplyingPriceHistory: true
+    });
+    const html = renderToStaticMarkup(React.createElement(DrugMasterSettingsTab, props as any));
+
+    const applyBtn = findOpeningTag(html, 'data-testid="drug-price-history-apply"', 'button');
+    assert.ok(
+      applyBtn.includes('disabled=""'),
+      `Expected apply price history button to be disabled during application:\n${applyBtn}`
+    );
+    assert.ok(html.includes('訂正中...'), 'Apply button should show loading text');
+  });
 });
+
