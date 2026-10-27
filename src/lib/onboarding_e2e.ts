@@ -32,7 +32,7 @@ export const ONBOARDING_E2E_SCENARIOS: OnboardingE2EScenarioDefinition[] = [
     id: 'claim_uke_export',
     title: '導入時請求テスト',
     goal: 'テスト受付を請求確認画面へ送り、UKE出力と請求ロックの監査ログを残す（チュートリアルのデモ患者はUKE出力不可のため、導入確認用テストデータを使う）',
-    routePattern: '/ -> /print/[visitId]',
+    routePattern: '/app -> /print/[visitId]',
     stableSelectors: [
       '[data-testid="claim-risk-queue"]',
       '[data-testid="claim-risk-open-print"]',

@@ -257,13 +257,15 @@ async function run() {
       await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
     }
 
-    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await wait(2500);
+    await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForSelector('[data-testid="claim-risk-queue"]', { timeout: 20000 });
+    await wait(1000);
     await assertSelectors(page, requiredDashboardSelectors, 'dashboard onboarding');
 
     if (effectiveVisitId) {
       await page.goto(`${baseUrl}/print/${encodeURIComponent(effectiveVisitId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await wait(2500);
+      await page.waitForSelector('[data-testid="print-page"]', { timeout: 20000 });
+      await wait(1000);
       await assertSelectors(page, requiredPrintSelectors, 'print onboarding');
 
       // 「ピッキングへ」(?openPicking=1)で開いたモーダルは、閉じたら閉じたままであること。

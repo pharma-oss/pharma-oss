@@ -2,7 +2,9 @@
 const nextConfig = {
   allowedDevOrigins: ['127.0.0.1', '[::1]'],
   transpilePackages: ['rxdb', 'rxjs', 'tesseract.js'],
-  turbopack: {},
+  turbopack: {
+    root: process.cwd(),
+  },
   async headers() {
     return [
       {

@@ -109,7 +109,7 @@ async function main() {
       };
     });
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
-    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await ensureInitialAdmin(page);
     await dismissOverlays(page);
 
@@ -133,7 +133,7 @@ async function main() {
     await capture(page, join(outputDir, 'picking.png'));
 
     // 3. ダッシュボード(対応キュー・KPI・デモ残存バナー)
-    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForFunction(
       () => document.body.innerText.includes('本日の業務'),
       { timeout: 30000 }
