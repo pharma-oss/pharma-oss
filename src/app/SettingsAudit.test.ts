@@ -548,6 +548,175 @@ describe('OfficialAuditSettingsTab renderToStaticMarkup contracts', () => {
       `Must include dosage-category-conflict-csv-button in permitted disabled controls:\n${disabledTagsPermitted.join('\n')}`
     );
   });
+
+  it('keeps gate CSV button disabled during exporting official all fields gate CSV', () => {
+    const props = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      isExportingDispensingUkeOfficialAllFieldsGate: true
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    const gateCsvBtn = findOpeningTag(
+      html,
+      'data-testid="dispensing-uke-official-all-fields-gate-csv-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(gateCsvBtn),
+      `Expected gate CSV button to be disabled during export:\n${gateCsvBtn}`
+    );
+  });
+
+  it('keeps claim points drift run button disabled during in-flight review', () => {
+    const props = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      isReviewingClaimPointsDrift: true
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    const runBtn = findOpeningTag(
+      html,
+      'data-testid="claim-points-drift-run-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(runBtn),
+      `Expected claim points drift run button to be disabled during review:\n${runBtn}`
+    );
+    assert.ok(
+      html.includes('点検中...'),
+      'Expected button label to show "点検中..." during review'
+    );
+  });
+
+  it('keeps dosage category conflict run button disabled during in-flight review', () => {
+    const props = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      isReviewingDosageCategoryConflict: true
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    const runBtn = findOpeningTag(
+      html,
+      'data-testid="dosage-category-conflict-run-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(runBtn),
+      `Expected dosage category conflict run button to be disabled during review:\n${runBtn}`
+    );
+    assert.ok(
+      html.includes('点検中...'),
+      'Expected button label to show "点検中..." during review'
+    );
+  });
+
+  it('keeps spec fetch, review buttons and textareas disabled during fetching spec PDF', () => {
+    const props = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      isFetchingDispensingUkeSpecPdf: true
+    });
+    const html = renderToStaticMarkup(React.createElement(OfficialAuditSettingsTab, props as any));
+
+    const fetchBtn = findOpeningTag(
+      html,
+      'data-testid="dispensing-uke-spec-fetch-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(fetchBtn),
+      `Expected spec fetch button to be disabled during fetch:\n${fetchBtn}`
+    );
+    assert.ok(
+      html.includes('取得中...'),
+      'Expected fetch button label to show "取得中..." during fetch'
+    );
+
+    const reviewBtn = findOpeningTag(
+      html,
+      'data-testid="dispensing-uke-spec-review-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(reviewBtn),
+      `Expected spec review button to be disabled during fetch:\n${reviewBtn}`
+    );
+
+    const textTextarea = findOpeningTag(
+      html,
+      'textarea-spec-text',
+      'textarea'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(textTextarea),
+      `Expected spec text textarea to be disabled during fetch:\n${textTextarea}`
+    );
+
+    const memoTextarea = findOpeningTag(
+      html,
+      'textarea-memo',
+      'textarea'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(memoTextarea),
+      `Expected confirmation memo textarea to be disabled during fetch:\n${memoTextarea}`
+    );
+  });
+
+  it('keeps spec review CSV and implementation pack buttons disabled during respective in-flight exports', () => {
+    const reviewExportProps = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      dispensingUkeSpecCompletionGate: {
+        ok: true,
+        statusLabel: 'OK',
+        source: DISPENSING_UKE_RECORD_SPEC_SOURCE,
+        expectedRecordTypeCount: 1,
+        parsedRecordTypeCount: 1,
+        expectedRecordTypes: ['RE'],
+        parsedRecordTypes: ['RE'],
+        missingRecordTypes: [],
+        parsedFieldCount: 10,
+        definedFieldCount: 10,
+        remainingFieldCount: 0,
+        remainingRecordTypes: [],
+        parseIssueCount: 0,
+        blockerCount: 0,
+        blockers: []
+      },
+      isExportingDispensingUkeSpecReview: true
+    });
+    const reviewHtml = renderToStaticMarkup(
+      React.createElement(OfficialAuditSettingsTab, reviewExportProps as any)
+    );
+    const reviewCsvBtn = findOpeningTag(
+      reviewHtml,
+      'data-testid="dispensing-uke-spec-review-csv-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(reviewCsvBtn),
+      `Expected spec review CSV button to be disabled during export:\n${reviewCsvBtn}`
+    );
+
+    const packExportProps = createMockOfficialAuditSettingsProps({
+      canViewOfficialAudit: true,
+      dispensingUkeSpecPdfText: 'YK 薬局情報レコード',
+      isExportingDispensingUkeSpecImplementationPack: true
+    });
+    const packHtml = renderToStaticMarkup(
+      React.createElement(OfficialAuditSettingsTab, packExportProps as any)
+    );
+    const packBtn = findOpeningTag(
+      packHtml,
+      'data-testid="dispensing-uke-spec-implementation-pack-button"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(packBtn),
+      `Expected implementation pack button to be disabled during export:\n${packBtn}`
+    );
+  });
 });
+
 
 
