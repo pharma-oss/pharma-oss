@@ -258,8 +258,10 @@ test('LocationMaster pins add location button as disabled and marks wrapper data
 
   const addBtnTag = findOpeningTag(html, '>追加</button>', 'button');
   assert.ok(addBtnTag.includes('disabled=""'), `Add button must have disabled attribute when inputs are empty: ${addBtnTag}`);
-  assert.ok(html.includes('data-disabled="true"'), 'Tooltip wrapper must mark data-disabled="true" when input is empty');
-  assert.ok(html.includes('title="棚番地を入力してください"'), 'Tooltip title must explain reason for disabled state');
+  const wrapperTag = findOpeningTag(html, '>追加</button>', 'span');
+  assert.ok(wrapperTag.includes('btn-tooltip-wrapper'), `Wrapper span must directly precede the add button: ${wrapperTag}`);
+  assert.ok(wrapperTag.includes('data-disabled="true"'), `Tooltip wrapper must mark data-disabled="true" when input is empty: ${wrapperTag}`);
+  assert.ok(wrapperTag.includes('title="棚番地を入力してください"'), `Tooltip title must explain reason for disabled state: ${wrapperTag}`);
 });
 
 test('LocationMaster pins delete unused locations button as disabled when unusedLocations count is 0', () => {
