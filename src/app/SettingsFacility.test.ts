@@ -329,4 +329,195 @@ describe('FacilitySettingsTab contracts', () => {
       `Disabled tags in permitted no-proposal render must be only apply and review-csv buttons:\n${disabledTags.join('\n')}`
     );
   });
+
+  it('keeps proposal apply button disabled when proposal has zero matched candidates', () => {
+    const zeroMatchedProposal: OfficialFeeCodeMasterProposal = {
+      ...MOCK_PROPOSAL,
+      matchedCount: 0,
+      candidates: []
+    };
+    const props = createMockFacilitySettingsProps({
+      canManageFacility: true,
+      officialFeeCodeMasterProposal: zeroMatchedProposal
+    });
+    const html = renderToStaticMarkup(React.createElement(FacilitySettingsTab, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      1,
+      `When permitted and proposal exists with matchedCount 0, only apply button must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const applyButtonTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-master-apply"',
+      'button'
+    );
+    const reviewCsvButtonTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-master-review-csv"',
+      'button'
+    );
+
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(applyButtonTag),
+      `Expected official-fee-code-master-apply to be disabled when matchedCount is 0:\n${applyButtonTag}`
+    );
+    assert.ok(
+      !DISABLED_ATTR_PATTERN.test(reviewCsvButtonTag),
+      `Expected official-fee-code-master-review-csv to remain enabled when matchedCount is 0:\n${reviewCsvButtonTag}`
+    );
+    assert.deepEqual(disabledTags, [applyButtonTag]);
+  });
+
+  it('keeps official fee code CSV import controls disabled during in-flight import', () => {
+    const props = createMockFacilitySettingsProps({
+      canManageFacility: true,
+      isImportingOfficialFeeCodeCsv: true
+    });
+    const html = renderToStaticMarkup(React.createElement(FacilitySettingsTab, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      1,
+      `When isImportingOfficialFeeCodeCsv is true, exactly 1 input must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const inputTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-csv-input"',
+      'input'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(inputTag),
+      `Expected official-fee-code-csv-input to be disabled during import:\n${inputTag}`
+    );
+    assert.deepEqual(disabledTags, [inputTag]);
+
+    const dataDisabledTags = listDataDisabledOpeningTags(html);
+    assert.equal(
+      dataDisabledTags.length,
+      1,
+      `When isImportingOfficialFeeCodeCsv is true, exactly 1 data-disabled tag must be present:\n${dataDisabledTags.join('\n')}`
+    );
+    const wrapperSpan = findWrapperSpanBeforeOpeningTag(
+      html,
+      'data-testid="official-fee-code-csv-input"',
+      'label'
+    );
+    assert.ok(
+      DATA_DISABLED_ATTR_PATTERN.test(wrapperSpan),
+      `Expected wrapper span to have data-disabled during import:\n${wrapperSpan}`
+    );
+
+    const ariaDisabledTags = listAriaDisabledOpeningTags(html);
+    assert.equal(
+      ariaDisabledTags.length,
+      1,
+      `When isImportingOfficialFeeCodeCsv is true, exactly 1 aria-disabled tag must be present:\n${ariaDisabledTags.join('\n')}`
+    );
+    const labelTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-csv-input"',
+      'label'
+    );
+    assert.ok(
+      ARIA_DISABLED_ATTR_PATTERN.test(labelTag),
+      `Expected upload label to have aria-disabled during import:\n${labelTag}`
+    );
+  });
+
+  it('keeps official fee code master CSV review controls disabled during in-flight review', () => {
+    const props = createMockFacilitySettingsProps({
+      canManageFacility: true,
+      isReviewingOfficialFeeCodeMasterCsv: true
+    });
+    const html = renderToStaticMarkup(React.createElement(FacilitySettingsTab, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      1,
+      `When isReviewingOfficialFeeCodeMasterCsv is true, exactly 1 input must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const inputTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-master-csv-input"',
+      'input'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(inputTag),
+      `Expected official-fee-code-master-csv-input to be disabled during review:\n${inputTag}`
+    );
+    assert.deepEqual(disabledTags, [inputTag]);
+
+    const dataDisabledTags = listDataDisabledOpeningTags(html);
+    assert.equal(
+      dataDisabledTags.length,
+      1,
+      `When isReviewingOfficialFeeCodeMasterCsv is true, exactly 1 data-disabled tag must be present:\n${dataDisabledTags.join('\n')}`
+    );
+    const wrapperSpan = findWrapperSpanBeforeOpeningTag(
+      html,
+      'data-testid="official-fee-code-master-csv-input"',
+      'label'
+    );
+    assert.ok(
+      DATA_DISABLED_ATTR_PATTERN.test(wrapperSpan),
+      `Expected wrapper span to have data-disabled during review:\n${wrapperSpan}`
+    );
+
+    const ariaDisabledTags = listAriaDisabledOpeningTags(html);
+    assert.equal(
+      ariaDisabledTags.length,
+      1,
+      `When isReviewingOfficialFeeCodeMasterCsv is true, exactly 1 aria-disabled tag must be present:\n${ariaDisabledTags.join('\n')}`
+    );
+    const labelTag = findOpeningTag(
+      html,
+      'data-testid="official-fee-code-master-csv-input"',
+      'label'
+    );
+    assert.ok(
+      ARIA_DISABLED_ATTR_PATTERN.test(labelTag),
+      `Expected upload label to have aria-disabled during review:\n${labelTag}`
+    );
+  });
+
+  it('keeps save settings button disabled during in-flight save', () => {
+    const props = createMockFacilitySettingsProps({
+      canManageFacility: true,
+      isSavingSettings: true
+    });
+    const html = renderToStaticMarkup(React.createElement(FacilitySettingsTab, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      1,
+      `When isSavingSettings is true, exactly 1 button must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const saveButtonTag = findOpeningTag(html, 'btn-primary', 'button');
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(saveButtonTag),
+      `Expected save button to be disabled during save:\n${saveButtonTag}`
+    );
+    assert.deepEqual(disabledTags, [saveButtonTag]);
+
+    const dataDisabledTags = listDataDisabledOpeningTags(html);
+    assert.equal(
+      dataDisabledTags.length,
+      1,
+      `When isSavingSettings is true, exactly 1 data-disabled tag must be present:\n${dataDisabledTags.join('\n')}`
+    );
+    const wrapperSpan = findOpeningTag(html, 'btn-primary', 'span');
+    assert.ok(
+      DATA_DISABLED_ATTR_PATTERN.test(wrapperSpan),
+      `Expected wrapper span to have data-disabled during save:\n${wrapperSpan}`
+    );
+  });
 });
