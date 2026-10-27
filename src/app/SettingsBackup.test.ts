@@ -20,6 +20,7 @@ import {
 type BackupSettingsTabProps = React.ComponentProps<typeof BackupSettingsTab>;
 
 const DISABLED_ATTR_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
+const TITLE_ATTR_PATTERN = /\stitle="([^"]*)"/;
 const BUTTON_BLOCK_PATTERN = /<button\b[^>]*>[\s\S]*?<\/button>/gi;
 const BUTTON_OPENING_TAG_PATTERN = /^<button\b[^>]*>/i;
 
@@ -171,12 +172,16 @@ function createMockBackupSettingsProps(
   };
 }
 
-function renderWithEscrowInputsFilled(props: BackupSettingsTabProps): string {
+function renderWithEscrowInputsFilled(
+  props: BackupSettingsTabProps,
+  additionalStateOverrides: Readonly<Record<number, unknown>> = {}
+): string {
   const originalUseState = React.useState;
-  const escrowInputOverrides: Readonly<Record<number, string>> = {
+  const escrowStateOverrides: Readonly<Record<number, unknown>> = {
     1: 'admin-password-123',
     5: 'escrow-payload-text',
-    6: 'restore-password-123'
+    6: 'restore-password-123',
+    ...additionalStateOverrides
   };
   let callIndex = 0;
   const useStateMock = mock.method(
@@ -184,13 +189,21 @@ function renderWithEscrowInputsFilled(props: BackupSettingsTabProps): string {
     'useState',
     ((initialState?: unknown) => {
       const currentIndex = callIndex++;
-      if (currentIndex in escrowInputOverrides) {
-        assert.equal(
-          initialState,
-          '',
-          `Expected BackupSettingsTab React.useState call #${currentIndex} initial value to be '', got ${String(initialState)}`
-        );
-        return [escrowInputOverrides[currentIndex], () => {}];
+      if (currentIndex in escrowStateOverrides) {
+        if (currentIndex === 1 || currentIndex === 5 || currentIndex === 6) {
+          assert.equal(
+            initialState,
+            '',
+            `Expected BackupSettingsTab React.useState call #${currentIndex} initial value to be '', got ${String(initialState)}`
+          );
+        } else if (currentIndex === 2 || currentIndex === 7) {
+          assert.equal(
+            initialState,
+            false,
+            `Expected BackupSettingsTab React.useState call #${currentIndex} initial value to be false, got ${String(initialState)}`
+          );
+        }
+        return [escrowStateOverrides[currentIndex], () => {}];
       }
       return (originalUseState as (init?: unknown) => [unknown, (v: unknown) => void])(
         initialState
@@ -223,6 +236,11 @@ function findButtonOpeningTagBySpanText(html: string, spanText: string): string 
   const openingMatch = matchingBlocks[0].match(BUTTON_OPENING_TAG_PATTERN);
   assert.ok(openingMatch, `Failed to extract opening <button> tag for ${targetSpan}`);
   return openingMatch[0];
+}
+
+function extractTitleAttribute(tag: string): string | null {
+  const match = tag.match(TITLE_ATTR_PATTERN);
+  return match ? match[1] : null;
 }
 
 interface BackupControlSpec {
@@ -380,5 +398,260 @@ describe('BackupSettingsTab contracts', () => {
       [issueButtonTag, restoreButtonTag],
       `Disabled tags in permitted default render must be only escrow-issue-button and escrow-restore-button:\n${disabledDefault.join('\n')}`
     );
+  });
+
+  it('keeps file action buttons disabled with guidance titles when files are missing even when permitted', () => {
+    // 1) externalBackupReceiptFile が未選択のとき: 受領書記録ボタンのみ無効かつ案内 title
+    const missingReceiptHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        externalBackupReceiptFile: null
+      })
+    );
+    const receiptTag = findButtonOpeningTagBySpanText(
+      missingReceiptHtml,
+      '受領書を監査ログへ記録'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(receiptTag),
+      `Expected receipt button to be disabled when externalBackupReceiptFile is null:\n${receiptTag}`
+    );
+    assert.equal(
+      extractTitleAttribute(receiptTag),
+      '外部保存ジョブ受領書JSONを選択してください',
+      `Expected receipt button to display selection guide title:\n${receiptTag}`
+    );
+    assert.deepEqual(
+      listDisabledOpeningTags(missingReceiptHtml),
+      [receiptTag],
+      'Only receipt button should be disabled when externalBackupReceiptFile is null'
+    );
+
+    // 2) migrationCsvFile が未選択のとき: 移行CSVプレビューボタンのみ無効かつ案内 title
+    const missingMigrationHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        migrationCsvFile: null
+      })
+    );
+    const migrationTag = findButtonOpeningTagBySpanText(
+      missingMigrationHtml,
+      'CSVを変換してプレビュー'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(migrationTag),
+      `Expected migration button to be disabled when migrationCsvFile is null:\n${migrationTag}`
+    );
+    assert.equal(
+      extractTitleAttribute(migrationTag),
+      'CSV/TSVを選択してください',
+      `Expected migration button to display selection guide title:\n${migrationTag}`
+    );
+    assert.deepEqual(
+      listDisabledOpeningTags(missingMigrationHtml),
+      [migrationTag],
+      'Only migration button should be disabled when migrationCsvFile is null'
+    );
+
+    // 3) backupFile が未選択のとき: 復旧ボタンのみ無効かつ案内 title
+    const missingBackupHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        backupFile: null
+      })
+    );
+    const restoreTag = findButtonOpeningTagBySpanText(
+      missingBackupHtml,
+      'バックアップを復旧する'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(restoreTag),
+      `Expected restore button to be disabled when backupFile is null:\n${restoreTag}`
+    );
+    assert.equal(
+      extractTitleAttribute(restoreTag),
+      '復旧するJSONファイルを選択してください',
+      `Expected restore button to display selection guide title:\n${restoreTag}`
+    );
+    assert.deepEqual(
+      listDisabledOpeningTags(missingBackupHtml),
+      [restoreTag],
+      'Only restore button should be disabled when backupFile is null'
+    );
+
+    // 4) 3 つ全て未選択のとき: 3 つのボタンのみ無効
+    const allFilesMissingHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        externalBackupReceiptFile: null,
+        migrationCsvFile: null,
+        backupFile: null
+      })
+    );
+    const allMissingDisabled = listDisabledOpeningTags(allFilesMissingHtml);
+    assert.equal(allMissingDisabled.length, 3);
+    assert.ok(
+      allMissingDisabled.some((t) => t.includes('外部保存ジョブ受領書JSONを選択してください')),
+      `Expected disabled receipt button in allMissingDisabled:\n${allMissingDisabled.join('\n')}`
+    );
+    assert.ok(
+      allMissingDisabled.some((t) => t.includes('CSV/TSVを選択してください')),
+      `Expected disabled migration button in allMissingDisabled:\n${allMissingDisabled.join('\n')}`
+    );
+    assert.ok(
+      allMissingDisabled.some((t) => t.includes('復旧するJSONファイルを選択してください')),
+      `Expected disabled restore button in allMissingDisabled:\n${allMissingDisabled.join('\n')}`
+    );
+  });
+
+  it('keeps controls disabled during in-flight operations even when permitted', () => {
+    // 1) isSavingBackupSchedule
+    const savingScheduleHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isSavingBackupSchedule: true
+      })
+    );
+    const savingScheduleTag = findButtonOpeningTagBySpanText(savingScheduleHtml, '保存中...');
+    assert.ok(DISABLED_ATTR_PATTERN.test(savingScheduleTag));
+    assert.deepEqual(listDisabledOpeningTags(savingScheduleHtml), [savingScheduleTag]);
+
+    // 2) isScanningPatientDuplicates
+    const scanningDuplicatesHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isScanningPatientDuplicates: true
+      })
+    );
+    const scanningTag = findOpeningTag(
+      scanningDuplicatesHtml,
+      'data-testid="patient-duplicate-scan-button"',
+      'button'
+    );
+    assert.ok(DISABLED_ATTR_PATTERN.test(scanningTag));
+    assert.deepEqual(listDisabledOpeningTags(scanningDuplicatesHtml), [scanningTag]);
+
+    // 3) isApplyingDuplicateMerge
+    const applyingMergeHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isApplyingDuplicateMerge: true
+      })
+    );
+    const mergeTag = findOpeningTag(applyingMergeHtml, 'btn-duplicate-review', 'button');
+    assert.ok(DISABLED_ATTR_PATTERN.test(mergeTag));
+
+    // 4) isExportingBackupGenerationReview
+    const exportingGenHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isExportingBackupGenerationReview: true
+      })
+    );
+    const genTag = findOpeningTag(exportingGenHtml, 'btn-generation-csv', 'button');
+    assert.ok(DISABLED_ATTR_PATTERN.test(genTag));
+    assert.deepEqual(listDisabledOpeningTags(exportingGenHtml), [genTag]);
+
+    // 5) isGeneratingEscrow (React.useState call #2)
+    const generatingEscrowHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({ canManageBackups: true }),
+      { 2: true }
+    );
+    const issueInput = findOpeningTag(
+      generatingEscrowHtml,
+      'data-testid="escrow-issue-password-input"',
+      'input'
+    );
+    const issueBtn = findOpeningTag(
+      generatingEscrowHtml,
+      'data-testid="escrow-issue-button"',
+      'button'
+    );
+    assert.ok(DISABLED_ATTR_PATTERN.test(issueInput));
+    assert.ok(DISABLED_ATTR_PATTERN.test(issueBtn));
+    assert.deepEqual(listDisabledOpeningTags(generatingEscrowHtml), [issueInput, issueBtn]);
+
+    // 6) isRestoringEscrow (React.useState call #7)
+    const restoringEscrowHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({ canManageBackups: true }),
+      { 7: true }
+    );
+    const restoreInput = findOpeningTag(
+      restoringEscrowHtml,
+      'data-testid="escrow-restore-password-input"',
+      'input'
+    );
+    const restoreEscrowBtn = findOpeningTag(
+      restoringEscrowHtml,
+      'data-testid="escrow-restore-button"',
+      'button'
+    );
+    assert.ok(DISABLED_ATTR_PATTERN.test(restoreInput));
+    assert.ok(DISABLED_ATTR_PATTERN.test(restoreEscrowBtn));
+    assert.deepEqual(listDisabledOpeningTags(restoringEscrowHtml), [restoreInput, restoreEscrowBtn]);
+
+    // 7) isExportingBackup
+    const exportingBackupHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isExportingBackup: true
+      })
+    );
+    const exportBtn = findOpeningTag(
+      exportingBackupHtml,
+      'data-testid="backup-export-button"',
+      'button'
+    );
+    assert.ok(DISABLED_ATTR_PATTERN.test(exportBtn));
+    assert.deepEqual(listDisabledOpeningTags(exportingBackupHtml), [exportBtn]);
+
+    // 8) isRecordingExternalBackupStorage
+    const recordingStorageHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isRecordingExternalBackupStorage: true
+      })
+    );
+    const storageTag = findButtonOpeningTagBySpanText(recordingStorageHtml, '記録中...');
+    assert.ok(DISABLED_ATTR_PATTERN.test(storageTag));
+    assert.deepEqual(listDisabledOpeningTags(recordingStorageHtml), [storageTag]);
+
+    // 9) isRecordingExternalBackupReceipt
+    const recordingReceiptHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isRecordingExternalBackupReceipt: true
+      })
+    );
+    const receiptInput = findOpeningTag(
+      recordingReceiptHtml,
+      'aria-label="外部保存ジョブ受領書JSONを選択"',
+      'input'
+    );
+    const receiptTag = findButtonOpeningTagBySpanText(recordingReceiptHtml, '受領書を記録中...');
+    assert.ok(DISABLED_ATTR_PATTERN.test(receiptInput));
+    assert.ok(DISABLED_ATTR_PATTERN.test(receiptTag));
+    assert.deepEqual(listDisabledOpeningTags(recordingReceiptHtml), [receiptInput, receiptTag]);
+
+    // 10) isAnalyzingMigrationCsv
+    const analyzingMigrationHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isAnalyzingMigrationCsv: true
+      })
+    );
+    const migrationBtn = findButtonOpeningTagBySpanText(analyzingMigrationHtml, '解析中...');
+    assert.ok(DISABLED_ATTR_PATTERN.test(migrationBtn));
+
+    // 11) isImportingBackup
+    const importingBackupHtml = renderWithEscrowInputsFilled(
+      createMockBackupSettingsProps({
+        canManageBackups: true,
+        isImportingBackup: true
+      })
+    );
+    const restoreBackupBtn = findButtonOpeningTagBySpanText(importingBackupHtml, 'バックアップを復旧する');
+    assert.ok(DISABLED_ATTR_PATTERN.test(restoreBackupBtn));
+    assert.deepEqual(listDisabledOpeningTags(importingBackupHtml), [restoreBackupBtn]);
   });
 });
