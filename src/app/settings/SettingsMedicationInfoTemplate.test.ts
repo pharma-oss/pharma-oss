@@ -349,5 +349,241 @@ describe('MedicationInfoTemplateSettingsTab renderToStaticMarkup contracts', () 
       `Expected safety draft csv export button to be disabled when exporting csv:\n${draftCsvButtonTag}`
     );
   });
+
+  it('keeps top action controls and file inputs disabled during in-flight CSV import', () => {
+    const props = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      isImportingMedicationInfoCsv: true
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, props)
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      6,
+      `When isImportingMedicationInfoCsv is true, exactly 6 form controls must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const newBtn = findOpeningTag(html, '新規', 'button');
+    const exportBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-csv-export"',
+      'button'
+    );
+    const inputTag = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-csv-input"',
+      'input'
+    );
+    const pmdaBtn = findOpeningTag(html, 'PMDA検索URL', 'button');
+    const safetyDraftBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-safety-draft"',
+      'button'
+    );
+    const safetyDraftCsvBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-safety-draft-csv-export"',
+      'button'
+    );
+
+    for (const [name, tag] of [
+      ['新規ボタン', newBtn],
+      ['CSV書出ボタン', exportBtn],
+      ['CSV取込入力', inputTag],
+      ['PMDA検索URLボタン', pmdaBtn],
+      ['副作用/注意案ボタン', safetyDraftBtn],
+      ['注意案CSVボタン', safetyDraftCsvBtn]
+    ]) {
+      assert.ok(
+        DISABLED_ATTR_PATTERN.test(tag),
+        `Expected "${name}" to be disabled during CSV import:\n${tag}`
+      );
+    }
+
+    const ariaDisabledTags = listAriaDisabledOpeningTags(html);
+    assert.equal(
+      ariaDisabledTags.length,
+      1,
+      `When isImportingMedicationInfoCsv is true, exactly 1 aria-disabled tag must be present:\n${ariaDisabledTags.join('\n')}`
+    );
+    const labelTag = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-csv-input"',
+      'label'
+    );
+    assert.ok(
+      ARIA_DISABLED_ATTR_PATTERN.test(labelTag),
+      `Expected CSV upload label to have aria-disabled during CSV import:\n${labelTag}`
+    );
+  });
+
+  it('keeps approve button disabled and sets title when approval issues exist', () => {
+    const props = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      currentMedicationInfoApprovalIssues: [
+        { code: 'side_effect_text', message: '主な副作用を入力してください' }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, props)
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      1,
+      `When approval issues exist, only the approve button must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const approveBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-approve"',
+      'button'
+    );
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(approveBtn),
+      `Expected approve button to be disabled when issues exist:\n${approveBtn}`
+    );
+    assert.ok(
+      approveBtn.includes('title="主な副作用を入力してください"'),
+      `Expected approve button title to explain issues:\n${approveBtn}`
+    );
+
+    const saveDraftBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-save-draft"',
+      'button'
+    );
+    const needsReviewBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-needs-review"',
+      'button'
+    );
+    const retireBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-retire"',
+      'button'
+    );
+
+    assert.ok(!DISABLED_ATTR_PATTERN.test(saveDraftBtn));
+    assert.ok(!DISABLED_ATTR_PATTERN.test(needsReviewBtn));
+    assert.ok(!DISABLED_ATTR_PATTERN.test(retireBtn));
+    assert.deepEqual(disabledTags, [approveBtn]);
+  });
+
+  it('keeps needs-review and retire buttons disabled with revision notice when editing immutable revision', () => {
+    const props = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      isEditingImmutableMedicationInfoRevision: true
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, props)
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      2,
+      `When editing immutable revision, exactly 2 buttons must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const needsReviewBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-needs-review"',
+      'button'
+    );
+    const retireBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-retire"',
+      'button'
+    );
+
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(needsReviewBtn),
+      `Expected needs-review button to be disabled when editing immutable revision:\n${needsReviewBtn}`
+    );
+    assert.ok(
+      needsReviewBtn.includes('title="本文・参照元の変更は新版として下書き保存してください"'),
+      `Expected needs-review button title to explain immutable revision notice:\n${needsReviewBtn}`
+    );
+
+    assert.ok(
+      DISABLED_ATTR_PATTERN.test(retireBtn),
+      `Expected retire button to be disabled when editing immutable revision:\n${retireBtn}`
+    );
+    assert.ok(
+      retireBtn.includes('title="本文・参照元の変更は新版として下書き保存してください"'),
+      `Expected retire button title to explain immutable revision notice:\n${retireBtn}`
+    );
+
+    const saveDraftBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-save-draft"',
+      'button'
+    );
+    const approveBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-approve"',
+      'button'
+    );
+
+    assert.ok(!DISABLED_ATTR_PATTERN.test(saveDraftBtn));
+    assert.ok(!DISABLED_ATTR_PATTERN.test(approveBtn));
+    assert.deepEqual(disabledTags, [needsReviewBtn, retireBtn]);
+  });
+
+  it('keeps all action buttons and form submit controls disabled during in-flight template save', () => {
+    const props = createMockMedicationInfoTemplateProps({
+      canManageFacility: true,
+      isSavingMedicationInfoTemplate: true
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(MedicationInfoTemplateSettingsTab, props)
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      10,
+      `When isSavingMedicationInfoTemplate is true, exactly 10 form controls must be disabled:\n${disabledTags.join('\n')}`
+    );
+
+    const saveDraftBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-save-draft"',
+      'button'
+    );
+    const approveBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-approve"',
+      'button'
+    );
+    const needsReviewBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-needs-review"',
+      'button'
+    );
+    const retireBtn = findOpeningTag(
+      html,
+      'data-testid="medication-info-template-retire"',
+      'button'
+    );
+
+    assert.ok(DISABLED_ATTR_PATTERN.test(saveDraftBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(approveBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(needsReviewBtn));
+    assert.ok(DISABLED_ATTR_PATTERN.test(retireBtn));
+
+    const ariaDisabledTags = listAriaDisabledOpeningTags(html);
+    assert.equal(
+      ariaDisabledTags.length,
+      1,
+      `When isSavingMedicationInfoTemplate is true, exactly 1 aria-disabled tag must be present:\n${ariaDisabledTags.join('\n')}`
+    );
+  });
 });
+
 
