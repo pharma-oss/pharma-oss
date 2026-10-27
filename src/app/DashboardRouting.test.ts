@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import {
   ClaimRiskRow,
@@ -25,7 +26,11 @@ import {
   formatClaimRuleAttentionForScreen
 } from '@/lib/dashboard_helpers';
 import type { OperationalAiPrediction } from '@/lib/operational_ai_prediction';
-import { EMPTY_COUNTS, type DashboardClaimWorkItem } from '@/lib/dashboard_tasks';
+import {
+  EMPTY_COUNTS,
+  type DashboardClaimWorkItem,
+  type DashboardInventoryRisk
+} from '@/lib/dashboard_tasks';
 
 describe('Dashboard component contracts and routing handlers', () => {
   describe('DashboardRows export contracts', () => {
@@ -437,6 +442,78 @@ describe('Dashboard component contracts and routing handlers', () => {
       assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled');
 
       assert.ok(html.includes('返戻 1'));
+    });
+  });
+
+  describe('InventoryAlertSection UI disabled states and markup pinning', () => {
+    const sampleUrgentRisk: DashboardInventoryRisk = {
+      drugId: 'drug-1',
+      drugName: 'ロキソニン錠60mg',
+      location: 'A-01',
+      supplierName: 'スズケン',
+      requiredAmount: 100,
+      availableAmount: 20,
+      shortageAmount: 80,
+      recommendedOrderAmount: 100,
+      affectedVisitCount: 2,
+      affectedPatientNames: ['患者A', '患者B'],
+      priority: 'high',
+      actionLabel: '至急発注',
+      pickingShortageAmount: 10
+    };
+
+    const mockAppRouter = {
+      push: () => {},
+      replace: () => {},
+      refresh: () => {},
+      back: () => {},
+      forward: () => {},
+      prefetch: () => {}
+    };
+
+    it('pins memo and csv buttons as disabled when inventory risks are empty', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(
+          AppRouterContext.Provider,
+          { value: mockAppRouter },
+          React.createElement(InventoryAlertSection, {
+            inventoryRisks: [],
+            counts: EMPTY_COUNTS,
+            isLoading: false
+          })
+        )
+      );
+
+      const memoBtn = findOpeningTag(html, '<span>発注メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+
+      assert.ok(memoBtn.includes('disabled=""'), 'Memo button must be disabled when no risks exist');
+      assert.ok(csvBtn.includes('disabled=""'), 'CSV button must be disabled when no risks exist');
+      assert.ok(html.includes('現在、在庫不足リスクはありません。'));
+      assert.ok(html.includes('0品目'));
+    });
+
+    it('enables memo and csv buttons and displays urgent badge when inventory risks are present', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(
+          AppRouterContext.Provider,
+          { value: mockAppRouter },
+          React.createElement(InventoryAlertSection, {
+            inventoryRisks: [sampleUrgentRisk],
+            counts: { ...EMPTY_COUNTS, inventoryShortageCount: 1 },
+            isLoading: false
+          })
+        )
+      );
+
+      const memoBtn = findOpeningTag(html, '<span>発注メモ</span>', 'button');
+      const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
+
+      assert.ok(!memoBtn.includes('disabled'), 'Memo button must be enabled when risks exist');
+      assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled when risks exist');
+      assert.ok(html.includes('至急 1'));
+      assert.ok(html.includes('1品目'));
+      assert.ok(html.includes('ロキソニン錠60mg'));
     });
   });
 });
