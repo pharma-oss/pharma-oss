@@ -11,6 +11,69 @@ import {
   SESSION_LOCK_TIMEOUT_MS,
   SESSION_ACTIVITY_EVENTS
 } from '@/hooks/useSessionLock';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import ClientLayout from './ClientLayout';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
+
+function renderClientLayoutWithSetupState(overrides: {
+  isCreatingInitialAdmin?: boolean;
+  isResumingGuestDemo?: boolean;
+}): string {
+  let callCount = 0;
+
+  const mockRouter = {
+    push: () => {},
+    replace: () => {},
+    refresh: () => {},
+    back: () => {},
+    forward: () => {},
+    prefetch: () => {}
+  };
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        if (currentIndex === 2) {
+          return [[{ userId: 'initial_admin', name: '管理者', role: 'admin' }], () => {}];
+        }
+        if (currentIndex === 3) {
+          return [true, () => {}];
+        }
+        if (currentIndex === 21 && overrides.isCreatingInitialAdmin !== undefined) {
+          return [overrides.isCreatingInitialAdmin, () => {}];
+        }
+        if (currentIndex === 22) {
+          dispatcher.useState = origUseState;
+          if (overrides.isResumingGuestDemo !== undefined) {
+            return [overrides.isResumingGuestDemo, () => {}];
+          }
+        }
+        return origUseState(initialState);
+      };
+    }
+
+    return React.createElement(
+      AppRouterContext.Provider,
+      { value: mockRouter as never },
+      React.createElement(ClientLayout, null, 'child-content')
+    );
+  }
+
+  return renderToStaticMarkup(React.createElement(Wrapper));
+}
 
 describe('ClientLayout and session lock contracts', () => {
   it('defines valid staff load timeout', () => {
@@ -147,6 +210,83 @@ describe('getStaffAuthGateViewState', () => {
       errorMessage: '',
       isLoading: false
     });
+  });
+});
+
+describe('ClientLayout initial admin setup disabled states contracts', () => {
+  it('pins initial admin setup form buttons as disabled when isCreatingInitialAdmin is true', () => {
+    const html = renderClientLayoutWithSetupState({
+      isCreatingInitialAdmin: true,
+      isResumingGuestDemo: false
+    });
+
+    const passwordBtnTag = findOpeningTag(html, 'パスワードを設定して開始', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(passwordBtnTag),
+      'Password submit button must be disabled when isCreatingInitialAdmin is true'
+    );
+
+    const passkeyBtnTag = findOpeningTag(html, 'btn-passkey-setup', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(passkeyBtnTag),
+      'Passkey register button must be disabled when isCreatingInitialAdmin is true'
+    );
+
+    const demoBtnTag = findOpeningTag(html, 'data-testid="guest-demo-start"', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(demoBtnTag),
+      'Guest demo button must be disabled when isCreatingInitialAdmin is true'
+    );
+  });
+
+  it('pins initial admin setup form buttons as enabled when idle', () => {
+    const html = renderClientLayoutWithSetupState({
+      isCreatingInitialAdmin: false,
+      isResumingGuestDemo: false
+    });
+
+    const passwordBtnTag = findOpeningTag(html, 'パスワードを設定して開始', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(passwordBtnTag),
+      'Password submit button must be enabled when idle'
+    );
+
+    const passkeyBtnTag = findOpeningTag(html, 'btn-passkey-setup', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(passkeyBtnTag),
+      'Passkey register button must be enabled when idle'
+    );
+
+    const demoBtnTag = findOpeningTag(html, 'data-testid="guest-demo-start"', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(demoBtnTag),
+      'Guest demo button must be enabled when idle'
+    );
+  });
+
+  it('pins guest demo button as disabled when isResumingGuestDemo is true even if not creating admin', () => {
+    const html = renderClientLayoutWithSetupState({
+      isCreatingInitialAdmin: false,
+      isResumingGuestDemo: true
+    });
+
+    const passwordBtnTag = findOpeningTag(html, 'パスワードを設定して開始', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(passwordBtnTag),
+      'Password submit button must remain enabled when only resuming guest demo'
+    );
+
+    const passkeyBtnTag = findOpeningTag(html, 'btn-passkey-setup', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(passkeyBtnTag),
+      'Passkey register button must remain enabled when only resuming guest demo'
+    );
+
+    const demoBtnTag = findOpeningTag(html, 'data-testid="guest-demo-start"', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(demoBtnTag),
+      'Guest demo button must be disabled when isResumingGuestDemo is true'
+    );
   });
 });
 
