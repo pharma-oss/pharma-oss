@@ -4,6 +4,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TracingReportModal, type TracingReportModalProps } from './components/TracingReportModal';
 import type { VisitTracingReport } from '@/db/types';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
 function createMockTracingReportModalProps(
   overrides: Partial<TracingReportModalProps> = {}
@@ -35,6 +38,48 @@ function createMockTracingReportModalProps(
     onSaveReport: async () => {},
     ...overrides
   };
+}
+
+function renderWithIsSaving(
+  props: TracingReportModalProps,
+  isSavingOverride: boolean
+): string {
+  let callCount = 0;
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        if (currentIndex === 1) {
+          assert.equal(
+            initialState,
+            false,
+            `Expected TracingReportModal useState call #1 initial value to be false (isSaving), got ${String(initialState)}`
+          );
+          // Restore immediately so children (e.g. MedicalInstitutionAutoComplete) use unpatched useState
+          dispatcher.useState = origUseState;
+          return [isSavingOverride, () => {}];
+        }
+        return origUseState(initialState);
+      };
+    }
+    return React.createElement(TracingReportModal, props);
+  }
+
+  const html = renderToStaticMarkup(React.createElement(Wrapper));
+  assert.equal(
+    callCount,
+    2,
+    `Expected TracingReportModal to call useState exactly 2 times, got ${callCount}`
+  );
+  return html;
 }
 
 describe('TracingReportModal renderToStaticMarkup contracts', () => {
@@ -103,5 +148,72 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('value="【服薬情報提供】残薬調整および服薬状況報告"'), 'Should populate report subject');
     assert.ok(html.includes('カルベジロール錠10mg 1日1回 朝食後'), 'Should populate medication summary');
     assert.ok(html.includes('朝の服用忘れが週に1〜2回あり'), 'Should populate patient condition');
+  });
+
+  it('pins save button as disabled when report subject is empty or whitespace-only', () => {
+    // Case 1: Empty subject string
+    const emptyProps = createMockTracingReportModalProps({
+      existingReport: { subject: '' } as unknown as VisitTracingReport
+    });
+    const emptyHtml = renderToStaticMarkup(React.createElement(TracingReportModal, emptyProps));
+    const emptyBtnTag = findOpeningTag(emptyHtml, '<span>保存</span>', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(emptyBtnTag),
+      `Save button must be disabled when subject is empty: ${emptyBtnTag}`
+    );
+    assert.ok(emptyHtml.includes('<span>保存</span>'), 'Save button label should be "保存"');
+
+    // Case 2: Whitespace-only subject string
+    const whitespaceProps = createMockTracingReportModalProps({
+      existingReport: { subject: '   ' } as unknown as VisitTracingReport
+    });
+    const whitespaceHtml = renderToStaticMarkup(React.createElement(TracingReportModal, whitespaceProps));
+    const whitespaceBtnTag = findOpeningTag(whitespaceHtml, '<span>保存</span>', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(whitespaceBtnTag),
+      `Save button must be disabled when subject is whitespace-only: ${whitespaceBtnTag}`
+    );
+  });
+
+  it('pins save button as enabled when subject is present and not saving', () => {
+    // Case 1: Auto-drafted subject from default props
+    const defaultProps = createMockTracingReportModalProps();
+    const defaultHtml = renderToStaticMarkup(React.createElement(TracingReportModal, defaultProps));
+    const defaultBtnTag = findOpeningTag(defaultHtml, '<span>保存</span>', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(defaultBtnTag),
+      `Save button must be enabled with auto-drafted subject: ${defaultBtnTag}`
+    );
+    assert.ok(defaultHtml.includes('<span>保存</span>'), 'Save button label should be "保存"');
+
+    // Case 2: Valid explicit subject from existingReport
+    const validProps = createMockTracingReportModalProps({
+      existingReport: {
+        subject: '【服薬情報提供】残薬調整および服薬状況報告'
+      } as unknown as VisitTracingReport
+    });
+    const validHtml = renderToStaticMarkup(React.createElement(TracingReportModal, validProps));
+    const validBtnTag = findOpeningTag(validHtml, '<span>保存</span>', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(validBtnTag),
+      `Save button must be enabled with valid subject: ${validBtnTag}`
+    );
+  });
+
+  it('pins save button as disabled and displays saving text when isSaving is true', () => {
+    const props = createMockTracingReportModalProps({
+      existingReport: {
+        subject: '【服薬情報提供】残薬調整および服薬状況報告'
+      } as unknown as VisitTracingReport
+    });
+
+    const savingHtml = renderWithIsSaving(props, true);
+    const savingBtnTag = findOpeningTag(savingHtml, '<span>保存中...</span>', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(savingBtnTag),
+      `Save button must be disabled when isSaving is true even with valid subject: ${savingBtnTag}`
+    );
+    assert.ok(savingHtml.includes('<span>保存中...</span>'), 'Save button label should change to "保存中..."');
+    assert.ok(!savingHtml.includes('<span>保存</span>'), 'Save button label should not remain "保存"');
   });
 });
