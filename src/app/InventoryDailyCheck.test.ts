@@ -169,4 +169,169 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
     assert.ok(html.includes('ジアゼパム錠5mg'), 'Psychotropic drug name should be rendered in table');
     assert.ok(html.includes('未入力 2 件'), 'Summary note should indicate 2 unentered rows');
   });
+
+  interface DailyCheckStateOverrides {
+    actualCounts?: Record<string, number>;
+    isSavingInventory?: boolean;
+  }
+
+  function renderWithDailyCheckOverrides(
+    drugs: ReturnType<typeof toInventoryDrugRow>[],
+    overrides: DailyCheckStateOverrides = {}
+  ): string {
+    const { actualCounts = {}, isSavingInventory = false } = overrides;
+    let callCount = 0;
+
+    function Wrapper(): React.ReactNode {
+      const internals = (React as unknown as {
+        __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+          H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+        }
+      }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+      const dispatcher = internals?.H;
+      if (dispatcher?.useState) {
+        const origUseState = dispatcher.useState;
+        dispatcher.useState = (initialState: unknown) => {
+          const currentIndex = callCount++;
+          if (currentIndex === 0) {
+            assert.deepEqual(
+              initialState,
+              {},
+              `Expected DailyCheckPanel useState call #0 initial value to be {}, got ${JSON.stringify(initialState)}`
+            );
+            return [actualCounts, () => {}];
+          }
+          if (currentIndex === 7) {
+            assert.equal(
+              initialState,
+              false,
+              `Expected DailyCheckPanel useState call #7 initial value to be false (isSavingInventory), got ${String(initialState)}`
+            );
+            dispatcher.useState = origUseState;
+            return [isSavingInventory, () => {}];
+          }
+          return origUseState(initialState);
+        };
+      }
+
+      return React.createElement(DailyCheckPanel, {
+        db: {},
+        drugs,
+        pendingStockMap: new Map<string, number>()
+      });
+    }
+
+    const html = renderToStaticMarkup(React.createElement(Wrapper));
+    assert.equal(
+      callCount,
+      8,
+      `Expected DailyCheckPanel to call useState exactly 8 times, got ${callCount}`
+    );
+    return html;
+  }
+
+  it('pins per-row clear count button disabled state based on hasActualCount', () => {
+    const drugs = [sampleNarcoticDrug, samplePsychotropicDrug];
+
+    // Case 1: unentered actual counts -> both row clear buttons must be disabled
+    const unenteredHtml = renderWithDailyCheckOverrides(drugs, { actualCounts: {} });
+    const rowClearUnentered1 = findOpeningTag(
+      unenteredHtml,
+      'モルヒネ塩酸塩錠10mgの実地棚在庫数をクリア',
+      'button'
+    );
+    const rowClearUnentered2 = findOpeningTag(
+      unenteredHtml,
+      'ジアゼパム錠5mgの実地棚在庫数をクリア',
+      'button'
+    );
+    assert.ok(
+      rowClearUnentered1.includes('disabled=""'),
+      `Unentered narcotic row clear button must be disabled: ${rowClearUnentered1}`
+    );
+    assert.ok(
+      rowClearUnentered2.includes('disabled=""'),
+      `Unentered psychotropic row clear button must be disabled: ${rowClearUnentered2}`
+    );
+
+    // Case 2: entered count for drug1 only -> drug1 row clear enabled, drug2 row clear disabled
+    const partiallyEnteredHtml = renderWithDailyCheckOverrides(drugs, {
+      actualCounts: { [sampleNarcoticDrug.code]: 50 }
+    });
+    const rowClearEntered1 = findOpeningTag(
+      partiallyEnteredHtml,
+      'モルヒネ塩酸塩錠10mgの実地棚在庫数をクリア',
+      'button'
+    );
+    const rowClearStillUnentered2 = findOpeningTag(
+      partiallyEnteredHtml,
+      'ジアゼパム錠5mgの実地棚在庫数をクリア',
+      'button'
+    );
+    assert.ok(
+      !rowClearEntered1.includes('disabled'),
+      `Entered narcotic row clear button must be enabled: ${rowClearEntered1}`
+    );
+    assert.ok(
+      rowClearStillUnentered2.includes('disabled=""'),
+      `Unentered psychotropic row clear button must remain disabled: ${rowClearStillUnentered2}`
+    );
+  });
+
+  it('enables clear all and save buttons when actual counts are entered and idle', () => {
+    const drugs = [sampleNarcoticDrug, samplePsychotropicDrug];
+    const html = renderWithDailyCheckOverrides(drugs, {
+      actualCounts: {
+        [sampleNarcoticDrug.code]: 50,
+        [samplePsychotropicDrug.code]: 100
+      },
+      isSavingInventory: false
+    });
+
+    const clearAllBtnTag = findOpeningTag(html, '表示中クリア', 'button');
+    const saveBtnTag = findOpeningTag(html, 'btn-primary flex-center gap-2', 'button');
+    const saveTooltipSpan = findOpeningTag(html, 'btn-tooltip-wrapper', 'span');
+
+    assert.ok(
+      !clearAllBtnTag.includes('disabled'),
+      `Clear all button must be enabled when enteredCount > 0: ${clearAllBtnTag}`
+    );
+    assert.ok(
+      !saveBtnTag.includes('disabled'),
+      `Save button must be enabled when enteredCount > 0 and idle: ${saveBtnTag}`
+    );
+    assert.ok(
+      !saveTooltipSpan.includes('data-disabled="true"'),
+      `Save tooltip must not have data-disabled="true" when enabled: ${saveTooltipSpan}`
+    );
+    assert.ok(html.includes('棚卸し結果を保存'), 'Save button label should be "棚卸し結果を保存"');
+  });
+
+  it('pins save button as disabled and wrapper data-disabled when isSavingInventory is true even with entered counts', () => {
+    const drugs = [sampleNarcoticDrug, samplePsychotropicDrug];
+    const html = renderWithDailyCheckOverrides(drugs, {
+      actualCounts: {
+        [sampleNarcoticDrug.code]: 50
+      },
+      isSavingInventory: true
+    });
+
+    const saveBtnTag = findOpeningTag(html, 'btn-primary flex-center gap-2', 'button');
+    const saveTooltipSpan = findOpeningTag(html, 'btn-tooltip-wrapper', 'span');
+
+    assert.ok(
+      saveBtnTag.includes('disabled=""'),
+      `Save button must be disabled when isSavingInventory is true: ${saveBtnTag}`
+    );
+    assert.ok(
+      saveTooltipSpan.includes('data-disabled="true"'),
+      `Save tooltip wrapper must have data-disabled="true" when saving: ${saveTooltipSpan}`
+    );
+    assert.ok(
+      saveTooltipSpan.includes('title="保存中..."'),
+      `Save tooltip title must be "保存中...": ${saveTooltipSpan}`
+    );
+    assert.ok(html.includes('保存中...'), 'Save button label should change to "保存中..."');
+  });
 });
