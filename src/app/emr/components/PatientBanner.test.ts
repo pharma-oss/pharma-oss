@@ -20,6 +20,58 @@ import {
   type EditablePublicInsurance
 } from '@/lib/patient_public_insurance';
 import type { PublicInsurance } from '@/db/types';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
+
+function renderWithPatientBannerOverrides(overrides: {
+  isModalOpen?: boolean;
+  questionnaireRawText?: string;
+  isQuestionnaireProcessing?: boolean;
+  patientData?: unknown;
+}): string {
+  let callCount = 0;
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        if (currentIndex === 0 && overrides.patientData !== undefined) {
+          return [overrides.patientData, () => {}];
+        }
+        if (currentIndex === 7 && overrides.isModalOpen !== undefined) {
+          return [overrides.isModalOpen, () => {}];
+        }
+        if (currentIndex === 26 && overrides.questionnaireRawText !== undefined) {
+          return [overrides.questionnaireRawText, () => {}];
+        }
+        if (currentIndex === 36) {
+          dispatcher.useState = origUseState;
+          if (overrides.isQuestionnaireProcessing !== undefined) {
+            return [overrides.isQuestionnaireProcessing, () => {}];
+          }
+        }
+        return origUseState(initialState);
+      };
+    }
+
+    return React.createElement(PatientBanner, {
+      patientAlerts: [],
+      targetVisitId: 'test-visit-id',
+      onOpenPicking: () => {}
+    });
+  }
+
+  return renderToStaticMarkup(React.createElement(Wrapper));
+}
 
 test('PatientBanner renders initial fallback state without crashing and contains edit action', () => {
   const element = React.createElement(PatientBanner, {
@@ -229,5 +281,85 @@ test('buildPatientBannerSummaryDisplay formats male gender and omits gender segm
     false
   );
   assert.strictEqual(noGender.patientTitle, '佐藤 花子 (46歳)');
+});
+
+test('pins questionnaire inputs, re-extract button, and save insurance button as disabled when isQuestionnaireProcessing is true', () => {
+  const html = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isQuestionnaireProcessing: true,
+    questionnaireRawText: 'アレルギー: 既往あり'
+  });
+
+  const cameraInputTag = findOpeningTag(html, 'data-testid="emr-initial-questionnaire-camera-input"', 'input');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(cameraInputTag),
+    'Camera input should be disabled during questionnaire processing'
+  );
+
+  const imageInputTag = findOpeningTag(html, 'data-testid="emr-initial-questionnaire-image-input"', 'input');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(imageInputTag),
+    'Image input should be disabled during questionnaire processing'
+  );
+
+  const reextractBtnTag = findOpeningTag(html, '全文から再抽出', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(reextractBtnTag),
+    'Re-extract button should be disabled during questionnaire processing'
+  );
+
+  const saveBtnTag = findOpeningTag(html, 'OCR中...', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(saveBtnTag),
+    'Save insurance button should be disabled during questionnaire processing'
+  );
+  assert.ok(html.includes('OCR中...'), 'Save button label should indicate OCR in-flight');
+});
+
+test('pins questionnaire inputs, re-extract button, and save insurance button as enabled when idle with questionnaire text', () => {
+  const html = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isQuestionnaireProcessing: false,
+    questionnaireRawText: 'アレルギー: なし'
+  });
+
+  const cameraInputTag = findOpeningTag(html, 'data-testid="emr-initial-questionnaire-camera-input"', 'input');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(cameraInputTag),
+    'Camera input should be enabled when idle'
+  );
+
+  const imageInputTag = findOpeningTag(html, 'data-testid="emr-initial-questionnaire-image-input"', 'input');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(imageInputTag),
+    'Image input should be enabled when idle'
+  );
+
+  const reextractBtnTag = findOpeningTag(html, '全文から再抽出', 'button');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(reextractBtnTag),
+    'Re-extract button should be enabled when text is present and idle'
+  );
+
+  const saveBtnTag = findOpeningTag(html, '保存して適用', 'button');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(saveBtnTag),
+    'Save insurance button should be enabled when idle'
+  );
+  assert.ok(html.includes('保存して適用'), 'Save button label should indicate normal ready state');
+});
+
+test('pins questionnaire re-extract button as disabled when questionnaire raw text is empty even if idle', () => {
+  const html = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isQuestionnaireProcessing: false,
+    questionnaireRawText: ''
+  });
+
+  const reextractBtnTag = findOpeningTag(html, '全文から再抽出', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(reextractBtnTag),
+    'Re-extract button should be disabled when questionnaire raw text is empty'
+  );
 });
 
