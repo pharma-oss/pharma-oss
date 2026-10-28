@@ -11,6 +11,9 @@ import {
   GuidanceDropdownPanel
 } from './components/EmrInsightCards';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
 describe('EmrInsightCards renderToStaticMarkup contracts', () => {
   describe('CareChecklistCard', () => {
@@ -150,6 +153,55 @@ describe('EmrInsightCards renderToStaticMarkup contracts', () => {
       assert.ok(html.includes('85%'), 'Should render confidence percentage');
       assert.ok(html.includes('検査値: eGFR 38 (2026/09/15)'), 'Should render evidence detail');
       assert.ok(html.includes('SOAPへ反映'), 'Should render apply button');
+    });
+
+    it('pins evidence button disabled state based on targetId presence', () => {
+      const mockSuggestions: SoapAiDraftSuggestion[] = [
+        {
+          draftId: 'draft-ckd-evidence-test',
+          type: 'A',
+          title: '腎機能低下に伴う用量確認',
+          text: 'eGFR 38 mL/min/1.73m2 に応じた減量基準を満たしていることを確認済み。',
+          severity: 'warning',
+          confidence: 85,
+          evidence: [
+            {
+              label: '検査値',
+              detail: 'eGFR 38 (2026/09/15)',
+              source: '検査データ',
+              targetId: 'lab-egfr',
+              targetLabel: '検査データ'
+            },
+            {
+              label: '留意事項',
+              detail: '添付文書の慎重投与規定を参照',
+              source: '添付文書'
+              // targetId is undefined
+            }
+          ],
+          guardrail: '処方監査'
+        }
+      ];
+
+      const html = renderToStaticMarkup(
+        React.createElement(SoapAiDraftInsightCard, {
+          suggestions: mockSuggestions,
+          onApplyDraft: () => {},
+          onFocusEvidence: () => {}
+        })
+      );
+
+      const enabledButtonTag = findOpeningTag(html, 'eGFR 38 (2026/09/15)', 'button');
+      assert.ok(
+        !DISABLED_ATTRIBUTE_PATTERN.test(enabledButtonTag),
+        'Evidence button with targetId should be enabled (no disabled attribute)'
+      );
+
+      const disabledButtonTag = findOpeningTag(html, '添付文書の慎重投与規定を参照', 'button');
+      assert.ok(
+        DISABLED_ATTRIBUTE_PATTERN.test(disabledButtonTag),
+        'Evidence button without targetId should have disabled attribute'
+      );
     });
   });
 
