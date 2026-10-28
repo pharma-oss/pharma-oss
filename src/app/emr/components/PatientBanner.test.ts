@@ -29,6 +29,8 @@ function renderWithPatientBannerOverrides(overrides: {
   questionnaireRawText?: string;
   isQuestionnaireProcessing?: boolean;
   patientData?: unknown;
+  isReading?: boolean;
+  mynaReaderState?: unknown;
 }): string {
   let callCount = 0;
 
@@ -46,6 +48,12 @@ function renderWithPatientBannerOverrides(overrides: {
         const currentIndex = callCount++;
         if (currentIndex === 0 && overrides.patientData !== undefined) {
           return [overrides.patientData, () => {}];
+        }
+        if (currentIndex === 2 && overrides.isReading !== undefined) {
+          return [overrides.isReading, () => {}];
+        }
+        if (currentIndex === 4 && overrides.mynaReaderState !== undefined) {
+          return [overrides.mynaReaderState, () => {}];
         }
         if (currentIndex === 7 && overrides.isModalOpen !== undefined) {
           return [overrides.isModalOpen, () => {}];
@@ -360,6 +368,58 @@ test('pins questionnaire re-extract button as disabled when questionnaire raw te
   assert.ok(
     DISABLED_ATTRIBUTE_PATTERN.test(reextractBtnTag),
     'Re-extract button should be disabled when questionnaire raw text is empty'
+  );
+});
+
+test('pins Myna read button and wrapper as disabled when isReading is true even if reader is available', () => {
+  const html = renderWithPatientBannerOverrides({
+    isReading: true,
+    patientData: { name: '山田 太郎' },
+    mynaReaderState: { status: 'ready', available: true }
+  });
+
+  const buttonTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(buttonTag),
+    'Myna read button must be disabled when isReading is true'
+  );
+
+  const wrapperTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'span');
+  assert.ok(
+    wrapperTag.includes('data-disabled="true"'),
+    'Myna wrapper must have data-disabled="true" when isReading is true'
+  );
+  assert.ok(
+    wrapperTag.includes('title="読み取り中..."'),
+    'Myna wrapper title must be "読み取り中..." when isReading is true'
+  );
+  assert.ok(
+    html.includes('読取中...'),
+    'Button label must indicate reading in-flight state'
+  );
+});
+
+test('pins Myna read button and wrapper as enabled when reader is available and not reading with patient loaded', () => {
+  const html = renderWithPatientBannerOverrides({
+    isReading: false,
+    patientData: { name: '山田 太郎' },
+    mynaReaderState: { status: 'ready', available: true }
+  });
+
+  const buttonTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'button');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(buttonTag),
+    'Myna read button must be enabled when reader is available, patient is loaded, and not reading'
+  );
+
+  const wrapperTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'span');
+  assert.ok(
+    !wrapperTag.includes('data-disabled="true"'),
+    'Myna wrapper must not have data-disabled="true" when available and ready'
+  );
+  assert.ok(
+    html.includes('マイナ読取'),
+    'Button label must show idle "マイナ読取"'
   );
 });
 
