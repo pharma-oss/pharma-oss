@@ -9,6 +9,9 @@ import {
   type PickingSupportModalProps
 } from './components/PickingSupportModal';
 import type { PickingItem } from '@/lib/emr_helpers';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
 function createMockPickingSupportModalProps(
   overrides: Partial<PickingSupportModalProps> = {}
@@ -50,6 +53,75 @@ function createMockPickingSupportModalProps(
     onPrintReceipt: () => {},
     ...overrides
   };
+}
+
+interface PickingStateOverrides {
+  scanInput?: string;
+  isVerifyingScan?: boolean;
+  isImportingSystemResult?: boolean;
+}
+
+function renderWithStateOverrides(
+  props: PickingSupportModalProps,
+  overrides: PickingStateOverrides = {}
+): string {
+  const { scanInput = '', isVerifyingScan = false, isImportingSystemResult = false } = overrides;
+  let callCount = 0;
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        if (currentIndex === 0) {
+          // 0: const [scanInput, setScanInput] = useState('');
+          assert.equal(
+            initialState,
+            '',
+            `Expected PickingSupportModal useState call #0 initial value to be '', got ${String(initialState)}`
+          );
+          return [scanInput, () => {}];
+        }
+        if (currentIndex === 2) {
+          // 2: const [isVerifyingScan, setIsVerifyingScan] = useState(false);
+          assert.equal(
+            initialState,
+            false,
+            `Expected PickingSupportModal useState call #2 initial value to be false (isVerifyingScan), got ${String(initialState)}`
+          );
+          return [isVerifyingScan, () => {}];
+        }
+        if (currentIndex === 6) {
+          // 6: const [isImportingSystemResult, setIsImportingSystemResult] = useState(false);
+          assert.equal(
+            initialState,
+            false,
+            `Expected PickingSupportModal useState call #6 initial value to be false (isImportingSystemResult), got ${String(initialState)}`
+          );
+          // Restore immediately after the last hook of PickingSupportModal so children use unpatched hook
+          dispatcher.useState = origUseState;
+          return [isImportingSystemResult, () => {}];
+        }
+        return origUseState(initialState);
+      };
+    }
+    return React.createElement(PickingSupportModal, props);
+  }
+
+  const html = renderToStaticMarkup(React.createElement(Wrapper));
+  assert.equal(
+    callCount,
+    7,
+    `Expected PickingSupportModal to call useState exactly 7 times before children, got ${callCount}`
+  );
+  return html;
 }
 
 describe('PickingSupportModal renderToStaticMarkup contracts', () => {
@@ -118,6 +190,81 @@ describe('PickingSupportModal renderToStaticMarkup contracts', () => {
 
     assert.ok(html.includes('全調剤完了'), 'Should render all-picked badge when all items are picked');
     assert.ok(html.includes('進捗: <strong>1</strong> / 1 調剤完了'), 'Should render 1/1 completed count');
+  });
+
+  it('pins scan submit button as disabled when scanInput is empty or whitespace-only', () => {
+    const props = createMockPickingSupportModalProps();
+
+    // Case 1: Empty scanInput
+    const emptyHtml = renderWithStateOverrides(props, { scanInput: '', isVerifyingScan: false });
+    const emptyBtnTag = findOpeningTag(emptyHtml, 'btn-scan-submit', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(emptyBtnTag),
+      `Scan button must be disabled when scanInput is empty: ${emptyBtnTag}`
+    );
+    assert.ok(emptyHtml.includes('照合'), 'Scan button label should be "照合"');
+
+    // Case 2: Whitespace-only scanInput
+    const whitespaceHtml = renderWithStateOverrides(props, { scanInput: '   ', isVerifyingScan: false });
+    const whitespaceBtnTag = findOpeningTag(whitespaceHtml, 'btn-scan-submit', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(whitespaceBtnTag),
+      `Scan button must be disabled when scanInput is whitespace-only: ${whitespaceBtnTag}`
+    );
+  });
+
+  it('pins scan submit button as enabled when barcode is entered and idle', () => {
+    const props = createMockPickingSupportModalProps();
+    const validHtml = renderWithStateOverrides(props, {
+      scanInput: '04987001001001',
+      isVerifyingScan: false
+    });
+    const validBtnTag = findOpeningTag(validHtml, 'btn-scan-submit', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(validBtnTag),
+      `Scan button must be enabled when barcode is entered: ${validBtnTag}`
+    );
+    assert.ok(validHtml.includes('照合'), 'Scan button label should be "照合"');
+    assert.ok(!validHtml.includes('照合中...'), 'Scan button label should not show verifying state');
+  });
+
+  it('pins scan submit button as disabled and displays verifying text when isVerifyingScan is true', () => {
+    const props = createMockPickingSupportModalProps();
+    const verifyingHtml = renderWithStateOverrides(props, {
+      scanInput: '04987001001001',
+      isVerifyingScan: true
+    });
+    const verifyingBtnTag = findOpeningTag(verifyingHtml, 'btn-scan-submit', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(verifyingBtnTag),
+      `Scan button must be disabled when isVerifyingScan is true: ${verifyingBtnTag}`
+    );
+    assert.ok(verifyingHtml.includes('照合中...'), 'Scan button label should show "照合中..."');
+    assert.ok(!verifyingHtml.includes('>照合</button>'), 'Scan button label should not remain idle "照合"');
+  });
+
+  it('pins result import file input disabled state and label based on isImportingSystemResult', () => {
+    const props = createMockPickingSupportModalProps();
+
+    // Idle state
+    const idleHtml = renderWithStateOverrides(props, { isImportingSystemResult: false });
+    const idleInputTag = findOpeningTag(idleHtml, 'file-input-hidden', 'input');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(idleInputTag),
+      `File input must not be disabled when idle: ${idleInputTag}`
+    );
+    assert.ok(idleHtml.includes('結果取込'), 'Result import label should show "結果取込"');
+    assert.ok(!idleHtml.includes('取込中...'), 'Result import label should not show "取込中..."');
+
+    // Importing state
+    const importingHtml = renderWithStateOverrides(props, { isImportingSystemResult: true });
+    const importingInputTag = findOpeningTag(importingHtml, 'file-input-hidden', 'input');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(importingInputTag),
+      `File input must be disabled when isImportingSystemResult is true: ${importingInputTag}`
+    );
+    assert.ok(importingHtml.includes('取込中...'), 'Result import label should show "取込中..."');
+    assert.ok(!importingHtml.includes('>結果取込<'), 'Result import label should not show "結果取込"');
   });
 });
 
