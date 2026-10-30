@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -48,9 +48,10 @@ function renderWithAdminPasswordInput(
       }
     }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
 
-    if (internals?.H?.useState) {
-      const origUseState = internals.H.useState;
-      internals.H.useState = (initialState: unknown) => {
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
         const currentIndex = callCount++;
         if (currentIndex === 0) {
           assert.equal(
@@ -59,6 +60,14 @@ function renderWithAdminPasswordInput(
             `Expected EmergencyRecoveryKeySheetPrint useState call #0 initial value to be '', got ${String(initialState)}`
           );
           return [passwordOverride, () => {}];
+        }
+        if (currentIndex === 1) {
+          assert.equal(
+            initialState,
+            null,
+            `Expected EmergencyRecoveryKeySheetPrint useState call #1 initial value to be null, got ${String(initialState)}`
+          );
+          dispatcher.useState = origUseState;
         }
         return origUseState(initialState);
       };
@@ -196,5 +205,36 @@ describe('EmergencyRecoveryKeySheetPrint contracts', () => {
     const btnTagIssuedFilled = findOpeningTag(htmlIssuedFilled, 'btn-generate-escrow', 'button');
     assert.ok(!btnTagIssuedFilled.includes('disabled'), `Reissue button must be enabled when password is provided: ${btnTagIssuedFilled}`);
     assert.ok(htmlIssuedFilled.includes('新しいパスワードで再発行'), 'Button label must indicate reissue when escrow is present');
+  });
+
+  it('restores useState dispatcher hook immediately so subsequent renders are not polluted', () => {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    let probeBefore: unknown = null;
+    let probeAfter: unknown = null;
+
+    function ProbeBefore(): React.ReactNode {
+      probeBefore = internals?.H?.useState;
+      return null;
+    }
+    function ProbeAfter(): React.ReactNode {
+      probeAfter = internals?.H?.useState;
+      return null;
+    }
+
+    renderToStaticMarkup(React.createElement(ProbeBefore));
+    renderWithAdminPasswordInput(createMockEmergencyRecoveryKeySheetPrintProps());
+    renderToStaticMarkup(React.createElement(ProbeAfter));
+
+    assert.ok(probeBefore !== null, 'ProbeBefore must capture initial useState hook');
+    assert.strictEqual(
+      probeAfter,
+      probeBefore,
+      'useState dispatcher must be completely restored to its original reference after render'
+    );
   });
 });
