@@ -5,6 +5,7 @@ import { DISPENSING_OFFICIAL_FEE_CODE_OVERRIDE_ITEMS, type OfficialFeeCodeOverri
 import { type OfficialFeeCodeMasterProposal } from '@/lib/official_fee_code_overrides';
 import { getPermissionDeniedMessage } from '@/lib/audit';
 import { AI_ASSIST_MODE_DESCRIPTIONS, normalizeAiAssistMode } from '@/lib/ai_assist_policy';
+import BusinessHoursSettingsSection from './BusinessHoursSettingsSection';
 
 interface FacilitySettingsTabProps {
   settings: FacilitySettings;
@@ -182,6 +183,12 @@ export default function FacilitySettingsTab({
         </label>
         <small className="help-text">該当する施設基準の場合のみ選択してください。</small>
       </div>
+
+      <BusinessHoursSettingsSection
+        businessHours={settings.businessHours}
+        disabled={!canManageFacility}
+        onChange={(hours) => handleSettingsChange('businessHours', hours)}
+      />
 
       <h3 className="subsection-title">AI補助運用</h3>
       <div className="form-group">

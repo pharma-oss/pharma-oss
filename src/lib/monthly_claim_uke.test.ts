@@ -1669,3 +1669,42 @@ test('SH record dosage form code: manual dosageCategorySource takes precedence o
   const sh = officialRecordFields(claim, 'SH');
   assert.strictEqual(sh[1], '1', '手動指定された内服コード1が自動外用判定より優先されること');
 });
+
+test('official readiness stops a claim whose fee has no points in the table, and one with an after-hours addition', () => {
+  const unset = makeOfficialReadyCase();
+  unset.calculatedFees = [
+    ...unset.calculatedFees,
+    {
+      code: 'medication_guidance',
+      feeKey: 'medication_guidance_no_notebook',
+      name: '服薬管理指導料(お薬手帳なし)',
+      points: 0,
+      pointsUnset: true,
+      rationale: '点数が点数表に未設定です。'
+    }
+  ];
+  const unsetReport = buildMonthlyClaimUkeOfficialReadinessReport(unset);
+  const unsetIssue = unsetReport.issues.find((issue) => issue.code === 'official_uke_fee_points_unset');
+  assert.ok(unsetIssue, 'the unset fee is reported');
+  assert.strictEqual(unsetIssue.severity, 'error');
+  assert.strictEqual(unsetIssue.feeName, '服薬管理指導料(お薬手帳なし)');
+  assert.strictEqual(unsetReport.ok, false);
+
+  const afterHours = makeOfficialReadyCase();
+  afterHours.calculatedFees = [
+    ...afterHours.calculatedFees,
+    { code: 'after_hours', feeKey: 'holiday_addition', receiptFeeCode: '120002380', name: '休日加算', points: 99, rationale: 'テスト' }
+  ];
+  const afterHoursReport = buildMonthlyClaimUkeOfficialReadinessReport(afterHours);
+  const afterHoursIssue = afterHoursReport.issues.find((issue) => issue.code === 'official_uke_after_hours_unsupported');
+  assert.ok(afterHoursIssue, 'the addition that the official body cannot carry is reported, not silently dropped');
+  assert.strictEqual(afterHoursIssue.severity, 'error');
+  assert.match(afterHoursIssue.message, /99点/);
+  assert.strictEqual(afterHoursReport.ok, false);
+
+  const ordinary = buildMonthlyClaimUkeOfficialReadinessReport(makeOfficialReadyCase());
+  assert.strictEqual(
+    ordinary.issues.some((issue) => issue.code === 'official_uke_fee_points_unset' || issue.code === 'official_uke_after_hours_unsupported'),
+    false
+  );
+});

@@ -112,6 +112,30 @@ async function waitForLayout(page) {
   await wait(1000);
 }
 
+// 領収証の照合バーコードは、印字した領収金額をそのまま符号化している。
+// 金額とバーコードがずれた領収証を渡さないよう、描画された画面で突き合わせる。
+async function assertReceiptBarcode(page) {
+  const info = await page.evaluate(() => {
+    const barcode = document.querySelector('[data-testid="receipt-barcode"]');
+    const amount = document.querySelector('[data-testid="receipt-doc"] .receipt-money-panel strong');
+    return {
+      payload: barcode?.getAttribute('data-barcode-payload') || null,
+      barCount: barcode ? barcode.querySelectorAll('rect').length : 0,
+      amountText: amount?.textContent || ''
+    };
+  });
+  assertOk(info.payload, 'the receipt barcode is missing from the receipt');
+  assertOk(info.barCount > 20, `the receipt barcode has too few bars: ${info.barCount}`);
+  const match = info.payload.match(/^[A-Za-z0-9_]+\/(\d{8})\/(\d+)$/);
+  assertOk(match, `the receipt barcode payload is not in the expected format: ${info.payload}`);
+  const printedYen = Number((info.amountText.match(/[\d,]+/) || [''])[0].replace(/,/g, ''));
+  assertOk(
+    Number(match[2]) === printedYen,
+    `the barcode amount (${match[2]}) differs from the printed receipt amount (${info.amountText})`
+  );
+  return { payload: info.payload, printedYen };
+}
+
 async function screenshotElement(element, filePath) {
   const box = await element.boundingBox();
   assertOk(Boolean(box), `target has no visible bounding box: ${filePath}`);
@@ -239,6 +263,7 @@ async function run() {
 
     await page.goto(`${baseUrl}/print/${encodeURIComponent(effectiveVisitId)}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await waitForLayout(page);
+    const receiptBarcode = await assertReceiptBarcode(page);
 
     const artifactDir = join(artifactRoot, artifactStamp());
     await mkdir(artifactDir, { recursive: true });
@@ -253,6 +278,7 @@ async function run() {
       visitId: effectiveVisitId,
       artifactDir,
       captureCount: captures.length,
+      receiptBarcode,
       captures,
       seeded: seedResult ? {
         patientId: seedResult.patientId,

@@ -40,6 +40,8 @@ export const ReceiptStatementPrint = React.memo(function ReceiptStatementPrint({
   prescriptionDateStr,
   renderIdentityMark
 }: ReceiptStatementPrintProps) {
+  // 点数を決められない算定項目があるあいだは、合計と窓口負担は確定していない。金額を出さない。
+  const amountsPending = calculatedFees.some((fee) => fee.pointsUnset === true);
   return (
     <section className="print-preview-card card paper-preview-card">
       <div className="preview-header no-print">
@@ -82,19 +84,19 @@ export const ReceiptStatementPrint = React.memo(function ReceiptStatementPrint({
         <div className="statement-summary-band">
           <div>
             <span>合計点数</span>
-            <strong>{totalPoints.toLocaleString()} 点</strong>
+            <strong>{amountsPending ? '未確定' : `${totalPoints.toLocaleString()} 点`}</strong>
           </div>
           <div>
             <span>保険診療総額</span>
-            <strong>¥{formatYen(insuranceAmounts.totalCostYen)}</strong>
+            <strong>{amountsPending ? '未確定' : `¥${formatYen(insuranceAmounts.totalCostYen)}`}</strong>
           </div>
           <div>
             <span>保険者負担相当額</span>
-            <strong>¥{formatYen(insuranceAmounts.insurerBurdenYen)}</strong>
+            <strong>{amountsPending ? '未確定' : `¥${formatYen(insuranceAmounts.insurerBurdenYen)}`}</strong>
           </div>
           <div className="statement-summary-primary">
             <span>患者負担</span>
-            <strong>¥{formatYen(insuranceAmounts.patientCopayYen)}</strong>
+            <strong>{amountsPending ? '点数未設定' : `¥${formatYen(insuranceAmounts.patientCopayYen)}`}</strong>
           </div>
         </div>
 
@@ -120,7 +122,7 @@ export const ReceiptStatementPrint = React.memo(function ReceiptStatementPrint({
                   <td className="statement-category">{getFeeSectionLabel(fee.code)}</td>
                   <td className="statement-fee-name">{fee.name}</td>
                   <td>{fee.rationale || '-'}</td>
-                  <td className="statement-point-cell">{fee.points.toLocaleString()}</td>
+                  <td className="statement-point-cell">{fee.pointsUnset ? '未設定' : fee.points.toLocaleString()}</td>
                   <td>{fee.receiptFeeCode || fee.receiptRemarks?.map((remark: any) => remark.code).join(' / ') || '-'}</td>
                 </tr>
               ))

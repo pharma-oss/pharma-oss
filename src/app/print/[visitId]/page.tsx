@@ -28,7 +28,16 @@ import { isDemoVisit } from "@/lib/demo_data";
 import { buildDispensingUkeRecords, type DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 import { generateUkeContent } from "@/lib/receipt/uke_generator";
 import { useDatabase } from '@/db/DatabaseProvider';
-import { calculateDispensingFees, getTotalPoints, getFormulationType, type FeeCode, type FeeCalculationOptions } from '@/lib/calculator';
+import { calculateDispensingFees, getTotalPoints, getUnsetPointFees, getFormulationType, type FeeCode, type FeeCalculationOptions } from '@/lib/calculator';
+import {
+  judgeAfterHoursCategory,
+  resolveAfterHoursCategory,
+  resolveMedicationNotebook,
+  resolveTokkanOverride,
+  type ClaimConditionOptions
+} from '@/lib/claim_conditions';
+import { previewClaimOptions, previewConditionChoices } from '@/lib/claim_condition_previews';
+import { buildReceiptBarcodePayload, formatReceiptBarcodeCaption } from '@/lib/receipt_barcode';
 import { calculateInsuranceAmounts, formatYen } from '@/lib/billing';
 import { validateDispensingClaim } from '@/lib/claim_validation';
 import {
@@ -128,6 +137,8 @@ import {
   applyClaimOptionsWithAudit,
   applyDrugPriceOverrideWithAudit,
   applyItemClaimFlagWithAudit,
+  buildReceiptReissueAuditDetail,
+  changeClaimConditions,
   persistClaimLifecycleWithAudit,
   persistClaimOptions as persistVisitClaimOptions,
   printDocumentsWithAuditLog
@@ -136,6 +147,7 @@ import {
 import { DispensingRecordPrint } from '../components/DispensingRecordPrint';
 import { ReceiptStatementPrint } from '../components/ReceiptStatementPrint';
 import { ReceiptPrint } from '../components/ReceiptPrint';
+import { ReceiptConditionPanel } from '../components/ReceiptConditionPanel';
 import { DrugInfoPrint } from '../components/DrugInfoPrint';
 import { MedicineBagPrint } from '../components/MedicineBagPrint';
 import { MedicineNotebookStickerPrint } from '../components/MedicineNotebookStickerPrint';
@@ -258,6 +270,32 @@ export default function PrintPage() {
   const totalPoints = useMemo(() => {
     return getTotalPoints(calculatedFees);
   }, [calculatedFees]);
+
+  // 点数が決められない算定項目 (点数表に値が無い条件を選んだとき)。あるあいだは金額を確定させない。
+  const unsetPointFees = useMemo(() => getUnsetPointFees(calculatedFees), [calculatedFees]);
+
+  // 画面と同じ計算関数を、条件を差し替えて呼ぶ。試算と監査ログの金額に使う (別の計算は作らない)。
+  const calculateForOptions = useCallback((options: FeeCalculationOptions) => {
+    if (!settingsData || !patientData) return [];
+    const visitDateStr = visitData?.dispensingDate || visitData?.prescriptionDate || visitData?.issueDate || toLocalDateKey();
+    return calculateDispensingFees(settingsData, prescriptionItems, patientData, visitDateStr, options);
+  }, [settingsData, patientData, prescriptionItems, visitData]);
+
+  const burdenRatioForPreview = patientData?.insuranceInfo?.burdenRatio ?? 30;
+
+  // 領収証の横の条件パネル用。各選択肢を選んだときの金額を試算する。
+  const conditionPreviews = useMemo(() => {
+    if (!settingsData || !patientData) return null;
+    return {
+      current: previewClaimOptions(calculateForOptions, claimOptions, burdenRatioForPreview),
+      choices: previewConditionChoices({ calculate: calculateForOptions, options: claimOptions, burdenRatio: burdenRatioForPreview })
+    };
+  }, [settingsData, patientData, calculateForOptions, claimOptions, burdenRatioForPreview]);
+
+  const afterHoursJudgement = useMemo(
+    () => judgeAfterHoursCategory(visitData?.receptionAt, settingsData?.businessHours),
+    [visitData?.receptionAt, settingsData?.businessHours]
+  );
 
   const claimValidation = useMemo(() => {
     return validateDispensingClaim({
@@ -458,6 +496,60 @@ export default function PrintPage() {
       console.error('Failed to persist claim options:', e);
       alert('点数請求設定の保存に失敗しました。');
     }
+  };
+
+  const [conditionBusy, setConditionBusy] = useState(false);
+
+  // 領収証の横から、お薬手帳・時間外等・特管を切り替える。その来局の請求内容 (claimOptions) として
+  // 保存し、監査ログを残す。請求ロック後 (UKE出力後) は変更できない。
+  const handleClaimConditionChange = async (patch: ClaimConditionOptions) => {
+    if (conditionBusy) return;
+    if (!ensurePermission('change_billing')) return;
+    if (!db) {
+      alert(CLAIM_ACTION_MESSAGES.databaseNotReady);
+      return;
+    }
+    const previousOptions = claimOptions;
+    const before = previewClaimOptions(calculateForOptions, claimOptions, burdenRatioForPreview);
+    const after = previewClaimOptions(calculateForOptions, { ...claimOptions, ...patch }, burdenRatioForPreview);
+    // 点数未設定で金額が確定しない側は、監査ログに金額を書かない (未確定のまま数字を残さない)
+    const amounts = before.copayYen !== null && after.copayYen !== null
+      ? {
+          before: { totalPoints: before.totalPoints, copayYen: before.copayYen },
+          after: { totalPoints: after.totalPoints, copayYen: after.copayYen }
+        }
+      : undefined;
+    setConditionBusy(true);
+    try {
+      const outcome = await changeClaimConditions({
+        db,
+        visitId,
+        currentOptions: claimOptions,
+        patch,
+        claimLifecycle,
+        amounts,
+        patientId: visitData?.patientId,
+        patientName: patientData?.name,
+        applyOptions: setClaimOptions,
+        onPersisted: applyPersistedClaimOptions
+      });
+      if (outcome.status === 'blocked' || outcome.status === 'rolled_back') {
+        alert(outcome.message);
+      }
+    } catch (e) {
+      setClaimOptions(previousOptions);
+      console.error('Failed to change claim conditions:', e);
+      alert('算定条件の保存に失敗しました。');
+    } finally {
+      setConditionBusy(false);
+    }
+  };
+
+  const handleApplyAfterHoursJudgement = () => {
+    if (afterHoursJudgement.status !== 'judged') return;
+    void handleClaimConditionChange({
+      afterHoursCategory: afterHoursJudgement.category === 'none' ? undefined : afterHoursJudgement.category
+    });
   };
 
   const handleRecordAiSuggestionDecision = async (
@@ -854,6 +946,10 @@ export default function PrintPage() {
     if (!ensurePermission('print_documents')) return;
     if (!db) {
       alert('データベースの初期化が完了していません。');
+      return;
+    }
+    if (unsetPointFees.length > 0) {
+      alert(CLAIM_ACTION_MESSAGES.printBlockedUnsetPoints);
       return;
     }
     if (!(await ensureReceiptRemarksSaved())) return;
@@ -1366,6 +1462,19 @@ export default function PrintPage() {
   const liquidItems = prescriptionItems.filter(isLiquidItem);
   const ointmentItems = prescriptionItems.filter(isOintmentItem);
 
+  // 領収証の金額と同じ値を符号化した照合バーコード。点数未設定で金額が確定しないときは作らない。
+  const receiptAmountsPending = unsetPointFees.length > 0;
+  const receiptBarcodeInput = {
+    receiptNumber: receiptRunId,
+    dispensingDate: visitData.dispensingDate || visitData.issueDate,
+    copayYen: insuranceAmounts.patientCopayYen
+  };
+  const receiptBarcodePayload = receiptAmountsPending ? null : buildReceiptBarcodePayload(receiptBarcodeInput);
+  const receiptBarcodeCaption = receiptAmountsPending ? null : formatReceiptBarcodeCaption(receiptBarcodeInput);
+  const receiptBarcode = receiptBarcodePayload && receiptBarcodeCaption
+    ? { payload: receiptBarcodePayload, caption: receiptBarcodeCaption }
+    : null;
+
   const sumFeePoints = (codes: FeeCode[]) => (
     calculatedFees
       .filter((fee) => fee.code && codes.includes(fee.code))
@@ -1375,7 +1484,7 @@ export default function PrintPage() {
   const receiptBreakdownRows = [
     {
       label: '調剤技術料',
-      points: sumFeePoints(['base_fee', 'base_additions', 'drug_preparation', 'mixing']),
+      points: sumFeePoints(['base_fee', 'base_additions', 'drug_preparation', 'mixing', 'after_hours']),
       note: '基本料・加算・調製料'
     },
     {
@@ -1392,8 +1501,65 @@ export default function PrintPage() {
       label: '特定保険医療材料料',
       points: 0,
       note: '該当なし'
-    }
+    },
+    // 点数表に値が無く点数を決められない項目は、0点として合計に混ぜず、未設定の行として出す
+    ...unsetPointFees.map((fee) => ({
+      label: fee.name,
+      points: 0,
+      note: '点数未設定',
+      unset: true
+    }))
   ];
+
+  const claimConditions = {
+    medicationNotebook: resolveMedicationNotebook(claimOptions),
+    afterHoursCategory: resolveAfterHoursCategory(claimOptions),
+    tokkanOverride: resolveTokkanOverride(claimOptions)
+  };
+  const conditionLockedReason = !canChangeBilling
+    ? '算定条件を変更する権限がありません。'
+    : claimEditBlocked
+      ? getClaimEditBlockedMessage(claimLifecycle, 'billing')
+      : undefined;
+  const receptionAtText = visitData.receptionAt
+    ? new Date(visitData.receptionAt).toLocaleString('ja-JP', { dateStyle: 'medium', timeStyle: 'short' })
+    : undefined;
+
+  // 領収証だけを刷り直す。他の帳票は刷らず、どの金額で刷ったかを監査ログに残す。
+  const handlePrintReceiptOnly = async () => {
+    if (!ensurePermission('print_documents')) return;
+    if (!db) {
+      alert(CLAIM_ACTION_MESSAGES.databaseNotReady);
+      return;
+    }
+    if (receiptAmountsPending) {
+      alert(CLAIM_ACTION_MESSAGES.printBlockedUnsetPoints);
+      return;
+    }
+    const outcome = await printDocumentsWithAuditLog({
+      db,
+      visitId,
+      patientId: visitData?.patientId,
+      patientName: patientData?.name,
+      auditDetail: buildReceiptReissueAuditDetail(visitId, patientData?.name, {
+        totalPoints,
+        copayYen: insuranceAmounts.patientCopayYen,
+        barcodePayload: receiptBarcodePayload ?? undefined
+      }),
+      print: () => {
+        // 印刷の間だけ、領収証以外の帳票を印刷から外す (print.css の print-receipt-only)
+        document.body.classList.add('print-receipt-only');
+        try {
+          window.print();
+        } finally {
+          document.body.classList.remove('print-receipt-only');
+        }
+      }
+    });
+    if (outcome.status !== 'printed') {
+      alert(outcome.message);
+    }
+  };
 
   const electronicPrescriptionDispensingInformationFile = electronicPrescription?.dispensingInformationFile;
   const electronicPrescriptionDispensingInformationSignatureText = electronicPrescriptionDispensingInformationFile
@@ -2111,6 +2277,23 @@ export default function PrintPage() {
           dispensingDateStr={dispensingDateStr}
           prescriptionDateStr={prescriptionDateStr}
           renderIdentityMark={renderIdentityMark}
+          unsetFeeNames={unsetPointFees.map((fee) => fee.name)}
+          barcode={receiptBarcode}
+          conditionPanel={conditionPreviews ? (
+            <ReceiptConditionPanel
+              conditions={claimConditions}
+              previews={conditionPreviews.choices}
+              current={conditionPreviews.current}
+              autoJudgement={afterHoursJudgement}
+              receptionAtText={receptionAtText}
+              busy={conditionBusy}
+              lockedReason={conditionLockedReason}
+              canPrintReceipt={canPrintDocuments}
+              onChange={handleClaimConditionChange}
+              onApplyAutoJudgement={handleApplyAfterHoursJudgement}
+              onPrintReceiptOnly={handlePrintReceiptOnly}
+            />
+          ) : null}
         />
 
         {/* 4. 薬剤情報提供文書 (drug-info) */}

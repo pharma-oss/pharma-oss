@@ -14,6 +14,8 @@ import {
   printDocumentsWithAuditLog,
   applyDrugPriceOverrideWithAudit,
   buildDrugPriceOverrideAuditDetail,
+  buildReceiptReissueAuditDetail,
+  changeClaimConditions,
   type LogAuditActionFn
 } from './claim_actions.ts';
 import type { ClaimLifecycleState } from '../../lib/claim_lifecycle.ts';
@@ -768,4 +770,196 @@ test('item-level actions refuse to run without the prescription item document', 
   );
 
   assert.deepEqual(harness.auditEntries, [], '保存できていないのに監査ログを書かない');
+});
+
+// ---------------------------------------------------------------------------
+// 算定条件 (お薬手帳・時間外等・特管) の変更: 領収証の横から切り替える
+// ---------------------------------------------------------------------------
+
+const baseConditionOptions: FeeCalculationOptions = {
+  drugFeeOnly: false,
+  disabledFeeCodes: ['mixing'],
+  disabledFeeRationales: { mixing: '算定要件未充足のため' },
+  officialInsuranceCopaymentYen: 250
+} as FeeCalculationOptions;
+
+test('changeClaimConditions saves the new condition with one audit entry and keeps every other option', async () => {
+  const harness = createHarness({ visit: { visitId: 'v_0001', claimOptions: baseConditionOptions } });
+  const applied: FeeCalculationOptions[] = [];
+  const persisted: FeeCalculationOptions[] = [];
+
+  const outcome = await changeClaimConditions({
+    db: harness.db,
+    visitId: 'v_0001',
+    currentOptions: baseConditionOptions,
+    patch: { medicationNotebook: 'not_carried' },
+    amounts: { before: { totalPoints: 83, copayYen: 250 }, after: { totalPoints: 97, copayYen: 290 } },
+    patientId: 'pt_0001',
+    patientName: 'デモ患者 みどり',
+    applyOptions: (o) => applied.push(o),
+    onPersisted: (o) => persisted.push(o),
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(outcome, { status: 'applied' });
+  assert.deepEqual(harness.currentVisit().claimOptions, { ...baseConditionOptions, medicationNotebook: 'not_carried' });
+  assert.equal(harness.auditEntries.length, 1);
+  assert.equal(harness.auditEntries[0].actionType, 'billing_toggle');
+  assert.equal(
+    harness.auditEntries[0].details,
+    '算定条件変更: お薬手帳 お薬手帳あり → お薬手帳なし (83点・窓口負担¥250 → 97点・窓口負担¥290)'
+  );
+  assert.deepEqual(harness.events, ['visit.patch', 'audit']);
+  assert.equal(applied.length, 1);
+  assert.equal(persisted.length, 1);
+});
+
+test('changeClaimConditions returning a condition to its default removes the stored value', async () => {
+  const withNotebook = { ...baseConditionOptions, medicationNotebook: 'not_carried' } as FeeCalculationOptions;
+  const harness = createHarness({ visit: { visitId: 'v_0001', claimOptions: withNotebook } });
+
+  const outcome = await changeClaimConditions({
+    db: harness.db,
+    visitId: 'v_0001',
+    currentOptions: withNotebook,
+    patch: { medicationNotebook: undefined, tokkanOverride: '1' },
+    applyOptions: () => {},
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(outcome, { status: 'applied' });
+  const stored = harness.currentVisit().claimOptions;
+  assert.ok(!('medicationNotebook' in stored), 'the cleared condition is not left behind as undefined or the old value');
+  assert.equal(stored.tokkanOverride, '1');
+  assert.equal(stored.officialInsuranceCopaymentYen, 250, 'official-only options survive');
+});
+
+test('changeClaimConditions does nothing, and writes no audit entry, when the choice is already in effect', async () => {
+  const harness = createHarness({ visit: { visitId: 'v_0001', claimOptions: baseConditionOptions } });
+  const outcome = await changeClaimConditions({
+    db: harness.db,
+    visitId: 'v_0001',
+    currentOptions: baseConditionOptions,
+    patch: { medicationNotebook: 'carried', afterHoursCategory: 'none' },
+    applyOptions: () => assert.fail('options must not be re-applied'),
+    logAudit: harness.logAudit
+  });
+  assert.deepEqual(outcome, { status: 'unchanged' });
+  assert.deepEqual(harness.events, []);
+  assert.equal(harness.auditEntries.length, 0);
+});
+
+test('changeClaimConditions refuses to change a claim that is locked after the UKE export', async () => {
+  for (const status of ['exported', 'accepted', 'closed'] as const) {
+    const harness = createHarness({ visit: { visitId: 'v_0001', claimOptions: baseConditionOptions } });
+    const outcome = await changeClaimConditions({
+      db: harness.db,
+      visitId: 'v_0001',
+      currentOptions: baseConditionOptions,
+      patch: { afterHoursCategory: 'holiday' },
+      claimLifecycle: { status, exportedFileName: 'RECEIPT_v_0001.uke' } as ClaimLifecycleState,
+      applyOptions: () => assert.fail('a locked claim must not be touched'),
+      logAudit: harness.logAudit
+    });
+    assert.equal(outcome.status, 'blocked', status);
+    assert.match((outcome as { message: string }).message, /RECEIPT_v_0001\.uke 後の請求はロックされています/);
+    assert.deepEqual(harness.events, [], status);
+    assert.equal(harness.currentVisit().claimOptions.afterHoursCategory, undefined, status);
+  }
+});
+
+test('changeClaimConditions still works while the claim is a draft or being re-billed', async () => {
+  for (const status of ['draft', 'returned', 'rebilling'] as const) {
+    const harness = createHarness({ visit: { visitId: 'v_0001', claimOptions: baseConditionOptions } });
+    const outcome = await changeClaimConditions({
+      db: harness.db,
+      visitId: 'v_0001',
+      currentOptions: baseConditionOptions,
+      patch: { afterHoursCategory: 'holiday' },
+      claimLifecycle: { status } as ClaimLifecycleState,
+      applyOptions: () => {},
+      logAudit: harness.logAudit
+    });
+    assert.equal(outcome.status, 'applied', status);
+  }
+});
+
+test('changeClaimConditions puts the stored conditions back when the audit log fails', async () => {
+  const harness = createHarness({
+    visit: { visitId: 'v_0001', claimOptions: baseConditionOptions },
+    auditOk: false
+  });
+  const applied: FeeCalculationOptions[] = [];
+
+  const outcome = await changeClaimConditions({
+    db: harness.db,
+    visitId: 'v_0001',
+    currentOptions: baseConditionOptions,
+    patch: { afterHoursCategory: 'late_night' },
+    applyOptions: (o) => applied.push(o),
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(outcome, { status: 'rolled_back', message: CLAIM_ACTION_MESSAGES.claimConditionAuditRolledBack });
+  assert.deepEqual(harness.currentVisit().claimOptions, baseConditionOptions);
+  assert.equal(applied.length, 2, 'the screen state goes to the new value and back');
+  assert.deepEqual(applied[1], baseConditionOptions);
+});
+
+test('changeClaimConditions reports a missing visit instead of recording an audit entry', async () => {
+  const harness = createHarness({ visit: null });
+  await assert.rejects(
+    changeClaimConditions({
+      db: harness.db,
+      visitId: 'v_missing',
+      currentOptions: baseConditionOptions,
+      patch: { medicationNotebook: 'not_carried' },
+      applyOptions: () => {},
+      logAudit: harness.logAudit
+    }),
+    new RegExp(CLAIM_ACTION_MESSAGES.visitNotFound)
+  );
+  assert.equal(harness.auditEntries.length, 0);
+});
+
+test('printDocumentsWithAuditLog can record a receipt reissue with the amount instead of the bundle wording', async () => {
+  const harness = createHarness();
+  const printed: string[] = [];
+  const detail = buildReceiptReissueAuditDetail('v_0001', 'デモ患者 みどり', {
+    totalPoints: 97,
+    copayYen: 1290,
+    barcodePayload: 'v0001/20261030/1290'
+  });
+  assert.equal(
+    detail,
+    '領収証印刷(再発行): 受付ID v_0001 / 患者 デモ患者 みどり / 97点・窓口負担¥1,290 / バーコード v0001/20261030/1290'
+  );
+
+  const outcome = await printDocumentsWithAuditLog({
+    db: harness.db,
+    visitId: 'v_0001',
+    patientId: 'pt_0001',
+    patientName: 'デモ患者 みどり',
+    auditDetail: detail,
+    print: () => printed.push('print'),
+    logAudit: harness.logAudit
+  });
+
+  assert.deepEqual(outcome, { status: 'printed' });
+  assert.equal(harness.auditEntries[0].actionType, 'print');
+  assert.equal(harness.auditEntries[0].details, detail);
+  assert.deepEqual(harness.events, ['audit']);
+  assert.deepEqual(printed, ['print']);
+});
+
+test('a receipt reissue is not printed when its audit entry cannot be recorded', async () => {
+  const harness = createHarness({ auditOk: false });
+  const outcome = await printDocumentsWithAuditLog({
+    db: harness.db,
+    visitId: 'v_0001',
+    auditDetail: buildReceiptReissueAuditDetail('v_0001', undefined, { totalPoints: 10, copayYen: 30 }),
+    print: () => assert.fail('must not print without the audit entry'),
+    logAudit: harness.logAudit
+  });
+  assert.deepEqual(outcome, { status: 'blocked', message: CLAIM_ACTION_MESSAGES.printAuditFailed });
 });

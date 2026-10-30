@@ -3,6 +3,14 @@ import { FileText } from 'lucide-react';
 import { formatYen } from '@/lib/billing';
 import { hasRealRegistrationNumber } from '@/lib/facility_placeholders';
 import type { PharmacyInfo } from '../types';
+import { Code128Barcode } from './Code128Barcode';
+
+export interface ReceiptBarcodeProps {
+  /** バーコードに符号化する文字列 (buildReceiptBarcodePayload の結果) */
+  payload: string;
+  /** バーコードの下に印字する、人が読める形 */
+  caption: string;
+}
 
 export interface ReceiptPrintProps {
   patientData: any;
@@ -17,6 +25,8 @@ export interface ReceiptPrintProps {
     label: string;
     points: number;
     note: string;
+    /** 点数表に値が無く、点数を決められない行 */
+    unset?: boolean;
   }[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
@@ -25,6 +35,15 @@ export interface ReceiptPrintProps {
   dispensingDateStr: string;
   prescriptionDateStr: string;
   renderIdentityMark: (variant?: 'paper' | 'compact' | 'tiny') => React.ReactNode;
+  /**
+   * 点数が決められていない算定項目の名前。1つでもあれば、合計と窓口負担は確定していないので、
+   * 金額を印字せず「点数未設定」と出す。
+   */
+  unsetFeeNames?: string[];
+  /** 領収金額まで含めた照合バーコード。金額が確定していないときは渡さない */
+  barcode?: ReceiptBarcodeProps | null;
+  /** 画面だけに出す、金額を変える条件の操作パネル (印刷には出ない) */
+  conditionPanel?: React.ReactNode;
 }
 
 export const ReceiptPrint = React.memo(function ReceiptPrint({
@@ -38,13 +57,19 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
   currentDateStr,
   dispensingDateStr,
   prescriptionDateStr,
-  renderIdentityMark
+  renderIdentityMark,
+  unsetFeeNames = [],
+  barcode = null,
+  conditionPanel = null
 }: ReceiptPrintProps) {
+  const amountsPending = unsetFeeNames.length > 0;
   return (
     <section className="print-preview-card card paper-preview-card receipt-preview-card">
       <div className="preview-header no-print">
         <h3><FileText size={18} aria-hidden="true" /> 領収証</h3>
       </div>
+
+      {conditionPanel}
 
       <div className="print-document receipt-doc receipt-redesign-doc" data-testid="receipt-doc">
         <div className="receipt-copy-band">
@@ -66,24 +91,32 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
           <strong>{patientData.name} 様</strong>
         </div>
 
-        <div className="receipt-money-panel">
-          <span>領収金額</span>
-          <strong>¥{formatYen(insuranceAmounts.patientCopayYen)}</strong>
-          <p>ただし、保険調剤一部負担金として上記正に領収いたしました。</p>
-        </div>
+        {amountsPending ? (
+          <div className="receipt-money-panel receipt-money-pending" data-testid="receipt-amount-pending">
+            <span>領収金額</span>
+            <strong>点数未設定</strong>
+            <p>{unsetFeeNames.join('・')}の点数が点数表に未設定のため、金額は確定していません。</p>
+          </div>
+        ) : (
+          <div className="receipt-money-panel">
+            <span>領収金額</span>
+            <strong>¥{formatYen(insuranceAmounts.patientCopayYen)}</strong>
+            <p>ただし、保険調剤一部負担金として上記正に領収いたしました。</p>
+          </div>
+        )}
 
         <div className="receipt-accounting-strip">
           <div>
             <span>総点数</span>
-            <strong>{totalPoints.toLocaleString()} 点</strong>
+            <strong>{amountsPending ? '未確定' : `${totalPoints.toLocaleString()} 点`}</strong>
           </div>
           <div>
             <span>保険診療総額</span>
-            <strong>¥{formatYen(insuranceAmounts.totalCostYen)}</strong>
+            <strong>{amountsPending ? '未確定' : `¥${formatYen(insuranceAmounts.totalCostYen)}`}</strong>
           </div>
           <div>
             <span>保険者負担相当額</span>
-            <strong>¥{formatYen(insuranceAmounts.insurerBurdenYen)}</strong>
+            <strong>{amountsPending ? '未確定' : `¥${formatYen(insuranceAmounts.insurerBurdenYen)}`}</strong>
           </div>
           <div>
             <span>患者負担割合</span>
@@ -103,7 +136,7 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
             {receiptBreakdownRows.map((row) => (
               <tr key={row.label}>
                 <td>{row.label}</td>
-                <td className="text-right">{row.points.toLocaleString()} 点</td>
+                <td className="text-right">{row.unset ? '未設定' : `${row.points.toLocaleString()} 点`}</td>
                 <td>{row.note}</td>
               </tr>
             ))}
@@ -123,9 +156,15 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
           <div className="receipt-seal-box">領収印</div>
         </div>
 
+        {barcode && !amountsPending ? (
+          <div className="receipt-barcode-strip">
+            <Code128Barcode payload={barcode.payload} caption={barcode.caption} testId="receipt-barcode" />
+          </div>
+        ) : null}
+
         <div className="receipt-stub">
           <span>薬局控え</span>
-          <strong>{patientData.name} 様 / ¥{formatYen(insuranceAmounts.patientCopayYen)}</strong>
+          <strong>{patientData.name} 様 / {amountsPending ? '点数未設定' : `¥${formatYen(insuranceAmounts.patientCopayYen)}`}</strong>
           <span>処方日 {prescriptionDateStr} / 調剤日 {dispensingDateStr}</span>
         </div>
 
@@ -256,6 +295,23 @@ export const ReceiptPrint = React.memo(function ReceiptPrint({
           margin: 0;
           font-size: 0.7rem;
           color: #166534;
+        }
+
+        .receipt-money-pending {
+          background: #fffbeb;
+          border-color: #b45309;
+        }
+
+        .receipt-money-pending span,
+        .receipt-money-pending strong,
+        .receipt-money-pending p {
+          color: #92400e;
+        }
+
+        .receipt-barcode-strip {
+          display: flex;
+          justify-content: center;
+          margin: 0.6rem 0 0.4rem;
         }
 
         .receipt-accounting-strip {

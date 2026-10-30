@@ -150,6 +150,8 @@ export interface MonthlyClaimUkeBatchCheckIssue {
 export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_fee_code_missing'
   | 'official_uke_fee_code_invalid'
+  | 'official_uke_fee_points_unset'
+  | 'official_uke_after_hours_unsupported'
   | 'official_uke_drug_code_missing'
   | 'official_uke_drug_code_invalid'
   | 'official_uke_patient_gender_missing'
@@ -1591,6 +1593,34 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
     && MONTHLY_CLAIM_UKE_OFFICIAL_FEE_RECORD_TYPES[fee.code] !== undefined
   ));
   const checkedDrugItems = claim.items.filter((item) => item.claimDrugFee !== false);
+
+  // 点数が決められていない項目や、公式本文に出力できない加算を黙って落とすと、
+  // 領収証の金額と請求の点数がずれる。理由を出して止める。
+  for (const fee of claim.calculatedFees) {
+    if (fee.pointsUnset) {
+      addOfficialReadinessIssue(issues, {
+        severity: 'error',
+        code: 'official_uke_fee_points_unset',
+        title: '算定項目の点数が未設定です',
+        message: `${patientName} の ${fee.name} は点数表に値が無く、点数を決められません。点数表を埋めてから出力してください。`,
+        visitId,
+        patientName,
+        feeCode: fee.code,
+        feeName: fee.name
+      });
+    } else if (fee.code === 'after_hours' && fee.points !== 0) {
+      addOfficialReadinessIssue(issues, {
+        severity: 'error',
+        code: 'official_uke_after_hours_unsupported',
+        title: '時間外・休日・深夜加算は公式UKE本文に未対応です',
+        message: `${patientName} の ${fee.name}（${fee.points}点）は公式本文への出力が未対応のため、このまま出力すると領収証の金額と請求の点数がずれます。`,
+        visitId,
+        patientName,
+        feeCode: fee.code,
+        feeName: fee.name
+      });
+    }
+  }
 
   if (dispensingDateSource) {
     // 適用区分はあるのに特記事項として記録できない場合、黙って落とすと

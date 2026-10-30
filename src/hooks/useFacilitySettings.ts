@@ -95,7 +95,9 @@ export function useFacilitySettings({
             postGenericAddition: saved.postGenericAddition || 'none',
             genericDispensingReduction: !!saved.genericDispensingReduction,
             aiAssistMode: normalizeAiAssistMode(saved.aiAssistMode),
-            officialFeeCodeOverrides: saved.officialFeeCodeOverrides || {}
+            officialFeeCodeOverrides: saved.officialFeeCodeOverrides || {},
+            // 項目ごとに組み直しているので、足し忘れると読み込みと次の保存で消える
+            businessHours: saved.businessHours
           });
         }
       } catch (error) {

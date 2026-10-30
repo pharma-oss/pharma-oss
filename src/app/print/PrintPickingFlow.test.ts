@@ -279,9 +279,44 @@ test('print page delegates document printing to the audited claim action', () =>
   assert.match(body, /alert\(outcome\.message\)/);
   assert.match(body, /medicationInfo: \{/);
 
-  // 監査ログを通さない印刷経路が増えていないこと。
+  // 監査ログを通さない印刷経路が増えていないこと。window.print() は、帳票一式の印刷と
+  // 領収証だけの印刷 (次のテスト) の2つで、どちらも printDocumentsWithAuditLog の print に渡している。
   const directPrintCalls = printSource.match(/window\.print\(\)/g) || [];
-  assert.equal(directPrintCalls.length, 1, 'window.print() は監査済みの1経路のみ');
+  assert.equal(directPrintCalls.length, 2, 'window.print() は監査済みの2経路 (帳票一式・領収証だけ) のみ');
+  const auditedPrintCalls = printSource.match(/await printDocumentsWithAuditLog\(/g) || [];
+  assert.equal(auditedPrintCalls.length, 2, 'window.print() の数と同じだけ、監査済みの呼び出しがある');
+
+  // 点数が決められないあいだは、帳票一式も印刷しない。
+  assert.match(body, /unsetPointFees\.length > 0/);
+  assert.match(body, /CLAIM_ACTION_MESSAGES\.printBlockedUnsetPoints/);
+});
+
+test('print page prints the receipt alone only through the audited claim action, and clears the print-only class', () => {
+  const body = section(printSource, 'const handlePrintReceiptOnly = async', 'const electronicPrescriptionDispensingInformationFile');
+
+  assert.match(body, /ensurePermission\('print_documents'\)/);
+  assert.match(body, /if \(receiptAmountsPending\)/);
+  assert.match(body, /CLAIM_ACTION_MESSAGES\.printBlockedUnsetPoints/);
+  assert.match(body, /await printDocumentsWithAuditLog\(/);
+  // 刷った金額を監査ログに残す
+  assert.match(body, /auditDetail: buildReceiptReissueAuditDetail\(/);
+  assert.match(body, /copayYen: insuranceAmounts\.patientCopayYen/);
+  // 印刷が例外で止まっても、他の帳票を隠したままにしない
+  assert.match(body, /classList\.add\('print-receipt-only'\);\s*try \{\s*window\.print\(\);\s*\} finally \{\s*document\.body\.classList\.remove\('print-receipt-only'\);/);
+  assert.match(body, /outcome\.status !== 'printed'/);
+});
+
+test('print page delegates condition changes to the audited claim action and keeps the lock check inside it', () => {
+  const body = section(printSource, 'const handleClaimConditionChange = async', 'const handleApplyAfterHoursJudgement');
+
+  assert.match(body, /ensurePermission\('change_billing'\)/);
+  assert.match(body, /await changeClaimConditions\(/);
+  assert.match(body, /claimLifecycle,/);
+  assert.match(body, /onPersisted: applyPersistedClaimOptions/);
+  assert.match(body, /outcome\.status === 'blocked' \|\| outcome\.status === 'rolled_back'/);
+  assert.match(body, /alert\(outcome\.message\)/);
+  // 失敗したら画面の state も元に戻す
+  assert.match(body, /setClaimOptions\(previousOptions\)/);
 });
 
 test('print page delegates billing option changes to the audited claim action', () => {

@@ -67,6 +67,7 @@ export const FEE_TOGGLES: { code: FeeCode; label: string }[] = [
   { code: 'special_management', label: '特薬管' },
   { code: 'ippoka', label: '外来服薬支援料2' },
   { code: 'mixing', label: '自家製剤/計量混合' },
+  { code: 'after_hours', label: '時間外・休日・深夜加算' },
   { code: 'drug_fee', label: '薬剤料' }
 ];
 

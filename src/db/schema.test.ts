@@ -226,7 +226,7 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithSpecialPublicExpense);
       assert.strictEqual(errors, null);
-      assert.strictEqual(VISIT_SCHEMA.version, 23);
+      assert.strictEqual(VISIT_SCHEMA.version, 24);
     });
 
     test('should validate a visit carrying structured intervention events', () => {

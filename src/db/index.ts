@@ -368,7 +368,11 @@ const create = async () => {
                 21: keepDocument,
                 // v22 -> v23: interventionEvents (疑義照会・処方変更構造化イベント配列) を追加。
                 // 任意項目で、記録が無い受付は空のまま保持される。
-                22: keepDocument
+                22: keepDocument,
+                // v23 -> v24: receptionAt (受付した実時刻) と、claimOptions の算定条件
+                // (medicationNotebook / afterHoursCategory / tokkanOverride) を追加。
+                // いずれも任意項目で、無い受付はこれまでの算定 (手帳あり・通常) のまま。
+                23: keepDocument
             })
         },
 
@@ -544,7 +548,10 @@ const create = async () => {
                 4: (oldDoc) => ({
                     ...oldDoc,
                     aiAssistMode: oldDoc.aiAssistMode || 'enabled'
-                })
+                }),
+                // v5 -> v6: 時間外・休日・深夜の自動判定に使う businessHours (任意項目) を追加。
+                // 未設定のままなら自動判定しない。
+                5: keepDocument
             })
         },
         locations: {

@@ -333,6 +333,8 @@ export function getFeeSectionLabel(code?: FeeCode): string {
       return '外来服薬支援料';
     case 'mixing':
       return '自家製剤・計量混合';
+    case 'after_hours':
+      return '時間外・休日・深夜加算';
     case 'drug_fee':
       return '薬剤料';
     default:

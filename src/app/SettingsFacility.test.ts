@@ -188,7 +188,21 @@ const FACILITY_MANAGEMENT_CONTROL_SPECS: readonly FacilityControlSpec[] = [
     name: '設定保存ボタン (L365, disabled)',
     kind: 'disabled',
     getOpeningTag: (html) => findOpeningTag(html, '設定を保存する', 'button')
-  }
+  },
+  // 開局時間・休日 (時間外・休日・深夜の自動判定に使う設定)。算定に直結するので、権限が無ければ編集できない。
+  ...([
+    ['平日の開局', 'businessHoursWeekdayOpen', 'input'],
+    ['平日の閉局', 'businessHoursWeekdayClose', 'input'],
+    ['土曜の開局', 'businessHoursSaturdayOpen', 'input'],
+    ['土曜の閉局', 'businessHoursSaturdayClose', 'input'],
+    ['深夜の開始', 'businessHoursLateNightStart', 'input'],
+    ['深夜の終了', 'businessHoursLateNightEnd', 'input'],
+    ['休日として扱う日付', 'businessHoursHolidayDates', 'textarea']
+  ] as const).map(([label, id, tagName]): FacilityControlSpec => ({
+    name: `開局時間・休日 ${label} (${id})`,
+    kind: 'disabled',
+    getOpeningTag: (html) => findOpeningTag(html, `id="${id}"`, tagName)
+  }))
 ];
 
 describe('FacilitySettingsTab contracts', () => {
@@ -203,8 +217,8 @@ describe('FacilitySettingsTab contracts', () => {
     const disabledDenied = listDisabledOpeningTags(deniedHtml);
     assert.equal(
       disabledDenied.length,
-      6,
-      `When canManageFacility is false, exactly 6 disabled="" tags must be present:\n${disabledDenied.join('\n')}`
+      13,
+      `When canManageFacility is false, exactly 13 disabled="" tags must be present:\n${disabledDenied.join('\n')}`
     );
 
     const dataDisabledDenied = listDataDisabledOpeningTags(deniedHtml);
@@ -258,8 +272,8 @@ describe('FacilitySettingsTab contracts', () => {
       tag: spec.getOpeningTag(permittedHtml)
     }));
 
-    assert.equal(deniedExtractedTags.length, 12);
-    assert.equal(permittedExtractedTags.length, 12);
+    assert.equal(deniedExtractedTags.length, 19);
+    assert.equal(permittedExtractedTags.length, 19);
 
     const checkDisabled = (tag: string, kind: FacilityControlSpec['kind']): boolean => {
       if (kind === 'disabled') return DISABLED_ATTR_PATTERN.test(tag);

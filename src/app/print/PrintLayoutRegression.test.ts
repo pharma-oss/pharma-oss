@@ -100,3 +100,21 @@ test('CI workflow executes print layout regression and preserves artifacts', () 
   assert.match(workflowSource, /npm run test:e2e:print-layout/);
   assert.match(workflowSource, /artifacts\/print-layout-regression/);
 });
+
+test('the receipt barcode is checked against the printed amount by the layout runner', () => {
+  assert.ok(allSources.includes('testId="receipt-barcode"'), 'the receipt gives its barcode a stable selector');
+  assert.ok(allSources.includes('data-barcode-payload'), 'the barcode exposes what it encodes');
+  assert.match(printLayoutScript, /receipt-barcode/);
+  assert.match(printLayoutScript, /assertReceiptBarcode/);
+});
+
+test('receipt-only printing hides every other document through print.css and always clears itself', () => {
+  assert.match(
+    printCssSource,
+    /body\.print-receipt-only\s+\.print-workspace\s*>\s*:not\(\.receipt-preview-card\)\s*{[^}]*display:\s*none\s*!important/
+  );
+  assert.ok(componentsSources.includes('receipt-preview-card'), 'the receipt card carries the class the rule keeps');
+  assert.ok(pageSource.includes("document.body.classList.add('print-receipt-only')"));
+  // 印刷が例外で止まっても、他の帳票を隠したままにしない
+  assert.match(pageSource, /classList\.add\('print-receipt-only'\);\s*try\s*{\s*window\.print\(\);\s*}\s*finally\s*{\s*document\.body\.classList\.remove\('print-receipt-only'\);/);
+});

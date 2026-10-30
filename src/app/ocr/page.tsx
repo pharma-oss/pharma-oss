@@ -42,6 +42,7 @@ import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@/lib/prescription_registration';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
+import { buildReceptionClaimOptions, judgeAfterHoursCategory } from '@/lib/claim_conditions';
 import {
   formatOnlineEligibilityFieldMappingReport,
   normalizeOnlineEligibilityResponse,
@@ -1336,6 +1337,18 @@ export default function OcrPage() {
         setIsSaving(false);
         return;
       }
+      // 受付した実時刻を残し、開局時間が設定済みなら時間外・休日・深夜を受付時に自動判定する。
+      // 判定できない (開局時間が未設定など) 受付は、これまでと同じ (区分なし) にする。
+      const receptionAt = new Date().toISOString();
+      let receptionClaimOptions: ReturnType<typeof buildReceptionClaimOptions>;
+      try {
+        const settingsDoc = await db.facility_settings.findOne('default').exec();
+        receptionClaimOptions = buildReceptionClaimOptions(
+          judgeAfterHoursCategory(receptionAt, settingsDoc?.toJSON().businessHours)
+        );
+      } catch (settingsError) {
+        console.error('Failed to read business hours for the reception judgement:', settingsError);
+      }
       const existingPatient = { ...selectedPatientDoc.toJSON(), doc: selectedPatientDoc };
       const patientId = existingPatient.patientId;
       // 患者の氏名・生年月日は登録内容のまま。受付で書き換えない(処方箋の読み取り違いで、選んだ患者の名前が変わらないように)
@@ -1446,6 +1459,10 @@ export default function OcrPage() {
           prescriptionDate,
           dispensingDate,
           issueDate: dateInputToIso(dispensingDate),
+          receptionAt,
+          ...(receptionClaimOptions
+            ? { claimOptions: { drugFeeOnly: false, disabledFeeCodes: [], disabledFeeRationales: {}, ...receptionClaimOptions } }
+            : {}),
           status: 'processing', // 処方入力済みステータスとして扱う
           ...(appliedElectronicPrescription
             ? { electronicPrescription: appliedElectronicPrescription }

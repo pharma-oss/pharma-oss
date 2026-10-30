@@ -427,6 +427,7 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
     prescriptionDate: today,
     dispensingDate: today,
     issueDate: new Date().toISOString(),
+    receptionAt: new Date().toISOString(),
     status: 'processing'
   });
 

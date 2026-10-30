@@ -38,7 +38,7 @@ export const LOCATION_SCHEMA: RxJsonSchema<Location> = {
 
 export const FACILITY_SETTINGS_SCHEMA: RxJsonSchema<FacilitySettings> = {
   title: 'facility settings schema',
-  version: 5,
+  version: 6,
   primaryKey: 'id',
   type: 'object',
   properties: {
@@ -63,6 +63,35 @@ export const FACILITY_SETTINGS_SCHEMA: RxJsonSchema<FacilitySettings> = {
     officialFeeCodeOverrides: {
       type: 'object',
       additionalProperties: { type: 'string', maxLength: 9, pattern: '^\\d{0,9}$' }
+    },
+    // 時間外・休日・深夜の自動判定に使う開局時間と休日。未設定なら自動判定しない。
+    businessHours: {
+      type: 'object',
+      properties: {
+        weekday: {
+          type: 'object',
+          properties: {
+            open: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' },
+            close: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' }
+          },
+          required: ['open', 'close']
+        },
+        saturday: {
+          type: 'object',
+          properties: {
+            open: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' },
+            close: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' }
+          },
+          required: ['open', 'close']
+        },
+        holidayDates: {
+          type: 'array',
+          maxItems: 400,
+          items: { type: 'string', maxLength: 10, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+        },
+        lateNightStart: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' },
+        lateNightEnd: { type: 'string', maxLength: 5, pattern: '^\\d{1,2}:\\d{2}$' }
+      }
     }
   },
   required: ['id', 'baseFeeCategory', 'regionalSupportAddition', 'medicalDxAddition']
@@ -166,7 +195,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 23,
+  version: 24,
   primaryKey: 'visitId',
   type: 'object',
   properties: {
@@ -181,6 +210,8 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
     prescriptionDate: { type: 'string', format: 'date', maxLength: 50 },
     dispensingDate: { type: 'string', format: 'date', maxLength: 50 },
     issueDate: { type: 'string', format: 'date-time' },
+    // 受付した実時刻。時間外・休日・深夜の自動判定に使う (古い受付には無い)。
+    receptionAt: { type: 'string', format: 'date-time', maxLength: 50 },
     status: { type: 'string', enum: ['waiting', 'processing', 'completed', 'cancelled'], maxLength: 50 },
     electronicPrescription: {
       type: 'object',
@@ -505,6 +536,10 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
         disabledFeeRationales: {
           type: 'object'
         },
+        // 来局ごとに金額を変える算定の条件。未設定は 手帳あり・通常・処方明細ごとの特管。
+        medicationNotebook: { type: 'string', enum: ['carried', 'not_carried'], maxLength: 20 },
+        afterHoursCategory: { type: 'string', enum: ['none', 'after_hours', 'holiday', 'late_night'], maxLength: 20 },
+        tokkanOverride: { type: 'string', enum: ['none', '1', '3_i'], maxLength: 10 },
         specialPublicExpenseRecord: {
           type: 'object',
           properties: {

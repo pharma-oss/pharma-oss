@@ -3646,6 +3646,11 @@
             page-break-after: always !important;
           }
 
+          /* 領収証だけを印刷する (領収証の横の「領収証だけ印刷」)。印刷の間だけ body に付く。 */
+          body.print-receipt-only .print-workspace > :not(.receipt-preview-card) {
+            display: none !important;
+          }
+
           .print-document {
             box-shadow: none !important;
             margin: 0 auto !important;

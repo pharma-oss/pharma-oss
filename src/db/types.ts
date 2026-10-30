@@ -24,6 +24,30 @@ export interface FacilitySettings {
   genericDispensingReduction?: boolean;
   aiAssistMode?: AiAssistMode;
   officialFeeCodeOverrides?: Record<string, string>;
+  /** 時間外・休日・深夜の自動判定に使う開局時間と休日 (未設定なら自動判定しない) */
+  businessHours?: PharmacyBusinessHours;
+}
+
+/** 開局時間の範囲。HH:mm 形式 */
+export interface BusinessHoursRange {
+  open: string;
+  close: string;
+}
+
+/**
+ * 時間外・休日・深夜の自動判定に使う、薬局ごとの定義。
+ * 日曜は常に休日扱い。祝日・年末年始は薬局が日付で登録する (祝日カレンダーは持たない)。
+ */
+export interface PharmacyBusinessHours {
+  /** 月〜金の開局時間。未設定なら閉局日扱い */
+  weekday?: BusinessHoursRange;
+  /** 土曜の開局時間。未設定なら閉局日扱い */
+  saturday?: BusinessHoursRange;
+  /** 休日として扱う日付 (YYYY-MM-DD)。祝日・年末年始など */
+  holidayDates?: readonly string[];
+  /** 深夜の開始・終了 (HH:mm)。両方そろったときだけ深夜を判定する */
+  lateNightStart?: string;
+  lateNightEnd?: string;
 }
 
 export interface Location {
@@ -334,6 +358,8 @@ export interface Visit {
   prescriptionDate?: string;
   dispensingDate?: string;
   issueDate: string;
+  /** 受付した実時刻 (ISO)。時間外・休日・深夜の自動判定に使う。古い受付には無い */
+  receptionAt?: string;
   status: 'waiting' | 'processing' | 'completed' | 'cancelled';
   electronicPrescription?: VisitElectronicPrescription;
   pharmacyDeviceHandoff?: VisitPharmacyDeviceHandoff;
@@ -344,6 +370,12 @@ export interface Visit {
     drugFeeOnly?: boolean;
     disabledFeeCodes?: string[];
     disabledFeeRationales?: { [feeCode: string]: string };
+    /** お薬手帳。未設定はあり (服薬管理指導料の従来算定) */
+    medicationNotebook?: 'carried' | 'not_carried';
+    /** 時間外・休日・深夜。未設定は通常 */
+    afterHoursCategory?: 'none' | 'after_hours' | 'holiday' | 'late_night';
+    /** 特定薬剤管理指導加算を来局単位で指定する。未設定は処方明細ごと */
+    tokkanOverride?: 'none' | '1' | '3_i';
     specialPublicExpenseRecord?: {
       category: string;
       branch: string;

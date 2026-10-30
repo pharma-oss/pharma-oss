@@ -89,6 +89,29 @@ GitHub Actions の `Onboarding E2E` ワークフローでは、lint、型チェ�
 
 返戻修正導線は、同じワークフロー内で `npm run test:e2e:return-correction` 相当のブラウザE2Eとして確認します。返戻用のテストデータを投入し、保険・公費、処方内容、点数内訳の返戻修正ボタンと遷移先クエリを検証します。
 
+### 算定条件の点数表（お薬手帳なし・時間外/休日/深夜）
+
+来局ごとに金額を変える条件は `visit.claimOptions` の `medicationNotebook`（`carried` / `not_carried`）、`afterHoursCategory`（`none` / `after_hours` / `holiday` / `late_night`）、`tokkanOverride`（`none` / `1` / `3_i`、未設定は処方明細ごと）に保存され、`calculateDispensingFees`（`src/lib/calculator.ts`）が条件つきで再計算します。画面・領収証・明細書・UKE・ダッシュボードは同じ関数を同じ `claimOptions` で呼ぶので、金額は一致します。変更は `changeClaimConditions`（`src/app/print/claim_actions.ts`）が、請求ロックの確認・監査ログ・ロールバックつきで行います。
+
+点数は `src/lib/claim_conditions.ts` の `DEFAULT_CONDITION_FEE_TABLE`（差し替え用の表）にあります。`null` は「点数未設定」で、推測の数字は入れません。令和8年6月施行の点数表で確認した値を、次のとおり入れてください。
+
+| 条件 | 入れる場所 | 備考 |
+|---|---|---|
+| お薬手帳なしの点数 | `medicationGuidance.not_carried.points` | 手帳ありは既存の 45 点（`carried.points`） |
+| 時間外・休日・深夜の割合（%） | `afterHours.categories.<区分>.ratePercent` | 基礎額に対する割合 |
+| 基礎額に含める算定項目 | `afterHours.baseFeeCodes` | `FeeCode` の配列。`null` のままだと点数を出さない |
+| 端数処理 | `afterHours.rounding` | `round` / `floor` / `ceil`。暫定で `round`（四捨五入）。要確認 |
+| 自動判定の優先順位 | `afterHours.priority` | 受付時刻が複数の区分に当てはまるときの順（先頭が最優先）。暫定で 深夜 → 休日 → 時間外。ここに無い区分は自動判定で選ばれない |
+| 公式算定コード（9桁） | 設定 > 公式算定コード | `medication_guidance_no_notebook`、`after_hours_addition`、`holiday_addition`、`late_night_addition` |
+
+値が `null` の条件を選ぶと、計算結果に `pointsUnset: true` の項目が入り（点数は 0 で合計に混ぜない）、領収証・明細書は金額を出さずに「点数未設定」と表示します。帳票の印刷は止まり、請求前チェック（`fee_points_unset`）と公式UKEの事前点検（`official_uke_fee_points_unset`）がエラーになります。
+
+時間外・休日・深夜の加算（`FeeCode` の `after_hours`）は、公式UKE本文への出力が未対応です。点数を入れて算定すると `after_hours_uke_unsupported` / `official_uke_after_hours_unsupported` のエラーで出力を止めます。出力に対応するときは、この2つのエラーと `monthly_claim_uke.ts` の本文生成を合わせて直してください。
+
+受付時刻は `visit.receptionAt`（受付時に `new Date().toISOString()` を保存）です。自動判定は `judgeAfterHoursCategory`（`claim_conditions.ts`）で、施設設定の `businessHours`（平日・土曜の開局時間、休日として扱う日付、深夜の時間帯）を使います。時刻と暦日は端末のタイムゾーンで見ます。受付時には `buildReceptionClaimOptions` が、時間外・休日・深夜と判定されたときだけ `afterHoursCategory` を保存します。
+
+領収証の照合バーコードは `src/lib/receipt_barcode.ts`（中身の生成・解析、純粋関数）と `src/lib/code128.ts`（Code128B のエンコーダ。外部ライブラリなし）で作り、`Code128Barcode`（SVG）で描きます。`code128.test.ts` は独立実装の `@zxing/library` で読み戻して検証します。`npm run test:e2e:print-layout` は、描画された領収証でバーコードの金額と領収金額が一致することも確かめます。
+
 印刷帳票のスクリーンショット回帰は、導入E2Eシードを使って調剤録、明細、領収証、薬剤情報、薬袋、お薬手帳シール、水剤ラベル、軟膏ラベルをPNG保存します。
 
 ```bash

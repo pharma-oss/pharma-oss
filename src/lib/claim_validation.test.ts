@@ -463,3 +463,65 @@ test('validateDispensingClaim stays quiet when there is no override', () => {
 
   assert.strictEqual(issues.some((item) => item.code === 'drug_price_override_applied'), false);
 });
+
+// ---- 算定条件 (お薬手帳なし・時間外等): 点数が決められない項目と、公式UKE未対応の加算 ----
+
+test('validateDispensingClaim stops the claim while a fee has no points in the table', () => {
+  const unsetFee: CalculationResultItem = {
+    code: 'medication_guidance',
+    feeKey: 'medication_guidance_no_notebook',
+    name: '服薬管理指導料(お薬手帳なし)',
+    points: 0,
+    pointsUnset: true,
+    rationale: '服薬管理指導料(お薬手帳なし)の点数が点数表に未設定です。'
+  };
+  const issues = validateDispensingClaim({
+    settings,
+    patient,
+    items: [item()],
+    calculatedFees: [...fees.filter((fee) => fee.code !== 'medication_guidance'), unsetFee]
+  });
+  const unset = issues.filter((issue) => issue.code === 'fee_points_unset');
+  assert.strictEqual(unset.length, 1);
+  assert.strictEqual(unset[0].severity, 'error');
+  assert.strictEqual(unset[0].feeCode, 'medication_guidance');
+  assert.match(unset[0].title, /服薬管理指導料\(お薬手帳なし\)の点数が未設定です/);
+});
+
+test('validateDispensingClaim blocks an after-hours addition because the official UKE cannot carry it yet', () => {
+  const afterHours: CalculationResultItem = {
+    code: 'after_hours',
+    feeKey: 'holiday_addition',
+    name: '休日加算',
+    points: 99,
+    rationale: 'test'
+  };
+  const issues = validateDispensingClaim({ settings, patient, items: [item()], calculatedFees: [...fees, afterHours] });
+  const blocked = issues.filter((issue) => issue.code === 'after_hours_uke_unsupported');
+  assert.strictEqual(blocked.length, 1);
+  assert.strictEqual(blocked[0].severity, 'error');
+  assert.match(blocked[0].message, /99点/);
+});
+
+test('validateDispensingClaim raises neither condition error for an ordinary claim', () => {
+  const issues = validateDispensingClaim({ settings, patient, items: [item()], calculatedFees: fees });
+  assert.deepStrictEqual(
+    issues.filter((issue) => issue.code === 'fee_points_unset' || issue.code === 'after_hours_uke_unsupported'),
+    []
+  );
+});
+
+test('an unset after-hours fee reports the missing points, not the UKE gap', () => {
+  const unsetAfterHours: CalculationResultItem = {
+    code: 'after_hours',
+    name: '深夜加算',
+    points: 0,
+    pointsUnset: true,
+    rationale: '深夜加算の割合が点数表に未設定です。'
+  };
+  const issues = validateDispensingClaim({ settings, patient, items: [item()], calculatedFees: [...fees, unsetAfterHours] });
+  assert.deepStrictEqual(
+    issues.filter((issue) => issue.code === 'fee_points_unset' || issue.code === 'after_hours_uke_unsupported').map((issue) => issue.code),
+    ['fee_points_unset']
+  );
+});

@@ -7,6 +7,8 @@ import {
   type DrugPriceSource
 } from '@/lib/drug_price_history';
 import type { FeeCalculationOptions } from '@/lib/calculator';
+import { buildClaimConditionAuditDetail, type ClaimConditionOptions } from '@/lib/claim_conditions';
+import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import type { ClaimLifecycleState } from '@/lib/claim_lifecycle';
 import type { AuditActionType, PharmacyDatabase } from '@/db/types';
 import { restoreFields, restoreWith } from '@/lib/rxdb_restore';
@@ -37,7 +39,9 @@ export const CLAIM_ACTION_MESSAGES = {
   drugPriceOverrideAuditRolledBack: '薬価の版変更の監査ログ記録に失敗したため、変更を元に戻しました。',
   officialCopaymentAuditRolledBack: '一部負担金額の監査ログ記録に失敗したため、記録を元に戻しました。',
   claimLifecycleVisitNotFound: '対象の受付が見つかりません。',
-  claimLifecycleAuditRolledBack: '請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。'
+  claimLifecycleAuditRolledBack: '請求状態変更の監査ログ記録に失敗したため、変更を取り消しました。',
+  claimConditionAuditRolledBack: '算定条件の変更の監査ログ記録に失敗したため、変更を元に戻しました。',
+  printBlockedUnsetPoints: '点数が未設定の算定項目があり、領収金額が確定していません。点数表に値を入れるまで、帳票は印刷できません。'
 } as const;
 
 type MaybeDatabase = PharmacyDatabase | null | undefined;
@@ -71,6 +75,8 @@ export interface PrintDocumentsWithAuditLogParams {
   patientName?: string;
   print: () => void;
   medicationInfo?: PrintMedicationInfoCounts;
+  /** 監査ログの文言を差し替える (領収証だけの再発行など)。省略時は帳票印刷の定型文 */
+  auditDetail?: string;
   logAudit?: LogAuditActionFn;
 }
 
@@ -87,14 +93,14 @@ export type PrintDocumentsOutcome =
 export async function printDocumentsWithAuditLog(
   params: PrintDocumentsWithAuditLogParams
 ): Promise<PrintDocumentsOutcome> {
-  const { db, visitId, patientId, patientName, print, medicationInfo, logAudit = logAuditAction } = params;
+  const { db, visitId, patientId, patientName, print, medicationInfo, auditDetail, logAudit = logAuditAction } = params;
   if (!db) {
     return { status: 'blocked', message: CLAIM_ACTION_MESSAGES.databaseNotReady };
   }
   const auditOk = await logAudit(
     db,
     'print',
-    buildPrintAuditDetail(visitId, patientName, medicationInfo),
+    auditDetail ?? buildPrintAuditDetail(visitId, patientName, medicationInfo),
     patientId,
     patientName
   );
@@ -206,6 +212,78 @@ export async function applyClaimOptionsWithAudit(
     return { status: 'rolled_back', message: rollbackMessage };
   }
   return { status: 'applied' };
+}
+
+export interface ReceiptReissueSummary {
+  totalPoints: number;
+  copayYen: number;
+  /** 領収証に載せたバーコードの中身 */
+  barcodePayload?: string;
+}
+
+/**
+ * 領収証だけを刷り直したときの監査ログの文言。どの金額で刷ったかを残す。
+ * 金額を変える操作そのもの (算定条件変更) は、切り替えた時点の監査ログに別に残る。
+ */
+export function buildReceiptReissueAuditDetail(
+  visitId: string,
+  patientName: string | undefined,
+  receipt: ReceiptReissueSummary
+): string {
+  const barcode = receipt.barcodePayload ? ` / バーコード ${receipt.barcodePayload}` : '';
+  return `領収証印刷(再発行): 受付ID ${visitId} / 患者 ${patientName || '未設定'} / ${receipt.totalPoints}点・窓口負担¥${receipt.copayYen.toLocaleString('ja-JP')}${barcode}`;
+}
+
+export interface ChangeClaimConditionsParams {
+  db: MaybeDatabase;
+  visitId: string;
+  /** 画面に出ている保存済みの claimOptions (全項目) */
+  currentOptions: FeeCalculationOptions;
+  /** 変える条件だけ。undefined を渡した条件は「未設定(既定)」に戻す */
+  patch: ClaimConditionOptions;
+  claimLifecycle?: ClaimLifecycleState | null;
+  /** 変更前後の点数と窓口負担額。監査ログに残す (点数未設定で確定しない側は渡さない) */
+  amounts?: Parameters<typeof buildClaimConditionAuditDetail>[2];
+  patientId?: string;
+  patientName?: string;
+  applyOptions: (options: FeeCalculationOptions) => void;
+  onPersisted?: (options: FeeCalculationOptions) => void;
+  logAudit?: LogAuditActionFn;
+}
+
+export type ChangeClaimConditionsOutcome =
+  | { status: 'unchanged' }
+  | { status: 'blocked'; message: string }
+  | ClaimOptionsAuditOutcome;
+
+/**
+ * お薬手帳・時間外等・特管の条件を、その来局の請求内容 (claimOptions) として保存する。
+ * 請求ロック後は変更しない。監査ログが残らなければ元に戻す。
+ */
+export async function changeClaimConditions(
+  params: ChangeClaimConditionsParams
+): Promise<ChangeClaimConditionsOutcome> {
+  const { currentOptions, patch, claimLifecycle } = params;
+  if (isClaimEditBlocked(claimLifecycle)) {
+    return { status: 'blocked', message: getClaimEditBlockedMessage(claimLifecycle, 'billing') };
+  }
+  const nextOptions: FeeCalculationOptions = { ...currentOptions, ...patch };
+  const auditDetail = buildClaimConditionAuditDetail(currentOptions, nextOptions, params.amounts);
+  if (!auditDetail) return { status: 'unchanged' };
+
+  return applyClaimOptionsWithAudit({
+    db: params.db,
+    visitId: params.visitId,
+    previousOptions: currentOptions,
+    nextOptions,
+    auditDetail,
+    rollbackMessage: CLAIM_ACTION_MESSAGES.claimConditionAuditRolledBack,
+    patientId: params.patientId,
+    patientName: params.patientName,
+    applyOptions: params.applyOptions,
+    onPersisted: params.onPersisted,
+    logAudit: params.logAudit
+  });
 }
 
 export interface ItemClaimFlagPatches {

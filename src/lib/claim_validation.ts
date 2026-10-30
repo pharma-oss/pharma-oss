@@ -59,7 +59,8 @@ const NON_DRUG_FEE_CODES: FeeCode[] = [
   'medication_guidance',
   'special_management',
   'ippoka',
-  'mixing'
+  'mixing',
+  'after_hours'
 ];
 
 function isFeeEnabled(code: FeeCode, options?: FeeCalculationOptions): boolean {
@@ -146,6 +147,32 @@ export function validateDispensingClaim(input: ValidateDispensingClaimInput): Cl
           : `調剤日時点は ${auto.price}円（${formatDrugPriceRevisionLabel(auto.effectiveFrom)}）です。`
       }理由を摘要欄に記載してから提出してください。`,
       itemId: item.itemId
+    });
+  }
+
+  // 条件 (お薬手帳なし・時間外等) を選んだのに点数表に値が無い項目は、合計が確定していない。
+  // 金額を出さずに止め、点数表を埋めるまで請求と領収証の確定をさせない。
+  for (const fee of calculatedFees) {
+    if (!fee.pointsUnset) continue;
+    addIssue(issues, {
+      severity: 'error',
+      code: 'fee_points_unset',
+      title: `${fee.name}の点数が未設定です`,
+      message: `${fee.rationale}`,
+      feeCode: fee.code
+    });
+  }
+
+  // 時間外・休日・深夜の加算は、公式のUKE本文への出力がまだ対応していない。
+  // 黙って落とすと、領収証の金額と請求の点数がずれるので、請求前に止める。
+  for (const fee of calculatedFees) {
+    if (fee.code !== 'after_hours' || fee.pointsUnset || fee.points === 0) continue;
+    addIssue(issues, {
+      severity: 'error',
+      code: 'after_hours_uke_unsupported',
+      title: `${fee.name}は公式UKEの出力に未対応です`,
+      message: `${fee.name}（${fee.points}点）を算定していますが、公式のUKE本文への出力は未対応です。UKEを出力すると領収証の金額と請求の点数がずれるため、出力前に確認してください。`,
+      feeCode: fee.code
     });
   }
 

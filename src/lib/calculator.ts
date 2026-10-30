@@ -3,6 +3,15 @@ import {
   resolveCalculationDosageFlags,
   type DosageCategoryResolution
 } from './dosage_category.ts';
+import {
+  DEFAULT_CONDITION_FEE_TABLE,
+  calculateAfterHoursPoints,
+  resolveAfterHoursCategory,
+  resolveMedicationNotebook,
+  resolveTokkanOverride,
+  type ClaimConditionOptions,
+  type ConditionFeeTable
+} from './claim_conditions.ts';
 
 export type FeeCode =
   | 'base_fee'
@@ -13,6 +22,7 @@ export type FeeCode =
   | 'special_management'
   | 'ippoka'
   | 'mixing'
+  | 'after_hours'
   | 'drug_fee';
 
 export interface MonthlyFeeHistoryEntry {
@@ -25,7 +35,7 @@ export interface MonthlyFeeHistoryEntry {
   points?: number;
 }
 
-export interface FeeCalculationOptions {
+export interface FeeCalculationOptions extends ClaimConditionOptions {
   drugFeeOnly?: boolean;
   disabledFeeCodes?: string[];
   disabledFeeRationales?: { [feeCode: string]: string };
@@ -33,6 +43,8 @@ export interface FeeCalculationOptions {
   monthlyFeeHistory?: MonthlyFeeHistoryEntry[];
   /** 既定は 'legacy'。点検画面の what-if 計算だけが 'respect_manual' を渡す */
   dosageCategoryResolution?: DosageCategoryResolution;
+  /** 手帳なし・時間外等の点数表。既定は DEFAULT_CONDITION_FEE_TABLE (保存はされない。テストと差し替え用) */
+  conditionFeeTable?: ConditionFeeTable;
 }
 
 export interface CalculationResultItem {
@@ -43,6 +55,11 @@ export interface CalculationResultItem {
   name: string;
   points: number;
   rationale: string;
+  /**
+   * 選ばれた条件の点数が点数表に入っていないため、点数を決められなかった項目。
+   * points は 0 で、合計は確定していない (領収証・請求は止める)。
+   */
+  pointsUnset?: boolean;
 }
 
 export type FeeOffReasonCategory = 'monthly_count' | 'prohibited';
@@ -78,6 +95,10 @@ export type OfficialFeeCodeOverrideKey =
   | 'dispensing_management_internal'
   | 'dispensing_management_other'
   | 'medication_guidance_1'
+  | 'medication_guidance_no_notebook'
+  | 'after_hours_addition'
+  | 'holiday_addition'
+  | 'late_night_addition'
   | 'special_management_1'
   | 'special_management_3_i'
   | 'outpatient_medication_support_2'
@@ -111,6 +132,10 @@ export const DISPENSING_OFFICIAL_FEE_CODE_OVERRIDE_ITEMS: OfficialFeeCodeOverrid
   { key: 'dispensing_management_internal', label: '調剤管理料(内服薬)', group: 'management' },
   { key: 'dispensing_management_other', label: '調剤管理料(内服薬以外)', group: 'management' },
   { key: 'medication_guidance_1', label: '服薬管理指導料1', group: 'management' },
+  { key: 'medication_guidance_no_notebook', label: '服薬管理指導料(お薬手帳なし)', group: 'management' },
+  { key: 'after_hours_addition', label: '時間外加算', group: 'addition' },
+  { key: 'holiday_addition', label: '休日加算', group: 'addition' },
+  { key: 'late_night_addition', label: '深夜加算', group: 'addition' },
   { key: 'special_management_1', label: '特定薬剤管理指導加算1', group: 'management' },
   { key: 'special_management_3_i', label: '特定薬剤管理指導加算3(イ)', group: 'management' },
   { key: 'outpatient_medication_support_2', label: '外来服薬支援料2', group: 'management' },
@@ -546,6 +571,7 @@ export function calculateDispensingFees(
   options?: FeeCalculationOptions
 ): CalculationResultItem[] {
   const results: CalculationResultItem[] = [];
+  const conditionFeeTable = options?.conditionFeeTable ?? DEFAULT_CONDITION_FEE_TABLE;
   const currentVisitId = inferCurrentVisitId(items, options);
   const feeOffReasonByKey = new Map(
     evaluateFeeOffReasons(settings, _patient, _visitDateStr, options, currentVisitId)
@@ -948,18 +974,37 @@ export function calculateDispensingFees(
     }
 
     if (hasGuidanceTarget) {
-      results.push({
-        code: 'medication_guidance',
-        receiptFeeCode: getReceiptFeeCode(settings, 'medication_guidance_1'),
-        name: '服薬管理指導料1',
-        points: 45,
-        rationale: '患者の服薬状況や副作用等を確認し、必要な薬学的管理と服薬指導を行ったため'
-      });
+      // お薬手帳の有無で点数が変わる。点数は conditionFeeTable (既定は DEFAULT_CONDITION_FEE_TABLE)。
+      const guidanceSpec = conditionFeeTable.medicationGuidance[resolveMedicationNotebook(options)];
+      const guidanceFeeKey = guidanceSpec.feeKey ? { feeKey: guidanceSpec.feeKey } : {};
+      if (guidanceSpec.points === null) {
+        results.push({
+          code: 'medication_guidance',
+          ...guidanceFeeKey,
+          name: guidanceSpec.name,
+          points: 0,
+          pointsUnset: true,
+          rationale: `${guidanceSpec.name}の点数が点数表に未設定です。令和8年6月施行の点数を点数表に入れるまで、金額は確定できません。`
+        });
+      } else {
+        results.push({
+          code: 'medication_guidance',
+          ...guidanceFeeKey,
+          receiptFeeCode: getReceiptFeeCode(settings, guidanceSpec.overrideKey),
+          name: guidanceSpec.name,
+          points: guidanceSpec.points,
+          rationale: guidanceSpec.rationale
+        });
+      }
     }
 
     // 7.5 特定薬剤管理指導加算 (Special Medication Management and Guidance Fee / Tokkan)
     let tokkanType = 'none';
-    if (hasGuidanceTarget && isFeeEnabled('special_management', options)) {
+    // 来局単位の指定 (領収証の横で切り替える) があれば、処方明細ごとの設定より優先する。
+    const tokkanOverride = resolveTokkanOverride(options);
+    if (hasGuidanceTarget && isFeeEnabled('special_management', options) && tokkanOverride !== undefined) {
+      tokkanType = tokkanOverride;
+    } else if (hasGuidanceTarget && isFeeEnabled('special_management', options)) {
       for (let i = 0; i < enrichedItems.length; i++) {
         const item = enrichedItems[i];
         if (!item.claimManagement) continue;
@@ -1339,7 +1384,42 @@ export function calculateDispensingFees(
     });
   }
 
+  // 10. 時間外・休日・深夜の加算 (基礎額 × 割合)。基礎額は上で計算した算定項目から取る。
+  const afterHoursCategory = resolveAfterHoursCategory(options);
+  if (afterHoursCategory !== 'none' && items.length > 0 && isFeeEnabled('after_hours', options)) {
+    const afterHoursSpec = conditionFeeTable.afterHours.categories[afterHoursCategory];
+    const afterHours = calculateAfterHoursPoints({
+      category: afterHoursCategory,
+      fees: results,
+      table: conditionFeeTable
+    });
+    if (afterHours.status === 'unset') {
+      results.push({
+        code: 'after_hours',
+        feeKey: afterHoursSpec.feeKey,
+        name: afterHoursSpec.name,
+        points: 0,
+        pointsUnset: true,
+        rationale: `${afterHoursSpec.name}の${afterHours.missing.map((m) => (m === 'rate' ? '割合' : '基礎額の対象項目')).join('・')}が点数表に未設定です。令和8年6月施行の値を点数表に入れるまで、金額は確定できません。`
+      });
+    } else if (afterHours.points !== 0) {
+      results.push({
+        code: 'after_hours',
+        feeKey: afterHoursSpec.feeKey,
+        receiptFeeCode: getReceiptFeeCode(settings, afterHoursSpec.overrideKey),
+        name: afterHoursSpec.name,
+        points: afterHours.points,
+        rationale: `${afterHoursSpec.rationale}（基礎額 ${afterHours.baseAmount}点 × ${afterHours.ratePercent}%）`
+      });
+    }
+  }
+
   return results;
+}
+
+/** 点数が決められず「点数未設定」になっている項目。あれば合計と窓口負担は確定していない。 */
+export function getUnsetPointFees(results: CalculationResultItem[]): CalculationResultItem[] {
+  return results.filter((fee) => fee.pointsUnset === true);
 }
 
 export function getTotalPoints(results: CalculationResultItem[]): number {
