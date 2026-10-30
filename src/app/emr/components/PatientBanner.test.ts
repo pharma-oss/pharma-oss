@@ -21,6 +21,7 @@ import {
 } from '@/lib/patient_public_insurance';
 import type { PublicInsurance } from '@/db/types';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { FEATURE_AVAILABILITY } from '@/lib/feature_availability';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
@@ -30,6 +31,7 @@ function renderWithPatientBannerOverrides(overrides: {
   isQuestionnaireProcessing?: boolean;
   patientData?: unknown;
   isReading?: boolean;
+  isReadingClinical?: boolean;
   mynaReaderState?: unknown;
 }): string {
   let callCount = 0;
@@ -51,6 +53,9 @@ function renderWithPatientBannerOverrides(overrides: {
         }
         if (currentIndex === 2 && overrides.isReading !== undefined) {
           return [overrides.isReading, () => {}];
+        }
+        if (currentIndex === 3 && overrides.isReadingClinical !== undefined) {
+          return [overrides.isReadingClinical, () => {}];
         }
         if (currentIndex === 4 && overrides.mynaReaderState !== undefined) {
           return [overrides.mynaReaderState, () => {}];
@@ -421,5 +426,129 @@ test('pins Myna read button and wrapper as enabled when reader is available and 
     html.includes('マイナ読取'),
     'Button label must show idle "マイナ読取"'
   );
+});
+
+test('pins Myna read button and wrapper as disabled when patientData is null even if reader is ready', () => {
+  const html = renderWithPatientBannerOverrides({
+    isReading: false,
+    patientData: null,
+    mynaReaderState: { status: 'ready', available: true }
+  });
+
+  const buttonTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(buttonTag),
+    'Myna read button must be disabled when patientData is null'
+  );
+
+  const wrapperTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'span');
+  assert.ok(
+    wrapperTag.includes('data-disabled="true"'),
+    'Myna wrapper must have data-disabled="true" when patientData is null'
+  );
+  assert.ok(
+    wrapperTag.includes('title="患者を選択してください"'),
+    'Myna wrapper title must be "患者を選択してください" when patientData is null'
+  );
+});
+
+test('pins Myna read button and wrapper as disabled when reader is unavailable even with patient loaded', () => {
+  const html = renderWithPatientBannerOverrides({
+    isReading: false,
+    patientData: { name: '山田 太郎' },
+    mynaReaderState: { status: 'ready', available: false, reason: 'カードリーダーが見つかりません。' }
+  });
+
+  const buttonTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(buttonTag),
+    'Myna read button must be disabled when reader is unavailable'
+  );
+
+  const wrapperTag = findOpeningTag(html, 'data-testid="myna-read-button"', 'span');
+  assert.ok(
+    wrapperTag.includes('data-disabled="true"'),
+    'Myna wrapper must have data-disabled="true" when reader is unavailable'
+  );
+  assert.ok(
+    wrapperTag.includes('title="カードリーダーが見つかりません。"'),
+    'Myna wrapper title must reflect unavailable reason'
+  );
+});
+
+test('pins Myna clinical import button as disabled while feature is unimplemented and modal is open', () => {
+  const html = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isReadingClinical: false,
+    patientData: { name: '山田 太郎' }
+  });
+
+  const buttonTag = findOpeningTag(html, 'data-testid="myna-clinical-import-button"', 'button');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(buttonTag),
+    'Clinical import button must be disabled when feature is unimplemented'
+  );
+  assert.ok(
+    buttonTag.includes(`title="${FEATURE_AVAILABILITY.mynaClinicalImport.unavailableReason}"`),
+    'Clinical import button must set unavailable reason as title'
+  );
+  assert.ok(
+    html.includes('特定健診・薬剤履歴を取込（未実装）'),
+    'Button label must contain unimplemented badge text'
+  );
+  assert.ok(
+    html.includes('data-testid="myna-clinical-unimplemented-note"'),
+    'Unimplemented note must be rendered next to button'
+  );
+});
+
+test('pins Myna clinical import button as disabled when reading or patient is null, and enabled when ready', () => {
+  const feature = FEATURE_AVAILABILITY.mynaClinicalImport as { implemented: boolean };
+  const origImplemented = feature.implemented;
+  feature.implemented = true;
+  try {
+    const readingHtml = renderWithPatientBannerOverrides({
+      isModalOpen: true,
+      isReadingClinical: true,
+      patientData: { name: '山田 太郎' }
+    });
+    const readingBtn = findOpeningTag(readingHtml, 'data-testid="myna-clinical-import-button"', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(readingBtn),
+      'Clinical import button must be disabled while isReadingClinical is true'
+    );
+    assert.ok(
+      readingHtml.includes('取込中...'),
+      'Button label must indicate reading state'
+    );
+
+    const noPatientHtml = renderWithPatientBannerOverrides({
+      isModalOpen: true,
+      isReadingClinical: false,
+      patientData: null
+    });
+    const noPatientBtn = findOpeningTag(noPatientHtml, 'data-testid="myna-clinical-import-button"', 'button');
+    assert.ok(
+      DISABLED_ATTRIBUTE_PATTERN.test(noPatientBtn),
+      'Clinical import button must be disabled when patientData is null'
+    );
+
+    const readyHtml = renderWithPatientBannerOverrides({
+      isModalOpen: true,
+      isReadingClinical: false,
+      patientData: { name: '山田 太郎' }
+    });
+    const readyBtn = findOpeningTag(readyHtml, 'data-testid="myna-clinical-import-button"', 'button');
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(readyBtn),
+      'Clinical import button must be enabled when ready with patient loaded'
+    );
+    assert.ok(
+      readyHtml.includes('特定健診・薬剤履歴を取込'),
+      'Button label must be clean without unimplemented badge'
+    );
+  } finally {
+    feature.implemented = origImplemented;
+  }
 });
 
