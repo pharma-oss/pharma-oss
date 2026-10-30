@@ -47,15 +47,37 @@ function renderClientLayoutWithSetupState(overrides: {
       dispatcher.useState = (initialState: unknown) => {
         const currentIndex = callCount++;
         if (currentIndex === 2) {
+          assert.deepStrictEqual(
+            initialState,
+            [],
+            `Expected ClientLayout useState call #2 initial value to be [] (users), got ${JSON.stringify(initialState)}`
+          );
           return [[{ userId: 'initial_admin', name: '管理者', role: 'admin' }], () => {}];
         }
         if (currentIndex === 3) {
+          assert.strictEqual(
+            initialState,
+            false,
+            `Expected ClientLayout useState call #3 initial value to be false (hasLoadedUsers), got ${String(initialState)}`
+          );
           return [true, () => {}];
         }
-        if (currentIndex === 21 && overrides.isCreatingInitialAdmin !== undefined) {
-          return [overrides.isCreatingInitialAdmin, () => {}];
+        if (currentIndex === 21) {
+          assert.strictEqual(
+            initialState,
+            false,
+            `Expected ClientLayout useState call #21 initial value to be false (isCreatingInitialAdmin), got ${String(initialState)}`
+          );
+          if (overrides.isCreatingInitialAdmin !== undefined) {
+            return [overrides.isCreatingInitialAdmin, () => {}];
+          }
         }
         if (currentIndex === 22) {
+          assert.strictEqual(
+            initialState,
+            false,
+            `Expected ClientLayout useState call #22 initial value to be false (isResumingGuestDemo), got ${String(initialState)}`
+          );
           dispatcher.useState = origUseState;
           if (overrides.isResumingGuestDemo !== undefined) {
             return [overrides.isResumingGuestDemo, () => {}];
@@ -72,7 +94,12 @@ function renderClientLayoutWithSetupState(overrides: {
     );
   }
 
-  return renderToStaticMarkup(React.createElement(Wrapper));
+  const html = renderToStaticMarkup(React.createElement(Wrapper));
+  assert.ok(
+    callCount >= 23,
+    `Expected ClientLayout to reach at least 23 useState calls before restoring dispatcher, got ${callCount}`
+  );
+  return html;
 }
 
 describe('ClientLayout and session lock contracts', () => {
