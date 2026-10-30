@@ -33,6 +33,7 @@ function renderWithPatientBannerOverrides(overrides: {
   isReading?: boolean;
   isReadingClinical?: boolean;
   mynaReaderState?: unknown;
+  editCopaymentSupport?: unknown;
 }): string {
   let callCount = 0;
 
@@ -63,6 +64,24 @@ function renderWithPatientBannerOverrides(overrides: {
         if (currentIndex === 7 && overrides.isModalOpen !== undefined) {
           return [overrides.isModalOpen, () => {}];
         }
+        if (currentIndex === 21 && overrides.editCopaymentSupport !== undefined) {
+          assert.equal(
+            typeof initialState,
+            'object',
+            'PatientBanner call 21 initial state must be an object'
+          );
+          assert.ok(
+            initialState !== null && 'highCostLimitCategory' in (initialState as Record<string, unknown>),
+            'PatientBanner call 21 initial state must be EditableCopaymentSupport'
+          );
+          return [
+            {
+              ...(initialState as Record<string, unknown>),
+              ...(overrides.editCopaymentSupport as Record<string, unknown>)
+            },
+            () => {}
+          ];
+        }
         if (currentIndex === 26 && overrides.questionnaireRawText !== undefined) {
           return [overrides.questionnaireRawText, () => {}];
         }
@@ -83,7 +102,12 @@ function renderWithPatientBannerOverrides(overrides: {
     });
   }
 
-  return renderToStaticMarkup(React.createElement(Wrapper));
+  const html = renderToStaticMarkup(React.createElement(Wrapper));
+  assert.ok(
+    callCount >= 37,
+    `PatientBanner useState mock expected at least 37 calls, observed ${callCount}`
+  );
+  return html;
 }
 
 test('PatientBanner renders initial fallback state without crashing and contains edit action', () => {
@@ -550,5 +574,49 @@ test('pins Myna clinical import button as disabled when reading or patient is nu
   } finally {
     feature.implemented = origImplemented;
   }
+});
+
+test('pins high cost multiple occurrence checkbox disabled state based on highCostLimitCategory', () => {
+  const disabledHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    editCopaymentSupport: { highCostLimitCategory: '' }
+  });
+  const disabledCheckbox = findOpeningTag(disabledHtml, 'data-testid="m-high-cost-multiple"', 'input');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(disabledCheckbox),
+    'High-cost multiple occurrence checkbox must be disabled when highCostLimitCategory is empty'
+  );
+
+  const enabledHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    editCopaymentSupport: { highCostLimitCategory: 'ウ' }
+  });
+  const enabledCheckbox = findOpeningTag(enabledHtml, 'data-testid="m-high-cost-multiple"', 'input');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(enabledCheckbox),
+    'High-cost multiple occurrence checkbox must be enabled when highCostLimitCategory is specified'
+  );
+});
+
+test('pins reduction certificate number input disabled state based on reductionCode', () => {
+  const disabledHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    editCopaymentSupport: { reductionCode: '' }
+  });
+  const disabledInput = findOpeningTag(disabledHtml, 'data-testid="m-reduction-cert"', 'input');
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(disabledInput),
+    'Reduction certificate number input must be disabled when reductionCode is empty'
+  );
+
+  const enabledHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    editCopaymentSupport: { reductionCode: '1' }
+  });
+  const enabledInput = findOpeningTag(enabledHtml, 'data-testid="m-reduction-cert"', 'input');
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(enabledInput),
+    'Reduction certificate number input must be enabled when reductionCode is specified'
+  );
 });
 
