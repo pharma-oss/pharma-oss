@@ -13,6 +13,7 @@ import {
 } from './drug_price_history.ts';
 import { evaluateInsuranceEligibility } from './insurance_eligibility.ts';
 import { findPatientAlertDrugWarnings } from './patient_alerts.ts';
+import { SELF_PAY_CLAIM_EXCLUSION_NOTE, isSelfPayPatient } from './self_pay_claim.ts';
 
 export type ClaimValidationSeverity = 'error' | 'warning' | 'info';
 
@@ -113,6 +114,18 @@ function addIssue(
 export function validateDispensingClaim(input: ValidateDispensingClaimInput): ClaimValidationIssue[] {
   const issues: ClaimValidationIssue[] = [];
   const { settings, patient, items, calculatedFees, claimOptions, patientAlerts = [], serviceDate } = input;
+
+  // 保険種別が「自費」の患者は請求の対象外。保険の請求を前提にした点検 (保険者番号・公費・算定ルールなど)
+  // は当てはまらないので行わず、対象外であることだけを情報として返す。
+  if (isSelfPayPatient(patient)) {
+    return [{
+      severity: 'info',
+      code: 'self_pay_claim_excluded',
+      title: '自費の患者のため、請求の対象外です',
+      message: SELF_PAY_CLAIM_EXCLUSION_NOTE
+    }];
+  }
+
   const effectiveClaimOptions: FeeCalculationOptions | undefined = claimOptions || input.currentVisitId || input.monthlyFeeHistory
     ? {
         ...(claimOptions || {}),

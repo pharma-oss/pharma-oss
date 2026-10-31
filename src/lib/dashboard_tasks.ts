@@ -21,6 +21,7 @@ import { getPublicInsuranceCategoryName } from './patient_public_insurance';
 import { evaluateInsuranceEligibility } from './insurance_eligibility';
 import { calculateReorderAmounts } from './inventory_reorder_support';
 import { toLocalDateKey } from './local_date';
+import { isSelfPayPatient } from './self_pay_claim';
 
 export interface DashboardTask {
   visitId: string;
@@ -50,6 +51,8 @@ export interface DashboardCounts {
   rebillingClaimCount: number;
   followUpDueCount: number;
   urgentFollowUpCount: number;
+  /** 保険種別が「自費」で、請求リストから外した受付の数 (請求の対象外) */
+  selfPayClaimExcludedCount?: number;
 }
 
 export interface DashboardInventoryRisk {
@@ -113,6 +116,11 @@ export interface DashboardClaimWorkItem {
     label: string;
     message: string;
   };
+  /**
+   * 保険種別が「自費」に変わった患者の、請求済みの受付。請求済みの記録は一覧から消さずに残すが、
+   * 自費の患者はUKEに含められないので、再出力の対象にはしない。
+   */
+  selfPayExcluded?: boolean;
 }
 
 /**
@@ -528,14 +536,22 @@ export function calculateDashboardClaimRisks({
   claimRisks: DashboardClaimRisk[];
   claimRiskCount: number;
   urgentClaimRiskCount: number;
+  /** 保険種別が「自費」で、請求リスクの対象から外した受付の数 */
+  selfPayExcludedCount: number;
 } {
   let claimRiskCount = 0;
   let urgentClaimRiskCount = 0;
+  let selfPayExcludedCount = 0;
   const claimRiskData: (DashboardClaimRisk & { sortKey: number })[] = [];
 
   for (let i = 0; i < claimReadyVisits.length; i++) {
     const visit = claimReadyVisits[i];
     const patientDoc = patientMap.get(visit.patientId);
+    // 保険種別が「自費」の患者は請求の対象外。請求リスクの点検・集計に入れない (件数だけ数えて画面に出す)。
+    if (isSelfPayPatient(patientDoc)) {
+      selfPayExcludedCount++;
+      continue;
+    }
     const items = itemsByVisitId.get(visit.visitId) || [];
     const claimItems: Array<ClaimValidationItem & ItemWithPrice> = new Array(items.length);
 
@@ -669,7 +685,7 @@ export function calculateDashboardClaimRisks({
     actionLabel: risk.actionLabel
   }));
 
-  return { claimRisks, claimRiskCount, urgentClaimRiskCount };
+  return { claimRisks, claimRiskCount, urgentClaimRiskCount, selfPayExcludedCount };
 }
 
 export interface CalculateClaimWorkItemsParams {
@@ -791,6 +807,7 @@ export function calculateDashboardClaimWorkItems({
       actionLabel: getClaimWorkbenchActionLabel(status),
       publicInsuranceSummary,
       eligibilityWarning,
+      ...(isSelfPayPatient(patientDoc) ? { selfPayExcluded: true } : {}),
       sortKey: parseDateForSort(latestEventAt)
     });
   }
@@ -818,7 +835,8 @@ export function calculateDashboardClaimWorkItems({
     reason: item.reason,
     actionLabel: item.actionLabel,
     publicInsuranceSummary: item.publicInsuranceSummary,
-    eligibilityWarning: item.eligibilityWarning
+    eligibilityWarning: item.eligibilityWarning,
+    ...(item.selfPayExcluded ? { selfPayExcluded: true } : {})
   }));
 
   return { claimWorkItems, returnedClaimCount, rebillingClaimCount };

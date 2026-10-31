@@ -340,6 +340,11 @@ export default function Dashboard() {
           ))}
           {!isLoading && visibleClaimRisks.length === 0 && <EmptyState text="現在、請求・返戻リスクはありません。" />}
         </div>
+        {!isLoading && (counts.selfPayClaimExcludedCount ?? 0) > 0 && (
+          <p className="text-muted" data-testid="claim-risk-self-pay-note">
+            保険種別が「自費」の患者 {counts.selfPayClaimExcludedCount}件は、請求の対象外のため、この一覧に含めていません。
+          </p>
+        )}
       </section>
 
       <ClaimWorkbenchSection

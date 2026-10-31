@@ -63,6 +63,7 @@ import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboa
 import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient } from '@/db/types';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
+import { describeSelfPayExclusion, partitionSelfPayClaims } from '@/lib/self_pay_claim';
 import { applyReversiblePatches, plainCopy, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
 
 export interface ClaimWorkbenchSectionProps {
@@ -182,7 +183,17 @@ export function ClaimWorkbenchSection({
       });
     }
 
-    return { cases, missingMessages, visits, visitDocs: orderedVisitDocs };
+    // 保険種別が「自費」の患者は請求 (UKE) の対象外。ここで外し、外した件数は呼び出し側が画面に出す。
+    // 保険種別が空の患者は外さない (これまで請求できている患者を落とさないため)。
+    const { claimable, excluded: selfPayExcluded } = partitionSelfPayClaims(cases);
+
+    // 出力後に請求状態 (UKE出力済み) を付ける対象も、UKEに載せた受付だけにする。
+    // 自費の受付を visits に残すと、UKEに含まれていないのに「出力済み・ロック」にしてしまう。
+    const selfPayVisitIds = new Set(selfPayExcluded.map((entry) => entry.visitId));
+    const claimableVisits = visits.filter((visit) => !selfPayVisitIds.has(visit.visitId));
+    const claimableVisitDocs = orderedVisitDocs.filter((doc) => !selfPayVisitIds.has(doc.visitId));
+
+    return { cases: claimable, selfPayExcluded, missingMessages, visits: claimableVisits, visitDocs: claimableVisitDocs };
   }, [db]);
 
   const handleDownloadClaimWorkbenchOfficialReadiness = useCallback(async () => {
@@ -203,13 +214,16 @@ export function ClaimWorkbenchSection({
 
     setIsCheckingOfficialReadiness(true);
     try {
-      const { cases, missingMessages } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`公式提出準備チェック前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;
       }
+      // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
+      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
+      if (selfPayNote) toast.info(selfPayNote);
       if (cases.length === 0) {
-        toast.info('公式提出準備を確認できる受付がありません。');
+        if (!selfPayNote) toast.info('公式提出準備を確認できる受付がありません。');
         return;
       }
 
@@ -273,13 +287,16 @@ export function ClaimWorkbenchSection({
 
     setIsCheckingRules(true);
     try {
-      const { cases, missingMessages } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`算定ルール確認前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;
       }
+      // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
+      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
+      if (selfPayNote) toast.info(selfPayNote);
       if (cases.length === 0) {
-        toast.info('算定ルールを確認できる受付がありません。');
+        if (!selfPayNote) toast.info('算定ルールを確認できる受付がありません。');
         return;
       }
 
@@ -330,13 +347,16 @@ export function ClaimWorkbenchSection({
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
-      const { cases, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`公式UKE作成前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;
       }
+      // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
+      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
+      if (selfPayNote) toast.info(selfPayNote);
       if (cases.length === 0) {
-        toast.info('公式UKEを作成できる受付がありません。');
+        if (!selfPayNote) toast.info('公式UKEを作成できる受付がありません。');
         return;
       }
 
@@ -463,13 +483,16 @@ export function ClaimWorkbenchSection({
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
-      const { cases, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`オンライン請求受付前チェック前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;
       }
+      // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
+      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
+      if (selfPayNote) toast.info(selfPayNote);
       if (cases.length === 0) {
-        toast.info('UKEを出力できる受付がありません。');
+        if (!selfPayNote) toast.info('UKEを出力できる受付がありません。');
         return;
       }
 
@@ -839,6 +862,12 @@ export function ClaimWorkbenchSection({
         ))}
         {!isLoading && visibleClaimWorkItems.length === 0 && <EmptyState text="現在、月次請求で未締めの返戻・再請求ワークはありません。" />}
       </div>
+      {!isLoading && claimWorkItems.some((item) => item.selfPayExcluded) && (
+        <p className="text-muted" data-testid="claim-workbench-self-pay-note">
+          保険種別が「自費」に変わった請求済みの受付があります。自費の患者はUKEに含められないため、一括UKE・公式UKEの対象から外します。
+          保険を使う請求なら、患者の保険種別を設定し直してください。
+        </p>
+      )}
     </section>
   );
 }

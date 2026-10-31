@@ -310,6 +310,16 @@ export const ClaimWorkbenchRow = React.memo(function ClaimWorkbenchRow({
               公費: {item.publicInsuranceSummary}
             </span>
           )}
+          {item.selfPayExcluded && (
+            <span
+              className="claim-workbench-badge warning-warning"
+              title="保険種別が「自費」のため、UKEの対象から外しています。保険を使う請求なら、患者の保険種別を設定し直してください。"
+              data-testid="claim-workbench-self-pay-badge"
+            >
+              <AlertTriangle size={11} aria-hidden="true" />
+              自費（UKE対象外）
+            </span>
+          )}
           {item.eligibilityWarning && (
             <span
               className={`claim-workbench-badge warning-${item.eligibilityWarning.severity}`}

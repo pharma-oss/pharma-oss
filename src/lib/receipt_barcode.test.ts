@@ -198,18 +198,27 @@ const CLASSIFICATION_TABLE: ClassificationCase[] = [
   { name: '種別は自費で保険者番号も入っている', input: { insuranceType: '自費', provider: '06130012' }, category: 'self_pay', assumed: false, reasonIncludes: '自費' },
   // 種別が空のときは保険者番号 (既存の月次UKEと同じ)
   { name: '種別なし・6桁', input: { provider: '123456' }, category: 'national', assumed: false, reasonIncludes: '6桁' },
-  { name: '種別なし・8桁で06始まり', input: { provider: '06130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
-  { name: '種別なし・8桁で07始まり', input: { provider: '07130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
+  // 8桁は 06・07 に限らず社保 (01 の協会けんぽ、31〜34 の共済、63 の健保組合 など)
+  { name: '種別なし・8桁で06始まり', input: { provider: '06130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別なし・8桁で07始まり', input: { provider: '07130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別なし・8桁で01始まり (協会けんぽ)', input: { provider: '01130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別なし・8桁で31始まり (共済)', input: { provider: '31130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別なし・8桁で63始まり (健保組合)', input: { provider: '63130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別なし・8桁で00始まり', input: { provider: '00130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
   { name: '種別が空白だけ・6桁', input: { insuranceType: '  ', provider: '123456' }, category: 'national', assumed: false, reasonIncludes: '6桁' },
-  { name: '保険者番号にハイフンなどが混ざる', input: { provider: '06-130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
+  { name: '保険者番号にハイフンなどが混ざる', input: { provider: '01-130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
+  { name: '種別が空白だけ・8桁', input: { insuranceType: '   ', provider: '01130012' }, category: 'social', assumed: false, reasonIncludes: '8桁' },
   // 判定できないものは自費扱い (assumed)
   { name: '労災', input: { insuranceType: '労災' }, category: 'self_pay', assumed: true, reasonIncludes: '「労災」' },
   { name: '自賠責', input: { insuranceType: '自賠責' }, category: 'self_pay', assumed: true, reasonIncludes: '「自賠責」' },
   { name: '公費のみ (公費の登録あり・保険情報なし)', input: { hasPublicInsurance: true }, category: 'self_pay', assumed: true, reasonIncludes: '公費のみ' },
   { name: '保険情報なし', input: {}, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' },
   { name: '保険情報が空文字', input: { insuranceType: '', provider: '' }, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' },
-  { name: '種別なし・8桁で06/07以外', input: { provider: '01130012' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
-  { name: '種別なし・桁数が合わない', input: { provider: '12345' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  // 6桁と8桁以外の桁数は、従来どおり判定できず自費扱い
+  { name: '種別なし・5桁', input: { provider: '12345' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  { name: '種別なし・7桁', input: { provider: '1234567' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  { name: '種別なし・9桁', input: { provider: '123456789' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  { name: '種別なし・桁が数字でない', input: { provider: 'abcdefgh' }, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' },
   { name: '種別なし・null', input: { insuranceType: null, provider: null }, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' }
 ];
 

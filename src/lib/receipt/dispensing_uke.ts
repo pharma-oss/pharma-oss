@@ -1,6 +1,7 @@
 import type { Patient, PrescriptionItem, Visit, FacilitySettings } from '@/db/types';
 import type { CalculationResultItem, FeeCode } from '@/lib/calculator';
 import type { UkeRecord } from './uke_generator';
+import { SELF_PAY_UKE_BLOCKED_MESSAGE, isSelfPayPatient } from '@/lib/self_pay_claim';
 
 export interface DispensingUkeItem extends PrescriptionItem {
   drugName?: string;
@@ -144,6 +145,11 @@ function buildSpecialPublicExpenseRecord(visit: Visit): UkeRecord | undefined {
 
 export function buildDispensingUkeRecords(input: BuildDispensingUkeRecordsInput): UkeRecord[] {
   const { visit, patient, settings, items, calculatedFees, interventions } = input;
+  // 保険種別が「自費」の患者は請求の対象外。単票・月次・公式のどの経路でも、UKEの組み立てはここを通るので、
+  // 呼び出し側で除外し損ねても、自費の患者のUKEは作らない (月次は呼び出し側で先に除外して、件数を知らせる)。
+  if (isSelfPayPatient(patient)) {
+    throw new Error(SELF_PAY_UKE_BLOCKED_MESSAGE);
+  }
   const generatedAt = input.generatedAt || new Date();
   const totalPoints = calculatedFees.reduce((sum, fee) => sum + fee.points, 0);
   const records: UkeRecord[] = [];

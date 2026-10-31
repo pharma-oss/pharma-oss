@@ -9,6 +9,8 @@
 // 特定のレジ・会計ソフトの仕様に合わせたものではない。読ませる先が決まったら、その仕様に
 // 合わせて作り直す (docs/user_manual.md の 3.4.1)。
 
+import { isExplicitSelfPayInsuranceType } from './self_pay_claim.ts';
+
 export type InsuranceBarcodeCategory = 'national' | 'social' | 'self_pay';
 
 export const INSURANCE_BARCODE_CODES: Record<InsuranceBarcodeCategory, string> = {
@@ -31,15 +33,17 @@ export const RECEIPT_BARCODE_LENGTH = 1 + RECEIPT_BARCODE_AMOUNT_DIGITS + 1;
 // ---------------------------------------------------------------------------
 // 保険区分の割り当て (患者の保険種別・保険者番号 → 国保/社保/自費)
 //
-// 国保・社保の判定は、月次UKE (monthly_claim_uke.ts) の既存の分類と同じ文言・番号に合わせる。
+// 保険種別の文言 (国保・社保) は、月次UKE (monthly_claim_uke.ts) の既存の分類と同じに合わせる。
 // 後期高齢は既存コードが国保連側 (国保と同じ) に分けているので国保。
-// 判定できないもの (公費のみ・労災・自賠責・保険情報なし・その他) は自費として扱う。
+// 保険種別が空のときは保険者番号の桁数で見る (6桁=国保、8桁=社保)。8桁は 06・07 始まりに限らず
+// 社保にする (01 の協会けんぽなど)。月次UKEの既存の分類 (06/07 だけを社保の標本にする箇所) とは
+// 別の、バーコードだけの規則。
+// 判定できないもの (公費のみ・労災・自賠責・保険情報なし・6桁と8桁以外の番号・その他) は自費として扱う。
 // ただし「判定できず自費扱い」であることを assumed で持ち回り、画面と領収証の文字に出す。
 // ---------------------------------------------------------------------------
 
 const NATIONAL_INSURANCE_TYPE_PATTERN = /国保|国民健康保険|後期高齢/;
 const SOCIAL_INSURANCE_TYPE_PATTERN = /社保|健康保険|協会|組合|共済|被用者/;
-const SELF_PAY_INSURANCE_TYPE_PATTERN = /自費/;
 
 export interface InsuranceClassificationInput {
   /** 患者の保険種別 (自由入力の文字列。画面の選択肢は 社保・国保・後期高齢・自費) */
@@ -74,7 +78,7 @@ export function classifyInsuranceForBarcode(input: InsuranceClassificationInput)
   const provider = digitsOnly(input.provider);
 
   if (insuranceType) {
-    if (SELF_PAY_INSURANCE_TYPE_PATTERN.test(insuranceType)) {
+    if (isExplicitSelfPayInsuranceType(insuranceType)) {
       return { category: 'self_pay', assumed: false, basis: 'self_pay_selected', reason: `保険種別「${insuranceType}」` };
     }
     // 「国民健康保険」は「健康保険」を含むので、国保を先に見る
@@ -96,15 +100,15 @@ export function classifyInsuranceForBarcode(input: InsuranceClassificationInput)
   if (provider.length === 6) {
     return { category: 'national', assumed: false, basis: 'provider_number', reason: `保険者番号 ${provider} (6桁)` };
   }
-  if (provider.length === 8 && /^(06|07)/.test(provider)) {
-    return { category: 'social', assumed: false, basis: 'provider_number', reason: `保険者番号 ${provider} (8桁・06/07始まり)` };
+  if (provider.length === 8) {
+    return { category: 'social', assumed: false, basis: 'provider_number', reason: `保険者番号 ${provider} (8桁)` };
   }
   if (provider) {
     return {
       category: 'self_pay',
       assumed: true,
       basis: 'fallback_self_pay',
-      reason: `保険種別が空で、保険者番号 ${provider} からは国保・社保を判定できない`
+      reason: `保険種別が空で、保険者番号 ${provider} (6桁・8桁以外) からは国保・社保を判定できない`
     };
   }
   return {

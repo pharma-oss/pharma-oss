@@ -5,6 +5,18 @@
   min-height: 100%;
 }
 
+.claim-self-pay-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: var(--fs-sm);
+}
+
 .print-header {
   display: flex;
   flex-wrap: wrap;

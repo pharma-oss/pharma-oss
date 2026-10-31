@@ -170,6 +170,7 @@ import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
 import { usePrintElectronicPrescription } from '@/hooks/usePrintElectronicPrescription';
 import { usePrintDeviceIntegration } from '@/hooks/usePrintDeviceIntegration';
 import { toLocalDateKey } from '@/lib/local_date';
+import { SELF_PAY_CLAIM_EXCLUSION_NOTE, SELF_PAY_UKE_BLOCKED_MESSAGE, isSelfPayPatient } from '@/lib/self_pay_claim';
 import { restoreFields } from '@/lib/rxdb_restore';
 
 export default function PrintPage() {
@@ -319,6 +320,9 @@ export default function PrintPage() {
   const claimLifecycle = visitData?.claimLifecycle as ClaimLifecycleState | undefined;
   const claimLifecycleStatus = getClaimLifecycleStatus(claimLifecycle);
   const claimLifecycleLocked = isClaimLifecycleLocked(claimLifecycle);
+  // 保険種別が「自費」の患者は請求 (UKE) の対象外。UKE出力は止め、請求の画面にその旨を出す。
+  // 領収証は変わらず、保険点数×負担割合で計算する。
+  const isSelfPayClaimExcluded = isSelfPayPatient(patientData);
   const claimEditBlocked = isClaimEditBlocked(claimLifecycle);
   const canEditBilling = canChangeBilling && !claimEditBlocked;
   const canDownloadUke = canExportUke && (claimLifecycleStatus === 'draft' || claimLifecycleStatus === 'rebilling');
@@ -1040,6 +1044,10 @@ export default function PrintPage() {
 
   const handleDownloadUke = async () => {
     if (!ensurePermission('export_uke')) return;
+    if (isSelfPayClaimExcluded) {
+      alert(SELF_PAY_UKE_BLOCKED_MESSAGE);
+      return;
+    }
     if (isDemoVisit(visitData)) {
       alert('チュートリアルのデモ受付のため、UKEファイルは出力できません。\nUKE出力前チェックまでの流れは、この画面の薬剤師確認・請求前チェックで練習できます。');
       return;
@@ -1630,9 +1638,11 @@ export default function PrintPage() {
             type="button"
             className="btn-secondary"
             onClick={handleDownloadUke}
-            disabled={!canExportUke || hasClaimErrors}
+            disabled={!canExportUke || hasClaimErrors || isSelfPayClaimExcluded}
             data-testid="print-uke-export-button"
-            title={hasClaimErrors ? '請求前チェックのエラーを解消してください。' : '点検用UKE出力（旧形式・独自フォーマット: RECEIPT_{id}.uke）'}
+            title={isSelfPayClaimExcluded
+              ? SELF_PAY_UKE_BLOCKED_MESSAGE
+              : hasClaimErrors ? '請求前チェックのエラーを解消してください。' : '点検用UKE出力（旧形式・独自フォーマット: RECEIPT_{id}.uke）'}
           >
             <Download size={16} aria-hidden="true" />
             <span>UKE出力</span>
@@ -1641,9 +1651,11 @@ export default function PrintPage() {
             type="button"
             className="btn-secondary official-uke-btn"
             onClick={() => setIsOfficialUkeModalOpen(true)}
-            disabled={!canExportUke}
+            disabled={!canExportUke || isSelfPayClaimExcluded}
             data-testid="print-official-uke-button"
-            title="公式提出用UKE（正本: RECEIPTY.CYO / 支払基金・国保連電算仕様 / GO集計 / EOF 0x1A）の点検とダウンロード"
+            title={isSelfPayClaimExcluded
+              ? SELF_PAY_UKE_BLOCKED_MESSAGE
+              : '公式提出用UKE（正本: RECEIPTY.CYO / 支払基金・国保連電算仕様 / GO集計 / EOF 0x1A）の点検とダウンロード'}
           >
             <FileCheck2 size={16} aria-hidden="true" />
             <span>公式UKE</span>
@@ -1677,6 +1689,12 @@ export default function PrintPage() {
             </div>
           </div>
 
+          {isSelfPayClaimExcluded && (
+            <p className="claim-self-pay-note" role="status" data-testid="print-self-pay-claim-note">
+              <Info size={14} aria-hidden="true" /> {SELF_PAY_CLAIM_EXCLUSION_NOTE}
+            </p>
+          )}
+
           <div className="receipt-flow-grid">
             <div className={`receipt-flow-step ${pharmacistCheckStatus}`}>
               <span>1 薬剤師確認</span>
@@ -1684,7 +1702,7 @@ export default function PrintPage() {
             </div>
             <div className={`receipt-flow-step ${claimCheckStatus}`}>
               <span>2 請求前チェック</span>
-              <strong>{claimCheckStatus === 'ok' ? '適合' : `${claimValidationErrors.length}件 不備`}</strong>
+              <strong>{isSelfPayClaimExcluded ? '対象外（自費）' : claimCheckStatus === 'ok' ? '適合' : `${claimValidationErrors.length}件 不備`}</strong>
             </div>
             <div className={`receipt-flow-step ${claimLifecycleLocked ? 'locked' : claimLifecycleStatus}`}>
               <span>3 請求ロック</span>
@@ -2210,7 +2228,7 @@ export default function PrintPage() {
               </p>
             </div>
             <span className={`claim-check-badge ${claimCheckStatus}`}>
-              {claimCheckStatus === 'ok' ? '適合' : hasClaimErrors ? '要修正' : '要確認'}
+              {isSelfPayClaimExcluded ? '対象外' : claimCheckStatus === 'ok' ? '適合' : hasClaimErrors ? '要修正' : '要確認'}
             </span>
           </div>
 
@@ -2407,8 +2425,10 @@ export default function PrintPage() {
           prescriptionItems={itemsForUke}
           calculatedFees={calculatedFees}
           interventions={interventions}
-          hasClaimErrors={hasClaimErrors}
-          claimErrorMessages={claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))}
+          hasClaimErrors={hasClaimErrors || isSelfPayClaimExcluded}
+          claimErrorMessages={isSelfPayClaimExcluded
+            ? [SELF_PAY_UKE_BLOCKED_MESSAGE]
+            : claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))}
           onExportSuccess={handleOfficialUkeExportSuccess}
         />
       )}

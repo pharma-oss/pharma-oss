@@ -267,7 +267,7 @@ export function useDashboardTasks() {
         });
 
         const claimReadyVisits = processingVisits.concat(completedVisits);
-        const { claimRisks, claimRiskCount, urgentClaimRiskCount } = calculateDashboardClaimRisks({
+        const { claimRisks, claimRiskCount, urgentClaimRiskCount, selfPayExcludedCount } = calculateDashboardClaimRisks({
           claimReadyVisits,
           patientMap,
           itemsByVisitId,
@@ -317,7 +317,8 @@ export function useDashboardTasks() {
           returnedClaimCount,
           rebillingClaimCount,
           followUpDueCount,
-          urgentFollowUpCount
+          urgentFollowUpCount,
+          selfPayClaimExcludedCount: selfPayExcludedCount
         };
 
         const nextKpis = buildOperationalKpis({
