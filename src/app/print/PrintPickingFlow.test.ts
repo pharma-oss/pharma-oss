@@ -1035,3 +1035,21 @@ test('print page renders EmergencyRecoveryKeySheetPrint and PharmacyDeviceHandof
   assert.ok(deviceHtml.includes('data-testid="pharmacy-device-submit-button"'), '送信ボタンが存在すること');
 });
 
+
+test('print page builds the receipt barcode from the printed copay and the patient insurance, and tells the panel why there is none', () => {
+  const body = section(printSource, 'const receiptAmountsPending = unsetPointFees.length > 0;', 'const sumFeePoints = (codes: FeeCode[]) =>');
+
+  // 点数未設定のときは作らない。作るときは、印字する領収金額と同じ値・患者の保険種別と保険者番号・公費の有無を渡す
+  assert.match(body, /receiptAmountsPending\s*\?\s*null\s*:\s*buildReceiptBarcode\(/);
+  assert.match(body, /insuranceType: patientData\.insuranceInfo\?\.insuranceType/);
+  assert.match(body, /provider: patientData\.insuranceInfo\?\.provider/);
+  assert.match(body, /hasPublicInsurance: \(patientData\.publicInsurances \|\| \[\]\)\.length > 0/);
+  assert.match(body, /copayYen: insuranceAmounts\.patientCopayYen/);
+  // 領収証へは ok のときだけ渡し、画面のパネルには印字しない理由か、区分と判定の根拠を渡す
+  assert.match(body, /receiptBarcodeResult\?\.ok/);
+  assert.match(body, /categoryText: describeBarcodeCategory\(receiptBarcodeResult\.classification\)/);
+  assert.match(body, /assumed: receiptBarcodeResult\.classification\.assumed/);
+  assert.match(body, /message: receiptBarcodeResult\.message/);
+  assert.match(printSource, /barcodeStatus=\{receiptBarcodeStatus\}/);
+  assert.match(printSource, /barcode=\{receiptBarcode\}/);
+});

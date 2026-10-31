@@ -928,11 +928,11 @@ test('printDocumentsWithAuditLog can record a receipt reissue with the amount in
   const detail = buildReceiptReissueAuditDetail('v_0001', 'デモ患者 みどり', {
     totalPoints: 97,
     copayYen: 1290,
-    barcodePayload: 'v0001/20261030/1290'
+    barcode: { label: '社保', payload: '200012904' }
   });
   assert.equal(
     detail,
-    '領収証印刷(再発行): 受付ID v_0001 / 患者 デモ患者 みどり / 97点・窓口負担¥1,290 / バーコード v0001/20261030/1290'
+    '領収証印刷(再発行): 受付ID v_0001 / 患者 デモ患者 みどり / 97点・窓口負担¥1,290 / バーコード 社保 200012904'
   );
 
   const outcome = await printDocumentsWithAuditLog({

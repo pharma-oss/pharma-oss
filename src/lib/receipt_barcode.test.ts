@@ -1,121 +1,241 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import {
-  buildReceiptBarcodePayload,
-  formatReceiptBarcodeCaption,
-  normalizeReceiptNumberForBarcode,
-  parseReceiptBarcodePayload,
-  readReceiptBarcodeFields
+  INSURANCE_BARCODE_CODES,
+  RECEIPT_BARCODE_MAX_AMOUNT_YEN,
+  buildReceiptBarcode,
+  classifyInsuranceForBarcode,
+  describeBarcodeCategory,
+  hasValidLuhnCheckDigit,
+  luhnCheckDigit,
+  parseReceiptBarcodePayload
 } from './receipt_barcode.ts';
-import { isCode128Printable } from './code128.ts';
+import { readFileSync } from 'node:fs';
+import { isCode128Printable, layoutCode128B } from './code128.ts';
 
-test('the payload joins the receipt number, the dispensing date and the copay in yen', () => {
-  // 紙面の受付番号は visitId の先頭14文字で、uuid だと末尾にハイフンが付く
-  assert.strictEqual(
-    buildReceiptBarcodePayload({ receiptNumber: '3f2a9c1e-7b4d-', dispensingDate: '2026-10-30', copayYen: 750 }),
-    '3f2a9c1e7b4d/20261030/750'
-  );
+// ---- チェックデジット (Luhn / mod 10) ----
+
+test('the Luhn check digit follows the standard test vectors', () => {
+  // 7992739871 → 3 は Luhn の定番のテスト値 (全体 79927398713)
+  assert.strictEqual(luhnCheckDigit('7992739871'), '3');
+  assert.strictEqual(luhnCheckDigit('4539578763621486'.slice(0, -1)), '6', 'a 16-digit card-style number');
+  assert.strictEqual(luhnCheckDigit('0'), '0');
+  assert.strictEqual(luhnCheckDigit('1'), '8');
 });
 
-test('the payload changes when the copay changes (a re-issued receipt is distinguishable)', () => {
-  const base = { receiptNumber: '3f2a9c1e-7b4d-', dispensingDate: '2026-10-30' };
-  const before = buildReceiptBarcodePayload({ ...base, copayYen: 750 });
-  const after = buildReceiptBarcodePayload({ ...base, copayYen: 1130 });
-  assert.notStrictEqual(before, after);
-  assert.strictEqual(after, '3f2a9c1e7b4d/20261030/1130');
+test('the check digit of the documented examples is worked out digit by digit', () => {
+  // 国保 ¥750: 本体 1 0000750 = 1,0,0,0,0,7,5,0
+  //   右から 0(×2=0) 5 7(×2=14→5) 0 0(×2=0) 0 0(×2=0) 1 → 0+5+5+0+0+0+0+1 = 11 → (10 - 1) % 10 = 9
+  assert.strictEqual(luhnCheckDigit('10000750'), '9');
+  // 自費 ¥12,340: 本体 3 0012340 = 3,0,0,1,2,3,4,0
+  //   右から 0(×2=0) 4 3(×2=6) 2 1(×2=2) 0 0(×2=0) 3 → 0+4+6+2+2+0+0+3 = 17 → (10 - 7) % 10 = 3
+  assert.strictEqual(luhnCheckDigit('30012340'), '3');
+  // 社保 ¥1,130: 本体 2 0001130 → 0+3+2+1+0+0+0+2 = 8 → 2
+  assert.strictEqual(luhnCheckDigit('20001130'), '2');
 });
 
-test('a zero copay is still encoded (no amount is not the same as zero yen)', () => {
-  assert.strictEqual(
-    buildReceiptBarcodePayload({ receiptNumber: 'abc123', dispensingDate: '2026-01-05', copayYen: 0 }),
-    'abc123/20260105/0'
-  );
+test('a body whose digit sum is already a multiple of 10 gets check digit 0, not 10', () => {
+  // 19: 右から 9(×2=18→9) 1 → 9+1 = 10 → (10 - 0) % 10 = 0
+  assert.strictEqual(luhnCheckDigit('19'), '0');
+  assert.ok(hasValidLuhnCheckDigit('190'));
 });
 
-test('the receipt number keeps letters, digits and underscores only, so the separator never appears inside it', () => {
-  assert.strictEqual(normalizeReceiptNumberForBarcode('3f2a9c1e-7b4d-'), '3f2a9c1e7b4d');
-  assert.strictEqual(normalizeReceiptNumberForBarcode('demo_abc123'), 'demo_abc123');
-  assert.strictEqual(normalizeReceiptNumberForBarcode('A/B C\\D'), 'ABCD');
-  assert.strictEqual(normalizeReceiptNumberForBarcode('受付-001'), '001');
-});
-
-test('a timestamp is turned into the device calendar day, not the UTC day', () => {
-  // 日本時間の朝8:30 は UTC では前日。UTC の日付を切り出すと調剤日が1日ずれる
-  const morning = new Date(2026, 9, 30, 8, 30).toISOString();
-  assert.strictEqual(
-    buildReceiptBarcodePayload({ receiptNumber: 'abc', dispensingDate: morning, copayYen: 100 }),
-    'abc/20261030/100'
-  );
-});
-
-test('no payload is built when a field is unusable', () => {
-  const ok = { receiptNumber: 'abc', dispensingDate: '2026-10-30', copayYen: 100 };
-  assert.ok(buildReceiptBarcodePayload(ok));
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, receiptNumber: '---' }), null, 'nothing left of the receipt number');
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, receiptNumber: '' }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, dispensingDate: undefined }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, dispensingDate: 'not a date' }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, copayYen: -10 }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, copayYen: 12.5 }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, copayYen: Number.NaN }), null);
-  assert.strictEqual(buildReceiptBarcodePayload({ ...ok, copayYen: 100_000_000 }), null);
-});
-
-test('the payload is printable ASCII that fits Code128 and stays short enough for a 148 mm receipt', () => {
-  // 紙面の受付番号は visitId の先頭14文字なので、最長でも14文字
-  const payload = buildReceiptBarcodePayload({
-    receiptNumber: 'abcdef1234567_',
-    dispensingDate: '2026-12-31',
-    copayYen: 99_999_999
-  });
-  assert.ok(payload);
-  assert.ok(isCode128Printable(payload));
-  assert.ok(payload.length <= 32, `payload length ${payload.length}`);
-});
-
-test('parsing returns exactly what was built', () => {
-  const payload = buildReceiptBarcodePayload({ receiptNumber: '3f2a9c1e-7b4d-', dispensingDate: '2026-10-30', copayYen: 750 });
-  assert.deepStrictEqual(parseReceiptBarcodePayload(payload!), {
-    receiptNumber: '3f2a9c1e7b4d',
-    dispensingDate: '2026-10-30',
-    copayYen: 750
-  });
-});
-
-test('parsing rejects values that cannot have come from this format', () => {
-  for (const bad of [
-    '',
-    'abc',
-    'abc/20261030',
-    'abc/20261030/750/extra',
-    '/20261030/750',
-    'abc/2026-10-30/750',
-    'abc/20261330/750',
-    'abc/20260230/750',
-    'abc/20261030/',
-    'abc/20261030/-5',
-    'abc/20261030/007',
-    'abc/20261030/12.5',
-    'a b/20261030/750'
-  ]) {
-    assert.strictEqual(parseReceiptBarcodePayload(bad), null, JSON.stringify(bad));
+test('every single-digit mistake in the 9 digits is caught, and so are adjacent swaps except 09/90', () => {
+  const payload = buildReceiptBarcodeOk({ insuranceType: '国保', copayYen: 4560 }).payload;
+  assert.ok(hasValidLuhnCheckDigit(payload));
+  for (let i = 0; i < payload.length; i++) {
+    for (let digit = 0; digit <= 9; digit++) {
+      if (String(digit) === payload[i]) continue;
+      const mistaken = payload.slice(0, i) + digit + payload.slice(i + 1);
+      assert.ok(!hasValidLuhnCheckDigit(mistaken), `position ${i} read as ${digit}`);
+    }
+  }
+  for (let i = 0; i < payload.length - 1; i++) {
+    if (payload[i] === payload[i + 1]) continue;
+    const swapped = payload.slice(0, i) + payload[i + 1] + payload[i] + payload.slice(i + 2);
+    const isNineZero = (payload[i] === '0' && payload[i + 1] === '9') || (payload[i] === '9' && payload[i + 1] === '0');
+    if (isNineZero) continue;
+    assert.ok(!hasValidLuhnCheckDigit(swapped), `adjacent swap at ${i}`);
   }
 });
 
-test('the caption shows the same three values in a form a person can read', () => {
-  assert.strictEqual(
-    formatReceiptBarcodeCaption({ receiptNumber: '3f2a9c1e-7b4d-', dispensingDate: '2026-10-30', copayYen: 1130 }),
-    '3f2a9c1e7b4d / 2026-10-30 / ¥1,130'
-  );
-  assert.strictEqual(
-    formatReceiptBarcodeCaption({ receiptNumber: '', dispensingDate: '2026-10-30', copayYen: 1130 }),
-    null
-  );
+test('luhnCheckDigit rejects anything but digits', () => {
+  assert.throws(() => luhnCheckDigit('12a4'));
+  assert.throws(() => luhnCheckDigit(''));
+  assert.strictEqual(hasValidLuhnCheckDigit('1'), false);
+  assert.strictEqual(hasValidLuhnCheckDigit('12a45'), false);
 });
 
-test('readReceiptBarcodeFields exposes the normalized fields', () => {
-  assert.deepStrictEqual(
-    readReceiptBarcodeFields({ receiptNumber: 'a-b', dispensingDate: '2026-10-30', copayYen: 10 }),
-    { receiptNumber: 'ab', dispensingDate: '2026-10-30', copayYen: 10 }
-  );
+// ---- バーコードの中身 ----
+
+function buildReceiptBarcodeOk(input: Parameters<typeof buildReceiptBarcode>[0]) {
+  const result = buildReceiptBarcode(input);
+  assert.strictEqual(result.ok, true, JSON.stringify(result));
+  if (!result.ok) throw new Error('unreachable');
+  return result;
+}
+
+test('the payload is the category digit, the amount in 7 zero-padded digits, and the check digit', () => {
+  assert.strictEqual(buildReceiptBarcodeOk({ insuranceType: '国保', copayYen: 750 }).payload, '100007509');
+  assert.strictEqual(buildReceiptBarcodeOk({ insuranceType: '社保', copayYen: 1130 }).payload, '200011302');
+  assert.strictEqual(buildReceiptBarcodeOk({ insuranceType: '自費', copayYen: 12340 }).payload, '300123403');
+});
+
+test('a zero copay is still encoded (no amount is not the same as zero yen)', () => {
+  const result = buildReceiptBarcodeOk({ insuranceType: '社保', copayYen: 0 });
+  assert.strictEqual(result.payload.length, 9);
+  assert.strictEqual(result.payload.slice(0, 8), '20000000');
+  assert.deepStrictEqual(parseReceiptBarcodePayload(result.payload), { category: 'social', amountYen: 0 });
+});
+
+test('the payload changes when the amount or the category changes (a re-issued receipt is distinguishable)', () => {
+  const base = buildReceiptBarcodeOk({ insuranceType: '社保', copayYen: 750 }).payload;
+  assert.notStrictEqual(buildReceiptBarcodeOk({ insuranceType: '社保', copayYen: 780 }).payload, base);
+  assert.notStrictEqual(buildReceiptBarcodeOk({ insuranceType: '国保', copayYen: 750 }).payload, base);
+});
+
+test('the largest amount fits in 7 digits, and one yen more is refused with a reason', () => {
+  const max = buildReceiptBarcodeOk({ insuranceType: '国保', copayYen: RECEIPT_BARCODE_MAX_AMOUNT_YEN });
+  assert.strictEqual(max.payload, '199999996');
+  assert.strictEqual(RECEIPT_BARCODE_MAX_AMOUNT_YEN, 9_999_999);
+
+  const over = buildReceiptBarcode({ insuranceType: '国保', copayYen: RECEIPT_BARCODE_MAX_AMOUNT_YEN + 1 });
+  assert.strictEqual(over.ok, false);
+  if (!over.ok) {
+    assert.strictEqual(over.reason, 'amount_overflow');
+    assert.match(over.message, /9,999,999円を超え/);
+    assert.match(over.message, /バーコードを印字しません/);
+  }
+});
+
+test('a negative, fractional or non-finite amount builds no barcode', () => {
+  for (const copayYen of [-1, 12.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const result = buildReceiptBarcode({ insuranceType: '社保', copayYen });
+    assert.strictEqual(result.ok, false, String(copayYen));
+    if (!result.ok) assert.strictEqual(result.reason, 'amount_invalid');
+  }
+});
+
+test('the payload is 9 digits, printable by Code128, and short enough for a 148 mm receipt at any amount', () => {
+  for (const copayYen of [0, 1, 750, 12340, 9_999_999]) {
+    const { payload } = buildReceiptBarcodeOk({ insuranceType: '自費', copayYen });
+    assert.match(payload, /^\d{9}$/);
+    assert.ok(isCode128Printable(payload));
+    const { modules } = layoutCode128B(payload);
+    // 9桁は 数字ごとに11モジュール + 開始・チェック・終了。0.28mm で 50mm に満たない
+    assert.strictEqual(modules, 11 * (9 + 2) + 13);
+    assert.ok(modules * 0.28 < 50);
+  }
+});
+
+test('parsing returns exactly what was built', () => {
+  const { payload } = buildReceiptBarcodeOk({ insuranceType: '自費', copayYen: 12340 });
+  assert.deepStrictEqual(parseReceiptBarcodePayload(payload), { category: 'self_pay', amountYen: 12340 });
+  assert.deepStrictEqual(parseReceiptBarcodePayload('100007509'), { category: 'national', amountYen: 750 });
+});
+
+test('parsing rejects a wrong length, a non-digit, an unknown category code and a failed check digit', () => {
+  for (const bad of ['', '10000750', '1000075099', '10000750a', '1 0000750', '000007507', '400007501', '100007508']) {
+    assert.strictEqual(parseReceiptBarcodePayload(bad), null, JSON.stringify(bad));
+  }
+  // 区分コードは 1〜3 だけ。チェックデジットが合っていても 0 や 4 は受け付けない
+  for (const code of ['0', '4', '9']) {
+    const body = `${code}0000750`;
+    assert.strictEqual(parseReceiptBarcodePayload(`${body}${luhnCheckDigit(body)}`), null, `category code ${code}`);
+  }
+});
+
+test('the category codes are 1 national, 2 social, 3 self pay', () => {
+  assert.deepStrictEqual(INSURANCE_BARCODE_CODES, { national: '1', social: '2', self_pay: '3' });
+});
+
+// ---- 人が読める文字 ----
+
+test('the caption names the category, the amount and the digits', () => {
+  assert.strictEqual(buildReceiptBarcodeOk({ insuranceType: '国保', copayYen: 750 }).caption, '国保 / ¥750 / 100007509');
+  assert.strictEqual(buildReceiptBarcodeOk({ insuranceType: '自費', copayYen: 12340 }).caption, '自費 / ¥12,340 / 300123403');
+});
+
+test('a category assumed because nothing matched is written 自費扱い, so the paper shows what actually happened', () => {
+  const unknown = buildReceiptBarcodeOk({ insuranceType: '労災', copayYen: 750 });
+  assert.strictEqual(unknown.category, 'self_pay');
+  assert.strictEqual(unknown.classification.assumed, true);
+  assert.strictEqual(unknown.caption, '自費扱い / ¥750 / 300007507');
+  assert.strictEqual(describeBarcodeCategory(unknown.classification), '自費扱い');
+
+  const chosen = buildReceiptBarcodeOk({ insuranceType: '自費', copayYen: 750 });
+  assert.strictEqual(chosen.classification.assumed, false);
+  assert.strictEqual(chosen.caption, '自費 / ¥750 / 300007507');
+});
+
+// ---- 保険区分の割り当て表 ----
+
+interface ClassificationCase {
+  name: string;
+  input: Parameters<typeof classifyInsuranceForBarcode>[0];
+  category: 'national' | 'social' | 'self_pay';
+  assumed: boolean;
+  reasonIncludes: string;
+}
+
+const CLASSIFICATION_TABLE: ClassificationCase[] = [
+  // 保険種別で決まるもの (既存の月次UKEの分類)
+  { name: '国保', input: { insuranceType: '国保' }, category: 'national', assumed: false, reasonIncludes: '国保' },
+  { name: '国民健康保険', input: { insuranceType: '国民健康保険' }, category: 'national', assumed: false, reasonIncludes: '国民健康保険' },
+  { name: '国保組合 (国保と組合を両方含む)', input: { insuranceType: '国保組合' }, category: 'national', assumed: false, reasonIncludes: '国保組合' },
+  { name: '後期高齢 (画面の選択肢)', input: { insuranceType: '後期高齢' }, category: 'national', assumed: false, reasonIncludes: '後期高齢' },
+  { name: '後期高齢者医療', input: { insuranceType: '後期高齢者医療' }, category: 'national', assumed: false, reasonIncludes: '後期高齢者医療' },
+  { name: '社保', input: { insuranceType: '社保' }, category: 'social', assumed: false, reasonIncludes: '社保' },
+  { name: '協会けんぽ', input: { insuranceType: '協会けんぽ' }, category: 'social', assumed: false, reasonIncludes: '協会けんぽ' },
+  { name: '健康保険組合', input: { insuranceType: '健康保険組合' }, category: 'social', assumed: false, reasonIncludes: '健康保険組合' },
+  { name: '共済組合', input: { insuranceType: '共済組合' }, category: 'social', assumed: false, reasonIncludes: '共済組合' },
+  { name: '被用者保険', input: { insuranceType: '被用者保険' }, category: 'social', assumed: false, reasonIncludes: '被用者保険' },
+  // 自費 (画面の選択肢)
+  { name: '自費', input: { insuranceType: '自費' }, category: 'self_pay', assumed: false, reasonIncludes: '自費' },
+  // 種別が書かれていれば、保険者番号より種別を優先する
+  { name: '種別は国保で番号は8桁', input: { insuranceType: '国保', provider: '06130012' }, category: 'national', assumed: false, reasonIncludes: '国保' },
+  { name: '種別は社保で番号は6桁', input: { insuranceType: '社保', provider: '123456' }, category: 'social', assumed: false, reasonIncludes: '社保' },
+  { name: '種別は自費で保険者番号も入っている', input: { insuranceType: '自費', provider: '06130012' }, category: 'self_pay', assumed: false, reasonIncludes: '自費' },
+  // 種別が空のときは保険者番号 (既存の月次UKEと同じ)
+  { name: '種別なし・6桁', input: { provider: '123456' }, category: 'national', assumed: false, reasonIncludes: '6桁' },
+  { name: '種別なし・8桁で06始まり', input: { provider: '06130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
+  { name: '種別なし・8桁で07始まり', input: { provider: '07130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
+  { name: '種別が空白だけ・6桁', input: { insuranceType: '  ', provider: '123456' }, category: 'national', assumed: false, reasonIncludes: '6桁' },
+  { name: '保険者番号にハイフンなどが混ざる', input: { provider: '06-130012' }, category: 'social', assumed: false, reasonIncludes: '06/07' },
+  // 判定できないものは自費扱い (assumed)
+  { name: '労災', input: { insuranceType: '労災' }, category: 'self_pay', assumed: true, reasonIncludes: '「労災」' },
+  { name: '自賠責', input: { insuranceType: '自賠責' }, category: 'self_pay', assumed: true, reasonIncludes: '「自賠責」' },
+  { name: '公費のみ (公費の登録あり・保険情報なし)', input: { hasPublicInsurance: true }, category: 'self_pay', assumed: true, reasonIncludes: '公費のみ' },
+  { name: '保険情報なし', input: {}, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' },
+  { name: '保険情報が空文字', input: { insuranceType: '', provider: '' }, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' },
+  { name: '種別なし・8桁で06/07以外', input: { provider: '01130012' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  { name: '種別なし・桁数が合わない', input: { provider: '12345' }, category: 'self_pay', assumed: true, reasonIncludes: '判定できない' },
+  { name: '種別なし・null', input: { insuranceType: null, provider: null }, category: 'self_pay', assumed: true, reasonIncludes: '保険情報なし' }
+];
+
+for (const row of CLASSIFICATION_TABLE) {
+  test(`insurance category: ${row.name}`, () => {
+    const result = classifyInsuranceForBarcode(row.input);
+    assert.strictEqual(result.category, row.category);
+    assert.strictEqual(result.assumed, row.assumed);
+    assert.ok(result.reason.includes(row.reasonIncludes), `reason "${result.reason}" should include "${row.reasonIncludes}"`);
+  });
+}
+
+test('a public-expense registration does not change the category of a patient who has insurance', () => {
+  assert.strictEqual(classifyInsuranceForBarcode({ insuranceType: '社保', hasPublicInsurance: true }).category, 'social');
+  assert.strictEqual(classifyInsuranceForBarcode({ provider: '123456', hasPublicInsurance: true }).category, 'national');
+});
+
+test('every 保険種別 the patient editor offers has a defined barcode category, and 自費 is one of them', () => {
+  const source = readFileSync(new URL('../app/emr/components/PatientBanner.tsx', import.meta.url), 'utf8');
+  const select = source.match(/<select id="m-ins-type"[\s\S]*?<\/select>/)?.[0] ?? '';
+  const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepStrictEqual(values, ['社保', '国保', '後期高齢', '自費']);
+  const categories = values.map((value) => {
+    const result = classifyInsuranceForBarcode({ insuranceType: value });
+    assert.strictEqual(result.assumed, false, `「${value}」 is a defined choice, not a fallback`);
+    return result.category;
+  });
+  assert.deepStrictEqual(categories, ['social', 'national', 'national', 'self_pay']);
 });

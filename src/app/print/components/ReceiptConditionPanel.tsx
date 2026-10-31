@@ -13,6 +13,24 @@ import {
 } from '@/lib/claim_conditions';
 import type { ConditionChoicePreview, ConditionChoicePreviews } from '@/lib/claim_condition_previews';
 
+/**
+ * 照合バーコードの状態 (画面だけに出す)。印字した区分と、判定できず自費として扱った理由を見せる。
+ */
+export type ReceiptBarcodeStatus =
+  | {
+      kind: 'ok';
+      /** バーコードの数字9桁 */
+      payload: string;
+      /** 紙に印字した区分 (国保・社保・自費・自費扱い) */
+      categoryText: string;
+      amountYen: number;
+      /** 判定できず自費として扱ったとき true */
+      assumed: boolean;
+      /** 区分を決めた根拠 */
+      reason: string;
+    }
+  | { kind: 'none'; message: string };
+
 export interface ReceiptConditionPanelProps {
   conditions: {
     medicationNotebook: MedicationNotebookCondition;
@@ -30,6 +48,7 @@ export interface ReceiptConditionPanelProps {
   /** 変更できない理由 (請求ロック・権限)。あれば全操作を無効にして理由を出す */
   lockedReason?: string;
   canPrintReceipt: boolean;
+  barcodeStatus: ReceiptBarcodeStatus;
   onChange: (patch: ClaimConditionOptions) => void;
   onApplyAutoJudgement: () => void;
   onPrintReceiptOnly: () => void;
@@ -59,6 +78,7 @@ export const ReceiptConditionPanel = React.memo(function ReceiptConditionPanel({
   busy = false,
   lockedReason,
   canPrintReceipt,
+  barcodeStatus,
   onChange,
   onApplyAutoJudgement,
   onPrintReceiptOnly
@@ -184,6 +204,30 @@ export const ReceiptConditionPanel = React.memo(function ReceiptConditionPanel({
           </>
         ) : (
           <span>{autoJudgement.message}</span>
+        )}
+      </div>
+
+      <div
+        className={`condition-barcode${barcodeStatus.kind === 'ok' && barcodeStatus.assumed ? ' assumed' : ''}`}
+        data-testid="receipt-condition-barcode"
+      >
+        {barcodeStatus.kind === 'ok' ? (
+          <>
+            <span>
+              照合バーコード：<strong>{barcodeStatus.categoryText}</strong> ¥{formatYen(barcodeStatus.amountYen)}
+              <code className="condition-barcode-digits">{barcodeStatus.payload}</code>
+              （{barcodeStatus.reason}）
+            </span>
+            {barcodeStatus.assumed ? (
+              <span className="condition-barcode-warning" role="status" data-testid="receipt-condition-barcode-assumed">
+                <TriangleAlert size={14} aria-hidden="true" />
+                保険区分を判定できないため、自費として扱っています。公費のみ・労災・自賠責・保険情報なしも自費になります。
+                国保・社保にするには、患者の保険種別を設定してください。
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span>照合バーコード：印字しません。{barcodeStatus.message}</span>
         )}
       </div>
 
@@ -347,6 +391,31 @@ export const ReceiptConditionPanel = React.memo(function ReceiptConditionPanel({
           gap: 0.5rem 0.75rem;
           font-size: var(--fs-sm);
           color: var(--text-muted);
+        }
+
+        .condition-barcode {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
+        }
+
+        .condition-barcode-digits {
+          margin: 0 0.4rem;
+          font-size: var(--fs-sm);
+          color: var(--text-main);
+          letter-spacing: 0.05em;
+        }
+
+        .condition-barcode-warning {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          border-radius: 6px;
+          padding: 0.5rem 0.75rem;
+          background: var(--warning-soft);
+          color: var(--warning);
         }
 
         .condition-actions {

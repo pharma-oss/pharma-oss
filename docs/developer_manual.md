@@ -110,7 +110,7 @@ GitHub Actions の `Onboarding E2E` ワークフローでは、lint、型チェ�
 
 受付時刻は `visit.receptionAt`（受付時に `new Date().toISOString()` を保存）です。自動判定は `judgeAfterHoursCategory`（`claim_conditions.ts`）で、施設設定の `businessHours`（平日・土曜の開局時間、休日として扱う日付、深夜の時間帯）を使います。時刻と暦日は端末のタイムゾーンで見ます。受付時には `buildReceptionClaimOptions` が、時間外・休日・深夜と判定されたときだけ `afterHoursCategory` を保存します。
 
-領収証の照合バーコードは `src/lib/receipt_barcode.ts`（中身の生成・解析、純粋関数）と `src/lib/code128.ts`（Code128B のエンコーダ。外部ライブラリなし）で作り、`Code128Barcode`（SVG）で描きます。`code128.test.ts` は独立実装の `@zxing/library` で読み戻して検証します。`npm run test:e2e:print-layout` は、描画された領収証でバーコードの金額と領収金額が一致することも確かめます。
+領収証の照合バーコードは `src/lib/receipt_barcode.ts`（中身の生成・解析・保険区分の割り当て・Luhn、純粋関数）と `src/lib/code128.ts`（Code128B のエンコーダ。外部ライブラリなし）で作り、`Code128Barcode`（SVG）で描きます。中身は数字9桁 `区分1桁(1=国保/2=社保/3=自費) + 領収金額7桁 + Luhn のチェックデジット` で、保険区分は `classifyInsuranceForBarcode` が患者の保険種別・保険者番号から決めます（国保・社保の文言と番号は `monthly_claim_uke.ts` の既存の分類と同じ。判定できないものは自費で、`assumed: true` を持ち回って領収証の文字に「自費扱い」と出し、画面のパネルに理由を出します）。レジ・会計ソフトなど読ませる先が決まったら、その仕様に合わせて `receipt_barcode.ts` を作り直してください。`code128.test.ts` は独立実装の `@zxing/library` で読み戻して検証します。`npm run test:e2e:print-layout` は、描画された領収証でバーコードの桁数・区分・チェックデジット・金額が、印字した領収金額と一致することも確かめます。患者の保険種別の選択肢は `PatientBanner.tsx` にあり、`insuranceType` は自由入力の文字列（最大50字）なので、選択肢を足してもスキーマの version は変わりません。`receipt_barcode.test.ts` が、選択肢のすべてに区分が決まっていることを確かめます。
 
 印刷帳票のスクリーンショット回帰は、導入E2Eシードを使って調剤録、明細、領収証、薬剤情報、薬袋、お薬手帳シール、水剤ラベル、軟膏ラベルをPNG保存します。
 

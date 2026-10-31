@@ -37,7 +37,7 @@ import {
   type ClaimConditionOptions
 } from '@/lib/claim_conditions';
 import { previewClaimOptions, previewConditionChoices } from '@/lib/claim_condition_previews';
-import { buildReceiptBarcodePayload, formatReceiptBarcodeCaption } from '@/lib/receipt_barcode';
+import { buildReceiptBarcode, describeBarcodeCategory } from '@/lib/receipt_barcode';
 import { calculateInsuranceAmounts, formatYen } from '@/lib/billing';
 import { validateDispensingClaim } from '@/lib/claim_validation';
 import {
@@ -147,7 +147,7 @@ import {
 import { DispensingRecordPrint } from '../components/DispensingRecordPrint';
 import { ReceiptStatementPrint } from '../components/ReceiptStatementPrint';
 import { ReceiptPrint } from '../components/ReceiptPrint';
-import { ReceiptConditionPanel } from '../components/ReceiptConditionPanel';
+import { ReceiptConditionPanel, type ReceiptBarcodeStatus } from '../components/ReceiptConditionPanel';
 import { DrugInfoPrint } from '../components/DrugInfoPrint';
 import { MedicineBagPrint } from '../components/MedicineBagPrint';
 import { MedicineNotebookStickerPrint } from '../components/MedicineNotebookStickerPrint';
@@ -1462,18 +1462,32 @@ export default function PrintPage() {
   const liquidItems = prescriptionItems.filter(isLiquidItem);
   const ointmentItems = prescriptionItems.filter(isOintmentItem);
 
-  // 領収証の金額と同じ値を符号化した照合バーコード。点数未設定で金額が確定しないときは作らない。
+  // 領収証の金額と同じ値を符号化した照合バーコード (保険区分1桁+領収金額7桁+チェックデジット)。
+  // 点数未設定で金額が確定しないとき、金額が7桁に収まらないときは作らず、理由を画面に出す。
   const receiptAmountsPending = unsetPointFees.length > 0;
-  const receiptBarcodeInput = {
-    receiptNumber: receiptRunId,
-    dispensingDate: visitData.dispensingDate || visitData.issueDate,
-    copayYen: insuranceAmounts.patientCopayYen
-  };
-  const receiptBarcodePayload = receiptAmountsPending ? null : buildReceiptBarcodePayload(receiptBarcodeInput);
-  const receiptBarcodeCaption = receiptAmountsPending ? null : formatReceiptBarcodeCaption(receiptBarcodeInput);
-  const receiptBarcode = receiptBarcodePayload && receiptBarcodeCaption
-    ? { payload: receiptBarcodePayload, caption: receiptBarcodeCaption }
+  const receiptBarcodeResult = receiptAmountsPending
+    ? null
+    : buildReceiptBarcode({
+        insuranceType: patientData.insuranceInfo?.insuranceType,
+        provider: patientData.insuranceInfo?.provider,
+        hasPublicInsurance: (patientData.publicInsurances || []).length > 0,
+        copayYen: insuranceAmounts.patientCopayYen
+      });
+  const receiptBarcode = receiptBarcodeResult?.ok
+    ? { payload: receiptBarcodeResult.payload, caption: receiptBarcodeResult.caption }
     : null;
+  const receiptBarcodeStatus: ReceiptBarcodeStatus = receiptBarcodeResult === null
+    ? { kind: 'none', message: '点数が未設定で金額が確定しないため、バーコードは印字しません。' }
+    : receiptBarcodeResult.ok
+      ? {
+          kind: 'ok',
+          payload: receiptBarcodeResult.payload,
+          categoryText: describeBarcodeCategory(receiptBarcodeResult.classification),
+          amountYen: receiptBarcodeResult.amountYen,
+          assumed: receiptBarcodeResult.classification.assumed,
+          reason: receiptBarcodeResult.classification.reason
+        }
+      : { kind: 'none', message: receiptBarcodeResult.message };
 
   const sumFeePoints = (codes: FeeCode[]) => (
     calculatedFees
@@ -1544,7 +1558,9 @@ export default function PrintPage() {
       auditDetail: buildReceiptReissueAuditDetail(visitId, patientData?.name, {
         totalPoints,
         copayYen: insuranceAmounts.patientCopayYen,
-        barcodePayload: receiptBarcodePayload ?? undefined
+        barcode: receiptBarcodeResult?.ok
+          ? { label: describeBarcodeCategory(receiptBarcodeResult.classification), payload: receiptBarcodeResult.payload }
+          : undefined
       }),
       print: () => {
         // 印刷の間だけ、領収証以外の帳票を印刷から外す (print.css の print-receipt-only)
@@ -2289,6 +2305,7 @@ export default function PrintPage() {
               busy={conditionBusy}
               lockedReason={conditionLockedReason}
               canPrintReceipt={canPrintDocuments}
+              barcodeStatus={receiptBarcodeStatus}
               onChange={handleClaimConditionChange}
               onApplyAutoJudgement={handleApplyAfterHoursJudgement}
               onPrintReceiptOnly={handlePrintReceiptOnly}

@@ -4,9 +4,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ReceiptPrint } from './components/ReceiptPrint';
 import { ReceiptStatementPrint } from './components/ReceiptStatementPrint';
-import { ReceiptConditionPanel, type ReceiptConditionPanelProps } from './components/ReceiptConditionPanel';
+import { ReceiptConditionPanel, type ReceiptBarcodeStatus, type ReceiptConditionPanelProps } from './components/ReceiptConditionPanel';
 import { findOpeningTag, stripStyleBlocks } from '../../lib/test_support/html_disabled_tags';
-import { buildReceiptBarcodePayload, formatReceiptBarcodeCaption } from '../../lib/receipt_barcode';
+import { buildReceiptBarcode } from '../../lib/receipt_barcode';
 import type { ConditionChoicePreview, ConditionChoicePreviews } from '../../lib/claim_condition_previews';
 import type { PharmacyInfo } from './types';
 
@@ -44,15 +44,16 @@ function renderReceipt(extra: Record<string, unknown> = {}) {
 // ---- 領収証: バーコード ----
 
 test('the receipt prints the barcode of its own amount, with the readable caption under it', () => {
-  const input = { receiptNumber: '3f2a9c1e-7b4d-', dispensingDate: '2026-10-30', copayYen: 250 };
-  const payload = buildReceiptBarcodePayload(input)!;
-  const caption = formatReceiptBarcodeCaption(input)!;
-  const html = renderReceipt({ barcode: { payload, caption } });
+  const built = buildReceiptBarcode({ insuranceType: '国保', copayYen: 250 });
+  assert.ok(built.ok);
+  if (!built.ok) return;
+  const html = renderReceipt({ barcode: { payload: built.payload, caption: built.caption } });
 
   assert.ok(html.includes('data-testid="receipt-barcode"'));
-  assert.ok(html.includes(`data-barcode-payload="${payload}"`));
-  assert.strictEqual(payload, '3f2a9c1e7b4d/20261030/250');
-  assert.ok(html.includes('3f2a9c1e7b4d / 2026-10-30 / ¥250'), 'the caption is printed under the bars');
+  assert.ok(html.includes(`data-barcode-payload="${built.payload}"`));
+  assert.match(built.payload, /^1\d{7}\d$/);
+  assert.strictEqual(built.payload.slice(0, 8), '10000250', '区分1桁 + 金額7桁');
+  assert.ok(html.includes(`国保 / ¥250 / ${built.payload}`), 'the caption is printed under the bars');
   assert.ok((html.match(/<rect /g) || []).length > 20, 'the bars are drawn');
   assert.ok(html.includes('role="img"'));
   // 領収金額の表示と、バーコードに入れた金額は同じ値
@@ -168,6 +169,7 @@ function panelProps(overrides: Partial<ReceiptConditionPanelProps> = {}): Receip
     autoJudgement: { status: 'unavailable', reason: 'hours_unconfigured', message: '開局時間が未設定のため自動判定できません。' },
     receptionAtText: '2026/10/30 21:30',
     canPrintReceipt: true,
+    barcodeStatus: { kind: 'ok', payload: '100007509', categoryText: '国保', amountYen: 750, assumed: false, reason: '保険種別「国保」' },
     onChange: () => {},
     onApplyAutoJudgement: () => {},
     onPrintReceiptOnly: () => {},
@@ -327,4 +329,56 @@ test('the auto-judgement button and the receipt-only print button call their own
   (apply.props.onClick as () => void)();
   (print.props.onClick as () => void)();
   assert.deepStrictEqual([applied, printed], [1, 1]);
+});
+
+// ---- 条件パネル: 照合バーコードの状態 ----
+
+test('the panel shows the barcode category, amount, digits and where the category came from', () => {
+  const html = renderPanel();
+  assert.ok(html.includes('data-testid="receipt-condition-barcode"'));
+  assert.ok(/照合バーコード：<strong>国保<\/strong> ¥750/.test(html));
+  assert.ok(html.includes('100007509'));
+  assert.ok(html.includes('保険種別「国保」'));
+  assert.ok(!html.includes('receipt-condition-barcode-assumed'), 'no warning when the category was recognised');
+});
+
+test('a category assumed as self pay is called out on screen with what falls into it', () => {
+  const status: ReceiptBarcodeStatus = {
+    kind: 'ok',
+    payload: '300007507',
+    categoryText: '自費扱い',
+    amountYen: 750,
+    assumed: true,
+    reason: '公費のみ (保険種別・保険者番号なし)'
+  };
+  const html = renderPanel({ barcodeStatus: status });
+  assert.ok(/照合バーコード：<strong>自費扱い<\/strong> ¥750/.test(html));
+  assert.ok(html.includes('data-testid="receipt-condition-barcode-assumed"'));
+  assert.ok(html.includes('保険区分を判定できないため、自費として扱っています。'));
+  assert.ok(html.includes('公費のみ・労災・自賠責・保険情報なしも自費になります。'));
+  assert.ok(html.includes('患者の保険種別を設定してください'));
+  assert.ok(html.includes('公費のみ (保険種別・保険者番号なし)'), 'the reason is shown');
+  assert.ok(html.includes('condition-barcode assumed') || /class="[^"]*condition-barcode[^"]*assumed/.test(html), 'styled as a warning');
+});
+
+test('an explicit 自費 choice is shown without the assumption warning', () => {
+  const html = renderPanel({
+    barcodeStatus: { kind: 'ok', payload: '300007507', categoryText: '自費', amountYen: 750, assumed: false, reason: '保険種別「自費」' }
+  });
+  assert.ok(/照合バーコード：<strong>自費<\/strong>/.test(html));
+  assert.ok(!html.includes('receipt-condition-barcode-assumed'));
+});
+
+test('when no barcode is printed the panel says so and gives the reason', () => {
+  const overflow = renderPanel({
+    barcodeStatus: { kind: 'none', message: '領収金額が9,999,999円を超え、バーコードの桁数(金額7桁)に収まらないため、バーコードを印字しません。' }
+  });
+  assert.ok(overflow.includes('照合バーコード：印字しません。'));
+  assert.ok(overflow.includes('9,999,999円を超え'));
+  assert.ok(!overflow.includes('receipt-condition-barcode-assumed'));
+
+  const unset = renderPanel({
+    barcodeStatus: { kind: 'none', message: '点数が未設定で金額が確定しないため、バーコードは印字しません。' }
+  });
+  assert.ok(unset.includes('点数が未設定で金額が確定しない'));
 });

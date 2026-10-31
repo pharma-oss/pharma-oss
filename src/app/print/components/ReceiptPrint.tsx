@@ -6,9 +6,9 @@ import type { PharmacyInfo } from '../types';
 import { Code128Barcode } from './Code128Barcode';
 
 export interface ReceiptBarcodeProps {
-  /** バーコードに符号化する文字列 (buildReceiptBarcodePayload の結果) */
+  /** バーコードに符号化する数字9桁 (buildReceiptBarcode の結果) */
   payload: string;
-  /** バーコードの下に印字する、人が読める形 */
+  /** バーコードの下に印字する、人が読める形 (区分・金額・数字) */
   caption: string;
 }
 

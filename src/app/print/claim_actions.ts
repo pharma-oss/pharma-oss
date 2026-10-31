@@ -217,8 +217,8 @@ export async function applyClaimOptionsWithAudit(
 export interface ReceiptReissueSummary {
   totalPoints: number;
   copayYen: number;
-  /** 領収証に載せたバーコードの中身 */
-  barcodePayload?: string;
+  /** 領収証に載せたバーコード。label は紙に印字した区分 (国保・社保・自費・自費扱い)、payload は数字9桁 */
+  barcode?: { label: string; payload: string };
 }
 
 /**
@@ -230,7 +230,7 @@ export function buildReceiptReissueAuditDetail(
   patientName: string | undefined,
   receipt: ReceiptReissueSummary
 ): string {
-  const barcode = receipt.barcodePayload ? ` / バーコード ${receipt.barcodePayload}` : '';
+  const barcode = receipt.barcode ? ` / バーコード ${receipt.barcode.label} ${receipt.barcode.payload}` : '';
   return `領収証印刷(再発行): 受付ID ${visitId} / 患者 ${patientName || '未設定'} / ${receipt.totalPoints}点・窓口負担¥${receipt.copayYen.toLocaleString('ja-JP')}${barcode}`;
 }
 

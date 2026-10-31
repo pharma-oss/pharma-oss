@@ -112,8 +112,24 @@ async function waitForLayout(page) {
   await wait(1000);
 }
 
-// 領収証の照合バーコードは、印字した領収金額をそのまま符号化している。
-// 金額とバーコードがずれた領収証を渡さないよう、描画された画面で突き合わせる。
+// 領収証の照合バーコードは「保険区分1桁 + 領収金額7桁 + チェックデジット1桁」(数字9桁)で、
+// 金額は印字した領収金額をそのまま符号化している。金額がずれた領収証を渡さないよう、
+// 描画された画面で、桁数・区分・Luhn のチェックデジット・金額を突き合わせる。
+function luhnCheckDigit(body) {
+  let sum = 0;
+  let doubled = true;
+  for (let i = body.length - 1; i >= 0; i--) {
+    let digit = Number(body[i]);
+    if (doubled) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    doubled = !doubled;
+  }
+  return String((10 - (sum % 10)) % 10);
+}
+
 async function assertReceiptBarcode(page) {
   const info = await page.evaluate(() => {
     const barcode = document.querySelector('[data-testid="receipt-barcode"]');
@@ -121,19 +137,25 @@ async function assertReceiptBarcode(page) {
     return {
       payload: barcode?.getAttribute('data-barcode-payload') || null,
       barCount: barcode ? barcode.querySelectorAll('rect').length : 0,
+      caption: barcode?.querySelector('figcaption')?.textContent || '',
       amountText: amount?.textContent || ''
     };
   });
   assertOk(info.payload, 'the receipt barcode is missing from the receipt');
   assertOk(info.barCount > 20, `the receipt barcode has too few bars: ${info.barCount}`);
-  const match = info.payload.match(/^[A-Za-z0-9_]+\/(\d{8})\/(\d+)$/);
-  assertOk(match, `the receipt barcode payload is not in the expected format: ${info.payload}`);
+  assertOk(/^[123]\d{8}$/.test(info.payload), `the receipt barcode payload is not category(1-3) + 7-digit amount + check digit: ${info.payload}`);
+  assertOk(
+    luhnCheckDigit(info.payload.slice(0, 8)) === info.payload.slice(8),
+    `the receipt barcode check digit is wrong: ${info.payload}`
+  );
+  const barcodeYen = Number(info.payload.slice(1, 8));
   const printedYen = Number((info.amountText.match(/[\d,]+/) || [''])[0].replace(/,/g, ''));
   assertOk(
-    Number(match[2]) === printedYen,
-    `the barcode amount (${match[2]}) differs from the printed receipt amount (${info.amountText})`
+    barcodeYen === printedYen,
+    `the barcode amount (${barcodeYen}) differs from the printed receipt amount (${info.amountText})`
   );
-  return { payload: info.payload, printedYen };
+  assertOk(info.caption.includes(info.payload), `the caption under the barcode does not show its digits: ${info.caption}`);
+  return { payload: info.payload, caption: info.caption, printedYen };
 }
 
 async function screenshotElement(element, filePath) {

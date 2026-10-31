@@ -106,6 +106,9 @@ test('the receipt barcode is checked against the printed amount by the layout ru
   assert.ok(allSources.includes('data-barcode-payload'), 'the barcode exposes what it encodes');
   assert.match(printLayoutScript, /receipt-barcode/);
   assert.match(printLayoutScript, /assertReceiptBarcode/);
+  // 区分1桁 + 金額7桁 + チェックデジット (Luhn) を、描画された画面で突き合わせている
+  assert.match(printLayoutScript, /function luhnCheckDigit/);
+  assert.match(printLayoutScript, /\[123\]\\d\{8\}/);
 });
 
 test('receipt-only printing hides every other document through print.css and always clears itself', () => {
