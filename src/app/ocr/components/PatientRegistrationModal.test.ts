@@ -9,21 +9,78 @@ import { findOpeningTag, listDisabledOpeningTags, stripStyleBlocks } from '@/lib
 import { PatientRegistrationModal } from './PatientRegistrationModal';
 
 const MYNA_BUTTON_MARKER = 'data-testid="registration-myna-read-button"';
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
-function render(
-  options: {
-    initialForm?: PatientRegistrationForm;
-    mynaReaderState?: MynaReaderAvailabilityState;
-  } = {}
-): string {
-  return stripStyleBlocks(renderToStaticMarkup(React.createElement(PatientRegistrationModal, {
-    db: {} as PharmacyDatabase,
-    initialForm: options.initialForm ?? EMPTY_PATIENT_REGISTRATION_FORM,
-    mynaReaderState: options.mynaReaderState ?? { status: 'ready', available: true },
-    onClose: () => {},
-    onRegistered: () => {},
-    onSelectExisting: () => {}
-  })));
+interface RenderOptions {
+  initialForm?: PatientRegistrationForm;
+  mynaReaderState?: MynaReaderAvailabilityState;
+  isSubmitting?: boolean;
+  isReadingMyna?: boolean;
+}
+
+function render(options: RenderOptions = {}): string {
+  let callCount = 0;
+  let dispatcher: { useState?: (init: unknown) => [unknown, (v: unknown) => void] } | undefined;
+  let origUseState: ((init: unknown) => [unknown, (v: unknown) => void]) | undefined;
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      origUseState = dispatcher.useState;
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        if (currentIndex === 4) {
+          assert.strictEqual(
+            initialState,
+            false,
+            `Expected PatientRegistrationModal call 4 initial state to be false (isSubmitting), got ${String(initialState)}`
+          );
+          if (options.isSubmitting !== undefined) {
+            return [options.isSubmitting, () => {}];
+          }
+        }
+        if (currentIndex === 5) {
+          assert.strictEqual(
+            initialState,
+            false,
+            `Expected PatientRegistrationModal call 5 initial state to be false (isReadingMyna), got ${String(initialState)}`
+          );
+          if (options.isReadingMyna !== undefined) {
+            return [options.isReadingMyna, () => {}];
+          }
+        }
+        return origUseState!(initialState);
+      };
+    }
+
+    return React.createElement(PatientRegistrationModal, {
+      db: {} as PharmacyDatabase,
+      initialForm: options.initialForm ?? EMPTY_PATIENT_REGISTRATION_FORM,
+      mynaReaderState: options.mynaReaderState ?? { status: 'ready', available: true },
+      onClose: () => {},
+      onRegistered: () => {},
+      onSelectExisting: () => {}
+    });
+  }
+
+  try {
+    const html = stripStyleBlocks(renderToStaticMarkup(React.createElement(Wrapper)));
+    assert.ok(
+      callCount >= 8,
+      `PatientRegistrationModal must call useState at least 8 times, got ${callCount}`
+    );
+    return html;
+  } finally {
+    if (dispatcher && origUseState) {
+      dispatcher.useState = origUseState;
+    }
+  }
 }
 
 describe('PatientRegistrationModal: 構造', () => {
@@ -142,5 +199,64 @@ describe('PatientRegistrationModal: マイナ読み込みボタン', () => {
     assert.match(submit, /type="submit"/);
     assert.doesNotMatch(submit, /\sdisabled=""/);
     assert.match(html, /登録して受付へ進む/);
+  });
+});
+
+describe('PatientRegistrationModal: 登録処理中・マイナ読取中の無効化状態', () => {
+  it('登録処理中 (isSubmitting=true) は、閉じる・マイナ読取・キャンセル・登録ボタンの全4要素が無効化される', () => {
+    const html = render({ isSubmitting: true });
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(disabledTags.length, 4, '全4つのボタンが無効化されること');
+
+    const closeBtn = findOpeningTag(html, 'class="registration-close"', 'button');
+    const mynaBtn = findOpeningTag(html, MYNA_BUTTON_MARKER, 'button');
+    const cancelBtn = findOpeningTag(html, 'キャンセル', 'button');
+    const submitBtn = findOpeningTag(html, 'data-testid="patient-registration-submit"', 'button');
+
+    assert.match(closeBtn, DISABLED_ATTRIBUTE_PATTERN, '閉じるボタンが無効化されていること');
+    assert.match(mynaBtn, DISABLED_ATTRIBUTE_PATTERN, 'マイナ読取ボタンが無効化されていること');
+    assert.match(mynaBtn, /\saria-disabled="true"/, 'マイナ読取ボタンに aria-disabled="true" が付与されていること');
+    assert.match(cancelBtn, DISABLED_ATTRIBUTE_PATTERN, 'キャンセルボタンが無効化されていること');
+    assert.match(submitBtn, DISABLED_ATTRIBUTE_PATTERN, '登録ボタンが無効化されていること');
+    assert.match(submitBtn, /\saria-disabled="true"/, '登録ボタンに aria-disabled="true" が付与されていること');
+    assert.match(html, /登録中\.\.\./, '登録ボタンの文言が「登録中...」に変化すること');
+  });
+
+  it('通常時 (isSubmitting=false, isReadingMyna=false) かつマイナ利用可能な場合、すべてのボタンが有効', () => {
+    const html = render({ isSubmitting: false, isReadingMyna: false });
+    assert.deepStrictEqual(listDisabledOpeningTags(html), []);
+
+    const closeBtn = findOpeningTag(html, 'class="registration-close"', 'button');
+    const mynaBtn = findOpeningTag(html, MYNA_BUTTON_MARKER, 'button');
+    const cancelBtn = findOpeningTag(html, 'キャンセル', 'button');
+    const submitBtn = findOpeningTag(html, 'data-testid="patient-registration-submit"', 'button');
+
+    assert.doesNotMatch(closeBtn, DISABLED_ATTRIBUTE_PATTERN);
+    assert.doesNotMatch(mynaBtn, DISABLED_ATTRIBUTE_PATTERN);
+    assert.match(mynaBtn, /\saria-disabled="false"/, 'マイナ読取ボタンの aria-disabled は false であること');
+    assert.doesNotMatch(cancelBtn, DISABLED_ATTRIBUTE_PATTERN);
+    assert.doesNotMatch(submitBtn, DISABLED_ATTRIBUTE_PATTERN);
+    assert.match(submitBtn, /\saria-disabled="false"/, '登録ボタンの aria-disabled は false であること');
+    assert.match(html, /登録して受付へ進む/);
+  });
+
+  it('マイナ読取中 (isReadingMyna=true) は、マイナ読取ボタンのみが無効化され、閉じる・キャンセル・登録ボタンは有効なまま保たれる', () => {
+    const html = render({ isReadingMyna: true });
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(disabledTags.length, 1, 'マイナ読取ボタンのみが無効化されること');
+
+    const mynaBtn = findOpeningTag(html, MYNA_BUTTON_MARKER, 'button');
+    const closeBtn = findOpeningTag(html, 'class="registration-close"', 'button');
+    const cancelBtn = findOpeningTag(html, 'キャンセル', 'button');
+    const submitBtn = findOpeningTag(html, 'data-testid="patient-registration-submit"', 'button');
+
+    assert.match(mynaBtn, DISABLED_ATTRIBUTE_PATTERN, 'マイナ読取ボタンが無効化されていること');
+    assert.match(mynaBtn, /\saria-disabled="true"/);
+    assert.match(html, /読取中\.\.\./);
+
+    assert.doesNotMatch(closeBtn, DISABLED_ATTRIBUTE_PATTERN, '閉じるボタンは有効のまま');
+    assert.doesNotMatch(cancelBtn, DISABLED_ATTRIBUTE_PATTERN, 'キャンセルボタンは有効のまま');
+    assert.doesNotMatch(submitBtn, DISABLED_ATTRIBUTE_PATTERN, '登録ボタンは有効のまま');
+    assert.match(submitBtn, /\saria-disabled="false"/, 'マイナ読取中も登録ボタンの aria-disabled は false のまま');
   });
 });
