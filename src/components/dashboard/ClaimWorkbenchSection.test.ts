@@ -309,6 +309,69 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
     assert.ok(!ruleBtnTag.includes('disabled=""'), `算定ルール button must be enabled: ${ruleBtnTag}`);
   });
 
+  function getButtonSnippet(html: string, testId: string): string {
+    const marker = `data-testid="${testId}"`;
+    const markerIndex = html.indexOf(marker);
+    if (markerIndex === -1) {
+      throw new Error(`data-testid="${testId}" not found in HTML`);
+    }
+    const buttonStart = html.lastIndexOf('<button', markerIndex);
+    const buttonEnd = html.indexOf('</button>', markerIndex);
+    if (buttonStart === -1 || buttonEnd === -1) {
+      throw new Error(`Cannot delimit <button> tags for data-testid="${testId}"`);
+    }
+    return html.slice(buttonStart, buttonEnd + 9);
+  }
+
+  it('pins mutual exclusion across all 4 UKE export and review buttons when any export or review operation is in-flight', () => {
+    const props = createMockClaimWorkbenchSectionProps();
+    const operations: Array<keyof StateOverrides> = [
+      'isExportingUke',
+      'isExportingOfficialUke',
+      'isCheckingOfficialReadiness',
+      'isCheckingRules'
+    ];
+
+    for (const op of operations) {
+      const html = renderWithStateOverrides(props, { [op]: true });
+
+      const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+      const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+      const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+      const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+
+      assert.ok(
+        ukeBtnTag.includes('disabled=""'),
+        `一括UKE button must be disabled during ${op}: ${ukeBtnTag}`
+      );
+      assert.ok(
+        officialUkeBtnTag.includes('disabled=""'),
+        `公式UKE button must be disabled during ${op}: ${officialUkeBtnTag}`
+      );
+      assert.ok(
+        readinessBtnTag.includes('disabled=""'),
+        `公式確認 button must be disabled during ${op}: ${readinessBtnTag}`
+      );
+      assert.ok(
+        ruleBtnTag.includes('disabled=""'),
+        `算定ルール button must be disabled during ${op}: ${ruleBtnTag}`
+      );
+
+      // Non-UKE buttons must remain enabled
+      const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+      assert.ok(
+        !closeAcceptedBtnTag.includes('disabled=""'),
+        `受付済締め button must remain enabled during ${op}: ${closeAcceptedBtnTag}`
+      );
+
+      const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+      assert.ok(
+        !importAcceptanceBtnTag.includes('disabled=""'),
+        `結果取込 button must remain enabled during ${op}: ${importAcceptanceBtnTag}`
+      );
+    }
+  });
+
   it('pins loading state and disabled attribute during isExportingUke', () => {
     const props = createMockClaimWorkbenchSectionProps();
     const html = renderWithStateOverrides(props, { isExportingUke: true });
@@ -316,14 +379,33 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
     // The 4 UKE export buttons are disabled during export
     const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
     assert.ok(ukeBtnTag.includes('disabled=""'), `一括UKE button must be disabled during isExportingUke: ${ukeBtnTag}`);
-    assert.ok(html.includes('<span>作成中</span>'), 'Label must switch to 作成中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const ukeSnippet = getButtonSnippet(html, 'monthly-claim-uke-button');
+    assert.ok(ukeSnippet.includes('<span>作成中</span>'), 'UKE label must switch to 作成中');
+    assert.ok(ukeSnippet.includes('animate-spin'), 'UKE spinner must be visible');
 
     const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
     assert.ok(officialUkeBtnTag.includes('disabled=""'), `公式UKE button must be disabled during isExportingUke: ${officialUkeBtnTag}`);
+    const officialUkeSnippet = getButtonSnippet(html, 'monthly-claim-official-uke-button');
+    assert.ok(officialUkeSnippet.includes('<span>公式UKE</span>'), 'Official UKE label must remain 公式UKE');
+    assert.ok(!officialUkeSnippet.includes('animate-spin'), 'Official UKE spinner must not be visible');
+
+    const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+    assert.ok(readinessBtnTag.includes('disabled=""'), `公式確認 button must be disabled during isExportingUke: ${readinessBtnTag}`);
+    const readinessSnippet = getButtonSnippet(html, 'monthly-claim-official-readiness-button');
+    assert.ok(readinessSnippet.includes('<span>公式確認</span>'), 'Official readiness label must remain 公式確認');
+    assert.ok(!readinessSnippet.includes('animate-spin'), 'Official readiness spinner must not be visible');
+
+    const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+    assert.ok(ruleBtnTag.includes('disabled=""'), `算定ルール button must be disabled during isExportingUke: ${ruleBtnTag}`);
+    const ruleSnippet = getButtonSnippet(html, 'monthly-claim-rule-review-button');
+    assert.ok(ruleSnippet.includes('<span>算定ルール</span>'), 'Rule review label must remain 算定ルール');
+    assert.ok(!ruleSnippet.includes('animate-spin'), 'Rule review spinner must not be visible');
 
     const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
     assert.ok(!closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must remain enabled: ${closeAcceptedBtnTag}`);
+
+    const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+    assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must remain enabled: ${importAcceptanceBtnTag}`);
   });
 
   it('pins loading state and disabled attribute during isExportingOfficialUke', () => {
@@ -332,11 +414,33 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
     assert.ok(officialUkeBtnTag.includes('disabled=""'), `公式UKE button must be disabled during isExportingOfficialUke: ${officialUkeBtnTag}`);
-    assert.ok(html.includes('<span>作成中</span>'), 'Label must switch to 作成中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const officialUkeSnippet = getButtonSnippet(html, 'monthly-claim-official-uke-button');
+    assert.ok(officialUkeSnippet.includes('<span>作成中</span>'), 'Official UKE label must switch to 作成中');
+    assert.ok(officialUkeSnippet.includes('animate-spin'), 'Official UKE spinner must be visible');
 
     const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
     assert.ok(ukeBtnTag.includes('disabled=""'), `一括UKE button must be disabled during isExportingOfficialUke: ${ukeBtnTag}`);
+    const ukeSnippet = getButtonSnippet(html, 'monthly-claim-uke-button');
+    assert.ok(ukeSnippet.includes('<span>一括UKE</span>'), 'UKE label must remain 一括UKE');
+    assert.ok(!ukeSnippet.includes('animate-spin'), 'UKE spinner must not be visible');
+
+    const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+    assert.ok(readinessBtnTag.includes('disabled=""'), `公式確認 button must be disabled during isExportingOfficialUke: ${readinessBtnTag}`);
+    const readinessSnippet = getButtonSnippet(html, 'monthly-claim-official-readiness-button');
+    assert.ok(readinessSnippet.includes('<span>公式確認</span>'), 'Official readiness label must remain 公式確認');
+    assert.ok(!readinessSnippet.includes('animate-spin'), 'Official readiness spinner must not be visible');
+
+    const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+    assert.ok(ruleBtnTag.includes('disabled=""'), `算定ルール button must be disabled during isExportingOfficialUke: ${ruleBtnTag}`);
+    const ruleSnippet = getButtonSnippet(html, 'monthly-claim-rule-review-button');
+    assert.ok(ruleSnippet.includes('<span>算定ルール</span>'), 'Rule review label must remain 算定ルール');
+    assert.ok(!ruleSnippet.includes('animate-spin'), 'Rule review spinner must not be visible');
+
+    const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+    assert.ok(!closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must remain enabled: ${closeAcceptedBtnTag}`);
+
+    const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+    assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must remain enabled: ${importAcceptanceBtnTag}`);
   });
 
   it('pins loading state and disabled attribute during isCheckingOfficialReadiness', () => {
@@ -345,8 +449,33 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
     assert.ok(readinessBtnTag.includes('disabled=""'), `公式確認 button must be disabled during isCheckingOfficialReadiness: ${readinessBtnTag}`);
-    assert.ok(html.includes('<span>確認中</span>'), 'Label must switch to 確認中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const readinessSnippet = getButtonSnippet(html, 'monthly-claim-official-readiness-button');
+    assert.ok(readinessSnippet.includes('<span>確認中</span>'), 'Official readiness label must switch to 確認中');
+    assert.ok(readinessSnippet.includes('animate-spin'), 'Official readiness spinner must be visible');
+
+    const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+    assert.ok(ukeBtnTag.includes('disabled=""'), `一括UKE button must be disabled during isCheckingOfficialReadiness: ${ukeBtnTag}`);
+    const ukeSnippet = getButtonSnippet(html, 'monthly-claim-uke-button');
+    assert.ok(ukeSnippet.includes('<span>一括UKE</span>'), 'UKE label must remain 一括UKE');
+    assert.ok(!ukeSnippet.includes('animate-spin'), 'UKE spinner must not be visible');
+
+    const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+    assert.ok(officialUkeBtnTag.includes('disabled=""'), `公式UKE button must be disabled during isCheckingOfficialReadiness: ${officialUkeBtnTag}`);
+    const officialUkeSnippet = getButtonSnippet(html, 'monthly-claim-official-uke-button');
+    assert.ok(officialUkeSnippet.includes('<span>公式UKE</span>'), 'Official UKE label must remain 公式UKE');
+    assert.ok(!officialUkeSnippet.includes('animate-spin'), 'Official UKE spinner must not be visible');
+
+    const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+    assert.ok(ruleBtnTag.includes('disabled=""'), `算定ルール button must be disabled during isCheckingOfficialReadiness: ${ruleBtnTag}`);
+    const ruleSnippet = getButtonSnippet(html, 'monthly-claim-rule-review-button');
+    assert.ok(ruleSnippet.includes('<span>算定ルール</span>'), 'Rule review label must remain 算定ルール');
+    assert.ok(!ruleSnippet.includes('animate-spin'), 'Rule review spinner must not be visible');
+
+    const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+    assert.ok(!closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must remain enabled: ${closeAcceptedBtnTag}`);
+
+    const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+    assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must remain enabled: ${importAcceptanceBtnTag}`);
   });
 
   it('pins loading state and disabled attribute during isCheckingRules', () => {
@@ -355,8 +484,33 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
     assert.ok(ruleBtnTag.includes('disabled=""'), `算定ルール button must be disabled during isCheckingRules: ${ruleBtnTag}`);
-    assert.ok(html.includes('<span>確認中</span>'), 'Label must switch to 確認中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const ruleSnippet = getButtonSnippet(html, 'monthly-claim-rule-review-button');
+    assert.ok(ruleSnippet.includes('<span>確認中</span>'), 'Rule review label must switch to 確認中');
+    assert.ok(ruleSnippet.includes('animate-spin'), 'Rule review spinner must be visible');
+
+    const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+    assert.ok(ukeBtnTag.includes('disabled=""'), `一括UKE button must be disabled during isCheckingRules: ${ukeBtnTag}`);
+    const ukeSnippet = getButtonSnippet(html, 'monthly-claim-uke-button');
+    assert.ok(ukeSnippet.includes('<span>一括UKE</span>'), 'UKE label must remain 一括UKE');
+    assert.ok(!ukeSnippet.includes('animate-spin'), 'UKE spinner must not be visible');
+
+    const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+    assert.ok(officialUkeBtnTag.includes('disabled=""'), `公式UKE button must be disabled during isCheckingRules: ${officialUkeBtnTag}`);
+    const officialUkeSnippet = getButtonSnippet(html, 'monthly-claim-official-uke-button');
+    assert.ok(officialUkeSnippet.includes('<span>公式UKE</span>'), 'Official UKE label must remain 公式UKE');
+    assert.ok(!officialUkeSnippet.includes('animate-spin'), 'Official UKE spinner must not be visible');
+
+    const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+    assert.ok(readinessBtnTag.includes('disabled=""'), `公式確認 button must be disabled during isCheckingRules: ${readinessBtnTag}`);
+    const readinessSnippet = getButtonSnippet(html, 'monthly-claim-official-readiness-button');
+    assert.ok(readinessSnippet.includes('<span>公式確認</span>'), 'Official readiness label must remain 公式確認');
+    assert.ok(!readinessSnippet.includes('animate-spin'), 'Official readiness spinner must not be visible');
+
+    const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+    assert.ok(!closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must remain enabled: ${closeAcceptedBtnTag}`);
+
+    const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+    assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must remain enabled: ${importAcceptanceBtnTag}`);
   });
 
   it('pins loading state and disabled attribute during isClosingAccepted', () => {
@@ -365,8 +519,16 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
     assert.ok(closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must be disabled during isClosingAccepted: ${closeAcceptedBtnTag}`);
-    assert.ok(html.includes('<span>締め中</span>'), 'Label must switch to 締め中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const closeAcceptedSnippet = getButtonSnippet(html, 'monthly-claim-close-accepted-button');
+    assert.ok(closeAcceptedSnippet.includes('<span>締め中</span>'), 'Label must switch to 締め中');
+    assert.ok(closeAcceptedSnippet.includes('animate-spin'), 'Spinner must be visible');
+
+    // UKE buttons should remain enabled when items exist
+    const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+    assert.ok(!ukeBtnTag.includes('disabled=""'), `一括UKE button must remain enabled during isClosingAccepted: ${ukeBtnTag}`);
+
+    const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+    assert.ok(!officialUkeBtnTag.includes('disabled=""'), `公式UKE button must remain enabled during isClosingAccepted: ${officialUkeBtnTag}`);
   });
 
   it('pins loading state and disabled attribute during isImportingAcceptance', () => {
@@ -375,7 +537,12 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
     assert.ok(importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must be disabled during isImportingAcceptance: ${importAcceptanceBtnTag}`);
-    assert.ok(html.includes('<span>取込中</span>'), 'Label must switch to 取込中');
-    assert.ok(html.includes('animate-spin'), 'Spinner must be visible');
+    const importAcceptanceSnippet = getButtonSnippet(html, 'claim-acceptance-import-button');
+    assert.ok(importAcceptanceSnippet.includes('<span>取込中</span>'), 'Label must switch to 取込中');
+    assert.ok(importAcceptanceSnippet.includes('animate-spin'), 'Spinner must be visible');
+
+    // UKE buttons should remain enabled when items exist
+    const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+    assert.ok(!ukeBtnTag.includes('disabled=""'), `一括UKE button must remain enabled during isImportingAcceptance: ${ukeBtnTag}`);
   });
 });
