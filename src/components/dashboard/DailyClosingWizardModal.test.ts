@@ -887,6 +887,18 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
 
     const submitBtnTag = findOpeningTag(html, '暗号化バックアップ', 'button');
     assert.ok(!submitBtnTag.includes('disabled=""'), `Submit button must be enabled: ${submitBtnTag}`);
+
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.strictEqual(
+      cleanMarkup.match(/\bicon-warning\b/g)?.length ?? 0,
+      0,
+      'Zero icon-warning elements must be rendered in DOM when uncompletedEmrCount is 0'
+    );
+    assert.strictEqual(
+      cleanMarkup.match(/\bicon-success\b/g)?.length ?? 0,
+      2,
+      'Exactly 2 icon-success elements must be rendered in DOM when uncompletedEmrCount is 0'
+    );
   });
 
   it('renders processing state (isChecking=false, isProcessing=true) with both cancel and submit disabled', () => {
@@ -1008,7 +1020,18 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     );
 
     assert.ok(html.includes('薬歴未完了件数: <strong>4</strong> 件'), 'Uncompleted EMR count must be displayed');
-    assert.ok(html.includes('icon-warning'), 'Warning icon must be displayed for non-zero uncompleted EMR');
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(cleanMarkup.includes('icon-warning'), 'Warning icon must be displayed for non-zero uncompleted EMR');
+    assert.strictEqual(
+      cleanMarkup.match(/\bicon-warning\b/g)?.length ?? 0,
+      1,
+      'Exactly 1 icon-warning element must be rendered in DOM when uncompletedEmrCount > 0'
+    );
+    assert.strictEqual(
+      cleanMarkup.match(/\bicon-success\b/g)?.length ?? 0,
+      1,
+      'Exactly 1 icon-success element (reception count) must be rendered in DOM when uncompletedEmrCount > 0'
+    );
   });
 
   it('renders permission error card when permissionError is present', () => {
@@ -1029,17 +1052,18 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered on permission error');
   });
 
-  it('renders step 2 executing screen with status message and spinner', () => {
+  it('renders step 2 executing screen with status message and file check icon', () => {
     const html = renderDailyClosingWizardModal(
       { isOpen: true },
       { step: 2, saveStatus: '暗号化バックアップデータを生成中…' }
     );
 
-    assert.ok(html.includes('closing-step2-box'), 'Step 2 box must be rendered');
-    assert.ok(html.includes('暗号化バックアップデータを生成中…'), 'Save status must be rendered');
-    assert.ok(html.includes('暗号化処理および検証記録を実行中です…'), 'Processing description must be rendered');
-
     const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(cleanMarkup.includes('closing-step2-box'), 'Step 2 box container element must be rendered in DOM');
+    assert.ok(cleanMarkup.includes('closing-step2-icon'), 'File check icon must be rendered in step 2');
+    assert.ok(cleanMarkup.includes('暗号化バックアップデータを生成中…'), 'Save status must be rendered');
+    assert.ok(cleanMarkup.includes('暗号化処理および検証記録を実行中です…'), 'Processing description must be rendered');
+
     assert.ok(!cleanMarkup.includes('btn-closing-cancel'), 'Cancel button must not be rendered in step 2');
     assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered in step 2');
   });
@@ -1050,14 +1074,15 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
       { step: 3 }
     );
 
-    assert.ok(html.includes('closing-step3-box'), 'Step 3 box must be rendered');
-    assert.ok(html.includes('日次締め・暗号化外部保存が完了しました'), 'Completion title must be rendered');
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(cleanMarkup.includes('closing-step3-box'), 'Step 3 box container element must be rendered in DOM');
+    assert.ok(cleanMarkup.includes('closing-step3-icon'), 'Completion check icon must be rendered in step 3');
+    assert.ok(cleanMarkup.includes('日次締め・暗号化外部保存が完了しました'), 'Completion title must be rendered');
 
     const confirmBtnTag = findOpeningTag(html, '確認して閉じる', 'button');
     assert.ok(confirmBtnTag.includes('btn-closing-confirm'), 'Confirm button must be rendered in step 3');
     assert.ok(!confirmBtnTag.includes('disabled=""'), 'Confirm button must be enabled in step 3');
 
-    const cleanMarkup = stripStyleBlocks(html);
     assert.ok(!cleanMarkup.includes('btn-closing-cancel'), 'Cancel button must not be rendered in step 3');
     assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered in step 3');
   });
