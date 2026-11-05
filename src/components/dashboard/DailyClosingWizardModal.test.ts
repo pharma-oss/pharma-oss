@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { describe, it, test } from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  listDisabledOpeningTags,
+  findOpeningTag,
+  stripStyleBlocks,
+} from '@/lib/test_support/html_disabled_tags';
 import {
   BACKUP_PASSWORD_TOO_SHORT_MESSAGE,
   CLOSING_CHECK_FAILED_CONFIRM_MESSAGE,
@@ -7,6 +14,7 @@ import {
   getClosingCheckDisplayState,
   runDailyClosingBackupAndAudit,
   validateDailyClosingSubmission,
+  DailyClosingWizardModal,
   type ClosingCheckSummary,
 } from './DailyClosingWizardModal';
 
@@ -728,6 +736,362 @@ test('runDailyClosingBackupAndAudit uses fallback error message when saveBackupT
     );
     assert.strictEqual(auditCalled, false, `audit should not be called for ${tc.name}`);
   }
+});
+
+interface DailyClosingWizardModalMockState {
+  step?: 1 | 2 | 3;
+  isProcessing?: boolean;
+  saveStatus?: string;
+  password?: string;
+  checkSummary?: ClosingCheckSummary | null;
+  isChecking?: boolean;
+  hasCheckError?: boolean;
+  permissionError?: string | null;
+}
+
+function renderDailyClosingWizardModal(
+  props: { isOpen: boolean; onClose?: () => void; onComplete?: () => void },
+  stateOverrides?: DailyClosingWizardModalMockState
+): string {
+  let callCount = 0;
+  const cleanupRef: { restore?: () => void } = {};
+  const expectedInitials: Record<number, unknown> = {
+    0: 1, // step
+    1: false, // isProcessing
+    2: '', // saveStatus
+    3: '', // password
+    4: null, // checkSummary
+    5: true, // isChecking
+    6: false, // hasCheckError
+    7: null, // permissionError
+  };
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    const dispatcher = internals?.H;
+    if (dispatcher?.useState) {
+      const origUseState = dispatcher.useState;
+      cleanupRef.restore = () => {
+        dispatcher.useState = origUseState;
+      };
+
+      dispatcher.useState = (initialState: unknown) => {
+        const currentIndex = callCount++;
+        const expectedInit = expectedInitials[currentIndex];
+        assert.strictEqual(
+          initialState,
+          expectedInit,
+          `Expected DailyClosingWizardModal useState call #${currentIndex} initial value to be ${String(expectedInit)}, got ${String(initialState)}`
+        );
+
+        let value = initialState;
+        if (stateOverrides) {
+          if (currentIndex === 0 && stateOverrides.step !== undefined) value = stateOverrides.step;
+          if (currentIndex === 1 && stateOverrides.isProcessing !== undefined) value = stateOverrides.isProcessing;
+          if (currentIndex === 2 && stateOverrides.saveStatus !== undefined) value = stateOverrides.saveStatus;
+          if (currentIndex === 3 && stateOverrides.password !== undefined) value = stateOverrides.password;
+          if (currentIndex === 4 && stateOverrides.checkSummary !== undefined) value = stateOverrides.checkSummary;
+          if (currentIndex === 5 && stateOverrides.isChecking !== undefined) value = stateOverrides.isChecking;
+          if (currentIndex === 6 && stateOverrides.hasCheckError !== undefined) value = stateOverrides.hasCheckError;
+          if (currentIndex === 7 && stateOverrides.permissionError !== undefined) value = stateOverrides.permissionError;
+        }
+
+        if (currentIndex === 7) {
+          dispatcher.useState = origUseState;
+          delete cleanupRef.restore;
+        }
+        return [value, () => {}];
+      };
+    }
+    return React.createElement(DailyClosingWizardModal, {
+      isOpen: props.isOpen,
+      onClose: props.onClose ?? (() => {}),
+      onComplete: props.onComplete ?? (() => {}),
+    });
+  }
+
+  try {
+    const html = renderToStaticMarkup(React.createElement(Wrapper));
+    assert.strictEqual(
+      callCount,
+      8,
+      `Expected DailyClosingWizardModal to call useState exactly 8 times, got ${callCount}`
+    );
+    return html;
+  } finally {
+    cleanupRef.restore?.();
+  }
+}
+
+describe('DailyClosingWizardModal UI rendering and button disabled states', () => {
+  it('renders null when isOpen is false', () => {
+    const html = renderDailyClosingWizardModal({ isOpen: false });
+    assert.strictEqual(html, '');
+  });
+
+  it('renders default pre-checking state (isChecking=true, isProcessing=false) with submit button disabled and cancel enabled', () => {
+    const html = renderDailyClosingWizardModal({ isOpen: true });
+
+    assert.ok(html.includes('日次締め・閉局ウィザード'), 'Header title must be rendered');
+    assert.ok(html.includes('データベースを計測中…'), 'Pre-checking status must be displayed');
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(
+      disabledTags.length,
+      1,
+      `During pre-checking, exactly 1 button must be disabled, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+    );
+
+    const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
+    assert.ok(
+      !cancelBtnTag.includes('disabled=""'),
+      `Cancel button must be enabled during pre-checking: ${cancelBtnTag}`
+    );
+
+    const submitBtnTag = findOpeningTag(html, '暗号化バックアップ', 'button');
+    assert.ok(
+      submitBtnTag.includes('disabled=""'),
+      `Submit button must be disabled during pre-checking (isChecking=true): ${submitBtnTag}`
+    );
+  });
+
+  it('renders ready state (isChecking=false, isProcessing=false) with all action buttons enabled', () => {
+    const summary: ClosingCheckSummary = {
+      todayVisitsCount: 15,
+      uncompletedEmrCount: 0,
+      unsentClaimCount: 0,
+      canProceed: true,
+    };
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, checkSummary: summary }
+    );
+
+    assert.ok(html.includes('本日受付件数: <strong>15</strong> 件'), 'Today visits count must be rendered');
+    assert.ok(html.includes('薬歴未完了件数: <strong>0</strong> 件'), 'Uncompleted EMR count must be rendered');
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(
+      disabledTags.length,
+      0,
+      `When ready, exactly 0 disabled buttons should be present, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+    );
+
+    const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
+    assert.ok(!cancelBtnTag.includes('disabled=""'), `Cancel button must be enabled: ${cancelBtnTag}`);
+
+    const submitBtnTag = findOpeningTag(html, '暗号化バックアップ', 'button');
+    assert.ok(!submitBtnTag.includes('disabled=""'), `Submit button must be enabled: ${submitBtnTag}`);
+  });
+
+  it('renders processing state (isChecking=false, isProcessing=true) with both cancel and submit disabled', () => {
+    const summary: ClosingCheckSummary = {
+      todayVisitsCount: 10,
+      uncompletedEmrCount: 0,
+      unsentClaimCount: 0,
+      canProceed: true,
+    };
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, isProcessing: true, checkSummary: summary }
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(
+      disabledTags.length,
+      2,
+      `When isProcessing is true, exactly 2 buttons must be disabled, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+    );
+
+    const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
+    assert.ok(
+      cancelBtnTag.includes('disabled=""'),
+      `Cancel button must be disabled during processing: ${cancelBtnTag}`
+    );
+
+    const submitBtnTag = findOpeningTag(html, '暗号化バックアップ', 'button');
+    assert.ok(
+      submitBtnTag.includes('disabled=""'),
+      `Submit button must be disabled during processing: ${submitBtnTag}`
+    );
+  });
+
+  it('pins mutual exclusion across isChecking and isProcessing states', () => {
+    const summary: ClosingCheckSummary = {
+      todayVisitsCount: 5,
+      uncompletedEmrCount: 0,
+      unsentClaimCount: 0,
+      canProceed: true,
+    };
+
+    // Case A: isChecking=true, isProcessing=false -> submit is disabled, cancel is enabled
+    const htmlA = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: true, isProcessing: false, checkSummary: summary }
+    );
+    const cancelTagA = findOpeningTag(htmlA, 'キャンセル', 'button');
+    const submitTagA = findOpeningTag(htmlA, '暗号化バックアップ', 'button');
+    assert.ok(!cancelTagA.includes('disabled=""'), `Case A cancel must be enabled: ${cancelTagA}`);
+    assert.ok(submitTagA.includes('disabled=""'), `Case A submit must be disabled: ${submitTagA}`);
+
+    // Case B: isChecking=false, isProcessing=true -> both submit and cancel are disabled
+    const htmlB = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, isProcessing: true, checkSummary: summary }
+    );
+    const cancelTagB = findOpeningTag(htmlB, 'キャンセル', 'button');
+    const submitTagB = findOpeningTag(htmlB, '暗号化バックアップ', 'button');
+    assert.ok(cancelTagB.includes('disabled=""'), `Case B cancel must be disabled: ${cancelTagB}`);
+    assert.ok(submitTagB.includes('disabled=""'), `Case B submit must be disabled: ${submitTagB}`);
+
+    // Case C: isChecking=true, isProcessing=true -> both submit and cancel are disabled
+    const htmlC = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: true, isProcessing: true, checkSummary: summary }
+    );
+    const cancelTagC = findOpeningTag(htmlC, 'キャンセル', 'button');
+    const submitTagC = findOpeningTag(htmlC, '暗号化バックアップ', 'button');
+    assert.ok(cancelTagC.includes('disabled=""'), `Case C cancel must be disabled: ${cancelTagC}`);
+    assert.ok(submitTagC.includes('disabled=""'), `Case C submit must be disabled: ${submitTagC}`);
+
+    // Case D: isChecking=false, isProcessing=false -> neither is disabled
+    const htmlD = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, isProcessing: false, checkSummary: summary }
+    );
+    const cancelTagD = findOpeningTag(htmlD, 'キャンセル', 'button');
+    const submitTagD = findOpeningTag(htmlD, '暗号化バックアップ', 'button');
+    assert.ok(!cancelTagD.includes('disabled=""'), `Case D cancel must be enabled: ${cancelTagD}`);
+    assert.ok(!submitTagD.includes('disabled=""'), `Case D submit must be enabled: ${submitTagD}`);
+  });
+
+  it('renders pre-check error state (hasCheckError=true, isChecking=false) with submit button enabled and warning message', () => {
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, hasCheckError: true }
+    );
+
+    assert.ok(
+      html.includes('事前点検に失敗したため、本日の受付件数および薬歴未完了件数を確認できませんでした。'),
+      'Pre-check error message must be displayed'
+    );
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.strictEqual(
+      disabledTags.length,
+      0,
+      `When pre-check fails but not processing, buttons should be enabled, got ${disabledTags.length}`
+    );
+
+    const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
+    assert.ok(!cancelBtnTag.includes('disabled=""'), 'Cancel button must be enabled');
+
+    const submitBtnTag = findOpeningTag(html, '暗号化バックアップ', 'button');
+    assert.ok(!submitBtnTag.includes('disabled=""'), 'Submit button must be enabled even on pre-check error');
+  });
+
+  it('renders uncompleted EMR count warning when uncompletedEmrCount > 0', () => {
+    const summary: ClosingCheckSummary = {
+      todayVisitsCount: 10,
+      uncompletedEmrCount: 4,
+      unsentClaimCount: 0,
+      canProceed: true,
+    };
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, checkSummary: summary }
+    );
+
+    assert.ok(html.includes('薬歴未完了件数: <strong>4</strong> 件'), 'Uncompleted EMR count must be displayed');
+    assert.ok(html.includes('icon-warning'), 'Warning icon must be displayed for non-zero uncompleted EMR');
+  });
+
+  it('renders permission error card when permissionError is present', () => {
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { permissionError: 'バックアップおよび日次締めの実行権限がありません。' }
+    );
+
+    assert.ok(html.includes('権限エラー'), 'Permission error card must be displayed');
+    assert.ok(html.includes('バックアップおよび日次締めの実行権限がありません。'), 'Permission error description must be displayed');
+
+    const permCloseBtnTag = findOpeningTag(html, '閉じる', 'button');
+    assert.ok(permCloseBtnTag.includes('btn-perm-close'), 'Permission close button must be rendered');
+    assert.ok(!permCloseBtnTag.includes('disabled=""'), 'Permission close button must be enabled');
+
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(!cleanMarkup.includes('btn-closing-cancel'), 'Cancel button must not be rendered on permission error');
+    assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered on permission error');
+  });
+
+  it('renders step 2 executing screen with status message and spinner', () => {
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { step: 2, saveStatus: '暗号化バックアップデータを生成中…' }
+    );
+
+    assert.ok(html.includes('closing-step2-box'), 'Step 2 box must be rendered');
+    assert.ok(html.includes('暗号化バックアップデータを生成中…'), 'Save status must be rendered');
+    assert.ok(html.includes('暗号化処理および検証記録を実行中です…'), 'Processing description must be rendered');
+
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(!cleanMarkup.includes('btn-closing-cancel'), 'Cancel button must not be rendered in step 2');
+    assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered in step 2');
+  });
+
+  it('renders step 3 completion screen with confirm button', () => {
+    const html = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { step: 3 }
+    );
+
+    assert.ok(html.includes('closing-step3-box'), 'Step 3 box must be rendered');
+    assert.ok(html.includes('日次締め・暗号化外部保存が完了しました'), 'Completion title must be rendered');
+
+    const confirmBtnTag = findOpeningTag(html, '確認して閉じる', 'button');
+    assert.ok(confirmBtnTag.includes('btn-closing-confirm'), 'Confirm button must be rendered in step 3');
+    assert.ok(!confirmBtnTag.includes('disabled=""'), 'Confirm button must be enabled in step 3');
+
+    const cleanMarkup = stripStyleBlocks(html);
+    assert.ok(!cleanMarkup.includes('btn-closing-cancel'), 'Cancel button must not be rendered in step 3');
+    assert.ok(!cleanMarkup.includes('btn-closing-submit'), 'Submit button must not be rendered in step 3');
+  });
+
+  it('restores useState dispatcher hook immediately so subsequent renders are not polluted', () => {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
+        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+      }
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+
+    let probeBefore: unknown = null;
+    let probeAfter: unknown = null;
+
+    function ProbeBefore(): React.ReactNode {
+      probeBefore = internals?.H?.useState;
+      return null;
+    }
+    function ProbeAfter(): React.ReactNode {
+      probeAfter = internals?.H?.useState;
+      return null;
+    }
+
+    renderToStaticMarkup(React.createElement(ProbeBefore));
+    renderDailyClosingWizardModal({ isOpen: true }, { isChecking: false });
+    renderToStaticMarkup(React.createElement(ProbeAfter));
+
+    assert.ok(probeBefore !== null, 'ProbeBefore must capture initial useState hook');
+    assert.strictEqual(
+      probeAfter,
+      probeBefore,
+      'useState dispatcher must be completely restored to its original reference after render'
+    );
+  });
 });
 
 
