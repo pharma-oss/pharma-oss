@@ -234,6 +234,7 @@ test('a locked claim disables every condition group and says why', () => {
   assert.ok(html.includes('data-testid="receipt-condition-locked"'));
   assert.ok(html.includes('RECEIPT_v1.uke 後の請求はロックされています。'));
   assert.ok(!html.includes('各選択肢の右の金額は'), 'the how-to line gives way to the lock reason');
+  assert.ok(!/disabled=""/.test(findOpeningTag(html, 'data-testid="print-receipt-only-button"', 'button')), 're-printing receipt remains enabled even when claim is locked');
 });
 
 test('while saving, the conditions and the print button are off', () => {
@@ -253,6 +254,13 @@ test('the automatic judgement is shown, and offered only when it differs from th
   assert.ok(differs.includes('平日の開局時間 09:00〜18:00 の外'));
   assert.ok(differs.includes('data-testid="condition-apply-auto"'));
   assert.ok(differs.includes('自動判定に合わせる（時間外）'));
+  assert.ok(!/disabled=""/.test(findOpeningTag(differs, 'data-testid="condition-apply-auto"', 'button')), 'apply auto judgement button is enabled normally');
+
+  const differsBusy = renderPanel({ autoJudgement: judged('after_hours'), busy: true });
+  assert.ok(/disabled=""/.test(findOpeningTag(differsBusy, 'data-testid="condition-apply-auto"', 'button')), 'apply auto judgement button is disabled while saving');
+
+  const differsLocked = renderPanel({ autoJudgement: judged('after_hours'), lockedReason: 'ロック中' });
+  assert.ok(/disabled=""/.test(findOpeningTag(differsLocked, 'data-testid="condition-apply-auto"', 'button')), 'apply auto judgement button is disabled when locked');
 
   const same = renderPanel({
     autoJudgement: judged('after_hours'),
