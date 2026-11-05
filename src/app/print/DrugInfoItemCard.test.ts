@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import React from 'react';
+import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import {
   DrugInfoItemCard,
   hasPrescriptionChange,
@@ -130,6 +131,7 @@ test('DrugInfoItemCard static contract and style relocation', () => {
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PrintPrescriptionItem } from './types';
 import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
+import type { DrugPriceRevisionChoice } from '@/lib/drug_price_history';
 
 test('DrugInfoItemCard true HTML rendering with approved template and brand/generic change', () => {
   const mockItemWithSubstitution: PrintPrescriptionItem = {
@@ -254,4 +256,109 @@ test('DrugInfoItemCard true HTML rendering with fallback template and drug price
   // 2. 薬価警告と選択肢の実描画
   assert.ok(html.includes('過去の薬価版が選択されています'), '薬価警告が表示されていること');
   assert.ok(html.includes('drug-price-revision-select'), '薬価選択セレクトボックスが表示されていること');
+});
+
+test('DrugInfoItemCard billing adjustment controls disabled states when canEditBilling is false vs true', () => {
+  const mockItemFull: PrintPrescriptionItem = {
+    itemId: 'item-claim-full',
+    visitId: 'visit-1',
+    drugId: '620000003',
+    dispensedDrugCode: '620000003',
+    drugName: 'ワーファリン錠1mg',
+    dispensedDrug: 'ワーファリン錠1mg',
+    amount: 1,
+    days: 28,
+    usage: '1日1回夕食後',
+    rpNumber: 1,
+    dosageCategory: 'internal',
+    drugPrice: 9.8,
+    claimDrugFee: true,
+    isHighRisk: true,
+    tokkanType: '1',
+    isIppoka: true,
+    isCrushed: false,
+    claimPreparation: true,
+    claimManagement: true,
+    isDiagnosticTest: false,
+    billingAgentGroupKey: 'AGENT-1',
+    receiptRemark: '特記事項メモ'
+  } as unknown as PrintPrescriptionItem;
+
+  const mockMedicationInfo: MedicationInfoPrintContent = {
+    drugName: 'ワーファリン錠1mg',
+    source: 'approved_template',
+    sourceRevisionDate: '2026-04-01',
+    sideEffectText: '出血傾向等',
+    usageCautionText: '納豆・クロレラ摂取禁止',
+    officialSearchUrl: 'https://www.pmda.go.jp/PmdaSearch/iyakuSearch/'
+  };
+
+  const drugPriceChoices: DrugPriceRevisionChoice[] = [
+    { value: '2026-04-01', effectiveFrom: '2026-04-01', price: 9.8, isAutoSelected: true },
+    { value: '2024-04-01', effectiveFrom: '2024-04-01', price: 10.2, isAutoSelected: false }
+  ];
+
+  const noopAsync = async () => {};
+
+  const renderCard = (canEditBilling: boolean) =>
+    renderToStaticMarkup(
+      React.createElement(DrugInfoItemCard, {
+        item: mockItemFull,
+        idx: 0,
+        medicationInfo: mockMedicationInfo,
+        canEditBilling,
+        remarks: { 'item-claim-full': '特記事項メモ' },
+        drugPriceChoices,
+        dispensingDateForPrice: '2026-06-01',
+        handleToggleIppoka: noopAsync,
+        handleToggleCrushed: noopAsync,
+        handleItemClaimToggle: noopAsync,
+        handleTokkanChange: noopAsync,
+        handleDrugPriceOverrideChange: noopAsync,
+        handleReceiptRemarkChange: () => {},
+        handleBillingAgentOverrideLocalChange: () => {},
+        persistBillingAgentOverride: noopAsync
+      })
+    );
+
+  const htmlDisabled = renderCard(false);
+  const htmlEditable = renderCard(true);
+
+  // 1. canEditBilling: false 時は全9個のフォームコントロールが無効化されること
+  const disabledTags = listDisabledOpeningTags(htmlDisabled);
+  assert.strictEqual(
+    disabledTags.length,
+    9,
+    `All 9 billing adjustment controls must have disabled="" when canEditBilling is false:\n${disabledTags.join('\n')}`
+  );
+
+  // 各コントロールの開始タグを findOpeningTag で特定し、disabled="" を検証
+  assert.match(findOpeningTag(htmlDisabled, '>一包化</label>', 'input'), /\sdisabled=""/, '一包化チェックボックスが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '>粉砕</label>', 'input'), /\sdisabled=""/, '粉砕チェックボックスが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '>調製</label>', 'input'), /\sdisabled=""/, '調製チェックボックスが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '>薬管</label>', 'input'), /\sdisabled=""/, '薬管チェックボックスが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '>検査薬</label>', 'input'), /\sdisabled=""/, '検査薬チェックボックスが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '特定薬剤: なし', 'select'), /\sdisabled=""/, '特定薬剤加算セレクトが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, '薬価: 調剤日時点（自動）', 'select'), /\sdisabled=""/, '薬価改定セレクトが無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, 'placeholder="レセ適"', 'input'), /\sdisabled=""/, 'レセ適入力欄が無効化されていること');
+  assert.match(findOpeningTag(htmlDisabled, 'placeholder="剤キー"', 'input'), /\sdisabled=""/, '剤キー入力欄が無効化されていること');
+
+  // 2. canEditBilling: true 時は全9個のフォームコントロールが有効であること (disabled="" が 0 個)
+  const editableDisabledTags = listDisabledOpeningTags(htmlEditable);
+  assert.strictEqual(
+    editableDisabledTags.length,
+    0,
+    `No billing adjustment controls should have disabled="" when canEditBilling is true:\n${editableDisabledTags.join('\n')}`
+  );
+
+  // 各コントロールの開始タグが disabled="" を持たないことを検証
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '>一包化</label>', 'input'), /\sdisabled=""/, '一包化チェックボックスが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '>粉砕</label>', 'input'), /\sdisabled=""/, '粉砕チェックボックスが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '>調製</label>', 'input'), /\sdisabled=""/, '調製チェックボックスが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '>薬管</label>', 'input'), /\sdisabled=""/, '薬管チェックボックスが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '>検査薬</label>', 'input'), /\sdisabled=""/, '検査薬チェックボックスが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '特定薬剤: なし', 'select'), /\sdisabled=""/, '特定薬剤加算セレクトが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, '薬価: 調剤日時点（自動）', 'select'), /\sdisabled=""/, '薬価改定セレクトが有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, 'placeholder="レセ適"', 'input'), /\sdisabled=""/, 'レセ適入力欄が有効であること');
+  assert.doesNotMatch(findOpeningTag(htmlEditable, 'placeholder="剤キー"', 'input'), /\sdisabled=""/, '剤キー入力欄が有効であること');
 });
