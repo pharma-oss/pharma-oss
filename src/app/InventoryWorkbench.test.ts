@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import { defaultReceivingDraft } from './inventory/types';
 import {
   OrderWorkbench,
@@ -15,6 +15,7 @@ import {
   getInventoryOrderActionLabel,
   buildInventoryOrderCsv,
   buildInventoryOrderMemo,
+  getOrderWorkbenchRestoreErrorBannerMessage,
   type InventoryOrderRisk
 } from '@/lib/inventory_order';
 
@@ -156,6 +157,9 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     const props = createMockOrderWorkbenchProps({ candidates: [] });
     const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
 
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(disabledTags.length, 4, `Expected exactly 4 disabled buttons when empty:\n${disabledTags.join('\n')}`);
+
     const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
     assert.ok(openMemoTag.includes('disabled=""'), `Expected open memo button to be disabled: ${openMemoTag}`);
 
@@ -167,6 +171,9 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
 
     const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
     assert.ok(receivingChecklistTag.includes('disabled=""'), `Expected receiving checklist button to be disabled: ${receivingChecklistTag}`);
+
+    assert.ok(html.includes('現在、該当する発注候補はありません。'));
+    assert.ok(!html.includes('発注済みチェックを解除'));
   });
 
   it('enables open memo and csv buttons while pinning receiving memo and checklist as disabled when un-ordered candidates exist', () => {
@@ -175,6 +182,9 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
       orderedDrugIds: new Set()
     });
     const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(disabledTags.length, 2, `Expected exactly 2 disabled buttons when open candidates exist and ordered is empty:\n${disabledTags.join('\n')}`);
 
     const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
     assert.ok(!openMemoTag.includes('disabled'), `Expected open memo button to be enabled: ${openMemoTag}`);
@@ -187,6 +197,10 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
 
     const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
     assert.ok(receivingChecklistTag.includes('disabled=""'), `Expected receiving checklist button to be disabled: ${receivingChecklistTag}`);
+
+    assert.ok(html.includes('分譲で融通'), 'Un-ordered candidate should show transfer button');
+    assert.ok(html.includes('<span>発注済みにする</span>'));
+    assert.ok(!html.includes('発注済みチェックを解除'));
   });
 
   it('enables receiving memo and checklist while pinning open memo and csv as disabled when all candidates are ordered', () => {
@@ -195,6 +209,9 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
       orderedDrugIds: new Set(['d1'])
     });
     const html = renderToStaticMarkup(React.createElement(OrderWorkbench, props));
+
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(disabledTags.length, 2, `Expected exactly 2 disabled buttons when all candidates are ordered:\n${disabledTags.join('\n')}`);
 
     const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
     assert.ok(openMemoTag.includes('disabled=""'), `Expected open memo button to be disabled: ${openMemoTag}`);
@@ -207,6 +224,11 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
 
     const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
     assert.ok(!receivingChecklistTag.includes('disabled'), `Expected receiving checklist button to be enabled: ${receivingChecklistTag}`);
+
+    const clearOrderedBtn = findOpeningTag(html, '発注済みチェックを解除', 'button');
+    assert.ok(!clearOrderedBtn.includes('disabled'), `Clear ordered button must be enabled: ${clearOrderedBtn}`);
+    assert.ok(!html.includes('分譲で融通'), 'Ordered candidate should hide transfer button');
+    assert.ok(html.includes('<span>発注済み</span>'));
   });
 
   it('pins receiving submit button as disabled when receivingDrugId matches candidate during in-flight receiving', () => {
@@ -218,8 +240,12 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     });
     const inFlightHtml = renderToStaticMarkup(React.createElement(OrderWorkbench, inFlightProps));
 
+    const inFlightDisabled = listDisabledOpeningTags(inFlightHtml);
+    assert.equal(inFlightDisabled.length, 3, `Expected 3 disabled buttons when all ordered and receiving in-flight:\n${inFlightDisabled.join('\n')}`);
+
     const inFlightBtn = findOpeningTag(inFlightHtml, '<span>登録中...</span>', 'button');
     assert.ok(inFlightBtn.includes('disabled=""'), `Expected in-flight receiving button to be disabled: ${inFlightBtn}`);
+    assert.ok(!findOpeningTag(inFlightHtml, '発注済みチェックを解除', 'button').includes('disabled'));
 
     const idleProps = createMockOrderWorkbenchProps({
       candidates: [sampleCandidate],
@@ -229,8 +255,56 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     });
     const idleHtml = renderToStaticMarkup(React.createElement(OrderWorkbench, idleProps));
 
+    const idleDisabled = listDisabledOpeningTags(idleHtml);
+    assert.equal(idleDisabled.length, 2, `Expected 2 disabled buttons when all ordered and idle:\n${idleDisabled.join('\n')}`);
+
     const idleBtn = findOpeningTag(idleHtml, '<span>入庫登録</span>', 'button');
     assert.ok(!idleBtn.includes('disabled'), `Expected idle receiving button to be enabled: ${idleBtn}`);
+    assert.ok(!findOpeningTag(idleHtml, '発注済みチェックを解除', 'button').includes('disabled'));
+  });
+
+  it('enables all header and receiving controls when open and ordered candidates coexist and renders restore error banner when hasRestoreError is true', () => {
+    const orderedCandidate: InventoryOrderRisk = {
+      ...sampleCandidate,
+      drugId: 'd2',
+      drugName: 'カロナール錠200'
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(
+        OrderWorkbench,
+        createMockOrderWorkbenchProps({
+          candidates: [sampleCandidate, orderedCandidate],
+          orderedDrugIds: new Set(['d2']),
+          hasRestoreError: true,
+          receivingDrugId: '',
+          receivingDrafts: { d2: defaultReceivingDraft(orderedCandidate) }
+        })
+      )
+    );
+
+    assert.deepEqual(listDisabledOpeningTags(html), []);
+    assert.ok(!findOpeningTag(html, '<span>未対応メモ</span>', 'button').includes('disabled'));
+    assert.ok(!findOpeningTag(html, '<span>CSV</span>', 'button').includes('disabled'));
+    assert.ok(!findOpeningTag(html, '<span>入庫メモ</span>', 'button').includes('disabled'));
+    assert.ok(!findOpeningTag(html, '<span>入庫確認CSV</span>', 'button').includes('disabled'));
+    assert.ok(!findOpeningTag(html, '<span>入庫登録</span>', 'button').includes('disabled'));
+    assert.ok(!findOpeningTag(html, '発注済みチェックを解除', 'button').includes('disabled'));
+    assert.ok(html.includes('分譲で融通'));
+    assert.ok(html.includes('order-workbench-restore-error'));
+    assert.ok(html.includes(getOrderWorkbenchRestoreErrorBannerMessage(true) ?? ''));
+
+    const cleanHtml = renderToStaticMarkup(
+      React.createElement(
+        OrderWorkbench,
+        createMockOrderWorkbenchProps({
+          candidates: [sampleCandidate, orderedCandidate],
+          orderedDrugIds: new Set(['d2']),
+          hasRestoreError: false
+        })
+      )
+    );
+    assert.ok(!cleanHtml.includes('order-workbench-restore-error'));
   });
 });
 
