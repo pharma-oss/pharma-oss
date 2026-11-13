@@ -3,18 +3,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { DrugStock } from '@/db/types';
+import { DrugStock, type PharmacyDatabase } from '@/db/types';
 import {
     buildDeadStockCsv,
     buildDeadStockReport,
     getDeadStockPanelBodyState,
-    type DeadStockEntry
+    type DeadStockEntry,
+    type DeadStockItemLike,
+    type DeadStockVisitLike
 } from '@/lib/dead_stock';
 import type { DrugWithSearchCache } from '../types';
 import { toLocalDateKey } from '@/lib/local_date';
 
 export interface DeadStockPanelProps {
-    db: any;
+    db: PharmacyDatabase | null | undefined;
     drugs: DrugWithSearchCache[];
     stockLots: DrugStock[];
     onOpenTransfer: (entry: DeadStockEntry) => void;
@@ -22,7 +24,7 @@ export interface DeadStockPanelProps {
 
 export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadStockPanelProps) {
     const [thresholdDays, setThresholdDays] = useState(90);
-    const [movementSources, setMovementSources] = useState<{ items: any[]; visits: any[] } | null>(null);
+    const [movementSources, setMovementSources] = useState<{ items: DeadStockItemLike[]; visits: DeadStockVisitLike[] } | null>(null);
     const [hasLoadError, setHasLoadError] = useState(false);
 
     useEffect(() => {
@@ -42,8 +44,8 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
                 ]);
                 if (!isMounted) return;
                 setMovementSources({
-                    items: itemDocs.map((doc: any) => ({ visitId: doc.visitId, drugId: doc.drugId, dispensedDrugCode: doc.dispensedDrugCode })),
-                    visits: visitDocs.map((doc: any) => ({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status }))
+                    items: itemDocs.map((doc) => ({ visitId: doc.visitId, drugId: doc.drugId, dispensedDrugCode: doc.dispensedDrugCode })),
+                    visits: visitDocs.map((doc) => ({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status }))
                 });
                 setHasLoadError(false);
             } catch (error) {
