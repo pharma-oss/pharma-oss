@@ -64,6 +64,23 @@ const sampleAcceptedItem: DashboardClaimWorkItem = {
   actionLabel: '入金確認後に締め'
 };
 
+const sampleReturnedItem: DashboardClaimWorkItem = {
+  visitId: 'v-returned-1',
+  patientId: 'p3',
+  name: '患者 三郎',
+  issueDateLabel: '11/3',
+  monthLabel: '11月',
+  status: 'returned',
+  statusLabel: '返戻',
+  priority: 'high',
+  priorityLabel: '返戻対応',
+  totalPoints: 2400,
+  prescriptionCount: 3,
+  latestEventLabel: '返戻取込 11/3',
+  actionLabel: '修正して再請求へ',
+  reason: '保険番号記載不備'
+};
+
 function createMockClaimWorkbenchSectionProps(
   overrides?: Partial<ClaimWorkbenchSectionProps>
 ): ClaimWorkbenchSectionProps {
@@ -204,7 +221,8 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
   it('pins all claim-dependent buttons as disabled when claimWorkItems is empty', () => {
     const props = createMockClaimWorkbenchSectionProps({
-      claimWorkItems: []
+      claimWorkItems: [],
+      counts: createMockCounts({ claimWorkbenchCount: 0 })
     });
     const html = renderToStaticMarkup(React.createElement(ClaimWorkbenchSection, props));
 
@@ -240,12 +258,19 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
     // Import acceptance button does not depend on claim items
     const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
     assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button should remain enabled: ${importAcceptanceBtnTag}`);
+
+    assert.ok(
+      html.includes('現在、月次請求で未締めの返戻・再請求ワークはありません。'),
+      'Empty state message should be present'
+    );
+    assert.ok(html.includes('<span class="section-count">0件</span>'), '0件 count badge should be present');
   });
 
   it('pins UKE export buttons as disabled when no rebilling item exists and enables close accepted button when accepted item exists', () => {
     // Only accepted item: hasExportableClaimWorkItems is false, acceptedClaimWorkItemCount is 1
     const props = createMockClaimWorkbenchSectionProps({
-      claimWorkItems: [sampleAcceptedItem]
+      claimWorkItems: [sampleAcceptedItem],
+      counts: createMockCounts({ claimWorkbenchCount: 1 })
     });
     const html = renderToStaticMarkup(React.createElement(ClaimWorkbenchSection, props));
 
@@ -277,12 +302,16 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const csvBtnTag = findOpeningTag(html, '<span>CSV</span>', 'button');
     assert.ok(!csvBtnTag.includes('disabled=""'), `CSV button must be enabled: ${csvBtnTag}`);
+
+    assert.ok(html.includes('<span class="section-count">受付済 1</span>'), '受付済 1 badge should be present');
+    assert.ok(html.includes('<span class="section-count">1件</span>'), '1件 count badge should be present');
   });
 
   it('pins close accepted button as disabled when no accepted item exists and enables UKE export buttons when rebilling item exists', () => {
     // Only rebilling item: hasExportableClaimWorkItems is true, acceptedClaimWorkItemCount is 0
     const props = createMockClaimWorkbenchSectionProps({
-      claimWorkItems: [sampleRebillingItem]
+      claimWorkItems: [sampleRebillingItem],
+      counts: createMockCounts({ claimWorkbenchCount: 1, rebillingClaimCount: 1 })
     });
     const html = renderToStaticMarkup(React.createElement(ClaimWorkbenchSection, props));
 
@@ -307,6 +336,54 @@ describe('ClaimWorkbenchSection component contracts and UI disabled states', () 
 
     const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
     assert.ok(!ruleBtnTag.includes('disabled=""'), `算定ルール button must be enabled: ${ruleBtnTag}`);
+
+    assert.ok(html.includes('<span class="section-count">再請求 1</span>'), '再請求 1 badge should be present');
+    assert.ok(html.includes('<span class="section-count">1件</span>'), '1件 count badge should be present');
+  });
+
+  it('pins all export, review, and close buttons as disabled while enabling memo, csv, and import for returned items, and renders returned badge', () => {
+    // Returned item: hasExportableClaimWorkItems is false, acceptedClaimWorkItemCount is 0
+    const props = createMockClaimWorkbenchSectionProps({
+      claimWorkItems: [sampleReturnedItem],
+      counts: createMockCounts({ claimWorkbenchCount: 1, returnedClaimCount: 1 })
+    });
+    const html = renderToStaticMarkup(React.createElement(ClaimWorkbenchSection, props));
+
+    // 5 buttons disabled: uke, officialUke, readiness, rule, closeAccepted
+    const disabledTags = listDisabledOpeningTags(html);
+    assert.equal(
+      disabledTags.length,
+      5,
+      `When only returned items exist, exactly 5 buttons should be disabled, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+    );
+
+    const ukeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+    assert.ok(ukeBtnTag.includes('disabled=""'), `一括UKE button must be disabled for returned-only: ${ukeBtnTag}`);
+
+    const officialUkeBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+    assert.ok(officialUkeBtnTag.includes('disabled=""'), `公式UKE button must be disabled for returned-only: ${officialUkeBtnTag}`);
+
+    const readinessBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-readiness-button"', 'button');
+    assert.ok(readinessBtnTag.includes('disabled=""'), `公式確認 button must be disabled for returned-only: ${readinessBtnTag}`);
+
+    const ruleBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-rule-review-button"', 'button');
+    assert.ok(ruleBtnTag.includes('disabled=""'), `算定ルール button must be disabled for returned-only: ${ruleBtnTag}`);
+
+    const closeAcceptedBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-close-accepted-button"', 'button');
+    assert.ok(closeAcceptedBtnTag.includes('disabled=""'), `受付済締め button must be disabled for returned-only: ${closeAcceptedBtnTag}`);
+
+    const memoBtnTag = findOpeningTag(html, '<span>請求メモ</span>', 'button');
+    assert.ok(!memoBtnTag.includes('disabled=""'), `請求メモ button must be enabled: ${memoBtnTag}`);
+
+    const csvBtnTag = findOpeningTag(html, '<span>CSV</span>', 'button');
+    assert.ok(!csvBtnTag.includes('disabled=""'), `CSV button must be enabled: ${csvBtnTag}`);
+
+    const importAcceptanceBtnTag = findOpeningTag(html, 'data-testid="claim-acceptance-import-button"', 'button');
+    assert.ok(!importAcceptanceBtnTag.includes('disabled=""'), `結果取込 button must be enabled: ${importAcceptanceBtnTag}`);
+
+    assert.ok(html.includes('<span class="section-count urgent">返戻 1</span>'), '返戻 1 urgent badge should be present');
+    assert.ok(html.includes('<span class="section-count">1件</span>'), '1件 count badge should be present');
+    assert.ok(html.includes('修正して再請求へ'), 'Returned action label should be present');
   });
 
   function getButtonSnippet(html: string, testId: string): string {
