@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
-import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import {
   ClaimRiskRow,
   ClaimWorkbenchRow,
@@ -514,6 +514,78 @@ describe('Dashboard component contracts and routing handlers', () => {
       assert.ok(html.includes('至急 1'));
       assert.ok(html.includes('1品目'));
       assert.ok(html.includes('ロキソニン錠60mg'));
+    });
+  });
+
+  describe('FollowUpCandidateRow UI disabled states and markup pinning', () => {
+    it('enables completion button and renders idle/medium/non-overdue metadata when isCompleting is false', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(FollowUpCandidateRow, {
+          name: '佐藤花子',
+          time: '10:30',
+          prescriptionCount: 2,
+          reasonFlags: ['副作用確認', 'アドヒアランス', '残薬確認'],
+          priority: 'medium',
+          dueLabel: '本日中',
+          suggestedAction: '電話で服薬状況を確認',
+          riskScore: 42,
+          attemptCount: 0,
+          lastContactLabel: '昨日',
+          isOverdue: false,
+          isCompleting: false,
+          onOpen: () => {},
+          onComplete: () => {}
+        })
+      );
+
+      assert.deepEqual(listDisabledOpeningTags(html), []);
+      const completeBtn = findOpeningTag(html, '<span>対応記録</span>', 'button');
+      assert.ok(!completeBtn.includes('disabled'), 'Complete button must be enabled when isCompleting is false');
+      assert.ok(html.includes('followup-row priority-medium'));
+      assert.ok(html.includes('リスク 42'));
+      assert.ok(html.includes('10:30・2薬 / 本日中'));
+      assert.ok(!html.includes('期限超過'));
+      assert.ok(!html.includes('接触0回'));
+      assert.ok(html.includes('電話で服薬状況を確認'));
+      assert.ok(html.includes('<span>対応記録</span>'));
+      assert.ok(!html.includes('<span>更新中</span>'));
+    });
+
+    it('disables completion button and renders high priority, overdue, and contact history when isCompleting is true', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(FollowUpCandidateRow, {
+          name: '鈴木一郎',
+          time: '14:15',
+          prescriptionCount: 4,
+          reasonFlags: ['ハイリスク薬', '新規処方', '用法変更', '重複投薬'],
+          priority: 'high',
+          dueLabel: '本日中',
+          suggestedAction: '体調変化と検査値を確認',
+          riskScore: 88,
+          attemptCount: 2,
+          lastContactLabel: '昨日 16:00',
+          isOverdue: true,
+          isCompleting: true,
+          onOpen: () => {},
+          onComplete: () => {}
+        })
+      );
+
+      const disabledTags = listDisabledOpeningTags(html);
+      assert.equal(disabledTags.length, 1);
+      const completeBtn = findOpeningTag(html, '<span>更新中</span>', 'button');
+      assert.ok(completeBtn.includes('disabled'), 'Complete button must be disabled when isCompleting is true');
+      assert.equal(disabledTags[0], completeBtn);
+      assert.ok(html.includes('followup-row priority-high'));
+      assert.ok(html.includes('リスク 88'));
+      assert.ok(html.includes('14:15・4薬 / 期限超過'));
+      assert.ok(!html.includes('本日中'));
+      assert.ok(html.includes('接触2回 / 昨日 16:00'));
+      assert.ok(html.includes('体調変化と検査値を確認'));
+      assert.ok(html.includes('ハイリスク薬'));
+      assert.ok(!html.includes('重複投薬'), 'Only up to 3 reason flags should be rendered');
+      assert.ok(html.includes('<span>更新中</span>'));
+      assert.ok(!html.includes('<span>対応記録</span>'));
     });
   });
 });
