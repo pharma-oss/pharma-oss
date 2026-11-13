@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { DrugStock } from '@/db/types';
+import { DrugStock, type PharmacyDatabase } from '@/db/types';
 import {
   applyStockTransferIn,
   applyStockTransferOut,
@@ -22,7 +22,7 @@ import { getCurrentUser } from '@/lib/audit';
 import type { DrugWithSearchCache, TransferPrefill } from '../types';
 
 export interface StockTransferPanelProps {
-    db: any;
+    db: PharmacyDatabase | null | undefined;
     drugs: DrugWithSearchCache[];
     stockLots: DrugStock[];
     prefill?: TransferPrefill | null;
@@ -67,7 +67,7 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
             setFallbackDrug(null);
             return;
         }
-        db.drugs.findOne(selectedDrugCode).exec().then((doc: any) => {
+        db.drugs.findOne(selectedDrugCode).exec().then((doc) => {
             if (!isMounted || !doc) return;
             setFallbackDrug({ code: doc.code, name: doc.name, stockQuantity: doc.stockQuantity, location: doc.location });
         }).catch(() => {});
