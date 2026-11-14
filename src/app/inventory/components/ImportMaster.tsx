@@ -3,7 +3,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import encoding from 'encoding-japanese';
-import { DrugStock } from '@/db/types';
+import type { DrugStock, PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { processPrescription, parseDeliverySlip } from '@/lib/ocr/processor';
 import { logAuditAction } from '@/lib/audit';
@@ -13,7 +13,7 @@ import { runWithAuditRollback } from '@/lib/audit_guard';
 import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
 
 export interface ImportMasterProps {
-    db: any;
+    db: PharmacyDatabase | null | undefined;
     drugs: DrugWithSearchCache[];
     activeTab: string;
     orderedDrugIds: Set<string>;
