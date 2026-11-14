@@ -5,12 +5,27 @@ import {
   getDisplayDrugName,
   getAmountLabel,
   getAmountText,
-  getTimingBadges
+  getTimingBadges,
+  type AmountTextSourceItem
 } from '../helpers';
 
+export interface MedicineNotebookStickerPatientLike {
+  readonly name?: string | null;
+  readonly patientId?: string | null;
+}
+
+export type MedicineNotebookStickerItemLike = AmountTextSourceItem & {
+  readonly itemId?: string;
+  readonly drugId?: string;
+  readonly rpNumber?: number;
+  readonly usageSupplementText?: string;
+  readonly electronicUsageSupplementText?: string;
+  readonly unit?: string;
+};
+
 export interface MedicineNotebookStickerPrintProps {
-  patientData: any;
-  prescriptionItems: any[];
+  patientData: MedicineNotebookStickerPatientLike;
+  prescriptionItems: readonly MedicineNotebookStickerItemLike[];
   pharmacyInfo: PharmacyInfo;
   dispensingDateStr: string;
   renderIdentityMark: (variant?: 'paper' | 'compact' | 'tiny') => React.ReactNode;
