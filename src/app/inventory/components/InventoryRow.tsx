@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Location } from '@/db/types';
+import { Location, type PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { logAuditAction } from '@/lib/audit';
 import { AuditLogFailedError, runWithAuditRollback } from '@/lib/audit_guard';
@@ -11,7 +11,7 @@ import { restoreFields } from '@/lib/rxdb_restore';
 export interface InventoryRowProps {
     drug: DrugWithSearchCache;
     pendingStock: number;
-    db: any;
+    db: PharmacyDatabase | null | undefined;
     locations: Location[];
 }
 
@@ -108,7 +108,7 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
 });
 
 // Separate component for location editing to isolate state and logic
-const LocationEditor = React.memo(function LocationEditor({ drug, db, locations }: { drug: DrugWithSearchCache, db: any, locations: Location[] }) {
+const LocationEditor = React.memo(function LocationEditor({ drug, db, locations }: { drug: DrugWithSearchCache, db: PharmacyDatabase | null | undefined, locations: Location[] }) {
     const defaultParts = drug.location ? drug.location.split('-') : ['', '', ''];
     const [part1, setPart1] = useState(defaultParts[0] || '');
     const [part2, setPart2] = useState(defaultParts[1] || '');
@@ -205,7 +205,7 @@ const LocationEditor = React.memo(function LocationEditor({ drug, db, locations 
     );
 });
 
-const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: { drug: DrugWithSearchCache, db: any }) {
+const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: { drug: DrugWithSearchCache, db: PharmacyDatabase | null | undefined }) {
     const initialValue = typeof drug.doc?.reorderPoint === 'number' ? String(drug.doc.reorderPoint) : '';
     const [value, setValue] = useState(initialValue);
     const [isSaving, setIsSaving] = useState(false);
