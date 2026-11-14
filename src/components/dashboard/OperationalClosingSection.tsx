@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
-import type { AuditLog, FacilitySettings } from '@/db/types';
+import type { AuditLog, FacilitySettings, PharmacyDatabase } from '@/db/types';
 import { buildBackupContinuityReport, type BackupSchedulePolicy } from '@/lib/backup';
 import {
   buildOperationalClosingAuditDetails,
@@ -38,7 +38,7 @@ import type {
 import { toLocalDateKey } from '@/lib/local_date';
 
 export interface OperationalClosingSectionProps {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   kpis: OperationalKpis;
   counts: DashboardCounts;
   claimRisks: DashboardClaimRisk[];
