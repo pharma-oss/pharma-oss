@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, Pill, Stethoscope, CalendarDays, FileText, Loader2, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
+import type { PharmacyDatabase } from '@/db/types';
 import {
   buildDrugMedicationHistory,
   listPatientPrescribedDrugs,
@@ -42,7 +43,7 @@ export function getDrugHistoryModalBodyState(
 // 処方明細は薬品名を持たない(drugId=レセ電コードのみ)ため、
 // 表示名と変更調剤判定用に薬品マスターから名前を引いて渡す。
 async function loadDrugNamesByCode(
-  db: any,
+  db: PharmacyDatabase,
   items: MedHistoryPrescriptionItem[]
 ): Promise<Map<string, string>> {
   const codes = Array.from(new Set(
@@ -112,18 +113,18 @@ export default function DrugHistoryModal({
           return;
         }
         const visitDocs = await db.visits.find({ selector: { patientId } }).exec();
-        const visitList = visitDocs.map((d: any) => d.toJSON());
+        const visitList = visitDocs.map((d) => d.toJSON());
         const visitIds = visitList.map((v: MedHistoryVisit) => v.visitId);
         const [itemDocs, soapDocs] = await Promise.all([
           db.prescription_items.find({ selector: { visitId: { $in: visitIds } } }).exec(),
           db.soap_records.find({ selector: { visitId: { $in: visitIds } } }).exec()
         ]);
-        const itemList = itemDocs.map((d: any) => d.toJSON());
+        const itemList = itemDocs.map((d) => d.toJSON());
         const drugNames = await loadDrugNamesByCode(db, itemList);
         if (cancelled) return;
         setVisits(visitList);
         setItems(itemList);
-        setSoaps(soapDocs.map((d: any) => d.toJSON()));
+        setSoaps(soapDocs.map((d) => d.toJSON()));
         setDrugNamesById(drugNames);
         setHasLoadError(false);
       } catch (err) {

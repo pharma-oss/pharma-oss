@@ -37,12 +37,12 @@ export interface MedHistorySoapEntry {
 export interface MedHistorySoapProblem {
   id?: string;
   title: string;
-  entries: MedHistorySoapEntry[];
+  entries: readonly MedHistorySoapEntry[];
 }
 
 export interface MedHistorySoapRecord {
   visitId: string;
-  problems: MedHistorySoapProblem[];
+  problems: readonly MedHistorySoapProblem[];
   updatedAt?: string;
 }
 
