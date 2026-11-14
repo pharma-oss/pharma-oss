@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Location } from '@/db/types';
+import type { Location, PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';
 
@@ -195,7 +195,7 @@ export async function executeBulkLocationInsert(
 }
 
 export interface LocationMasterProps {
-    db: any;
+    db: PharmacyDatabase | null | undefined;
     locations: Location[];
     drugs: DrugWithSearchCache[];
 }
