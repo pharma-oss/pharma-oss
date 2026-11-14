@@ -1,14 +1,120 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  findOpeningTag,
+  listDisabledOpeningTags,
+  stripStyleBlocks
+} from '@/lib/test_support/html_disabled_tags';
 import WorkflowMiniTutorial, {
   WORKFLOW_DEMO_FIXTURE,
   workflowTutorialStorageKey,
   type WorkflowTutorialKind
 } from './WorkflowMiniTutorial';
 
-describe('WorkflowMiniTutorial contracts and fixtures', () => {
-  it('exports WorkflowMiniTutorial as a callable React component function', () => {
-    assert.equal(typeof WorkflowMiniTutorial, 'function');
+type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
+
+interface ReactInternalsWithDispatcher {
+  H?: {
+    useState?: ReactUseStateHook;
+  };
+}
+
+function renderWithOpenDialogOnSsr(kind: WorkflowTutorialKind): {
+  html: string;
+  observedInitialStates: unknown[];
+} {
+  const observedInitialStates: unknown[] = [];
+  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
+  let capturedOrigUseState: ReactUseStateHook | undefined;
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    const dispatcher = internals?.H;
+    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
+
+    const origUseState = dispatcher.useState;
+    capturedDispatcher = dispatcher;
+    capturedOrigUseState = origUseState;
+
+    dispatcher.useState = (initialState: unknown) => {
+      const idx = observedInitialStates.length;
+      observedInitialStates.push(initialState);
+      if (idx === 0) {
+        return [true, () => {}];
+      }
+      if (idx === 1) {
+        dispatcher.useState = origUseState;
+      }
+      return origUseState(initialState);
+    };
+
+    return React.createElement(WorkflowMiniTutorial, {
+      kind,
+      userId: 'staff_A'
+    });
+  }
+
+  try {
+    const html = stripStyleBlocks(renderToStaticMarkup(React.createElement(Wrapper)));
+    return { html, observedInitialStates };
+  } finally {
+    if (capturedDispatcher && capturedOrigUseState) {
+      capturedDispatcher.useState = capturedOrigUseState;
+    }
+  }
+}
+
+describe('WorkflowMiniTutorial UI rendering and fixtures', () => {
+  it('renders enabled trigger buttons with kind-specific accent, label, and dialog trigger accessibility attributes across all workflow kinds', () => {
+    const expectedCases: Array<{ kind: WorkflowTutorialKind; label: string }> = [
+      { kind: 'input', label: '入力デモ' },
+      { kind: 'picking', label: 'ピッキングデモ' },
+      { kind: 'medication', label: '薬歴デモ' }
+    ];
+
+    for (const { kind, label } of expectedCases) {
+      const html = stripStyleBlocks(
+        renderToStaticMarkup(
+          React.createElement(WorkflowMiniTutorial, {
+            kind,
+            userId: 'staff_A'
+          })
+        )
+      );
+
+      const triggerTag = findOpeningTag(
+        html,
+        `data-testid="workflow-demo-trigger-${kind}"`,
+        'button'
+      );
+      assert.match(triggerTag, /\btype="button"/);
+      assert.match(triggerTag, new RegExp(`\\bclass="workflow-demo-trigger ${kind}"`));
+      assert.match(triggerTag, /\baria-haspopup="dialog"/);
+      assert.match(triggerTag, new RegExp(`\\btitle="${label}を開く"`));
+
+      assert.deepEqual(listDisabledOpeningTags(html), []);
+      assert.ok(html.includes(`<span>${label}</span>`), `Expected trigger label ${label}`);
+      assert.ok(html.includes('aria-hidden="true"'), 'Expected decorative SVG icon marked aria-hidden="true"');
+      assert.ok(!html.includes(`data-testid="workflow-demo-${kind}"`), 'Closed SSR output must not mount dialog');
+      assert.ok(!html.includes('<dialog'), 'Closed SSR output must not emit portal dialog element');
+    }
+  });
+
+  it('initializes open and SSR portal guard hooks safely without invoking createPortal when isOpen is true', () => {
+    const { html, observedInitialStates } = renderWithOpenDialogOnSsr('picking');
+
+    assert.deepEqual(observedInitialStates, [false, false]);
+    const triggerTag = findOpeningTag(
+      html,
+      'data-testid="workflow-demo-trigger-picking"',
+      'button'
+    );
+    assert.match(triggerTag, /\bclass="workflow-demo-trigger picking"/);
+    assert.ok(!html.includes('<dialog'), 'SSR with canUsePortal=false must skip createPortal even when open');
   });
 
   it('keeps fixed workflow demo fixtures isolated from DB storage', () => {
