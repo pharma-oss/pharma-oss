@@ -100,7 +100,7 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
   it('renders all 4 action buttons disabled when drugs list is empty', () => {
     const html = renderToStaticMarkup(
       React.createElement(DailyCheckPanel, {
-        db: {},
+        db: null,
         drugs: [],
         pendingStockMap: new Map<string, number>()
       })
@@ -123,7 +123,7 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
   it('renders all action buttons disabled when only non-controlled drugs are supplied', () => {
     const html = renderToStaticMarkup(
       React.createElement(DailyCheckPanel, {
-        db: {},
+        db: null,
         drugs: [sampleNonControlledDrug],
         pendingStockMap: new Map<string, number>()
       })
@@ -146,7 +146,7 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
   it('enables fill and csv buttons while pinning clear and save as disabled when controlled drugs are unentered', () => {
     const html = renderToStaticMarkup(
       React.createElement(DailyCheckPanel, {
-        db: {},
+        db: null,
         drugs: [sampleNarcoticDrug, samplePsychotropicDrug],
         pendingStockMap: new Map<string, number>()
       })
@@ -216,7 +216,7 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
       }
 
       return React.createElement(DailyCheckPanel, {
-        db: {},
+        db: null,
         drugs,
         pendingStockMap: new Map<string, number>()
       });

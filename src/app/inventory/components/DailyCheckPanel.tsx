@@ -26,13 +26,14 @@ import {
   type DailyControlledDrugCheckSnapshot,
   type DailyControlledDrugDifferenceReason
 } from '@/lib/inventory_daily_check';
+import type { PharmacyDatabase } from '@/db/types';
 import type { DrugWithSearchCache } from '../types';
 
 export type DailyCheckKindFilter = 'all' | 'narcotic' | 'psychotropic';
 export type DailyCheckStatusFilter = 'all' | 'unentered' | 'mismatch';
 
 export interface DailyCheckPanelProps {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   drugs: DrugWithSearchCache[];
   pendingStockMap: Map<string, number>;
 }
