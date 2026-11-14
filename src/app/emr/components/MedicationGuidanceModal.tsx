@@ -16,14 +16,15 @@ export interface MedicationGuidanceEntry {
   text: string;
 }
 
+export interface MedicationGuidanceDrugLike {
+  readonly code?: string;
+  readonly name?: string;
+}
+
 export interface MedicationGuidanceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  drug: {
-    code?: string;
-    name?: string;
-    [key: string]: any;
-  } | null | undefined;
+  drug: MedicationGuidanceDrugLike | null | undefined;
   db?: any;
   initialEntries?: MedicationGuidanceEntry[];
   initialLoadError?: boolean;
