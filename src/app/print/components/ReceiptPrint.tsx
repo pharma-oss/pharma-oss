@@ -12,8 +12,13 @@ export interface ReceiptBarcodeProps {
   caption: string;
 }
 
+export interface ReceiptPrintPatientLike {
+  readonly name?: string | null;
+  readonly patientId?: string | null;
+}
+
 export interface ReceiptPrintProps {
-  patientData: any;
+  patientData: ReceiptPrintPatientLike;
   totalPoints: number;
   insuranceAmounts: {
     burdenRatio: number;
