@@ -4,9 +4,33 @@ import { formatYen } from '@/lib/billing';
 import type { PharmacyInfo } from '../types';
 import { getFeeSectionLabel } from '../helpers';
 
+export interface ReceiptStatementPatientLike {
+  id?: string;
+  patientId?: string;
+  name?: string;
+  insuranceInfo?: {
+    provider?: string;
+    number?: string;
+    burdenRatio?: number;
+  };
+}
+
+export interface ReceiptStatementVisitLike {
+  institutionName?: string;
+  institutionId?: string;
+  departmentName?: string;
+  departmentId?: string;
+  doctorName?: string;
+  doctorId?: string;
+}
+
+export interface ReceiptStatementRemarkLike {
+  code?: string;
+}
+
 export interface ReceiptStatementPrintProps {
-  patientData: any;
-  visitData: any;
+  patientData: ReceiptStatementPatientLike;
+  visitData: ReceiptStatementVisitLike;
   calculatedFees: any[];
   totalPoints: number;
   insuranceAmounts: {
@@ -123,7 +147,7 @@ export const ReceiptStatementPrint = React.memo(function ReceiptStatementPrint({
                   <td className="statement-fee-name">{fee.name}</td>
                   <td>{fee.rationale || '-'}</td>
                   <td className="statement-point-cell">{fee.pointsUnset ? '未設定' : fee.points.toLocaleString()}</td>
-                  <td>{fee.receiptFeeCode || fee.receiptRemarks?.map((remark: any) => remark.code).join(' / ') || '-'}</td>
+                  <td>{fee.receiptFeeCode || fee.receiptRemarks?.map((remark: ReceiptStatementRemarkLike) => remark.code).join(' / ') || '-'}</td>
                 </tr>
               ))
             ) : (
