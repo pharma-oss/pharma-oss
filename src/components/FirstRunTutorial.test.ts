@@ -1,13 +1,105 @@
-import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  findOpeningTag,
+  listDisabledOpeningTags,
+  stripStyleBlocks
+} from '@/lib/test_support/html_disabled_tags';
 import FirstRunTutorial, {
   DEMO_TUTORIAL_FIXTURE,
   tutorialStorageKey
 } from './FirstRunTutorial';
 
-describe('FirstRunTutorial contracts and isolation', () => {
-  it('exports FirstRunTutorial as a callable React component function', () => {
-    assert.equal(typeof FirstRunTutorial, 'function');
+type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
+
+interface ReactInternalsWithDispatcher {
+  H?: {
+    useState?: ReactUseStateHook;
+  };
+}
+
+function createTutorialProps() {
+  return {
+    userId: 'staff_1',
+    autoOpen: false,
+    onStartReception: () => {},
+    onStartDemo: () => {},
+    onCleanupDemo: () => {}
+  };
+}
+
+function renderWithOpenModalOnSsr(): {
+  html: string;
+  observedInitialStates: unknown[];
+} {
+  const observedInitialStates: unknown[] = [];
+  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
+  let capturedOrigUseState: ReactUseStateHook | undefined;
+
+  function Wrapper(): React.ReactNode {
+    const internals = (React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
+    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    const dispatcher = internals?.H;
+    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
+
+    const origUseState = dispatcher.useState;
+    capturedDispatcher = dispatcher;
+    capturedOrigUseState = origUseState;
+
+    dispatcher.useState = (initialState: unknown) => {
+      const idx = observedInitialStates.length;
+      observedInitialStates.push(initialState);
+      if (idx === 0) {
+        return [true, () => {}];
+      }
+      if (idx === 2) {
+        dispatcher.useState = origUseState;
+      }
+      return origUseState(initialState);
+    };
+
+    return React.createElement(FirstRunTutorial, createTutorialProps());
+  }
+
+  try {
+    const html = stripStyleBlocks(renderToStaticMarkup(React.createElement(Wrapper)));
+    return { html, observedInitialStates };
+  } finally {
+    if (capturedDispatcher && capturedOrigUseState) {
+      capturedDispatcher.useState = capturedOrigUseState;
+    }
+  }
+}
+
+describe('FirstRunTutorial UI rendering and isolation', () => {
+  it('renders an enabled trigger button with dialog trigger accessibility attributes in initial SSR output', () => {
+    const html = stripStyleBlocks(
+      renderToStaticMarkup(React.createElement(FirstRunTutorial, createTutorialProps()))
+    );
+
+    const triggerTag = findOpeningTag(html, 'data-testid="tutorial-trigger"', 'button');
+    assert.match(triggerTag, /\btype="button"/);
+    assert.match(triggerTag, /\bclass="tutorial-trigger"/);
+    assert.match(triggerTag, /\baria-haspopup="dialog"/);
+    assert.match(triggerTag, /\btitle="はじめての方向け3分デモ"/);
+
+    assert.deepEqual(listDisabledOpeningTags(html), []);
+    assert.ok(html.includes('<span>3分デモ</span>'), 'Expected visible 3分デモ trigger label');
+    assert.ok(html.includes('aria-hidden="true"'), 'Expected decorative SVG icon marked aria-hidden="true"');
+    assert.ok(!html.includes('tutorial-start-reception'), 'Closed SSR output must not mount modal controls');
+    assert.ok(!html.includes('role="dialog"'), 'Closed SSR output must not render portal dialog markup');
+  });
+
+  it('initializes open, step, and SSR portal guard hooks safely without invoking createPortal when isOpen is true', () => {
+    const { html, observedInitialStates } = renderWithOpenModalOnSsr();
+
+    assert.deepEqual(observedInitialStates, [false, 0, false]);
+    const triggerTag = findOpeningTag(html, 'data-testid="tutorial-trigger"', 'button');
+    assert.match(triggerTag, /\baria-haspopup="dialog"/);
+    assert.ok(!html.includes('role="dialog"'), 'SSR with canUsePortal=false must skip createPortal even when open');
   });
 
   it('keeps demo data isolated with fixed fixtures without touching DB directly', () => {
@@ -23,28 +115,5 @@ describe('FirstRunTutorial contracts and isolation', () => {
     assert.equal(key1, 'yakureki:first-run-tutorial:v1:staff_1');
     assert.equal(key2, 'yakureki:first-run-tutorial:v1:staff_2');
     assert.notEqual(key1, key2);
-  });
-
-  it('invokes workflow callback props correctly', () => {
-    let receptionStarted = false;
-    let demoStarted = false;
-    let demoCleaned = false;
-
-    const props = {
-      userId: 'test_user',
-      autoOpen: false,
-      onStartReception: () => { receptionStarted = true; },
-      onStartDemo: () => { demoStarted = true; },
-      onCleanupDemo: () => { demoCleaned = true; }
-    };
-
-    props.onStartReception();
-    assert.equal(receptionStarted, true);
-
-    props.onStartDemo();
-    assert.equal(demoStarted, true);
-
-    props.onCleanupDemo();
-    assert.equal(demoCleaned, true);
   });
 });
