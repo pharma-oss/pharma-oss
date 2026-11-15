@@ -7,9 +7,18 @@ import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
 import type { PharmacyInfo, PrintPrescriptionItem } from '../types';
 import type { DrugPriceRevisionChoice } from '@/lib/drug_price_history';
 
+export interface DrugInfoPrintPatientLike {
+  readonly name?: string | null;
+}
+
+export interface DrugInfoPrintVisitLike {
+  readonly institutionName?: string | null;
+  readonly institutionId?: string | null;
+}
+
 export interface DrugInfoPrintProps {
-  patientData: any;
-  visitData: any;
+  patientData: DrugInfoPrintPatientLike;
+  visitData: DrugInfoPrintVisitLike;
   prescriptionItems: PrintPrescriptionItem[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
