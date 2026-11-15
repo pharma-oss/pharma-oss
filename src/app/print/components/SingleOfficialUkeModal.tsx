@@ -20,6 +20,27 @@ import {
   type SingleDispensingUkeOfficialResult
 } from '@/lib/receipt/dispensing_uke_official_single';
 
+export interface SingleOfficialUkeInterventionLike {
+  readonly interventionId?: string;
+  readonly id?: string;
+  readonly visitId?: string;
+  readonly reason?: string;
+  readonly beforeSnapshot?: string;
+  readonly afterSnapshot?: string;
+  readonly category?: string;
+  readonly inquiryStatus?: string;
+  readonly inquiryMethod?: string;
+  readonly inquiryDoctor?: string;
+  readonly inquiryResult?: string;
+  readonly responseDueDate?: string;
+  readonly patientConsented?: boolean;
+  readonly contactedAt?: string;
+  readonly respondedAt?: string;
+  readonly createdAt?: string;
+  readonly handledBy?: string;
+  readonly note?: string;
+}
+
 export interface SingleOfficialUkeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,7 +49,7 @@ export interface SingleOfficialUkeModalProps {
   settingsData: FacilitySettings;
   prescriptionItems: DispensingUkeItem[];
   calculatedFees: CalculationResultItem[];
-  interventions?: any[];
+  interventions?: SingleOfficialUkeInterventionLike[];
   hasClaimErrors?: boolean;
   claimErrorMessages?: string[];
   onExportSuccess?: (result: SingleDispensingUkeOfficialResult) => Promise<void> | void;
