@@ -5,12 +5,25 @@ import {
   getDisplayDrugName,
   getAmountText,
   getTotalAmountText,
-  getDispensingTotalAmountText
+  getDispensingTotalAmountText,
+  type AmountTextSourceItem
 } from '../helpers';
 
+export interface LiquidLabelSheetPatientLike {
+  readonly name?: string | null;
+  readonly patientId?: string | null;
+}
+
+export type LiquidLabelSheetItemLike = AmountTextSourceItem & {
+  readonly itemId?: string;
+  readonly drugId?: string;
+  readonly totalAmount?: number;
+  readonly unit?: string;
+};
+
 export interface LiquidLabelSheetPrintProps {
-  patientData: any;
-  liquidItems: any[];
+  patientData: LiquidLabelSheetPatientLike;
+  liquidItems: readonly LiquidLabelSheetItemLike[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
   currentDateStr: string;

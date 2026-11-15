@@ -29,7 +29,7 @@ test('LiquidLabelSheetPrint renders liquid label with bottle instructions, dosag
       days: 7,
       totalAmount: 70,
       usage: '1日3回毎食後',
-      dosageCategory: 'internal',
+      dosageCategory: 'internal' as const,
       unit: 'mL'
     }
   ];
