@@ -14,8 +14,13 @@ import {
   getBagRpComments
 } from '../helpers';
 
+export interface MedicineBagPrintPatientLike {
+  readonly name?: string | null;
+  readonly patientId?: string | null;
+}
+
 export interface MedicineBagPrintProps {
-  patientData: any;
+  patientData: MedicineBagPrintPatientLike;
   groupedForBags: Record<string, any[]>;
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
