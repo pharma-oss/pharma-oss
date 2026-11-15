@@ -29,7 +29,7 @@ test('OintmentLabelSheetPrint renders ointment label with application site, dosa
       days: 0,
       totalAmount: 50,
       usage: '1日2回乾燥部位に薄く塗布',
-      dosageCategory: 'external',
+      dosageCategory: 'external' as const,
       unit: 'g'
     }
   ];

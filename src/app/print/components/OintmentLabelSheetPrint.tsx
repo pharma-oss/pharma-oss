@@ -4,12 +4,25 @@ import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
   getAmountText,
-  getTotalAmountText
+  getTotalAmountText,
+  type AmountTextSourceItem
 } from '../helpers';
 
+export interface OintmentLabelSheetPatientLike {
+  readonly name?: string | null;
+  readonly patientId?: string | null;
+}
+
+export type OintmentLabelSheetItemLike = AmountTextSourceItem & {
+  readonly itemId?: string;
+  readonly drugId?: string;
+  readonly totalAmount?: number;
+  readonly unit?: string;
+};
+
 export interface OintmentLabelSheetPrintProps {
-  patientData: any;
-  ointmentItems: any[];
+  patientData: OintmentLabelSheetPatientLike;
+  ointmentItems: readonly OintmentLabelSheetItemLike[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
   currentDateStr: string;
