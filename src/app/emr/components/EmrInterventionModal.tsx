@@ -5,6 +5,39 @@ import {
   suggestInterventionCategory,
   type InterventionCategory
 } from '@/lib/prescription_intervention_support';
+import { userFacingErrorMessage } from '@/lib/user_facing_error';
+
+export interface EmrInterventionSubmitOutcome {
+  alertMessage: string | null;
+  shouldCloseAndReset: boolean;
+}
+
+/**
+ * 疑義照会モーダル送信時の入力チェックと保存結果から、警告表示・モーダル閉鎖可否を決める。
+ */
+export async function submitEmrInterventionForm(params: {
+  reason: string;
+  onSave: () => Promise<boolean | void>;
+}): Promise<EmrInterventionSubmitOutcome> {
+  if (!params.reason.trim()) {
+    return {
+      alertMessage: '理由を入力してください。',
+      shouldCloseAndReset: false
+    };
+  }
+  try {
+    const result = await params.onSave();
+    return {
+      alertMessage: null,
+      shouldCloseAndReset: result !== false
+    };
+  } catch (error) {
+    return {
+      alertMessage: userFacingErrorMessage(error, '保存に失敗しました。'),
+      shouldCloseAndReset: false
+    };
+  }
+}
 
 export interface EmrInterventionModalProps {
   isOpen: boolean;
@@ -43,7 +76,7 @@ export interface EmrInterventionModalProps {
     responseDueDate: string;
     note: string;
     patientConsented: boolean;
-  }) => Promise<void>;
+  }) => Promise<boolean | void>;
   resetForm: () => void;
 }
 
@@ -75,7 +108,41 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
   onSave,
   resetForm
 }) => {
+  const [isSaving, setIsSaving] = React.useState(false);
+
   if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const outcome = await submitEmrInterventionForm({
+        reason: intReason,
+        onSave: () => onSave({
+          category: intCategory,
+          reason: intReason,
+          beforeSnapshot: intBefore,
+          afterSnapshot: intAfter,
+          inquiryStatus: intStatus,
+          inquiryMethod: intMethod,
+          inquiryDoctor: intDoctor,
+          inquiryResult: intResult,
+          responseDueDate: intResponseDueDate,
+          note: intNote,
+          patientConsented: intConsented
+        })
+      });
+      if (outcome.alertMessage) {
+        alert(outcome.alertMessage);
+      }
+      if (outcome.shouldCloseAndReset) {
+        onClose();
+        resetForm();
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="insurance-modal-overlay">
@@ -218,32 +285,15 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
           </label>
         </div>
         <div className="intervention-footer">
-          <button className="btn-secondary" onClick={onClose}>キャンセル</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>キャンセル</button>
           <button
+            type="button"
             className="btn-primary"
-            onClick={async () => {
-              if (!intReason.trim()) {
-                alert('理由を入力してください。');
-                return;
-              }
-              await onSave({
-                category: intCategory,
-                reason: intReason,
-                beforeSnapshot: intBefore,
-                afterSnapshot: intAfter,
-                inquiryStatus: intStatus,
-                inquiryMethod: intMethod,
-                inquiryDoctor: intDoctor,
-                inquiryResult: intResult,
-                responseDueDate: intResponseDueDate,
-                note: intNote,
-                patientConsented: intConsented
-              });
-              onClose();
-              resetForm();
-            }}
+            disabled={isSaving}
+            aria-busy={isSaving}
+            onClick={() => void handleSubmit()}
           >
-            登録
+            {isSaving ? '登録中...' : '登録'}
           </button>
         </div>
       </div>

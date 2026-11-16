@@ -1993,11 +1993,14 @@ useEffect(() => {
         onSave={async (input) => {
           if (!input.reason.trim()) {
             alert('理由を入力してください。');
-            return;
+            return false;
           }
-          await handleAddIntervention(input);
-          setIsInterventionModalOpen(false);
-          resetInterventionForm();
+          const saved = await handleAddIntervention(input);
+          if (saved) {
+            setIsInterventionModalOpen(false);
+            resetInterventionForm();
+          }
+          return saved;
         }}
         resetForm={resetInterventionForm}
       />
