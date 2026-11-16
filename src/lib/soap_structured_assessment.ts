@@ -35,9 +35,13 @@ function normalizeField<K extends keyof SoapStructuredAssessment>(
     : 'unknown' as NonNullable<SoapStructuredAssessment[K]>;
 }
 
+export type NormalizedSoapStructuredAssessment = {
+  [K in keyof SoapStructuredAssessment]-?: NonNullable<SoapStructuredAssessment[K]>;
+};
+
 export function normalizeSoapStructuredAssessment(
   value?: Partial<SoapStructuredAssessment> | null
-): SoapStructuredAssessment {
+): NormalizedSoapStructuredAssessment {
   return {
     adherence: normalizeField('adherence', value?.adherence),
     leftoverMedicine: normalizeField('leftoverMedicine', value?.leftoverMedicine),
@@ -59,10 +63,14 @@ export function getMissingSoapStructuredAssessmentFields(
 export interface SoapStructuredAssessmentControl<K extends keyof SoapStructuredAssessment = keyof SoapStructuredAssessment> {
   field: K;
   label: string;
-  options: Array<[SoapStructuredAssessment[K], string]>;
+  options: Array<[NonNullable<SoapStructuredAssessment[K]>, string]>;
 }
 
-export const soapStructuredAssessmentControls: Array<SoapStructuredAssessmentControl<any>> = [
+export type AnySoapStructuredAssessmentControl = {
+  [K in keyof SoapStructuredAssessment]-?: SoapStructuredAssessmentControl<K>;
+}[keyof SoapStructuredAssessment];
+
+export const soapStructuredAssessmentControls: AnySoapStructuredAssessmentControl[] = [
   {
     field: 'adherence',
     label: '服薬コンプライアンス',

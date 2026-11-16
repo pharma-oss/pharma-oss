@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { RxDocument } from 'rxdb';
 import { toast } from 'sonner';
-import type { Patient, Alert } from '@/db/types';
+import type { Patient, Alert, PharmacyDatabase } from '@/db/types';
 import type { EligibilityStatus } from '@/app/ocr/helpers';
 import {
   normalizeOnlineEligibilityResponse,
@@ -33,7 +34,7 @@ export type PatientMergeReview = {
 };
 
 interface UseOcrPatientEligibilityOptions {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   /** 受付の検索欄に打った文字。氏名・フリガナ・生年月日(半角8桁など)を空白で区切って絞り込む。 */
   patientSearchQuery: string;
   setPatientSearchQuery: (query: string) => void;
@@ -86,9 +87,9 @@ export function useOcrPatientEligibility({
     let subscription: { unsubscribe: () => void } | undefined;
     try {
       subscription = db.patients.find().$.subscribe({
-        next: (patientDocs: any[]) => {
+        next: (patientDocs: RxDocument<Patient>[]) => {
           if (!isMounted) return;
-          setAllPatients(patientDocs.map((patientDoc: any) => ({
+          setAllPatients(patientDocs.map((patientDoc) => ({
             ...patientDoc.toJSON(),
             doc: patientDoc
           })) as PatientCandidate[]);
@@ -141,8 +142,8 @@ export function useOcrPatientEligibility({
         if (!isMounted) return;
         setActivePatientAlerts(
           alertDocs
-            .map((alertDoc: any) => alertDoc.toJSON() as Alert)
-            .filter((alert: Alert) => alert.status !== 'resolved')
+            .map((alertDoc) => alertDoc.toJSON())
+            .filter((alert) => alert.status !== 'resolved')
         );
         setHasPatientAlertsFetchError(false);
       } catch (error) {

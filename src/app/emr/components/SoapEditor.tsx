@@ -95,13 +95,13 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
       try {
         const existing = await db.soap_records.find({ selector: { visitId } }).exec();
         if (cancelled) return;
-        const record = existing[0]?.toJSON?.() ?? existing[0];
+        const record = (typeof existing[0]?.toJSON === 'function' ? existing[0].toJSON() : existing[0]) as DbSoapRecord | undefined;
         soapIdRef.current = record?.soapId ?? `soap_${visitId}`;
         if (record && Array.isArray(record.problems) && record.problems.length > 0) {
-          setProblems(record.problems.map((p: any) => ({
+          setProblems(record.problems.map((p) => ({
             id: p.id || uuidv4(),
             title: p.title || '',
-            entries: (p.entries || []).map((e: any) => ({
+            entries: (p.entries || []).map((e) => ({
               id: e.id || uuidv4(),
               type: e.type as SoapEntryType,
               text: e.text || '',
@@ -555,7 +555,7 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
             )}
           </div>
           <div className="problem-entries">
-            {problem.entries.map((entry: any) => (
+            {problem.entries.map((entry) => (
               <SoapEntryBox
                 key={entry.id}
                 entry={entry}

@@ -8,7 +8,8 @@ import {
   SoapAiDraftInsightCard,
   VitalInsightCard,
   DocLinkInsightCard,
-  GuidanceDropdownPanel
+  GuidanceDropdownPanel,
+  type WarningInsightItem
 } from './components/EmrInsightCards';
 import type { SoapAiDraftSuggestion } from '@/lib/soap_ai_draft';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
@@ -76,7 +77,7 @@ describe('EmrInsightCards renderToStaticMarkup contracts', () => {
     });
 
     it('renders detailed contraindication and allergy alerts when warnings exist', () => {
-      const mockWarnings = [
+      const mockWarnings: WarningInsightItem[] = [
         {
           type: 'contraindication',
           severity: 'danger',

@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
+import type { RxDocument } from 'rxdb';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
+import type { Intervention, PharmacyDatabase, Visit } from '@/db/types';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isClaimEditBlocked, getClaimEditBlockedMessage } from '@/lib/claim_edit_guard';
 import {
@@ -15,13 +17,15 @@ import {
 } from '@/lib/prescription_intervention_support';
 import { userFacingErrorMessage } from '@/lib/user_facing_error';
 
+export type InterventionItem = Intervention & { id?: string; category?: string };
+
 export interface UseEmrInterventionParams {
-  db: any;
-  findActiveVisit: () => Promise<any>;
+  db: PharmacyDatabase | null | undefined;
+  findActiveVisit: () => Promise<RxDocument<Visit> | null>;
 }
 
 export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionParams) {
-  const [interventions, setInterventions] = useState<any[]>([]);
+  const [interventions, setInterventions] = useState<InterventionItem[]>([]);
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
   const [intCategory, setIntCategory] = useState<InterventionCategory>('other');
   const [intDoctor, setIntDoctor] = useState('');
@@ -89,7 +93,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
           logAuditAction(db, 'prescription_edit', detail, patientId, patientName)
       });
 
-      setInterventions((prev: any[]) => [...prev, newRecord]);
+      setInterventions((prev) => [...prev, newRecord]);
       toast.success(input.inquiryStatus === 'pending' ? '疑義照会を照会中として記録しました' : '疑義照会・処方変更を記録しました');
     } catch (err) {
       console.error('Failed to save intervention:', err);
@@ -118,7 +122,7 @@ export function useEmrIntervention({ db, findActiveVisit }: UseEmrInterventionPa
         toast.success('疑義照会を削除しました。');
         setInterventions((prev) => prev.filter((i) => (i.interventionId || i.id) !== interventionId));
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Failed to delete intervention:', e);
       toast.error(userFacingErrorMessage(e, '疑義照会の削除に失敗しました。'));
     }

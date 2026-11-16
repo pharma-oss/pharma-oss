@@ -2,11 +2,12 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { tracingStatusLabel } from '@/lib/emr_helpers';
-import type { Visit, VisitTracingReport } from '@/db/types';
+import type { RxDocument } from 'rxdb';
+import type { PharmacyDatabase, Visit, VisitTracingReport } from '@/db/types';
 
 export interface UseEmrTracingReportParams {
-  db: any;
-  findActiveVisit: () => Promise<any>;
+  db: PharmacyDatabase | null | undefined;
+  findActiveVisit: () => Promise<RxDocument<Visit> | null>;
   currentPatientName: string;
 }
 

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Drug, Visit, InsuranceEligibilityStatus, Patient } from '@/db/types';
+import type { Drug, Visit, InsuranceEligibilityStatus, Patient, PharmacyDatabase } from '@/db/types';
 import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import type { ElectronicPrescriptionItem } from '@/lib/electronic_prescription';
@@ -131,7 +131,10 @@ export const getGroupDosageCategory = (group: PrescriptionGroup): { category: Do
   };
 };
 
-export const attachStockQuantities = async (db: any, drugs: DrugMasterRecord[]) => {
+export const attachStockQuantities = async (
+  db: PharmacyDatabase | null | undefined,
+  drugs: DrugMasterRecord[]
+) => {
   if (!db || drugs.length === 0) {
     return drugs.map((drug) => ({ ...drug, stockQuantity: drug.stockQuantity || 0 }));
   }

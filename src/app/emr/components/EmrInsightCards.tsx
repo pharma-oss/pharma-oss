@@ -145,11 +145,39 @@ export const CareChecklistCard = React.memo(function CareChecklistCard({
   );
 });
 
+export type WarningInsightItem =
+  | {
+      type: 'contraindication';
+      severity: string;
+      drug1: string;
+      drug2: string;
+      message: string;
+    }
+  | {
+      type: 'usage';
+      severity: string;
+      drug: string;
+      message: string;
+    }
+  | {
+      type: 'patient_alert';
+      severity: string;
+      alertType?: string;
+      drug: string;
+      message: string;
+    };
+
+export interface PrescribedDrugLinkItem {
+  code?: string;
+  name?: string;
+  documentUrl?: string;
+}
+
 export const WarningInsightCard = React.memo(function WarningInsightCard({
   warnings,
   isLoading
 }: {
-  warnings?: any[];
+  warnings?: WarningInsightItem[];
   isLoading?: boolean;
 }) {
   if (isLoading) {
@@ -440,11 +468,11 @@ export const DocLinkInsightCard = React.memo(function DocLinkInsightCard({
   prescribedDrugs,
   onSelectGuidance
 }: {
-  prescribedDrugs?: any[];
+  prescribedDrugs?: PrescribedDrugLinkItem[];
   onSelectGuidance: (type: SoapEntryType, text: string) => void;
 }) {
   const db = useDatabase();
-  const [selectedDrug, setSelectedDrug] = useState<any>(null);
+  const [selectedDrug, setSelectedDrug] = useState<PrescribedDrugLinkItem | null>(null);
   const [guidanceByDrugCode, setGuidanceByDrugCode] = useState<Record<string, GuidanceDropdownEntry[]>>({});
   const [loadStatus, setLoadStatus] = useState<GuidanceLoadStatus>('loading');
   const [openDrugCode, setOpenDrugCode] = useState<string | null>(null);
