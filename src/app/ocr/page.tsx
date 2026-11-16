@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import './ocr.css';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, FileSearch, CheckCircle, Trash2, Loader2, CreditCard, Search, UserPlus, Hospital, Printer, AlertTriangle, ShieldCheck, History, QrCode, ChevronDown } from 'lucide-react';
@@ -27,8 +28,7 @@ import {
 import { describePatientMasterChanges } from '@/lib/patient_master_update';
 import {
   buildPatientMergeExecutionPlan,
-  buildPatientMergePlan,
-  type PatientMergeOperation
+  buildPatientMergePlan
 } from '@/lib/patient_merge';
 import {
   applyPatientMergeExecutionPlanWithAudit,
@@ -41,14 +41,12 @@ import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { buildReceptionClaimOptions, judgeAfterHoursCategory } from '@/lib/claim_conditions';
 import { formatOnlineEligibilityFieldMappingReport } from '@/lib/online_eligibility';
-import { findDrugMasterRecordByCode, isGeneralNameDrugRecord, searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
-import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { buildProviderHistory, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import { buildPreviousDoPrescriptions } from '@/lib/previous_prescription_do';
 import { buildOcrConfidenceReport } from '@/lib/ocr_confidence';
-import { parseJahisQr, parsePrescriptionOcrText, type DrugItem as JahisDrugItem } from '@/lib/ocr/processor';
-import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
+import { parseJahisQr, parsePrescriptionOcrText } from '@/lib/ocr/processor';
+import type { DosageCategory } from '@/lib/dosage_category';
 import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
 import { buildPublicInsuranceBadgeList } from '@/lib/patient_public_insurance';
 import { buildHighCostCopaymentBadges } from '@/lib/patient_copayment_support';
@@ -65,19 +63,35 @@ import {
   getPatientCandidatePanelViewState,
   getPatientRegistrationPrompt,
   getPreviousDoViewState,
-  getDrugAuditMeta,
   createEmptyPrescription,
   buildPrescriptionFromElectronicItem,
   toDateInputValue,
   dateInputToIso,
   normalizeDateInputValue,
   normalizeJahisDateInputValue,
-  getGroupDosageCategory,
   formatVisitDateLabel,
-  NO_SUBSTITUTION_LABEL,
-  isNoSubstitutionValue,
   getProviderHistoryCandidateViewState,
-  PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE
+  PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE,
+  PATIENT_MERGE_COLLECTION_LABEL,
+  formatPatientMergeOperationLabel,
+  QR_SOURCE_LABEL,
+  buildPrescriptionsFromParsedItems,
+  calculatePrescriptionMetrics,
+  buildPrescriptionAuditInputItems,
+  resolveExistingElectronicPrescriptionLinks,
+  isElectronicPrescriptionInstitutionMismatch,
+  buildAppliedElectronicPrescriptionState,
+  updatePrescriptionFieldAt,
+  updateRpGroupField,
+  updateRpGroupDosageCategory,
+  appendDrugToRpGroup,
+  insertEmptyRpGroupAfter,
+  removePrescriptionItemOrReset,
+  togglePrescriptionIppokaAt,
+  togglePrescriptionCrushedAt,
+  togglePrescriptionReceiptRemarkAt,
+  validateReceptionPrescriptionItems,
+  buildReceptionPrescriptionItemsPayload
 } from './helpers';
 import { OcrRawTextArea, OcrConfidencePanel } from './components/OcrConfidencePanel';
 import { PrescriptionGroupEditor } from './components/PrescriptionGroupEditor';
@@ -91,102 +105,6 @@ import { useOcrDrugSearchModal } from '@/hooks/useOcrDrugSearchModal';
 // ⚡ Bolt: Hoist regex to module scope to avoid re-compilation on every function call
 const INSURANCE_NUMBER_REGEX = /^\d+$/;
 
-
-
-const patientMergeCollectionLabel = {
-  visits: '受付',
-  alerts: 'アラート'
-} as const;
-
-function formatPatientMergeOperationLabel(operation: PatientMergeOperation): string {
-  switch (operation.type) {
-    case 'upsert_patient':
-      return `残す患者情報を更新: ${operation.patientId}`;
-    case 'delete_patient':
-      return `統合元患者を削除: ${operation.patientId}`;
-    case 'patch_visit_patient':
-      return `受付を付け替え: ${operation.visitId} -> ${operation.afterPatientId}`;
-    case 'patch_alert_patient':
-      return `アラートを付け替え: ${operation.alertId} -> ${operation.afterPatientId}`;
-  }
-}
-
-
-
-const normalizeDrugComparableText = (value?: string) => (
-  String(value || '')
-    .normalize('NFKC')
-    .replace(/[【［\[]\s*般\s*[】］\]]/g, '')
-    .replace(/\s|　/g, '')
-    .toLowerCase()
-);
-
-const toQrDrugCodeStatus = (drug?: Pick<DrugMasterRecord, 'isAbolished'>): Prescription['prescribedDrugCodeStatus'] => {
-  if (!drug) return 'unknown';
-  return drug.isAbolished ? 'abolished' : 'active';
-};
-
-const qrSourceLabel = {
-  camera: 'カメラ',
-  image: '画像',
-  manual: 'スキャナー'
-} as const;
-
-async function findBestDrugMasterForQrItem(item: JahisDrugItem): Promise<DrugMasterRecord | undefined> {
-  const drugCode = item.drugCode?.trim();
-  if (drugCode) {
-    const exactDrug = await findDrugMasterRecordByCode(drugCode);
-    if (exactDrug) return exactDrug;
-  }
-
-  const drugName = item.drugName.trim();
-  if (!drugName) return undefined;
-
-  const candidates = await searchDrugMaster(drugName, 25);
-  if (candidates.length === 0) return undefined;
-  const normalizedName = normalizeDrugComparableText(drugName);
-  return candidates.find((drug) => (
-    normalizeDrugComparableText(drug.name) === normalizedName ||
-    normalizeDrugComparableText(formatDrugDisplayName(drug.name)) === normalizedName ||
-    normalizeDrugComparableText(drug.genericName) === normalizedName ||
-    normalizeDrugComparableText(drug.code) === normalizeDrugComparableText(drugCode) ||
-    normalizeDrugComparableText(drug.yjCode) === normalizeDrugComparableText(drugCode)
-  )) || candidates[0];
-}
-
-const getEffectiveDispensedDrug = (prescription: Prescription) => {
-  const dispensedDrug = prescription.dispensedDrug.trim();
-  if (!dispensedDrug || isNoSubstitutionValue(dispensedDrug)) return '';
-  return dispensedDrug;
-};
-
-// QR・OCRで読み取った薬品行を、薬品マスタ照合込みで編集フォームの行へ変換する
-const buildPrescriptionsFromParsedItems = async (
-  items: JahisDrugItem[],
-  idPrefix: string
-): Promise<Prescription[]> => (
-  Promise.all(items.map(async (item, index) => {
-    const matchedDrug = await findBestDrugMasterForQrItem(item);
-    const auditMeta = matchedDrug ? getDrugAuditMeta(matchedDrug) : undefined;
-    const rpNumber = item.rpNumber || index + 1;
-    return createEmptyPrescription(`rp_${idPrefix}_${rpNumber}`, {
-      id: `item_${idPrefix}_${generateUUID()}`,
-      drugCode: matchedDrug?.code || item.drugCode || '',
-      drugName: matchedDrug?.name ? formatDrugDisplayName(matchedDrug.name) : item.drugName,
-      amount: item.amount || '1',
-      unitText: item.unit || '',
-      electronicUsageCode: item.usageCode || '',
-      electronicUsageFallbackText: item.usage || '',
-      prescribedDrugCodeStatus: toQrDrugCodeStatus(matchedDrug),
-      usage: item.usage || '',
-      days: item.days || '',
-      rpComment: item.rpComment || '',
-      dispensedDrug: NO_SUBSTITUTION_LABEL,
-      changeReason: '',
-      ...(auditMeta || {})
-    });
-  }))
-);
 export default function OcrPage() {
   const router = useRouter();
   const db = useDatabase();
@@ -219,7 +137,7 @@ export default function OcrPage() {
     const handle = idleCallback(() => {
       import('@/lib/ocr/processor').then(({ preloadOcr }) => {
         preloadOcr();
-      }).catch(() => {});
+      }).catch(() => { });
     });
 
     return () => {
@@ -386,44 +304,12 @@ export default function OcrPage() {
     [electronicPrescriptionApplyDecision, electronicPrescriptionWarnings]
   );
   const prescriptionGroups = useMemo(() => groupPrescriptionsByRp(prescriptions), [prescriptions]);
-  const prescriptionMetrics = useMemo(() => {
-    const missingDrugCount = prescriptions.filter((prescription) => !prescription.drugName.trim()).length;
-    const missingAmountCount = prescriptions.filter((prescription) => !prescription.amount.trim()).length;
-    const missingUsageCount = prescriptionGroups.filter((group) => !group.usage.trim()).length;
-    const missingDaysCount = prescriptionGroups.filter((group) => !group.days.trim()).length;
-    const substitutionCount = prescriptions.filter((prescription) => {
-      const dispensedDrug = prescription.dispensedDrug.trim();
-      return dispensedDrug && !isNoSubstitutionValue(dispensedDrug);
-    }).length;
-    const specialPrepCount = prescriptions.filter((prescription) => (
-      prescription.isIppoka || prescription.isCrushed || prescription.showReceiptRemark
-    )).length;
-
-    return {
-      rpCount: prescriptionGroups.length,
-      drugCount: prescriptions.length,
-      missingDrugCount,
-      missingAmountCount,
-      missingUsageCount,
-      missingDaysCount,
-      missingTotal: missingDrugCount + missingAmountCount + missingUsageCount + missingDaysCount,
-      substitutionCount,
-      specialPrepCount
-    };
-  }, [prescriptions, prescriptionGroups]);
+  const prescriptionMetrics = useMemo(
+    () => calculatePrescriptionMetrics(prescriptions, prescriptionGroups),
+    [prescriptions, prescriptionGroups]
+  );
   const prescriptionAudit = useMemo(() => {
-    const auditItems = prescriptions.map((p) => {
-      const group = prescriptionGroups.find((g) => g.rpId === p.rpId);
-      const groupCategory = group ? getGroupDosageCategory(group) : undefined;
-      const groupIndex = group ? prescriptionGroups.indexOf(group) : undefined;
-      return {
-        ...p,
-        usageSupplementText: p.usageSupplementText || group?.usageSupplementText,
-        dosageCategory: groupCategory?.category ?? p.dosageCategory,
-        dosageCategorySource: (groupCategory?.isManual ? 'manual' : 'auto') as 'auto' | 'manual',
-        rpNumber: groupIndex !== undefined ? groupIndex + 1 : undefined
-      };
-    });
+    const auditItems = buildPrescriptionAuditInputItems(prescriptions, prescriptionGroups);
     return buildPrescriptionInputAudit(auditItems, {
       patientAlerts: activePatientAlerts,
       hasPatientAlertsFetchError
@@ -555,39 +441,17 @@ export default function OcrPage() {
     }
     const result = pendingElectronicPrescription;
     const prescription = result.prescription!;
-    const existingLinks = appliedElectronicPrescription?.linkedPrescriptions?.length
-      ? appliedElectronicPrescription.linkedPrescriptions
-      : appliedElectronicPrescription
-        ? [{
-            prescriptionId: appliedElectronicPrescription.prescriptionId,
-            documentKind: appliedElectronicPrescription.documentKind,
-            validUntil: appliedElectronicPrescription.validUntil,
-            signatureStatus: appliedElectronicPrescription.signatureStatus,
-            signatureHpkiVerification: appliedElectronicPrescription.signatureHpkiVerification,
-            duplicateCheckStatus: appliedElectronicPrescription.duplicateCheckStatus,
-            integrityHash: appliedElectronicPrescription.integrityHash,
-            paperOriginalConfirmed: appliedElectronicPrescription.paperOriginalConfirmed,
-            supplementaryInformation: appliedElectronicPrescription.supplementaryInformation
-          }]
-        : [];
+    const existingLinks = resolveExistingElectronicPrescriptionLinks(appliedElectronicPrescription);
     const isAppending = existingLinks.length > 0;
     if (existingLinks.some((link) => link.prescriptionId === prescription.prescriptionId)) {
       toast.warning('この電子処方箋はすでに処方入力へ反映済みです。');
       return;
     }
     if (isAppending) {
-      const normalizeProvider = (value: string | undefined) => String(value || '')
-        .normalize('NFKC')
-        .replace(/[\s　]/g, '')
-        .toUpperCase();
-      const currentInstitutionCode = normalizeProvider(institutionCode);
-      const nextInstitutionCode = normalizeProvider(prescription.provider.institutionCode);
-      const currentInstitutionName = normalizeProvider(institutionName);
-      const nextInstitutionName = normalizeProvider(prescription.provider.institutionName);
-      const institutionMismatch = currentInstitutionCode && nextInstitutionCode
-        ? currentInstitutionCode !== nextInstitutionCode
-        : !currentInstitutionName || !nextInstitutionName || currentInstitutionName !== nextInstitutionName;
-      if (institutionMismatch) {
+      if (isElectronicPrescriptionInstitutionMismatch(
+        { institutionCode, institutionName },
+        prescription.provider
+      )) {
         toast.warning('同じ受付へ追加できるのは、同一医療機関が発行した電子処方箋だけです。');
         return;
       }
@@ -654,53 +518,16 @@ export default function OcrPage() {
         : nextPrescriptions.length > 0
           ? nextPrescriptions
           : [createEmptyPrescription('rp_initial', { id: 'item_initial' })]);
-      const appliedAt = new Date().toISOString();
-      const nextLink = {
-        prescriptionId: prescription.prescriptionId!,
-        documentKind: prescription.documentKind!,
-        validUntil: prescription.validUntil!,
-        signatureStatus: prescription.signatureVerification!.status,
-        signatureHpkiVerification: prescription.signatureVerification?.hpkiVerification,
-        duplicateCheckStatus: result.duplicateCheck?.status || 'not_checked' as const,
+
+      const nextAppliedState = buildAppliedElectronicPrescriptionState({
+        applied: appliedElectronicPrescription,
+        existingLinks,
+        prescription,
+        duplicateCheckStatus: result.duplicateCheck?.status,
         integrityHash: result.integrityHash!,
-        paperOriginalConfirmed: prescription.documentKind === 'prescription_information'
-          ? electronicPrescriptionPaperOriginalConfirmed
-          : undefined,
-        supplementaryInformation: prescription.supplementaryInformation
-      };
-      const linkedPrescriptions = [...existingLinks, nextLink];
-      const duplicateStatuses = linkedPrescriptions.map((link) => link.duplicateCheckStatus);
-      const duplicateCheckStatus = duplicateStatuses.includes('blocked')
-        ? 'blocked'
-        : duplicateStatuses.includes('warning')
-          ? 'warning'
-          : duplicateStatuses.every((status) => status === 'passed')
-            ? 'passed'
-            : 'not_checked';
-      const earliestValidUntil = linkedPrescriptions
-        .map((link) => link.validUntil)
-        .sort()[0] || prescription.validUntil!;
-      setAppliedElectronicPrescription({
-        prescriptionId: appliedElectronicPrescription?.prescriptionId || prescription.prescriptionId!,
-        linkedPrescriptions,
-        documentKind: appliedElectronicPrescription?.documentKind || prescription.documentKind!,
-        sourceMode: 'connector',
-        receivedAt: appliedElectronicPrescription?.receivedAt || appliedAt,
-        appliedAt,
-        validUntil: earliestValidUntil,
-        signatureStatus: appliedElectronicPrescription?.signatureStatus || prescription.signatureVerification!.status,
-        signatureHpkiVerification: appliedElectronicPrescription?.signatureHpkiVerification || prescription.signatureVerification?.hpkiVerification,
-        duplicateCheckStatus,
-        integrityHash: appliedElectronicPrescription?.integrityHash || result.integrityHash!,
-        paperOriginalConfirmed: linkedPrescriptions.every((link) => (
-          link.documentKind !== 'prescription_information' || link.paperOriginalConfirmed === true
-        )) || undefined,
-        refill: appliedElectronicPrescription?.refill || prescription.refill,
-        supplementaryInformation: appliedElectronicPrescription?.supplementaryInformation || prescription.supplementaryInformation,
-        receptionStatus: 'accepted',
-        dispensingResultStatus: 'pending',
-        dispensingResultEverRegistered: false
+        paperOriginalConfirmed: electronicPrescriptionPaperOriginalConfirmed
       });
+      setAppliedElectronicPrescription(nextAppliedState);
 
       const duplicateCheckMessage = result.duplicateCheck?.messages?.length
         ? ` / ${result.duplicateCheck.messages.join('、')}`
@@ -710,7 +537,7 @@ export default function OcrPage() {
       if (electronicPrescriptionApplyDecision.status === 'review') {
         toast.warning(`電子処方箋を${isAppending ? '追加' : '反映'}しました。重複投薬・併用禁忌の注意内容を確認してください。`);
       } else {
-        toast.success(`電子処方箋を${isAppending ? '追加' : '反映'}しました（合計${linkedPrescriptions.length}処方箋、追加${nextPrescriptions.length}薬品）。`);
+        toast.success(`電子処方箋を${isAppending ? '追加' : '反映'}しました（合計${nextAppliedState.linkedPrescriptions?.length || 1}処方箋、追加${nextPrescriptions.length}薬品）。`);
       }
     } catch (error) {
       console.error('Electronic prescription apply failed:', error);
@@ -739,7 +566,7 @@ export default function OcrPage() {
 
   const handleApplyPrescriptionQrData = useCallback(async (
     qrData: string,
-    source: keyof typeof qrSourceLabel,
+    source: keyof typeof QR_SOURCE_LABEL,
     segmentCount: number
   ) => {
     const parsed = parseJahisQr(qrData);
@@ -805,7 +632,7 @@ export default function OcrPage() {
       toast.warning(parsed.warnings.slice(0, 2).join(' / '));
     }
     setElectronicPrescriptionStatus('unchecked');
-    setElectronicPrescriptionMessage(`${qrSourceLabel[source]}で読み取った処方箋QRを反映しました。電子処方箋ではありません。`);
+    setElectronicPrescriptionMessage(`${QR_SOURCE_LABEL[source]}で読み取った処方箋QRを反映しました。電子処方箋ではありません。`);
   }, [hasCurrentPrescriptionInput, setAppliedElectronicPrescription, setElectronicPrescriptionMessage, setElectronicPrescriptionPaperOriginalConfirmed, setElectronicPrescriptionStatus, setEligibilityResult, setEligibilityStatus, setPendingElectronicPrescription, setPatientSearchQuery, setSelectedPatientId]);
 
   // 新規患者の登録画面を開く。分かっている氏名・生年月日(処方箋・QR・マイナ読取)と、読み取ったマイナの内容を初期値にする。
@@ -1070,114 +897,39 @@ export default function OcrPage() {
 
 
   const handlePrescriptionChange = useCallback((id: string, field: string, value: PrescriptionFieldValue, index: number) => {
-    setPrescriptions((prev) => {
-      // ⚡ Bolt: Optimize hot path by attempting direct index access first,
-      // falling back to findIndex if the array mutated asynchronously.
-      let targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
-      if (targetIndex === -1) return prev;
-      const next = [...prev];
-      if (field === 'usage' || field === 'days' || field === 'rpComment') {
-        const targetRpId = next[targetIndex].rpId;
-        return next.map((prescription) => (
-          prescription.rpId === targetRpId ? { ...prescription, [field]: value } : prescription
-        ));
-      }
-      next[targetIndex] = { ...next[targetIndex], [field]: value };
-      return next;
-    });
+    setPrescriptions((prev) => updatePrescriptionFieldAt(prev, id, field, value, index));
   }, []);
 
   const handleRpFieldChange = useCallback((rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string) => {
-    setPrescriptions((prev) => prev.map((prescription) => (
-      prescription.rpId === rpId ? { ...prescription, [field]: value } : prescription
-    )));
+    setPrescriptions((prev) => updateRpGroupField(prev, rpId, field, value));
   }, []);
 
   const handleRpDosageCategoryChange = useCallback((rpId: string, category: DosageCategory | null) => {
-    setPrescriptions((prev) => prev.map((prescription) => (
-      prescription.rpId === rpId
-        ? {
-            ...prescription,
-            dosageCategory: category || undefined,
-            dosageCategorySource: category ? 'manual' as const : undefined
-          }
-        : prescription
-    )));
+    setPrescriptions((prev) => updateRpGroupDosageCategory(prev, rpId, category));
   }, []);
 
   const handleAddDrugToRp = useCallback((rpId: string) => {
-    setPrescriptions((prev) => {
-      const next = [...prev];
-      const lastIndex = next.reduce((foundIndex, prescription, index) => (
-        prescription.rpId === rpId ? index : foundIndex
-      ), -1);
-      const template = next[lastIndex];
-      const insertIndex = lastIndex >= 0 ? lastIndex + 1 : next.length;
-      next.splice(insertIndex, 0, createEmptyPrescription(rpId, {
-        usage: template?.usage || '',
-        days: template?.days || '',
-        rpComment: template?.rpComment || '',
-        dosageCategory: template?.dosageCategory,
-        dosageCategorySource: template?.dosageCategorySource
-      }));
-      return next;
-    });
+    setPrescriptions((prev) => appendDrugToRpGroup(prev, rpId));
   }, []);
 
   const handleAddRpAfter = useCallback((rpId: string) => {
-    setPrescriptions((prev) => {
-      const next = [...prev];
-      const lastIndex = next.reduce((foundIndex, prescription, index) => (
-        prescription.rpId === rpId ? index : foundIndex
-      ), -1);
-      const insertIndex = lastIndex >= 0 ? lastIndex + 1 : next.length;
-      next.splice(insertIndex, 0, createEmptyPrescription());
-      return next;
-    });
+    setPrescriptions((prev) => insertEmptyRpGroupAfter(prev, rpId));
   }, []);
 
   const handleDeletePrescription = useCallback((id: string) => {
-    setPrescriptions((prev) => {
-      if (prev.length <= 1) {
-        return [createEmptyPrescription('rp_initial', { id: 'item_initial' })];
-      }
-      const next = prev.filter((prescription) => prescription.id !== id);
-      return next.length > 0 ? next : [createEmptyPrescription('rp_initial', { id: 'item_initial' })];
-    });
+    setPrescriptions((prev) => removePrescriptionItemOrReset(prev, id));
   }, []);
 
   const handleToggleIppoka = useCallback((id: string, checked: boolean, index: number) => {
-    setPrescriptions((prev) => {
-      let targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
-      if (targetIndex === -1) return prev;
-      const next = [...prev];
-      next[targetIndex] = { ...next[targetIndex], isIppoka: checked };
-      return next;
-    });
+    setPrescriptions((prev) => togglePrescriptionIppokaAt(prev, id, checked, index));
   }, []);
 
   const handleToggleCrushed = useCallback((id: string, checked: boolean, index: number) => {
-    setPrescriptions((prev) => {
-      let targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
-      if (targetIndex === -1) return prev;
-      const next = [...prev];
-      next[targetIndex] = { ...next[targetIndex], isCrushed: checked };
-      return next;
-    });
+    setPrescriptions((prev) => togglePrescriptionCrushedAt(prev, id, checked, index));
   }, []);
 
   const handleToggleReceiptRemark = useCallback((id: string, checked: boolean, index: number) => {
-    setPrescriptions((prev) => {
-      let targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
-      if (targetIndex === -1) return prev;
-      const next = [...prev];
-      next[targetIndex] = {
-        ...next[targetIndex],
-        showReceiptRemark: checked,
-        receiptRemark: checked ? next[targetIndex].receiptRemark : ''
-      };
-      return next;
-    });
+    setPrescriptions((prev) => togglePrescriptionReceiptRemarkAt(prev, id, checked, index));
   }, []);
 
   const handleReset = () => {
@@ -1260,26 +1012,10 @@ export default function OcrPage() {
       return;
     }
 
-    for (let i = 0; i < prescriptions.length; i++) {
-      const p = prescriptions[i];
-      if (!p.drugName.trim() || !p.drugCode) {
-        toast.error(`処方薬${i + 1}: 薬品名を選択してください。`);
-        return;
-      }
-      if (!p.amount || isNaN(parseFloat(p.amount)) || parseFloat(p.amount) <= 0) {
-        toast.error(`処方薬${i + 1}: 数量を正しく入力してください。`);
-        return;
-      }
-      if (p.days === '' || isNaN(parseInt(p.days, 10)) || parseInt(p.days, 10) < 0) {
-        toast.error(`処方薬${i + 1}: 日数を0以上で入力してください。`);
-        return;
-      }
-      // 【般】一般名処方は記載上の概念であり、在庫・ピッキングは銘柄(調剤薬)で追跡する。
-      // 調剤薬が未選択のままだと般コードで在庫参照してしまうため、ここで止める。
-      if (isGeneralNameDrugRecord({ code: p.drugCode, name: p.drugName }) && !p.dispensedDrugCode) {
-        toast.error(`処方薬${i + 1}: 一般名処方です。調剤薬(銘柄)を候補から選択してください。`);
-        return;
-      }
+    const prescriptionValidationError = validateReceptionPrescriptionItems(prescriptions);
+    if (prescriptionValidationError) {
+      toast.error(prescriptionValidationError);
+      return;
     }
 
     setIsSaving(true);
@@ -1320,9 +1056,9 @@ export default function OcrPage() {
         burdenRatio: eligibilityPatch.burdenRatio ?? parseInt(burdenRatio, 10),
         ...((savedEligibilityStatus && !eligibilityPatch.eligibilityStatus)
           ? {
-              eligibilityStatus: savedEligibilityStatus,
-              eligibilityCheckedAt: new Date().toISOString()
-            }
+            eligibilityStatus: savedEligibilityStatus,
+            eligibilityCheckedAt: new Date().toISOString()
+          }
           : {})
       };
       const eligibilityPublicInsurances = eligibilityResult?.publicInsurances?.filter((publicInsurance) => (
@@ -1345,58 +1081,7 @@ export default function OcrPage() {
         lockedClaimCountForPatient = existingPatientVisits.filter((visit) => isClaimEditBlocked(visit.claimLifecycle)).length;
       }
 
-      // ⚡ Bolt: Use a manual for loop instead of .map() to avoid intermediate array/closure allocations
-      const prescriptionItems = new Array(prescriptions.length);
-      const rpNumberById = new Map<string, number>();
-      let nextRpNumber = 1;
-      for (let i = 0; i < prescriptions.length; i++) {
-        const item = prescriptions[i];
-        if (!rpNumberById.has(item.rpId)) {
-          rpNumberById.set(item.rpId, nextRpNumber);
-          nextRpNumber++;
-        }
-        prescriptionItems[i] = {
-          itemId: `item_${generateUUID()}`,
-          visitId,
-          rpNumber: rpNumberById.get(item.rpId) || i + 1,
-          drugId: item.drugCode,
-          dispensedDrug: getEffectiveDispensedDrug(item) || item.drugName,
-          dispensedDrugCode: item.dispensedDrugCode || '',
-          prescribedDrugCodeStatus: item.prescribedDrugCodeStatus,
-          // 空文字はスキーマの format: 'date' 検証に落ちるため、値があるときだけ含める
-          ...(item.prescribedDrugCodeAbolishedAt
-            ? { prescribedDrugCodeAbolishedAt: item.prescribedDrugCodeAbolishedAt }
-            : {}),
-          electronicSourceDrugName: item.electronicSourceDrugName || '',
-          electronicMasterDrugName: item.electronicMasterDrugName || '',
-          electronicDrugNameVerificationStatus: item.electronicDrugNameVerificationStatus,
-          ...(item.electronicDrugNameVerificationCheckedAt
-            ? { electronicDrugNameVerificationCheckedAt: item.electronicDrugNameVerificationCheckedAt }
-            : {}),
-          unitCode: item.unitCode || '',
-          unitText: item.unitText || '',
-          electronicUnitConversion: item.electronicUnitConversion,
-          electronicUsageCode: item.electronicUsageCode || '',
-          electronicUsageFallbackText: item.electronicUsageFallbackText || '',
-          electronicUsageSupplementText: item.electronicUsageSupplementText || '',
-          usageSupplementText: item.usageSupplementText?.trim() || '',
-          changeReason: item.changeReason,
-          amount: parseFloat(item.amount) || 1,
-          usage: item.usage,
-          days: Number.isFinite(parseInt(item.days, 10)) ? parseInt(item.days, 10) : 0,
-          rpComment: item.rpComment?.trim() || '',
-          dosageCategory: (item.dosageCategorySource === 'manual' && item.dosageCategory)
-            ? item.dosageCategory
-            : inferDosageCategory(item.drugName || getEffectiveDispensedDrug(item), item.usage),
-          dosageCategorySource: item.dosageCategorySource === 'manual' ? 'manual' as const : 'auto' as const,
-          isIppoka: !!item.isIppoka,
-          isCrushed: !!item.isCrushed,
-          tokkanType: item.tokkanType || 'none',
-          receiptRemark: item.showReceiptRemark ? (item.receiptRemark || '') : '',
-          billingAgentGroupKey: item.billingAgentGroupKey?.trim() || '',
-          billingAgentGroupReason: item.billingAgentGroupKey?.trim() ? (item.billingAgentGroupReason?.trim() || '') : ''
-        };
-      }
+      const prescriptionItems = buildReceptionPrescriptionItemsPayload(prescriptions, visitId, generateUUID);
 
       // 患者 -> 受付 -> 処方明細の順に書き、どれかが失敗したら書いた分を取り消す(受付だけ、明細が欠けた受付が残らない)
       await registerPrescriptionAtomically({
@@ -1695,13 +1380,13 @@ export default function OcrPage() {
                             ? `反映済み ${appliedElectronicPrescriptionIds.length}件`
                             : electronicPrescriptionStatus === 'confirmed'
                               ? '取得済み'
-                            : electronicPrescriptionStatus === 'checking'
-                              ? '取得中'
-                              : electronicPrescriptionStatus === 'warning'
-                                ? '要確認'
-                                : electronicPrescriptionStatus === 'unavailable'
-                                  ? '未接続'
-                                  : '未取得'}
+                              : electronicPrescriptionStatus === 'checking'
+                                ? '取得中'
+                                : electronicPrescriptionStatus === 'warning'
+                                  ? '要確認'
+                                  : electronicPrescriptionStatus === 'unavailable'
+                                    ? '未接続'
+                                    : '未取得'}
                         </span>
                       </div>
                       <div className="electronic-prescription-controls">
@@ -1828,32 +1513,32 @@ export default function OcrPage() {
                             || (pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.length || 0) > 0
                             || !!pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription
                           ) && (
-                            <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
-                              <strong>処方補足情報</strong>
-                              <ul>
-                                {pendingElectronicPrescription.prescription.items.flatMap((item) => [
-                                  ...(item.unitConversion ? [
-                                    `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
-                                  ] : []),
-                                  ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
-                                ]).map((text) => <li key={text}>{text}</li>)}
-                                {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
-                                  <li key={`comment-${comment}`}>処方コメント: {comment}</li>
-                                ))}
-                                {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
-                                  <li key={`lab-${result.testName}-${index}`}>
-                                    検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
-                                    {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
-                                  </li>
-                                ))}
-                                {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
-                                  <li>
-                                    麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
-                                  </li>
-                                )}
-                              </ul>
-                            </div>
-                          )}
+                              <div className="electronic-prescription-supplementary" data-testid="electronic-prescription-supplementary">
+                                <strong>処方補足情報</strong>
+                                <ul>
+                                  {pendingElectronicPrescription.prescription.items.flatMap((item) => [
+                                    ...(item.unitConversion ? [
+                                      `${item.drugName}: 単位変換 ${item.unitConversion.prescribedAmount}${item.unitConversion.prescribedUnitText}（係数 ${item.unitConversion.conversionFactor}）`
+                                    ] : []),
+                                    ...(item.usageSupplementText ? [`${item.drugName}: 用法補足 ${item.usageSupplementText}`] : [])
+                                  ]).map((text) => <li key={text}>{text}</li>)}
+                                  {pendingElectronicPrescription.prescription.supplementaryInformation?.prescriptionComments.map((comment) => (
+                                    <li key={`comment-${comment}`}>処方コメント: {comment}</li>
+                                  ))}
+                                  {pendingElectronicPrescription.prescription.supplementaryInformation?.laboratoryResults.map((result, index) => (
+                                    <li key={`lab-${result.testName}-${index}`}>
+                                      検査値: {result.testName} {result.value}{result.unit ? ` ${result.unit}` : ''}
+                                      {result.referenceRange ? `（基準 ${result.referenceRange}）` : ''}
+                                    </li>
+                                  ))}
+                                  {pendingElectronicPrescription.prescription.supplementaryInformation?.narcoticAdministration?.isNarcoticPrescription && (
+                                    <li>
+                                      麻薬施用情報: {pendingElectronicPrescription.prescription.supplementaryInformation.narcoticAdministration.displayText || '表示不可'}
+                                    </li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
                           {pendingElectronicPrescription.prescription.documentKind === 'prescription_information' && (
                             <label className="electronic-prescription-original-check">
                               <input
@@ -1966,227 +1651,227 @@ export default function OcrPage() {
                 || selectedPatient
                 || isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage
                 || patientRegistrationPrompt) && (
-                <div className="patient-selection-panel">
-                  <div className="panel-title">患者選択</div>
-                  {patientCandidatePanelViewState.errorBannerMessage && (
-                    <div className="patient-candidate-fetch-error" role="alert">
-                      <AlertTriangle size={16} aria-hidden="true" />
-                      <span>{patientCandidatePanelViewState.errorBannerMessage}</span>
-                    </div>
-                  )}
-                  {patientCandidatePanelViewState.showCandidates && (
-                    <div className="patient-candidate-list">
-                      {patientCandidates.map((patient) => {
-                        const match = patientCandidateMatchById.get(patient.patientId);
-                        const canOpenMergeReview = !!selectedPatient && selectedPatient.patientId !== patient.patientId;
-                        return (
-                          <div
-                            key={patient.patientId}
-                            className={`patient-candidate risk-${match?.risk || 'medium'} ${selectedPatientId === patient.patientId ? 'selected' : ''}`}
-                          >
-                            <button
-                              type="button"
-                              className="patient-candidate-select"
-                              onClick={() => selectPatient(patient)}
+                  <div className="patient-selection-panel">
+                    <div className="panel-title">患者選択</div>
+                    {patientCandidatePanelViewState.errorBannerMessage && (
+                      <div className="patient-candidate-fetch-error" role="alert">
+                        <AlertTriangle size={16} aria-hidden="true" />
+                        <span>{patientCandidatePanelViewState.errorBannerMessage}</span>
+                      </div>
+                    )}
+                    {patientCandidatePanelViewState.showCandidates && (
+                      <div className="patient-candidate-list">
+                        {patientCandidates.map((patient) => {
+                          const match = patientCandidateMatchById.get(patient.patientId);
+                          const canOpenMergeReview = !!selectedPatient && selectedPatient.patientId !== patient.patientId;
+                          return (
+                            <div
+                              key={patient.patientId}
+                              className={`patient-candidate risk-${match?.risk || 'medium'} ${selectedPatientId === patient.patientId ? 'selected' : ''}`}
                             >
-                              <span className="candidate-main">{patient.name}</span>
-                              <span className="candidate-meta">
-                                {[patient.kana, patient.birthDate].filter(Boolean).join(' / ')} / 保険者番号 {pickReceptionInsuranceNumber(patient.insuranceInfo) || '未登録'}
-                              </span>
-                              {match && (
-                                <span className="candidate-reasons">
-                                  {match.reasonLabels.map((label) => (
-                                    <span key={label}>{label}</span>
-                                  ))}
-                                </span>
-                              )}
-                              {match?.warning && (
-                                <span className="candidate-warning">
-                                  <AlertTriangle size={12} aria-hidden="true" />
-                                  {match.warning}
-                                </span>
-                              )}
-                              {candidatePublicSummaryByPatientId.get(patient.patientId) && (
-                                <span className="candidate-public-tags">
-                                  <span className={`candidate-pub-badge ${candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired ? 'error' : candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning ? 'warning' : 'normal'}`}>
-                                    公費: {candidatePublicSummaryByPatientId.get(patient.patientId)?.summary}
-                                    {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired && '【期限切】'}
-                                    {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning && '【期限注意】'}
-                                  </span>
-                                </span>
-                              )}
-                            </button>
-                            {canOpenMergeReview && (
                               <button
                                 type="button"
-                                className={`patient-merge-open ${patientMergeReview?.sourcePatientId === patient.patientId ? 'active' : ''}`}
-                                onClick={() => openPatientMergeReview(patient)}
-                                disabled={isLoadingPatientMergeReview || isApplyingPatientMerge}
+                                className="patient-candidate-select"
+                                onClick={() => selectPatient(patient)}
                               >
-                                <ShieldCheck size={13} aria-hidden="true" />
-                                統合確認
+                                <span className="candidate-main">{patient.name}</span>
+                                <span className="candidate-meta">
+                                  {[patient.kana, patient.birthDate].filter(Boolean).join(' / ')} / 保険者番号 {pickReceptionInsuranceNumber(patient.insuranceInfo) || '未登録'}
+                                </span>
+                                {match && (
+                                  <span className="candidate-reasons">
+                                    {match.reasonLabels.map((label) => (
+                                      <span key={label}>{label}</span>
+                                    ))}
+                                  </span>
+                                )}
+                                {match?.warning && (
+                                  <span className="candidate-warning">
+                                    <AlertTriangle size={12} aria-hidden="true" />
+                                    {match.warning}
+                                  </span>
+                                )}
+                                {candidatePublicSummaryByPatientId.get(patient.patientId) && (
+                                  <span className="candidate-public-tags">
+                                    <span className={`candidate-pub-badge ${candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired ? 'error' : candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning ? 'warning' : 'normal'}`}>
+                                      公費: {candidatePublicSummaryByPatientId.get(patient.patientId)?.summary}
+                                      {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasExpired && '【期限切】'}
+                                      {candidatePublicSummaryByPatientId.get(patient.patientId)?.hasWarning && '【期限注意】'}
+                                    </span>
+                                  </span>
+                                )}
                               </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {patientRegistrationPrompt && (
-                    <div className="temporary-registration-note" data-testid="patient-not-found-note">
-                      <UserPlus size={16} aria-hidden="true" />
-                      <span>{patientRegistrationPrompt}</span>
-                      <button
-                        type="button"
-                        className="btn-primary flex-center gap-2"
-                        onClick={openPatientRegistration}
-                        disabled={!db}
-                        aria-disabled={!db}
-                        data-testid="patient-register-from-empty-button"
-                      >
+                              {canOpenMergeReview && (
+                                <button
+                                  type="button"
+                                  className={`patient-merge-open ${patientMergeReview?.sourcePatientId === patient.patientId ? 'active' : ''}`}
+                                  onClick={() => openPatientMergeReview(patient)}
+                                  disabled={isLoadingPatientMergeReview || isApplyingPatientMerge}
+                                >
+                                  <ShieldCheck size={13} aria-hidden="true" />
+                                  統合確認
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {patientRegistrationPrompt && (
+                      <div className="temporary-registration-note" data-testid="patient-not-found-note">
                         <UserPlus size={16} aria-hidden="true" />
-                        新規患者を登録
-                      </button>
-                    </div>
-                  )}
-                  {selectedPatient && (
-                    <div className="selected-patient-card" data-testid="selected-patient-card">
-                      <div className="selected-patient-header">
-                        <div className="selected-patient-title-line">
-                          <span className="selected-patient-badge">選択中患者</span>
-                          <strong className="selected-patient-name">{selectedPatient.name}</strong>
-                          <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
-                          <span className="selected-patient-insurance">
-                            保険者番号: {pickReceptionInsuranceNumber(selectedPatient.insuranceInfo) || '未登録'}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-secondary selected-patient-reselect"
-                            onClick={clearSelectedPatient}
-                            data-testid="reselect-patient-button"
-                          >
-                            選び直す
-                          </button>
+                        <span>{patientRegistrationPrompt}</span>
+                        <button
+                          type="button"
+                          className="btn-primary flex-center gap-2"
+                          onClick={openPatientRegistration}
+                          disabled={!db}
+                          aria-disabled={!db}
+                          data-testid="patient-register-from-empty-button"
+                        >
+                          <UserPlus size={16} aria-hidden="true" />
+                          新規患者を登録
+                        </button>
+                      </div>
+                    )}
+                    {selectedPatient && (
+                      <div className="selected-patient-card" data-testid="selected-patient-card">
+                        <div className="selected-patient-header">
+                          <div className="selected-patient-title-line">
+                            <span className="selected-patient-badge">選択中患者</span>
+                            <strong className="selected-patient-name">{selectedPatient.name}</strong>
+                            <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
+                            <span className="selected-patient-insurance">
+                              保険者番号: {pickReceptionInsuranceNumber(selectedPatient.insuranceInfo) || '未登録'}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn-secondary selected-patient-reselect"
+                              onClick={clearSelectedPatient}
+                              data-testid="reselect-patient-button"
+                            >
+                              選び直す
+                            </button>
+                          </div>
+                          {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
+                            <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
+                              {selectedPatientPublicBadges.map((badge) => (
+                                <span
+                                  key={`selected-pub-badge-${badge.index}`}
+                                  className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
+                                  title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
+                                >
+                                  公費{badge.index}: {badge.label}
+                                  {badge.hasError && '【要確認】'}
+                                  {badge.hasWarning && '【期限注意】'}
+                                </span>
+                              ))}
+                              {selectedPatientCopaymentBadges.map((badge, idx) => (
+                                <span
+                                  key={`selected-copay-badge-${idx}`}
+                                  className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
+                                  title={badge.title}
+                                  data-testid={`selected-patient-copay-badge-${idx}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
-                          <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
-                            {selectedPatientPublicBadges.map((badge) => (
-                              <span
-                                key={`selected-pub-badge-${badge.index}`}
-                                className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
-                                title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
+
+                        {selectedPatientReceptionAlerts.length > 0 && (
+                          <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
+                            {selectedPatientReceptionAlerts.map((issue) => (
+                              <div
+                                key={issue.code}
+                                className={`selected-patient-alert-item ${issue.severity}`}
                               >
-                                公費{badge.index}: {badge.label}
-                                {badge.hasError && '【要確認】'}
-                                {badge.hasWarning && '【期限注意】'}
-                              </span>
-                            ))}
-                            {selectedPatientCopaymentBadges.map((badge, idx) => (
-                              <span
-                                key={`selected-copay-badge-${idx}`}
-                                className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
-                                title={badge.title}
-                                data-testid={`selected-patient-copay-badge-${idx}`}
-                              >
-                                {badge.label}
-                              </span>
+                                <AlertTriangle size={13} aria-hidden="true" />
+                                <span className="alert-item-title">{issue.title}:</span>
+                                <span className="alert-item-message">{issue.message}</span>
+                              </div>
                             ))}
                           </div>
                         )}
                       </div>
-
-                      {selectedPatientReceptionAlerts.length > 0 && (
-                        <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
-                          {selectedPatientReceptionAlerts.map((issue) => (
-                            <div
-                              key={issue.code}
-                              className={`selected-patient-alert-item ${issue.severity}`}
+                    )}
+                    {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
+                      <div className="patient-merge-review">
+                        <div className="patient-merge-review-title">
+                          <ShieldCheck size={15} aria-hidden="true" />
+                          同姓同名の統合確認
+                        </div>
+                        {isLoadingPatientMergeReview && (
+                          <div className="merge-status-line">
+                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                            統合内容を確認しています
+                          </div>
+                        )}
+                        {patientMergeReview && (
+                          <>
+                            <div className="merge-patient-grid">
+                              <div>
+                                <span>残す患者</span>
+                                <strong>{patientMergeReview.plan.mergedPatient.name}</strong>
+                                <small>{patientMergeReview.plan.targetPatientId}</small>
+                              </div>
+                              <div>
+                                <span>統合元</span>
+                                <strong>{patientMergeReview.plan.sourcePatient.name}</strong>
+                                <small>{patientMergeReview.plan.sourcePatientId}</small>
+                              </div>
+                            </div>
+                            <div className="merge-summary-row">
+                              {patientMergeReview.plan.reassignments.map((reassignment) => (
+                                <span key={reassignment.collection}>
+                                  {PATIENT_MERGE_COLLECTION_LABEL[reassignment.collection]} {reassignment.count}件
+                                </span>
+                              ))}
+                              <span>確認事項 {patientMergeReview.plan.issues.length + patientMergeReview.plan.conflicts.length}件</span>
+                            </div>
+                            {(patientMergeReview.plan.issues.length > 0 || patientMergeReview.plan.conflicts.length > 0) && (
+                              <div className="merge-warning-list">
+                                {patientMergeReview.plan.issues.slice(0, 3).map((issue) => (
+                                  <span key={issue.code}>{issue.message}</span>
+                                ))}
+                                {patientMergeReview.plan.conflicts.slice(0, 3).map((conflict) => (
+                                  <span key={conflict.field}>{conflict.label}: {conflict.sourceValue} / {conflict.targetValue}</span>
+                                ))}
+                              </div>
+                            )}
+                            <div className="merge-operation-list">
+                              {patientMergeReview.executionPlan.applyOperations.map((operation, index) => (
+                                <span key={`${operation.type}-${index}`}>
+                                  {index + 1}. {formatPatientMergeOperationLabel(operation)}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="merge-checklist">
+                              {patientMergeReview.executionPlan.checklist.map((item) => (
+                                <span key={item}>{item}</span>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-primary patient-merge-apply"
+                              onClick={handleApplyPatientMerge}
+                              disabled={!patientMergeReview.executionPlan.canApply || isApplyingPatientMerge}
                             >
-                              <AlertTriangle size={13} aria-hidden="true" />
-                              <span className="alert-item-title">{issue.title}:</span>
-                              <span className="alert-item-message">{issue.message}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
-                    <div className="patient-merge-review">
-                      <div className="patient-merge-review-title">
-                        <ShieldCheck size={15} aria-hidden="true" />
-                        同姓同名の統合確認
+                              {isApplyingPatientMerge ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
+                              {isApplyingPatientMerge ? '統合中...' : '患者統合を実行'}
+                            </button>
+                          </>
+                        )}
+                        {patientMergeMessage && (
+                          <div className="merge-status-line">
+                            {patientMergeMessage}
+                          </div>
+                        )}
                       </div>
-                      {isLoadingPatientMergeReview && (
-                        <div className="merge-status-line">
-                          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                          統合内容を確認しています
-                        </div>
-                      )}
-                      {patientMergeReview && (
-                        <>
-                          <div className="merge-patient-grid">
-                            <div>
-                              <span>残す患者</span>
-                              <strong>{patientMergeReview.plan.mergedPatient.name}</strong>
-                              <small>{patientMergeReview.plan.targetPatientId}</small>
-                            </div>
-                            <div>
-                              <span>統合元</span>
-                              <strong>{patientMergeReview.plan.sourcePatient.name}</strong>
-                              <small>{patientMergeReview.plan.sourcePatientId}</small>
-                            </div>
-                          </div>
-                          <div className="merge-summary-row">
-                            {patientMergeReview.plan.reassignments.map((reassignment) => (
-                              <span key={reassignment.collection}>
-                                {patientMergeCollectionLabel[reassignment.collection]} {reassignment.count}件
-                              </span>
-                            ))}
-                            <span>確認事項 {patientMergeReview.plan.issues.length + patientMergeReview.plan.conflicts.length}件</span>
-                          </div>
-                          {(patientMergeReview.plan.issues.length > 0 || patientMergeReview.plan.conflicts.length > 0) && (
-                            <div className="merge-warning-list">
-                              {patientMergeReview.plan.issues.slice(0, 3).map((issue) => (
-                                <span key={issue.code}>{issue.message}</span>
-                              ))}
-                              {patientMergeReview.plan.conflicts.slice(0, 3).map((conflict) => (
-                                <span key={conflict.field}>{conflict.label}: {conflict.sourceValue} / {conflict.targetValue}</span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="merge-operation-list">
-                            {patientMergeReview.executionPlan.applyOperations.map((operation, index) => (
-                              <span key={`${operation.type}-${index}`}>
-                                {index + 1}. {formatPatientMergeOperationLabel(operation)}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="merge-checklist">
-                            {patientMergeReview.executionPlan.checklist.map((item) => (
-                              <span key={item}>{item}</span>
-                            ))}
-                          </div>
-                          <button
-                            type="button"
-                            className="btn-primary patient-merge-apply"
-                            onClick={handleApplyPatientMerge}
-                            disabled={!patientMergeReview.executionPlan.canApply || isApplyingPatientMerge}
-                          >
-                            {isApplyingPatientMerge ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
-                            {isApplyingPatientMerge ? '統合中...' : '患者統合を実行'}
-                          </button>
-                        </>
-                      )}
-                      {patientMergeMessage && (
-                        <div className="merge-status-line">
-                          {patientMergeMessage}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
 
 
               <div className="form-row">
@@ -2504,1450 +2189,6 @@ export default function OcrPage() {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .ocr-page {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
-        }
-
-        .page-header {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 1rem;
-        }
-
-        .page-header > div:first-child {
-          flex: 1 1 260px;
-          min-width: min(260px, 100%);
-        }
-
-        .upload-zone {
-          flex: 1;
-          border: 2px dashed var(--border);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: border-color var(--transition-fast);
-        }
-
-        .upload-zone:hover {
-          border-color: var(--primary);
-          background: rgba(37, 99, 235, 0.02);
-        }
-
-        .upload-zone:focus-within {
-          outline: 2px solid var(--primary);
-          outline-offset: 2px;
-          border-color: var(--primary);
-        }
-
-        .reception-choice-grid {
-          flex: 1;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-          gap: 1.5rem;
-          min-height: 420px;
-        }
-
-        .reception-entry-stack {
-          min-width: 0;
-          display: grid;
-          gap: 1rem;
-          align-content: start;
-        }
-
-        .manual-entry-card {
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          background: white;
-          color: var(--text-main);
-          cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 0.75rem;
-          padding: 2rem;
-          min-height: 148px;
-          text-align: center;
-          transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
-        }
-
-        .manual-entry-card:hover {
-          border-color: var(--primary);
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .manual-entry-card:focus-visible {
-          outline: 2px solid var(--primary);
-          outline-offset: 2px;
-        }
-
-        .manual-entry-title {
-          font-size: 1.05rem;
-          font-weight: 700;
-        }
-
-        .manual-entry-card:disabled {
-          cursor: not-allowed;
-          background: #f1f5f9;
-          color: var(--text-muted);
-        }
-
-        .manual-entry-card:disabled:hover {
-          border-color: var(--border);
-          transform: none;
-          box-shadow: none;
-        }
-
-        .unimplemented-badge {
-          display: inline-block;
-          margin-left: 0.5rem;
-          padding: 0.1rem 0.5rem;
-          border: 1px solid #fed7aa;
-          border-radius: 999px;
-          background: #fff7ed;
-          color: #c2410c;
-          font-size: var(--fs-xs);
-          font-weight: 800;
-          vertical-align: middle;
-          white-space: nowrap;
-        }
-
-        .electronic-prescription-panel.is-unimplemented {
-          border-color: #e2e8f0;
-          background: #f8fafc;
-        }
-
-        .electronic-prescription-panel.is-unimplemented .electronic-prescription-note {
-          color: var(--text-muted);
-        }
-
-        .manual-entry-subtitle {
-          color: var(--text-muted);
-          font-size: 0.88rem;
-          line-height: 1.5;
-        }
-
-        .hidden-input {
-          clip: rect(0 0 0 0);
-          clip-path: inset(50%);
-          height: 1px;
-          overflow: hidden;
-          position: absolute;
-          white-space: nowrap;
-          width: 1px;
-        }
-
-        .upload-zone.drag-active {
-          border-color: var(--primary);
-          background: rgba(37, 99, 235, 0.05);
-          transform: scale(1.02);
-        }
-
-        .side-by-side-container {
-          display: grid;
-          grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
-          gap: 1.5rem;
-          height: calc(100vh - 200px);
-          min-height: 620px;
-        }
-
-        /* 手入力受付では処方箋イメージがないため、左カラムを畳んで入力フォームを広げる */
-        .side-by-side-container.manual-mode {
-          grid-template-columns: 220px minmax(0, 1fr);
-        }
-
-        .side-by-side-container.manual-mode .manual-placeholder {
-          padding: 1.25rem 0.75rem;
-        }
-
-        .visual-column {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .column-label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.85rem;
-          font-weight: 600;
-          color: var(--text-muted);
-          margin-bottom: 1rem;
-          text-transform: uppercase;
-        }
-
-        .image-preview-container {
-          position: relative;
-          height: 100%;
-          overflow: hidden;
-          background: #f1f5f9;
-          border-radius: var(--radius-md);
-          display: flex;
-          justify-content: center;
-        }
-
-        .prescription-preview-image {
-          object-fit: contain;
-        }
-
-        .manual-placeholder {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 0.75rem;
-          min-height: 320px;
-          border: 1px dashed var(--border);
-          border-radius: var(--radius-md);
-          background: #f8fafc;
-          color: var(--text-muted);
-          text-align: center;
-          padding: 2rem;
-        }
-
-        .manual-placeholder strong {
-          color: var(--text-main);
-          font-size: 1.05rem;
-        }
-
-        .editor-column {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          min-width: 0;
-        }
-
-        .input-readiness-strip {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 0.5rem;
-          margin: -0.15rem 0 0.85rem;
-        }
-
-        .readiness-item {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 0.55rem;
-          min-height: 38px;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          padding: 0.45rem 0.6rem;
-          background: #ffffff;
-          font-family: inherit;
-          text-align: left;
-          cursor: pointer;
-        }
-
-        .readiness-item span {
-          color: var(--text-muted);
-          font-size: 0.75rem;
-          font-weight: 800;
-        }
-
-        .readiness-item strong {
-          color: var(--text-main);
-          font-size: 0.82rem;
-          white-space: nowrap;
-        }
-
-        .readiness-item.ready {
-          border-color: #bbf7d0;
-          background: #f0fdf4;
-        }
-
-        .readiness-item.ready strong {
-          color: var(--success);
-        }
-
-        .readiness-item.attention {
-          border-color: #fed7aa;
-          background: #fff7ed;
-        }
-
-        .readiness-item.attention strong {
-          color: #c2410c;
-        }
-
-        .ocr-form {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          overflow-y: auto;
-          padding-right: 0.5rem;
-          min-width: 0;
-        }
-
-        /* 生年月日・保険者番号・負担割合は同じ行に収まる分だけ並べ、狭い画面では2列→1列に落とす。
-           (以前は flex-direction: column のまま flex-basis: 160px が高さになり、欄ごとに160pxの空白ができていた) */
-        .form-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-          gap: 0.85rem 1rem;
-          align-items: start;
-        }
-
-        .form-row > .form-group {
-          min-width: 0;
-          width: auto;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 0.4rem;
-          margin-bottom: 0;
-        }
-
-        .form-group label {
-          display: flex;
-          align-items: baseline;
-          gap: 0.15rem;
-          margin-bottom: 0;
-          min-height: 1.4em;
-          line-height: 1.4;
-        }
-
-        .form-group input[type='date'] {
-          min-width: 165px;
-        }
-
-        .form-group label {
-          font-size: 0.8rem;
-          color: var(--text-muted);
-          font-weight: 500;
-        }
-
-        .field-hint {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-          padding: 0.6rem;
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          font-family: inherit;
-          font-size: var(--fs-md);
-          background: #ffffff;
-          min-width: 0;
-          box-sizing: border-box;
-        }
-
-        .form-group textarea {
-          resize: vertical;
-          min-height: 58px;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-          border-color: var(--border-focus);
-          outline: none; /* fallback, focus-visible will handle outline */
-        }
-
-        .form-group input:focus-visible,
-        .form-group select:focus-visible,
-        .form-group textarea:focus-visible {
-          outline: 2px solid var(--primary);
-          outline-offset: 1px;
-        }
-
-        .intake-tools {
-          border: 1px solid #bfdbfe;
-          border-radius: var(--radius-md);
-          background: #f5f9ff;
-        }
-
-        .intake-tools-toggle {
-          width: 100%;
-          min-height: 48px;
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          padding: 0.5rem 0.8rem;
-          border: 0;
-          border-radius: var(--radius-md);
-          background: transparent;
-          color: #1e40af;
-          font-family: inherit;
-          font-size: var(--fs-md);
-          font-weight: 800;
-          text-align: left;
-          cursor: pointer;
-        }
-
-        .intake-tools-title {
-          flex: 1 1 auto;
-          min-width: 0;
-        }
-
-        .intake-tools-toggle :global(.chevron) {
-          flex: 0 0 auto;
-          transition: transform var(--transition-fast);
-        }
-
-        .intake-tools-toggle :global(.chevron.open) {
-          transform: rotate(180deg);
-        }
-
-        .intake-tools-body {
-          display: grid;
-          gap: 0.85rem;
-          padding: 0 0.8rem 0.8rem;
-        }
-
-        .intake-tools-body[hidden] {
-          display: none;
-        }
-
-        .reception-section-anchor,
-        #reception-section-patient,
-        #reception-section-provider,
-        #reception-section-prescription {
-          scroll-margin-top: 84px;
-        }
-
-        .form-section-title.section-first {
-          margin-top: 0;
-        }
-
-        .reception-tool-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .reception-tool-note {
-          flex: 1 1 100%;
-          margin: 0;
-        }
-
-        .status-chip {
-          display: inline-flex;
-          align-items: center;
-          min-height: 32px;
-          padding: 0.35rem 0.6rem;
-          border-radius: 6px;
-          border: 1px solid var(--border);
-          font-size: 0.78rem;
-          color: var(--text-muted);
-          background: #f8fafc;
-        }
-
-        .status-chip.confirmed {
-          border-color: #bbf7d0;
-          color: #15803d;
-          background: #f0fdf4;
-        }
-
-        .status-chip.warning,
-        .status-chip.unavailable {
-          border-color: #fed7aa;
-          color: #c2410c;
-          background: #fff7ed;
-        }
-
-        .status-chip.compact {
-          min-height: 28px;
-          padding: 0.25rem 0.5rem;
-          font-size: var(--fs-2xs);
-          font-weight: 800;
-        }
-
-        .electronic-prescription-panel {
-          display: grid;
-          gap: 0.65rem;
-          border: 1px solid #bfdbfe;
-          border-radius: var(--radius-md);
-          background: #eff6ff;
-          padding: 0.8rem;
-        }
-
-        .electronic-prescription-header,
-        .electronic-prescription-controls {
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          flex-wrap: wrap;
-        }
-
-        .electronic-prescription-header {
-          justify-content: space-between;
-        }
-
-        .electronic-prescription-header strong {
-          display: block;
-          color: var(--text-main);
-          font-size: 0.92rem;
-        }
-
-        .electronic-prescription-controls label {
-          color: var(--text-muted);
-          font-size: 0.78rem;
-          font-weight: 800;
-        }
-
-        .electronic-prescription-key-kind {
-          display: inline-flex;
-          padding: 0.16rem;
-          border: 1px solid #93c5fd;
-          border-radius: var(--radius-md);
-          background: #dbeafe;
-        }
-
-        .electronic-prescription-key-kind button {
-          min-height: 30px;
-          padding: 0.25rem 0.55rem;
-          border: 0;
-          border-radius: 6px;
-          background: transparent;
-          color: #1e40af;
-          font-size: 0.78rem;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .electronic-prescription-key-kind button.active {
-          background: #ffffff;
-          color: #0f172a;
-          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
-        }
-
-        .electronic-prescription-controls input {
-          flex: 1 1 220px;
-          min-width: 0;
-          padding: 0.6rem;
-          border: 1px solid #93c5fd;
-          border-radius: var(--radius-md);
-          background: #ffffff;
-          font-size: 0.9rem;
-        }
-
-        .electronic-prescription-note,
-        .electronic-prescription-message,
-        .electronic-prescription-hash,
-        .electronic-prescription-warnings {
-          margin: 0;
-          color: #1e40af;
-          font-size: 0.76rem;
-          font-weight: 700;
-          line-height: 1.5;
-        }
-
-        .electronic-prescription-message.warning,
-        .electronic-prescription-message.unavailable,
-        .electronic-prescription-warnings {
-          color: #92400e;
-        }
-
-        .electronic-prescription-warnings {
-          padding-left: 1.1rem;
-        }
-
-        .electronic-prescription-hash {
-          color: #475569;
-          overflow-wrap: anywhere;
-        }
-
-        .electronic-prescription-review {
-          display: grid;
-          gap: 0.65rem;
-          border-top: 1px solid #bfdbfe;
-          padding-top: 0.7rem;
-        }
-
-        .electronic-prescription-review dl {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-          gap: 0.45rem;
-          margin: 0;
-        }
-
-        .electronic-prescription-review dl > div {
-          min-width: 0;
-          padding: 0.45rem 0.55rem;
-          border: 1px solid #bfdbfe;
-          border-radius: 6px;
-          background: #ffffff;
-        }
-
-        .electronic-prescription-review dt {
-          color: var(--text-muted);
-          font-size: var(--fs-2xs);
-          font-weight: 800;
-        }
-
-        .electronic-prescription-review dd {
-          margin: 0.1rem 0 0;
-          overflow-wrap: anywhere;
-          color: var(--text-main);
-          font-size: 0.78rem;
-          font-weight: 800;
-        }
-
-        .electronic-prescription-original-check {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-          color: #92400e;
-          font-size: 0.78rem;
-          font-weight: 800;
-          line-height: 1.45;
-        }
-
-        .electronic-prescription-original-check input {
-          flex: 0 0 auto;
-          margin-top: 0.15rem;
-        }
-
-        .electronic-prescription-decision {
-          display: grid;
-          gap: 0.2rem;
-          padding: 0.55rem 0.65rem;
-          border: 1px solid #bfdbfe;
-          border-radius: 6px;
-          background: #ffffff;
-          color: #1e40af;
-          font-size: 0.76rem;
-          line-height: 1.45;
-        }
-
-        .electronic-prescription-decision.blocked {
-          border-color: #fed7aa;
-          background: #fff7ed;
-          color: #92400e;
-        }
-
-        .electronic-prescription-decision.review {
-          border-color: #fde68a;
-          background: #fffbeb;
-          color: #92400e;
-        }
-
-        .patient-selection-panel {
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          padding: 0.75rem;
-          background: #f8fafc;
-          display: flex;
-          flex-direction: column;
-          gap: 0.55rem;
-        }
-
-        .panel-title {
-          font-size: 0.78rem;
-          font-weight: 700;
-          color: var(--text-muted);
-        }
-
-        .patient-candidate-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 0.5rem;
-        }
-
-        .patient-candidate {
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          background: white;
-          padding: 0.55rem 0.65rem;
-          text-align: left;
-          display: flex;
-          flex-direction: column;
-          gap: 0.45rem;
-        }
-
-        .patient-candidate.selected {
-          border-color: var(--primary);
-          background: var(--primary-light);
-        }
-
-        .patient-candidate-select {
-          border: 0;
-          background: transparent;
-          color: inherit;
-          padding: 0;
-          cursor: pointer;
-          text-align: left;
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-
-        .patient-candidate-select:hover .candidate-main {
-          color: var(--primary);
-        }
-
-        .patient-candidate.risk-high {
-          border-color: #f59e0b;
-        }
-
-        .patient-candidate.risk-low.selected {
-          border-color: #0f766e;
-          background: #f0fdfa;
-        }
-
-        .candidate-main {
-          font-weight: 700;
-          color: var(--text-main);
-        }
-
-        .candidate-meta,
-        .selected-patient-note,
-        .temporary-registration-note {
-          color: var(--text-muted);
-          font-size: 0.78rem;
-          line-height: 1.45;
-        }
-
-        .patient-candidate-fetch-error {
-          display: flex;
-          align-items: flex-start;
-          gap: var(--space-1-5);
-          padding: var(--space-2) var(--space-2-5);
-          border-radius: var(--radius-sm);
-          background: #fee2e2;
-          border: 1px solid #f87171;
-          color: #b91c1c;
-          font-size: var(--fs-xs);
-          font-weight: 600;
-          line-height: 1.45;
-        }
-
-        .candidate-public-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.25rem;
-          margin-top: 0.15rem;
-        }
-
-        .candidate-pub-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.1rem 0.35rem;
-          border-radius: var(--radius-sm);
-          font-size: var(--fs-2xs);
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .candidate-pub-badge.normal {
-          background: #f5f3ff;
-          color: #6d28d9;
-          border: 1px solid #ddd6fe;
-        }
-
-        .candidate-pub-badge.warning {
-          background: #fff7ed;
-          color: #c2410c;
-          border: 1px solid #fed7aa;
-        }
-
-        .candidate-pub-badge.error {
-          background: #fef2f2;
-          color: #dc2626;
-          border: 1px solid #fecaca;
-        }
-
-        .selected-patient-card {
-          border: 1px solid #bfdbfe;
-          background: #f0f7ff;
-          border-radius: var(--radius-md);
-          padding: 0.65rem 0.85rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.45rem;
-        }
-
-        .selected-patient-header {
-          display: flex;
-          flex-direction: column;
-          gap: 0.35rem;
-        }
-
-        .selected-patient-title-line {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 0.45rem;
-        }
-
-        .selected-patient-badge {
-          background: var(--primary, #2563eb);
-          color: white;
-          border-radius: var(--radius-sm);
-          padding: 0.08rem 0.38rem;
-          font-size: var(--fs-2xs);
-          font-weight: 700;
-        }
-
-        .selected-patient-name {
-          font-size: 0.92rem;
-          font-weight: 800;
-          color: var(--text-main);
-        }
-
-        .selected-patient-birth,
-        .selected-patient-insurance {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-
-        .selected-patient-public-badges {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.35rem;
-          margin-top: 0.15rem;
-        }
-
-        .selected-pub-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.12rem 0.45rem;
-          border-radius: var(--radius-sm);
-          font-size: var(--fs-2xs);
-          font-weight: 700;
-        }
-
-        .selected-pub-badge.normal {
-          background: #f5f3ff;
-          color: #6d28d9;
-          border: 1px solid #ddd6fe;
-        }
-
-        .selected-pub-badge.warning {
-          background: #fff7ed;
-          color: #c2410c;
-          border: 1px solid #fed7aa;
-        }
-
-        .selected-pub-badge.error {
-          background: #fef2f2;
-          color: #dc2626;
-          border: 1px solid #fecaca;
-        }
-
-        .selected-patient-alerts {
-          display: flex;
-          flex-direction: column;
-          gap: 0.35rem;
-          border-top: 1px dashed #bfdbfe;
-          padding-top: 0.45rem;
-        }
-
-        .selected-patient-alert-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.4rem;
-          padding: 0.35rem 0.55rem;
-          border-radius: var(--radius-sm);
-          font-size: 0.76rem;
-          line-height: 1.4;
-        }
-
-        .selected-patient-alert-item.error {
-          background: #fee2e2;
-          border: 1px solid #f87171;
-          color: #b91c1c;
-          font-weight: 600;
-        }
-
-        .selected-patient-alert-item.warning {
-          background: #ffedd5;
-          border: 1px solid #fb923c;
-          color: #c2410c;
-        }
-
-        .selected-patient-alert-item .alert-item-title {
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .selected-patient-alert-item .alert-item-message {
-          flex: 1;
-        }
-
-        .candidate-reasons {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.25rem;
-        }
-
-        .candidate-reasons span {
-          border-radius: 5px;
-          background: #eef2ff;
-          color: #3730a3;
-          font-size: var(--fs-2xs);
-          font-weight: 800;
-          line-height: 1.3;
-          padding: 0.15rem 0.32rem;
-        }
-
-        .candidate-warning {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.25rem;
-          color: #92400e;
-          font-size: var(--fs-2xs);
-          font-weight: 700;
-          line-height: 1.35;
-        }
-
-        .patient-merge-open {
-          align-self: flex-start;
-          border: 1px solid #bfdbfe;
-          border-radius: 5px;
-          background: #eff6ff;
-          color: #1d4ed8;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.3rem;
-          min-height: 28px;
-          padding: 0.25rem 0.45rem;
-          cursor: pointer;
-          font-size: var(--fs-2xs);
-          font-weight: 800;
-        }
-
-        .patient-merge-open:hover,
-        .patient-merge-open.active {
-          border-color: #2563eb;
-          background: #dbeafe;
-        }
-
-        .patient-merge-open:disabled {
-          cursor: not-allowed;
-          opacity: 0.65;
-        }
-
-        .patient-merge-review {
-          border: 1px solid #bfdbfe;
-          border-radius: 6px;
-          background: #fff;
-          padding: 0.7rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.55rem;
-        }
-
-        .patient-merge-review-title,
-        .merge-status-line {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-          color: #1e3a8a;
-          font-size: 0.8rem;
-          font-weight: 800;
-        }
-
-        .merge-status-line {
-          color: var(--text-muted);
-          font-weight: 700;
-        }
-
-        .merge-patient-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 0.5rem;
-        }
-
-        .merge-patient-grid > div {
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          padding: 0.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.18rem;
-          min-width: 0;
-        }
-
-        .merge-patient-grid span,
-        .merge-patient-grid small {
-          color: var(--text-muted);
-          font-size: var(--fs-2xs);
-        }
-
-        .merge-patient-grid strong {
-          color: var(--text-main);
-          font-size: 0.88rem;
-          overflow-wrap: anywhere;
-        }
-
-        .merge-summary-row,
-        .merge-warning-list,
-        .merge-operation-list,
-        .merge-checklist {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.35rem;
-        }
-
-        .merge-summary-row span,
-        .merge-warning-list span,
-        .merge-operation-list span,
-        .merge-checklist span {
-          border-radius: 5px;
-          padding: 0.24rem 0.4rem;
-          font-size: var(--fs-2xs);
-          font-weight: 800;
-          line-height: 1.35;
-          overflow-wrap: anywhere;
-        }
-
-        .merge-summary-row span {
-          background: #ecfeff;
-          color: #0f766e;
-        }
-
-        .merge-warning-list span {
-          background: #fff7ed;
-          color: #9a3412;
-        }
-
-        .merge-operation-list span {
-          background: #f1f5f9;
-          color: #334155;
-        }
-
-        .merge-checklist span {
-          background: #f0fdf4;
-          color: #166534;
-        }
-
-        .patient-merge-apply {
-          align-self: flex-start;
-          min-height: 34px;
-        }
-
-        .temporary-registration-note {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 0.45rem;
-        }
-
-        .patient-search-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .patient-search-input {
-          position: relative;
-          display: flex;
-          align-items: center;
-          flex: 1 1 18rem;
-          min-width: 0;
-        }
-
-        .patient-search-input :global(svg) {
-          position: absolute;
-          left: 0.7rem;
-          color: var(--text-muted);
-          pointer-events: none;
-        }
-
-        .patient-search-input input {
-          width: 100%;
-          padding-left: 2.2rem;
-        }
-
-        .prescription-patient-hint {
-          margin: 0;
-        }
-
-        .selected-patient-reselect {
-          margin-left: auto;
-          padding: 0.2rem 0.75rem;
-          font-size: var(--fs-xs);
-        }
-
-        .provider-grid {
-          display: grid;
-          grid-template-columns: minmax(96px, 0.7fr) minmax(0, 1.35fr) minmax(96px, 0.8fr) minmax(96px, 0.8fr);
-          gap: 0.75rem;
-        }
-
-        .provider-grid .form-group:nth-last-child(-n + 2) {
-          max-width: 180px;
-        }
-
-        .provider-history-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.45rem;
-          margin-top: -0.35rem;
-        }
-
-        .provider-history-error {
-          width: 100%;
-          color: var(--danger);
-          background: var(--danger-soft);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-sm);
-          padding: 0.45rem 0.65rem;
-          font-size: var(--fs-xs);
-          font-weight: 500;
-          line-height: 1.4;
-          margin: 0;
-        }
-
-        .provider-history-item {
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          background: white;
-          color: var(--text-main);
-          padding: 0.4rem 0.55rem;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          cursor: pointer;
-          font-size: 0.8rem;
-          max-width: 100%;
-        }
-
-        .provider-history-item:hover {
-          border-color: var(--primary);
-          background: var(--primary-light);
-        }
-
-        .form-section-title {
-          font-size: 0.9rem;
-          font-weight: 600;
-          border-bottom: 2px solid var(--primary-light);
-          padding-bottom: 4px;
-          margin-top: 1rem;
-        }
-
-        .prescription-workbench {
-          border: 1px solid #dbe4ef;
-          border-radius: 8px;
-          background: #f8fafc;
-          padding: 0.85rem;
-        }
-
-        .prescription-workbench-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 0.75rem;
-          margin-bottom: 0.75rem;
-        }
-
-        .prescription-workbench-header > div:first-child {
-          display: grid;
-          gap: 0.15rem;
-        }
-
-        .section-kicker {
-          color: var(--text-muted);
-          font-size: 0.75rem;
-          font-weight: 800;
-        }
-
-        .prescription-workbench-header strong {
-          color: var(--text-main);
-          font-size: 1rem;
-        }
-
-        .workbench-chips {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          gap: 0.4rem;
-        }
-
-        .workbench-action {
-          min-height: 28px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.3rem;
-          padding: 0 0.65rem;
-          border-radius: 6px;
-          font-size: 0.76rem;
-          font-weight: 850;
-          white-space: nowrap;
-        }
-
-        .prescriptions-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.85rem;
-        }
-
-        .post-entry-checks {
-          display: grid;
-          gap: 0.85rem;
-          margin-top: 0.9rem;
-        }
-
-        .post-entry-checks:empty {
-          display: none;
-        }
-
-        .processing-tag {
-          font-size: var(--fs-2xs);
-          color: var(--primary);
-          background: var(--primary-light);
-          padding: 2px 8px;
-          border-radius: 99px;
-          margin-left: 0.5rem;
-        }
-
-        .form-actions {
-          position: sticky;
-          bottom: 0;
-          z-index: 10;
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-          gap: var(--space-3);
-          border-top: 1px solid var(--border);
-          padding: 0.85rem 1rem;
-          background: rgba(255, 255, 255, 0.96);
-          backdrop-filter: blur(8px);
-          box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
-        }
-
-        .form-actions .btn-tooltip-wrapper {
-          display: inline-flex;
-        }
-
-        .form-actions .btn-label-main {
-          font-size: var(--fs-base);
-          font-weight: 700;
-        }
-
-        .form-actions .btn-label-sub {
-          font-size: var(--fs-base);
-          font-weight: 700;
-        }
-
-        .btn-trash {
-          background: none;
-          border: none;
-          color: #ef4444;
-          cursor: pointer;
-        }
-
-        .btn-trash:focus-visible {
-          outline: 2px solid var(--primary);
-          outline-offset: 2px;
-          border-radius: 4px;
-        }
-
-        .ml-auto { margin-left: auto; }
-        .mb-4 { margin-bottom: 1rem; }
-        .gap-2 { gap: 0.5rem; }
-        .animate-spin {
-          animation: spin 1s linear infinite;
-        }
-
-        @media (max-width: 900px) {
-          .reception-choice-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .side-by-side-container,
-          .side-by-side-container.manual-mode {
-            grid-template-columns: 1fr;
-            height: auto;
-            min-height: 0;
-          }
-
-          /* 手入力受付では左カラムは案内文だけで実質空欄のため、幅の狭い画面では畳んで
-             右の入力フォームを広げる(ヘッダーの「受付をやり直す」ボタンは残す)。 */
-          .side-by-side-container.manual-mode .visual-column {
-            display: none;
-          }
-
-          /* 処方箋イメージがある場合は原本確認のため残すが、フォームを圧迫しないよう
-             高さを抑える(拡大はブラウザのピンチズームで可能)。
-             next/image の fill は親に確定した高さが必要なため、100%ではなく固定値にする。 */
-          .image-preview-container {
-            height: 260px;
-          }
-
-          /* 医療機関名だけ1行、コード/診療科/医師名/処方日/調剤日は2列に並べて縦の長さを抑える */
-          .provider-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          /* 狭い画面はページ全体がスクロールするので、フォーム内側のスクロール枠は外す
-             (残すと下に固定する操作ボタンが枠の中で止まる) */
-          .ocr-form {
-            overflow: visible;
-            padding-right: 0;
-          }
-
-          /* DOM順は コード・名称・診療科・医師・処方日・調剤日。
-             名称を先頭の全幅にし、普段あまり触らないコードは最後に回す */
-          .provider-grid > .form-group:nth-child(2) {
-            grid-column: 1 / -1;
-            order: -1;
-          }
-
-          .provider-grid > .form-group:nth-child(1) {
-            grid-column: 1 / -1;
-            order: 10;
-          }
-
-          .prescription-workbench-header {
-            grid-template-columns: 1fr;
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .merge-patient-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .workbench-chips {
-            justify-content: flex-start;
-          }
-
-          .provider-grid .form-group:nth-last-child(-n + 2) {
-            max-width: none;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .ocr-page {
-            gap: 1rem;
-          }
-
-          .form-actions {
-            display: grid;
-            grid-template-columns: 0.9fr 1.6fr;
-            gap: var(--space-2);
-            padding: 0.65rem var(--space-2);
-            padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
-            width: 100%;
-            box-sizing: border-box;
-          }
-
-          .form-actions .btn-tooltip-wrapper {
-            width: 100%;
-          }
-
-          .form-actions button {
-            width: 100%;
-            min-height: 44px;
-            padding: 0.45rem 0.5rem;
-            justify-content: center;
-          }
-
-          .form-actions .btn-label-main {
-            font-size: var(--fs-sm);
-          }
-
-          .form-actions .btn-label-sub {
-            display: none;
-          }
-
-          .reception-choice-grid {
-            gap: 1rem;
-          }
-
-          .manual-entry-card {
-            padding: 1.25rem 1rem;
-            min-height: 120px;
-          }
-
-          .editor-column {
-            padding: 0.75rem;
-          }
-
-          /* 入れ子のカード(受付カード > 処方内容 > Rp > 薬品)が枠と余白を重ねて、
-             320px幅では薬品名の入力欄が200pxほどに痩せる。処方内容の外枠は外して平らにする */
-          .prescription-workbench {
-            padding: 0;
-            border: 0;
-            background: transparent;
-          }
-
-          .column-label {
-            margin-bottom: 0.65rem;
-          }
-
-          /* 入力状況は3つ横並びのまま(縦に積むと3段ぶん押し下げる) */
-          .input-readiness-strip {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.35rem;
-            margin-bottom: 0.65rem;
-          }
-
-          .readiness-item {
-            flex-direction: column;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 0.05rem;
-            padding: 0.4rem 0.55rem;
-          }
-
-          /* マイナ読取とオンライン資格確認は横2つ、状態表示は全幅 */
-          .reception-tool-row {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .reception-tool-row :global(button) {
-            min-height: 44px;
-            padding-inline: 0.5rem;
-            font-size: var(--fs-sm);
-            white-space: normal;
-          }
-
-          .reception-tool-row .status-chip,
-          .reception-tool-row .reception-tool-note {
-            grid-column: 1 / -1;
-          }
-
-          .form-group input,
-          .form-group select {
-            min-height: 44px;
-          }
-
-          /* 日付欄の最小幅(PC用の165px)を外さないと、2列のとき右へはみ出す */
-          .form-group input[type='date'] {
-            min-width: 0;
-            width: 100%;
-          }
-
-          /* 生年月日と負担割合を同じ行に、保険者番号は全幅の次行にする */
-          .form-row > .form-group.flex-1 {
-            order: 3;
-            grid-column: 1 / -1;
-          }
-
-          .ocr-form {
-            padding-right: 0;
-          }
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

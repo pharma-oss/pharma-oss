@@ -1,12 +1,34 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Drug, Visit, InsuranceEligibilityStatus, Patient, PharmacyDatabase } from '@/db/types';
-import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
+import type {
+  Drug,
+  Visit,
+  InsuranceEligibilityStatus,
+  Patient,
+  PharmacyDatabase,
+  PrescriptionItem,
+  VisitElectronicPrescription,
+  VisitElectronicPrescriptionLink
+} from '@/db/types';
+import { generateUUID } from '@/lib/crypto';
+import {
+  findDrugMasterRecordByCode,
+  isGeneralNameDrugRecord,
+  searchDrugMaster,
+  type DrugMasterRecord
+} from '@/lib/master-data/drug_master';
+import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
-import type { ElectronicPrescriptionItem } from '@/lib/electronic_prescription';
+import type {
+  ElectronicPrescriptionDuplicateCheckStatus,
+  ElectronicPrescriptionItem,
+  ElectronicPrescriptionPayload
+} from '@/lib/electronic_prescription';
 import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
+import type { DrugItem as JahisDrugItem } from '@/lib/ocr/processor';
+import type { PatientMergeOperation } from '@/lib/patient_merge';
 import { getPublicInsuranceCategoryName } from '@/lib/patient_public_insurance';
 import type { PreviousDoSnapshot } from '@/lib/previous_prescription_do';
-import type { Prescription, PrescriptionGroup } from './types';
+import type { Prescription, PrescriptionFieldValue, PrescriptionGroup } from './types';
 
 export type EligibilityStatus = 'unchecked' | 'checking' | 'confirmed' | 'warning' | 'unavailable';
 
@@ -533,4 +555,486 @@ export function getProviderHistoryCandidateViewState(params: {
   };
 }
 
+export const PATIENT_MERGE_COLLECTION_LABEL = {
+  visits: '受付',
+  alerts: 'アラート'
+} as const;
+
+export function formatPatientMergeOperationLabel(operation: PatientMergeOperation): string {
+  switch (operation.type) {
+    case 'upsert_patient':
+      return `残す患者情報を更新: ${operation.patientId}`;
+    case 'delete_patient':
+      return `統合元患者を削除: ${operation.patientId}`;
+    case 'patch_visit_patient':
+      return `受付を付け替え: ${operation.visitId} -> ${operation.afterPatientId}`;
+    case 'patch_alert_patient':
+      return `アラートを付け替え: ${operation.alertId} -> ${operation.afterPatientId}`;
+  }
+}
+
+export const normalizeDrugComparableText = (value?: string) => (
+  String(value || '')
+    .normalize('NFKC')
+    .replace(/[【［\[]\s*般\s*[】］\]]/g, '')
+    .replace(/\s|　/g, '')
+    .toLowerCase()
+);
+
+export const toQrDrugCodeStatus = (
+  drug?: Pick<DrugMasterRecord, 'isAbolished'>
+): Prescription['prescribedDrugCodeStatus'] => {
+  if (!drug) return 'unknown';
+  return drug.isAbolished ? 'abolished' : 'active';
+};
+
+export const QR_SOURCE_LABEL = {
+  camera: 'カメラ',
+  image: '画像',
+  manual: 'スキャナー'
+} as const;
+
+export async function findBestDrugMasterForQrItem(item: JahisDrugItem): Promise<DrugMasterRecord | undefined> {
+  const drugCode = item.drugCode?.trim();
+  if (drugCode) {
+    const exactDrug = await findDrugMasterRecordByCode(drugCode);
+    if (exactDrug) return exactDrug;
+  }
+
+  const drugName = item.drugName.trim();
+  if (!drugName) return undefined;
+
+  const candidates = await searchDrugMaster(drugName, 25);
+  if (candidates.length === 0) return undefined;
+  const normalizedName = normalizeDrugComparableText(drugName);
+  return candidates.find((drug) => (
+    normalizeDrugComparableText(drug.name) === normalizedName ||
+    normalizeDrugComparableText(formatDrugDisplayName(drug.name)) === normalizedName ||
+    normalizeDrugComparableText(drug.genericName) === normalizedName ||
+    normalizeDrugComparableText(drug.code) === normalizeDrugComparableText(drugCode) ||
+    normalizeDrugComparableText(drug.yjCode) === normalizeDrugComparableText(drugCode)
+  )) || candidates[0];
+}
+
+export const getEffectiveDispensedDrug = (prescription: Pick<Prescription, 'dispensedDrug'>) => {
+  const dispensedDrug = prescription.dispensedDrug.trim();
+  if (!dispensedDrug || isNoSubstitutionValue(dispensedDrug)) return '';
+  return dispensedDrug;
+};
+
+// QR・OCRで読み取った薬品行を、薬品マスタ照合込みで編集フォームの行へ変換する
+export const buildPrescriptionsFromParsedItems = async (
+  items: JahisDrugItem[],
+  idPrefix: string
+): Promise<Prescription[]> => (
+  Promise.all(items.map(async (item, index) => {
+    const matchedDrug = await findBestDrugMasterForQrItem(item);
+    const auditMeta = matchedDrug ? getDrugAuditMeta(matchedDrug) : undefined;
+    const rpNumber = item.rpNumber || index + 1;
+    return createEmptyPrescription(`rp_${idPrefix}_${rpNumber}`, {
+      id: `item_${idPrefix}_${generateUUID()}`,
+      drugCode: matchedDrug?.code || item.drugCode || '',
+      drugName: matchedDrug?.name ? formatDrugDisplayName(matchedDrug.name) : item.drugName,
+      amount: item.amount || '1',
+      unitText: item.unit || '',
+      electronicUsageCode: item.usageCode || '',
+      electronicUsageFallbackText: item.usage || '',
+      prescribedDrugCodeStatus: toQrDrugCodeStatus(matchedDrug),
+      usage: item.usage || '',
+      days: item.days || '',
+      rpComment: item.rpComment || '',
+      dispensedDrug: NO_SUBSTITUTION_LABEL,
+      changeReason: '',
+      ...(auditMeta || {})
+    });
+  }))
+);
+
+export interface PrescriptionMetrics {
+  rpCount: number;
+  drugCount: number;
+  missingDrugCount: number;
+  missingAmountCount: number;
+  missingUsageCount: number;
+  missingDaysCount: number;
+  missingTotal: number;
+  substitutionCount: number;
+  specialPrepCount: number;
+}
+
+export function calculatePrescriptionMetrics(
+  prescriptions: ReadonlyArray<Prescription>,
+  prescriptionGroups: ReadonlyArray<PrescriptionGroup>
+): PrescriptionMetrics {
+  const missingDrugCount = prescriptions.filter((prescription) => !prescription.drugName.trim()).length;
+  const missingAmountCount = prescriptions.filter((prescription) => !prescription.amount.trim()).length;
+  const missingUsageCount = prescriptionGroups.filter((group) => !group.usage.trim()).length;
+  const missingDaysCount = prescriptionGroups.filter((group) => !group.days.trim()).length;
+  const substitutionCount = prescriptions.filter((prescription) => {
+    const dispensedDrug = prescription.dispensedDrug.trim();
+    return Boolean(dispensedDrug && !isNoSubstitutionValue(dispensedDrug));
+  }).length;
+  const specialPrepCount = prescriptions.filter((prescription) => (
+    prescription.isIppoka || prescription.isCrushed || prescription.showReceiptRemark
+  )).length;
+
+  return {
+    rpCount: prescriptionGroups.length,
+    drugCount: prescriptions.length,
+    missingDrugCount,
+    missingAmountCount,
+    missingUsageCount,
+    missingDaysCount,
+    missingTotal: missingDrugCount + missingAmountCount + missingUsageCount + missingDaysCount,
+    substitutionCount,
+    specialPrepCount
+  };
+}
+
+export function buildPrescriptionAuditInputItems(
+  prescriptions: ReadonlyArray<Prescription>,
+  prescriptionGroups: ReadonlyArray<PrescriptionGroup>
+) {
+  return prescriptions.map((p) => {
+    const group = prescriptionGroups.find((g) => g.rpId === p.rpId);
+    const groupCategory = group ? getGroupDosageCategory(group) : undefined;
+    const groupIndex = group ? prescriptionGroups.indexOf(group) : undefined;
+    return {
+      ...p,
+      usageSupplementText: p.usageSupplementText || group?.usageSupplementText,
+      dosageCategory: groupCategory?.category ?? p.dosageCategory,
+      dosageCategorySource: (groupCategory?.isManual ? 'manual' : 'auto') as 'auto' | 'manual',
+      rpNumber: groupIndex !== undefined ? groupIndex + 1 : undefined
+    };
+  });
+}
+
+export function resolveExistingElectronicPrescriptionLinks(
+  applied: VisitElectronicPrescription | null
+): VisitElectronicPrescriptionLink[] {
+  if (!applied) return [];
+  if (applied.linkedPrescriptions && applied.linkedPrescriptions.length > 0) {
+    return applied.linkedPrescriptions;
+  }
+  return [{
+    prescriptionId: applied.prescriptionId,
+    documentKind: applied.documentKind,
+    validUntil: applied.validUntil,
+    signatureStatus: applied.signatureStatus,
+    signatureHpkiVerification: applied.signatureHpkiVerification,
+    duplicateCheckStatus: applied.duplicateCheckStatus,
+    integrityHash: applied.integrityHash,
+    paperOriginalConfirmed: applied.paperOriginalConfirmed,
+    supplementaryInformation: applied.supplementaryInformation
+  }];
+}
+
+const normalizeProviderComparableText = (value: string | undefined) => String(value || '')
+  .normalize('NFKC')
+  .replace(/[\s　]/g, '')
+  .toUpperCase();
+
+export function isElectronicPrescriptionInstitutionMismatch(
+  current: { institutionCode: string; institutionName: string },
+  next: { institutionCode?: string; institutionName?: string }
+): boolean {
+  const currentInstitutionCode = normalizeProviderComparableText(current.institutionCode);
+  const nextInstitutionCode = normalizeProviderComparableText(next.institutionCode);
+  const currentInstitutionName = normalizeProviderComparableText(current.institutionName);
+  const nextInstitutionName = normalizeProviderComparableText(next.institutionName);
+  return currentInstitutionCode && nextInstitutionCode
+    ? currentInstitutionCode !== nextInstitutionCode
+    : !currentInstitutionName || !nextInstitutionName || currentInstitutionName !== nextInstitutionName;
+}
+
+export function buildAppliedElectronicPrescriptionState(params: {
+  applied: VisitElectronicPrescription | null;
+  existingLinks: ReadonlyArray<VisitElectronicPrescriptionLink>;
+  prescription: ElectronicPrescriptionPayload;
+  duplicateCheckStatus?: ElectronicPrescriptionDuplicateCheckStatus;
+  integrityHash: string;
+  paperOriginalConfirmed: boolean;
+  appliedAt?: string;
+}): VisitElectronicPrescription {
+  const {
+    applied,
+    existingLinks,
+    prescription,
+    duplicateCheckStatus: incomingDuplicateStatus,
+    integrityHash,
+    paperOriginalConfirmed,
+    appliedAt = new Date().toISOString()
+  } = params;
+
+  const nextLink: VisitElectronicPrescriptionLink = {
+    prescriptionId: prescription.prescriptionId!,
+    documentKind: prescription.documentKind!,
+    validUntil: prescription.validUntil!,
+    signatureStatus: prescription.signatureVerification!.status,
+    signatureHpkiVerification: prescription.signatureVerification?.hpkiVerification,
+    duplicateCheckStatus: incomingDuplicateStatus || 'not_checked',
+    integrityHash,
+    paperOriginalConfirmed: prescription.documentKind === 'prescription_information'
+      ? paperOriginalConfirmed
+      : undefined,
+    supplementaryInformation: prescription.supplementaryInformation
+  };
+  const linkedPrescriptions = [...existingLinks, nextLink];
+  const duplicateStatuses = linkedPrescriptions.map((link) => link.duplicateCheckStatus);
+  const duplicateCheckStatus = duplicateStatuses.includes('blocked')
+    ? 'blocked'
+    : duplicateStatuses.includes('warning')
+      ? 'warning'
+      : duplicateStatuses.every((status) => status === 'passed')
+        ? 'passed'
+        : 'not_checked';
+  const earliestValidUntil = linkedPrescriptions
+    .map((link) => link.validUntil)
+    .sort()[0] || prescription.validUntil!;
+
+  return {
+    prescriptionId: applied?.prescriptionId || prescription.prescriptionId!,
+    linkedPrescriptions,
+    documentKind: applied?.documentKind || prescription.documentKind!,
+    sourceMode: 'connector',
+    receivedAt: applied?.receivedAt || appliedAt,
+    appliedAt,
+    validUntil: earliestValidUntil,
+    signatureStatus: applied?.signatureStatus || prescription.signatureVerification!.status,
+    signatureHpkiVerification: applied?.signatureHpkiVerification || prescription.signatureVerification?.hpkiVerification,
+    duplicateCheckStatus,
+    integrityHash: applied?.integrityHash || integrityHash,
+    paperOriginalConfirmed: linkedPrescriptions.every((link) => (
+      link.documentKind !== 'prescription_information' || link.paperOriginalConfirmed === true
+    )) || undefined,
+    refill: applied?.refill || prescription.refill,
+    supplementaryInformation: applied?.supplementaryInformation || prescription.supplementaryInformation,
+    receptionStatus: 'accepted',
+    dispensingResultStatus: 'pending',
+    dispensingResultEverRegistered: false
+  };
+}
+
+export function updatePrescriptionFieldAt(
+  prev: Prescription[],
+  id: string,
+  field: string,
+  value: PrescriptionFieldValue,
+  index: number
+): Prescription[] {
+  const targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
+  if (targetIndex === -1) return prev;
+  const next = [...prev];
+  if (field === 'usage' || field === 'days' || field === 'rpComment') {
+    const targetRpId = next[targetIndex].rpId;
+    return next.map((prescription) => (
+      prescription.rpId === targetRpId ? { ...prescription, [field]: value } : prescription
+    ));
+  }
+  next[targetIndex] = { ...next[targetIndex], [field]: value };
+  return next;
+}
+
+export function updateRpGroupField(
+  prev: Prescription[],
+  rpId: string,
+  field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment',
+  value: string
+): Prescription[] {
+  return prev.map((prescription) => (
+    prescription.rpId === rpId ? { ...prescription, [field]: value } : prescription
+  ));
+}
+
+export function updateRpGroupDosageCategory(
+  prev: Prescription[],
+  rpId: string,
+  category: DosageCategory | null
+): Prescription[] {
+  return prev.map((prescription) => (
+    prescription.rpId === rpId
+      ? {
+        ...prescription,
+        dosageCategory: category || undefined,
+        dosageCategorySource: category ? 'manual' as const : undefined
+      }
+      : prescription
+  ));
+}
+
+export function appendDrugToRpGroup(
+  prev: Prescription[],
+  rpId: string
+): Prescription[] {
+  const next = [...prev];
+  const lastIndex = next.reduce((foundIndex, prescription, index) => (
+    prescription.rpId === rpId ? index : foundIndex
+  ), -1);
+  const template = next[lastIndex];
+  const insertIndex = lastIndex >= 0 ? lastIndex + 1 : next.length;
+  next.splice(insertIndex, 0, createEmptyPrescription(rpId, {
+    usage: template?.usage || '',
+    days: template?.days || '',
+    rpComment: template?.rpComment || '',
+    dosageCategory: template?.dosageCategory,
+    dosageCategorySource: template?.dosageCategorySource
+  }));
+  return next;
+}
+
+export function insertEmptyRpGroupAfter(
+  prev: Prescription[],
+  rpId: string
+): Prescription[] {
+  const next = [...prev];
+  const lastIndex = next.reduce((foundIndex, prescription, index) => (
+    prescription.rpId === rpId ? index : foundIndex
+  ), -1);
+  const insertIndex = lastIndex >= 0 ? lastIndex + 1 : next.length;
+  next.splice(insertIndex, 0, createEmptyPrescription());
+  return next;
+}
+
+export function removePrescriptionItemOrReset(
+  prev: Prescription[],
+  id: string
+): Prescription[] {
+  if (prev.length <= 1) {
+    return [createEmptyPrescription('rp_initial', { id: 'item_initial' })];
+  }
+  const next = prev.filter((prescription) => prescription.id !== id);
+  return next.length > 0 ? next : [createEmptyPrescription('rp_initial', { id: 'item_initial' })];
+}
+
+export function togglePrescriptionIppokaAt(
+  prev: Prescription[],
+  id: string,
+  checked: boolean,
+  index: number
+): Prescription[] {
+  const targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
+  if (targetIndex === -1) return prev;
+  const next = [...prev];
+  next[targetIndex] = { ...next[targetIndex], isIppoka: checked };
+  return next;
+}
+
+export function togglePrescriptionCrushedAt(
+  prev: Prescription[],
+  id: string,
+  checked: boolean,
+  index: number
+): Prescription[] {
+  const targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
+  if (targetIndex === -1) return prev;
+  const next = [...prev];
+  next[targetIndex] = { ...next[targetIndex], isCrushed: checked };
+  return next;
+}
+
+export function togglePrescriptionReceiptRemarkAt(
+  prev: Prescription[],
+  id: string,
+  checked: boolean,
+  index: number
+): Prescription[] {
+  const targetIndex = prev[index]?.id === id ? index : prev.findIndex((p) => p.id === id);
+  if (targetIndex === -1) return prev;
+  const next = [...prev];
+  next[targetIndex] = {
+    ...next[targetIndex],
+    showReceiptRemark: checked,
+    receiptRemark: checked ? next[targetIndex].receiptRemark : ''
+  };
+  return next;
+}
+
+/**
+ * 処方受付保存時の各処方明細の入力チェック。
+ * 問題があればトースト表示用のエラー文言を返し、すべて妥当なら null を返す。
+ */
+export function validateReceptionPrescriptionItems(
+  prescriptions: ReadonlyArray<Prescription>
+): string | null {
+  for (let i = 0; i < prescriptions.length; i++) {
+    const p = prescriptions[i];
+    if (!p.drugName.trim() || !p.drugCode) {
+      return `処方薬${i + 1}: 薬品名を選択してください。`;
+    }
+    if (!p.amount || isNaN(parseFloat(p.amount)) || parseFloat(p.amount) <= 0) {
+      return `処方薬${i + 1}: 数量を正しく入力してください。`;
+    }
+    if (p.days === '' || isNaN(parseInt(p.days, 10)) || parseInt(p.days, 10) < 0) {
+      return `処方薬${i + 1}: 日数を0以上で入力してください。`;
+    }
+    // 【般】一般名処方は記載上の概念であり、在庫・ピッキングは銘柄(調剤薬)で追跡する。
+    // 調剤薬が未選択のままだと般コードで在庫参照してしまうため、ここで止める。
+    if (isGeneralNameDrugRecord({ code: p.drugCode, name: p.drugName }) && !p.dispensedDrugCode) {
+      return `処方薬${i + 1}: 一般名処方です。調剤薬(銘柄)を候補から選択してください。`;
+    }
+  }
+  return null;
+}
+
+/**
+ * 処方フォーム配列から、DB保存用の PrescriptionItem 配列を生成する純粋関数。
+ */
+export function buildReceptionPrescriptionItemsPayload(
+  prescriptions: ReadonlyArray<Prescription>,
+  visitId: string,
+  idGenerator: () => string = generateUUID
+): Array<PrescriptionItem & Record<string, unknown>> {
+  const prescriptionItems = new Array<PrescriptionItem & Record<string, unknown>>(prescriptions.length);
+  const rpNumberById = new Map<string, number>();
+  let nextRpNumber = 1;
+  for (let i = 0; i < prescriptions.length; i++) {
+    const item = prescriptions[i];
+    if (!rpNumberById.has(item.rpId)) {
+      rpNumberById.set(item.rpId, nextRpNumber);
+      nextRpNumber++;
+    }
+    prescriptionItems[i] = {
+      itemId: `item_${idGenerator()}`,
+      visitId,
+      rpNumber: rpNumberById.get(item.rpId) || i + 1,
+      drugId: item.drugCode,
+      dispensedDrug: getEffectiveDispensedDrug(item) || item.drugName,
+      dispensedDrugCode: item.dispensedDrugCode || '',
+      prescribedDrugCodeStatus: item.prescribedDrugCodeStatus,
+      // 空文字はスキーマの format: 'date' 検証に落ちるため、値があるときだけ含める
+      ...(item.prescribedDrugCodeAbolishedAt
+        ? { prescribedDrugCodeAbolishedAt: item.prescribedDrugCodeAbolishedAt }
+        : {}),
+      electronicSourceDrugName: item.electronicSourceDrugName || '',
+      electronicMasterDrugName: item.electronicMasterDrugName || '',
+      electronicDrugNameVerificationStatus: item.electronicDrugNameVerificationStatus,
+      ...(item.electronicDrugNameVerificationCheckedAt
+        ? { electronicDrugNameVerificationCheckedAt: item.electronicDrugNameVerificationCheckedAt }
+        : {}),
+      unitCode: item.unitCode || '',
+      unitText: item.unitText || '',
+      electronicUnitConversion: item.electronicUnitConversion,
+      electronicUsageCode: item.electronicUsageCode || '',
+      electronicUsageFallbackText: item.electronicUsageFallbackText || '',
+      electronicUsageSupplementText: item.electronicUsageSupplementText || '',
+      usageSupplementText: item.usageSupplementText?.trim() || '',
+      changeReason: item.changeReason,
+      amount: parseFloat(item.amount) || 1,
+      usage: item.usage,
+      days: Number.isFinite(parseInt(item.days, 10)) ? parseInt(item.days, 10) : 0,
+      rpComment: item.rpComment?.trim() || '',
+      dosageCategory: (item.dosageCategorySource === 'manual' && item.dosageCategory)
+        ? item.dosageCategory
+        : inferDosageCategory(item.drugName || getEffectiveDispensedDrug(item), item.usage),
+      dosageCategorySource: item.dosageCategorySource === 'manual' ? 'manual' as const : 'auto' as const,
+      isIppoka: !!item.isIppoka,
+      isCrushed: !!item.isCrushed,
+      tokkanType: item.tokkanType || 'none',
+      receiptRemark: item.showReceiptRemark ? (item.receiptRemark || '') : '',
+      billingAgentGroupKey: item.billingAgentGroupKey?.trim() || '',
+      billingAgentGroupReason: item.billingAgentGroupKey?.trim() ? (item.billingAgentGroupReason?.trim() || '') : ''
+    };
+  }
+  return prescriptionItems;
+}
 
