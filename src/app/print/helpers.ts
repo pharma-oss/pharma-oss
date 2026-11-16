@@ -40,6 +40,20 @@ export function buildPrintItemMasterFacts(
   };
 }
 
+const NO_SUBSTITUTION_LABELS = new Set(['変更なし', '変更調剤なし']);
+
+/**
+ * 変更調剤のないプレースホルダ（「変更なし」「変更調剤なし」）と空文字を除外し、
+ * 実際に選択された調剤薬品名のみを返す。
+ */
+function resolveActualDispensedDrug(dispensedDrug?: string): string {
+  const trimmed = String(dispensedDrug || '').trim();
+  if (!trimmed || NO_SUBSTITUTION_LABELS.has(trimmed)) {
+    return '';
+  }
+  return trimmed;
+}
+
 // 保存済みの処方明細と薬剤マスタから、印刷ページが使う明細を組み立てる。
 // 薬価は調剤日時点の版(薬剤師が選び直していればその版)で引き、廃止・在庫などのマスタ上の事実も載せる。
 export function buildPrintPrescriptionItem(
@@ -69,8 +83,7 @@ export function buildPrintAuditItems(
   remarks: Record<string, string> = {}
 ): PrescriptionInputAuditItem[] {
   return items.map((item) => {
-    const dispensedDrug = String(item.dispensedDrug || '').trim();
-    const hasActualDispensedDrug = dispensedDrug && !['変更なし', '変更調剤なし'].includes(dispensedDrug);
+    const hasActualDispensedDrug = Boolean(resolveActualDispensedDrug(item.dispensedDrug));
     const receiptRemark = remarks[item.itemId] ?? item.receiptRemark;
     return {
       id: item.itemId,
@@ -140,7 +153,7 @@ export function getPatientIdentityMark(patientIdOrId: string, visitId: string): 
 }
 
 export function getDisplayDrugName(item: { dispensedDrug?: string; drugName?: string; drugId?: string }): string {
-  return item.dispensedDrug || item.drugName || item.drugId || '';
+  return resolveActualDispensedDrug(item.dispensedDrug) || getPrescribedDrugName(item);
 }
 
 export function getPrescribedDrugName(item: { drugName?: string; drugId?: string }): string {
@@ -148,11 +161,7 @@ export function getPrescribedDrugName(item: { drugName?: string; drugId?: string
 }
 
 export function getRecordDrugName(item: { dispensedDrug?: string; drugName?: string; drugId?: string }): string {
-  const dispensedDrug = String(item.dispensedDrug || '').trim();
-  if (dispensedDrug && !['変更なし', '変更調剤なし'].includes(dispensedDrug)) {
-    return dispensedDrug;
-  }
-  return getPrescribedDrugName(item);
+  return getDisplayDrugName(item);
 }
 
 export function isLiquidItem(item: { usage?: string; dispensedDrug?: string; drugName?: string; drugId?: string }): boolean {
@@ -179,8 +188,9 @@ export function getRecordNotes(
   isFirstItem?: boolean
 ): string {
   const notes: string[] = [];
-  if (item.dispensedDrug && item.dispensedDrug !== item.drugName) {
-    notes.push(`後発変更: ${item.dispensedDrug}`);
+  const actualDispensedDrug = resolveActualDispensedDrug(item.dispensedDrug);
+  if (actualDispensedDrug && actualDispensedDrug !== item.drugName) {
+    notes.push(`後発変更: ${actualDispensedDrug}`);
   }
   if (item.changeReason) {
     notes.push(`変更理由: ${item.changeReason}`);

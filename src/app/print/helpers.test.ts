@@ -113,6 +113,13 @@ test('getDisplayDrugName prioritizes dispensedDrug over drugName and drugId', ()
   assert.equal(getDisplayDrugName({}), '');
 });
 
+test('getDisplayDrugName ignores no-substitution placeholders and falls back to prescribed name or id', () => {
+  assert.equal(getDisplayDrugName({ dispensedDrug: '変更なし', drugName: 'ノルバスク錠5mg', drugId: 'd001' }), 'ノルバスク錠5mg');
+  assert.equal(getDisplayDrugName({ dispensedDrug: '変更調剤なし', drugName: 'ノルバスク錠5mg', drugId: 'd001' }), 'ノルバスク錠5mg');
+  assert.equal(getDisplayDrugName({ dispensedDrug: ' 変更なし ', drugId: 'd001' }), 'd001');
+  assert.equal(getDisplayDrugName({ dispensedDrug: '   ', drugName: 'ノルバスク錠5mg', drugId: 'd001' }), 'ノルバスク錠5mg');
+});
+
 test('getPrescribedDrugName prioritizes drugName over drugId', () => {
   assert.equal(getPrescribedDrugName({ drugName: 'ノルバスク錠5mg', drugId: 'd001' }), 'ノルバスク錠5mg');
   assert.equal(getPrescribedDrugName({ drugId: 'd001' }), 'd001');
@@ -142,6 +149,11 @@ test('isOintmentItem detects ointment formulation from name or usage', () => {
   assert.equal(isOintmentItem({ drugName: 'ロキソニン錠60mg', usage: '1日3回毎食後' }), false);
 });
 
+test('isLiquidItem and isOintmentItem recognize prescribed formulation when dispensedDrug is a no-substitution placeholder', () => {
+  assert.equal(isLiquidItem({ dispensedDrug: '変更なし', drugName: 'アンブロキソールシロップ0.3%' }), true);
+  assert.equal(isOintmentItem({ dispensedDrug: '変更調剤なし', drugName: 'ヒルドイドソフト軟膏0.3%' }), true);
+});
+
 test('getRecordNotes formats note combinations with separator', () => {
   const note1 = getRecordNotes({
     dispensedDrug: 'アムロジピン錠5mg',
@@ -158,6 +170,20 @@ test('getRecordNotes formats note combinations with separator', () => {
     drugName: 'ノルバスク錠5mg'
   });
   assert.equal(note2, '');
+});
+
+test('getRecordNotes omits generic change prefix when dispensedDrug is a no-substitution placeholder', () => {
+  assert.equal(getRecordNotes({ dispensedDrug: '変更なし', drugName: 'ノルバスク錠5mg' }), '');
+  assert.equal(getRecordNotes({ dispensedDrug: '変更調剤なし', drugName: 'ノルバスク錠5mg' }), '');
+  assert.equal(
+    getRecordNotes({
+      dispensedDrug: ' 変更なし ',
+      drugName: 'ノルバスク錠5mg',
+      isIppoka: true,
+      rpComment: '分包指示'
+    }),
+    '一包化 / 分包指示'
+  );
 });
 
 test('getBagDaysText extracts maximum positive days count', () => {
