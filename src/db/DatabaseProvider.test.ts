@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { findOpeningTag, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DatabaseProvider, useDatabase } from './DatabaseProvider';
 import {
   DB_DEFAULT_ERROR_DESCRIPTION,
@@ -17,14 +17,6 @@ interface DatabaseProviderHookOverrides {
   satelliteSyncing?: boolean;
 }
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 function ChildProbe(): React.ReactNode {
   const db = useDatabase();
   const label = db ? `db-connected:${(db as unknown as { name?: string }).name ?? 'ok'}` : 'db-loading';
@@ -32,55 +24,37 @@ function ChildProbe(): React.ReactNode {
 }
 
 function renderDatabaseProvider(overrides: DatabaseProviderHookOverrides = {}): string {
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.equal(initialState, null, 'Hook #0 (db) must initialize as null');
-        if (overrides.db !== undefined) return [overrides.db, () => {}];
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(
+        DatabaseProvider,
+        null,
+        React.createElement(ChildProbe)
+      ),
+    {
+      componentName: 'DatabaseProvider',
+      restoreAtCallIndex: 2,
+      minCalls: 3,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #0 (db) must initialize as null'),
+          ...(overrides.db !== undefined ? { value: overrides.db } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #1 (dbError) must initialize as null'),
+          ...(overrides.dbError !== undefined ? { value: overrides.dbError } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #2 (satelliteSyncing) must initialize as false'),
+          ...(overrides.satelliteSyncing !== undefined ? { value: overrides.satelliteSyncing } : {})
+        }
       }
-      if (idx === 1) {
-        assert.equal(initialState, null, 'Hook #1 (dbError) must initialize as null');
-        if (overrides.dbError !== undefined) return [overrides.dbError, () => {}];
-      }
-      if (idx === 2) {
-        dispatcher.useState = origUseState;
-        assert.equal(initialState, false, 'Hook #2 (satelliteSyncing) must initialize as false');
-        if (overrides.satelliteSyncing !== undefined) return [overrides.satelliteSyncing, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(
-      DatabaseProvider,
-      null,
-      React.createElement(ChildProbe)
-    );
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.ok(callCount >= 3, `Expected at least 3 useState calls, observed ${callCount}`);
-    return stripStyleBlocks(html);
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('DatabaseProvider SSR UI states and context wiring', () => {

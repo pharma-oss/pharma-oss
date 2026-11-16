@@ -187,10 +187,10 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     assert.equal(disabledTags.length, 2, `Expected exactly 2 disabled buttons when open candidates exist and ordered is empty:\n${disabledTags.join('\n')}`);
 
     const openMemoTag = findOpeningTag(html, '<span>未対応メモ</span>', 'button');
-    assert.ok(!openMemoTag.includes('disabled'), `Expected open memo button to be enabled: ${openMemoTag}`);
+    assert.doesNotMatch(openMemoTag, /\sdisabled=""(?=[\s/>]|$)/, `Expected open memo button to be enabled: ${openMemoTag}`);
 
     const openCsvTag = findOpeningTag(html, '<span>CSV</span>', 'button');
-    assert.ok(!openCsvTag.includes('disabled'), `Expected open CSV button to be enabled: ${openCsvTag}`);
+    assert.doesNotMatch(openCsvTag, /\sdisabled=""(?=[\s/>]|$)/, `Expected open CSV button to be enabled: ${openCsvTag}`);
 
     const receivingMemoTag = findOpeningTag(html, '<span>入庫メモ</span>', 'button');
     assert.ok(receivingMemoTag.includes('disabled=""'), `Expected receiving memo button to be disabled: ${receivingMemoTag}`);
@@ -220,13 +220,13 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     assert.ok(openCsvTag.includes('disabled=""'), `Expected open CSV button to be disabled: ${openCsvTag}`);
 
     const receivingMemoTag = findOpeningTag(html, '<span>入庫メモ</span>', 'button');
-    assert.ok(!receivingMemoTag.includes('disabled'), `Expected receiving memo button to be enabled: ${receivingMemoTag}`);
+    assert.doesNotMatch(receivingMemoTag, /\sdisabled=""(?=[\s/>]|$)/, `Expected receiving memo button to be enabled: ${receivingMemoTag}`);
 
     const receivingChecklistTag = findOpeningTag(html, '<span>入庫確認CSV</span>', 'button');
-    assert.ok(!receivingChecklistTag.includes('disabled'), `Expected receiving checklist button to be enabled: ${receivingChecklistTag}`);
+    assert.doesNotMatch(receivingChecklistTag, /\sdisabled=""(?=[\s/>]|$)/, `Expected receiving checklist button to be enabled: ${receivingChecklistTag}`);
 
     const clearOrderedBtn = findOpeningTag(html, '発注済みチェックを解除', 'button');
-    assert.ok(!clearOrderedBtn.includes('disabled'), `Clear ordered button must be enabled: ${clearOrderedBtn}`);
+    assert.doesNotMatch(clearOrderedBtn, /\sdisabled=""(?=[\s/>]|$)/, `Clear ordered button must be enabled: ${clearOrderedBtn}`);
     assert.ok(!html.includes('分譲で融通'), 'Ordered candidate should hide transfer button');
     assert.ok(html.includes('<span>発注済み</span>'));
   });
@@ -245,7 +245,7 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
 
     const inFlightBtn = findOpeningTag(inFlightHtml, '<span>登録中...</span>', 'button');
     assert.ok(inFlightBtn.includes('disabled=""'), `Expected in-flight receiving button to be disabled: ${inFlightBtn}`);
-    assert.ok(!findOpeningTag(inFlightHtml, '発注済みチェックを解除', 'button').includes('disabled'));
+    assert.doesNotMatch(findOpeningTag(inFlightHtml, '発注済みチェックを解除', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
 
     const idleProps = createMockOrderWorkbenchProps({
       candidates: [sampleCandidate],
@@ -259,8 +259,8 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     assert.equal(idleDisabled.length, 2, `Expected 2 disabled buttons when all ordered and idle:\n${idleDisabled.join('\n')}`);
 
     const idleBtn = findOpeningTag(idleHtml, '<span>入庫登録</span>', 'button');
-    assert.ok(!idleBtn.includes('disabled'), `Expected idle receiving button to be enabled: ${idleBtn}`);
-    assert.ok(!findOpeningTag(idleHtml, '発注済みチェックを解除', 'button').includes('disabled'));
+    assert.doesNotMatch(idleBtn, /\sdisabled=""(?=[\s/>]|$)/, `Expected idle receiving button to be enabled: ${idleBtn}`);
+    assert.doesNotMatch(findOpeningTag(idleHtml, '発注済みチェックを解除', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
   });
 
   it('enables all header and receiving controls when open and ordered candidates coexist and renders restore error banner when hasRestoreError is true', () => {
@@ -284,12 +284,12 @@ describe('OrderWorkbench UI disabled states and markup pinning', () => {
     );
 
     assert.deepEqual(listDisabledOpeningTags(html), []);
-    assert.ok(!findOpeningTag(html, '<span>未対応メモ</span>', 'button').includes('disabled'));
-    assert.ok(!findOpeningTag(html, '<span>CSV</span>', 'button').includes('disabled'));
-    assert.ok(!findOpeningTag(html, '<span>入庫メモ</span>', 'button').includes('disabled'));
-    assert.ok(!findOpeningTag(html, '<span>入庫確認CSV</span>', 'button').includes('disabled'));
-    assert.ok(!findOpeningTag(html, '<span>入庫登録</span>', 'button').includes('disabled'));
-    assert.ok(!findOpeningTag(html, '発注済みチェックを解除', 'button').includes('disabled'));
+    assert.doesNotMatch(findOpeningTag(html, '<span>未対応メモ</span>', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
+    assert.doesNotMatch(findOpeningTag(html, '<span>CSV</span>', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
+    assert.doesNotMatch(findOpeningTag(html, '<span>入庫メモ</span>', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
+    assert.doesNotMatch(findOpeningTag(html, '<span>入庫確認CSV</span>', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
+    assert.doesNotMatch(findOpeningTag(html, '<span>入庫登録</span>', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
+    assert.doesNotMatch(findOpeningTag(html, '発注済みチェックを解除', 'button'), /\sdisabled=""(?=[\s/>]|$)/);
     assert.ok(html.includes('分譲で融通'));
     assert.ok(html.includes('order-workbench-restore-error'));
     assert.ok(html.includes(getOrderWorkbenchRestoreErrorBannerMessage(true) ?? ''));

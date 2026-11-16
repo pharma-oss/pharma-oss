@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { EmergencyRecoveryKeySheetPrint } from './components/EmergencyRecoveryKeySheetPrint';
 import type { DbKeyEscrowPayload } from '@/lib/db_key_escrow';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 
 type EmergencyRecoveryKeySheetPrintProps = React.ComponentProps<typeof EmergencyRecoveryKeySheetPrint>;
 
@@ -40,48 +41,33 @@ function renderWithAdminPasswordInput(
   props: EmergencyRecoveryKeySheetPrintProps,
   passwordOverride: string = 'admin-password-123'
 ): string {
-  let callCount = 0;
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(EmergencyRecoveryKeySheetPrint, props),
+    {
+      componentName: 'EmergencyRecoveryKeySheetPrint',
+      restoreAtCallIndex: 1,
+      expectedCalls: 2,
+      overrides: {
+        0: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              '',
+              `Expected EmergencyRecoveryKeySheetPrint useState call #0 initial value to be '', got ${String(initialState)}`
+            ),
+          value: passwordOverride
+        },
+        1: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              null,
+              `Expected EmergencyRecoveryKeySheetPrint useState call #1 initial value to be null, got ${String(initialState)}`
+            )
+        }
       }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 0) {
-          assert.equal(
-            initialState,
-            '',
-            `Expected EmergencyRecoveryKeySheetPrint useState call #0 initial value to be '', got ${String(initialState)}`
-          );
-          return [passwordOverride, () => {}];
-        }
-        if (currentIndex === 1) {
-          assert.equal(
-            initialState,
-            null,
-            `Expected EmergencyRecoveryKeySheetPrint useState call #1 initial value to be null, got ${String(initialState)}`
-          );
-          dispatcher.useState = origUseState;
-        }
-        return origUseState(initialState);
-      };
     }
-    return React.createElement(EmergencyRecoveryKeySheetPrint, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    2,
-    `Expected EmergencyRecoveryKeySheetPrint to call useState exactly 2 times, got ${callCount}`
   );
-  return html;
 }
 
 describe('EmergencyRecoveryKeySheetPrint contracts', () => {
@@ -141,7 +127,7 @@ describe('EmergencyRecoveryKeySheetPrint contracts', () => {
       )
     );
     const inputTagIdle = findOpeningTag(htmlIdle, 'escrow-password-input', 'input');
-    assert.ok(!inputTagIdle.includes('disabled'), `Password input must not be disabled when isGenerating is false: ${inputTagIdle}`);
+    assert.doesNotMatch(inputTagIdle, /\sdisabled=""(?=[\s/>]|$)/, `Password input must not be disabled when isGenerating is false: ${inputTagIdle}`);
 
     const btnTagIdle = findOpeningTag(htmlIdle, 'btn-generate-escrow', 'button');
     assert.ok(btnTagIdle.includes('disabled=""'), `Generate button must be disabled when admin password is empty: ${btnTagIdle}`);
@@ -168,10 +154,10 @@ describe('EmergencyRecoveryKeySheetPrint contracts', () => {
       'AdminSecretPass123'
     );
     const inputTagIdle = findOpeningTag(htmlIdleWithPassword, 'escrow-password-input', 'input');
-    assert.ok(!inputTagIdle.includes('disabled'), `Password input must be enabled when isGenerating is false: ${inputTagIdle}`);
+    assert.doesNotMatch(inputTagIdle, /\sdisabled=""(?=[\s/>]|$)/, `Password input must be enabled when isGenerating is false: ${inputTagIdle}`);
 
     const btnTagIdle = findOpeningTag(htmlIdleWithPassword, 'btn-generate-escrow', 'button');
-    assert.ok(!btnTagIdle.includes('disabled'), `Generate button must be enabled when password is entered and not generating: ${btnTagIdle}`);
+    assert.doesNotMatch(btnTagIdle, /\sdisabled=""(?=[\s/>]|$)/, `Generate button must be enabled when password is entered and not generating: ${btnTagIdle}`);
 
     // Case 2: Password entered but generating in-flight (isGenerating: true) - both input and button must be disabled
     const htmlGeneratingWithPassword = renderWithAdminPasswordInput(
@@ -203,7 +189,7 @@ describe('EmergencyRecoveryKeySheetPrint contracts', () => {
       'NewAdminSecretPass456'
     );
     const btnTagIssuedFilled = findOpeningTag(htmlIssuedFilled, 'btn-generate-escrow', 'button');
-    assert.ok(!btnTagIssuedFilled.includes('disabled'), `Reissue button must be enabled when password is provided: ${btnTagIssuedFilled}`);
+    assert.doesNotMatch(btnTagIssuedFilled, /\sdisabled=""(?=[\s/>]|$)/, `Reissue button must be enabled when password is provided: ${btnTagIssuedFilled}`);
     assert.ok(htmlIssuedFilled.includes('新しいパスワードで再発行'), 'Button label must indicate reissue when escrow is present');
   });
 

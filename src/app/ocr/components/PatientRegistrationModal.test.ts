@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { PharmacyDatabase } from '@/db/types';
 import type { MynaReaderAvailabilityState } from '@/lib/myna_read_display';
 import { EMPTY_PATIENT_REGISTRATION_FORM, type PatientRegistrationForm } from '@/lib/patient_registration';
 import { findOpeningTag, listDisabledOpeningTags, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { PatientRegistrationModal } from './PatientRegistrationModal';
 
 const MYNA_BUTTON_MARKER = 'data-testid="registration-myna-read-button"';
@@ -19,68 +19,42 @@ interface RenderOptions {
 }
 
 function render(options: RenderOptions = {}): string {
-  let callCount = 0;
-  let dispatcher: { useState?: (init: unknown) => [unknown, (v: unknown) => void] } | undefined;
-  let origUseState: ((init: unknown) => [unknown, (v: unknown) => void]) | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(PatientRegistrationModal, {
+        db: {} as PharmacyDatabase,
+        initialForm: options.initialForm ?? EMPTY_PATIENT_REGISTRATION_FORM,
+        mynaReaderState: options.mynaReaderState ?? { status: 'ready', available: true },
+        onClose: () => {},
+        onRegistered: () => {},
+        onSelectExisting: () => {}
+      }),
+    {
+      componentName: 'PatientRegistrationModal',
+      minCalls: 8,
+      overrides: {
+        4: {
+          assertInitial: (initialState) =>
+            assert.strictEqual(
+              initialState,
+              false,
+              `Expected PatientRegistrationModal call 4 initial state to be false (isSubmitting), got ${String(initialState)}`
+            ),
+          ...(options.isSubmitting !== undefined ? { value: options.isSubmitting } : {})
+        },
+        5: {
+          assertInitial: (initialState) =>
+            assert.strictEqual(
+              initialState,
+              false,
+              `Expected PatientRegistrationModal call 5 initial state to be false (isReadingMyna), got ${String(initialState)}`
+            ),
+          ...(options.isReadingMyna !== undefined ? { value: options.isReadingMyna } : {})
+        }
       }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 4) {
-          assert.strictEqual(
-            initialState,
-            false,
-            `Expected PatientRegistrationModal call 4 initial state to be false (isSubmitting), got ${String(initialState)}`
-          );
-          if (options.isSubmitting !== undefined) {
-            return [options.isSubmitting, () => {}];
-          }
-        }
-        if (currentIndex === 5) {
-          assert.strictEqual(
-            initialState,
-            false,
-            `Expected PatientRegistrationModal call 5 initial state to be false (isReadingMyna), got ${String(initialState)}`
-          );
-          if (options.isReadingMyna !== undefined) {
-            return [options.isReadingMyna, () => {}];
-          }
-        }
-        return origUseState!(initialState);
-      };
     }
-
-    return React.createElement(PatientRegistrationModal, {
-      db: {} as PharmacyDatabase,
-      initialForm: options.initialForm ?? EMPTY_PATIENT_REGISTRATION_FORM,
-      mynaReaderState: options.mynaReaderState ?? { status: 'ready', available: true },
-      onClose: () => {},
-      onRegistered: () => {},
-      onSelectExisting: () => {}
-    });
-  }
-
-  try {
-    const html = stripStyleBlocks(renderToStaticMarkup(React.createElement(Wrapper)));
-    assert.ok(
-      callCount >= 8,
-      `PatientRegistrationModal must call useState at least 8 times, got ${callCount}`
-    );
-    return html;
-  } finally {
-    if (dispatcher && origUseState) {
-      dispatcher.useState = origUseState;
-    }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('PatientRegistrationModal: 構造', () => {

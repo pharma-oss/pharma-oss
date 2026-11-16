@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Drug } from '@/db/types';
 import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
 import { InventoryRow, type InventoryRowProps } from './components/InventoryRow';
 import { toInventoryDrugRow } from './types';
@@ -109,65 +110,34 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     overrides: InventoryRowStateOverrides = {}
   ): string {
     const { isAdjusting = false, isSaving = false } = overrides;
-    let callCount = 0;
-    let activeDispatcher: { useState?: (init: unknown) => [unknown, (v: unknown) => void] } | undefined;
-    let savedOrigUseState: ((init: unknown) => [unknown, (v: unknown) => void]) | undefined;
-
-    function Wrapper(): React.ReactNode {
-      const internals = (React as unknown as {
-        __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-          H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] };
-        };
-      }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-      const dispatcher = internals?.H;
-      if (dispatcher?.useState) {
-        const origUseState = dispatcher.useState;
-        activeDispatcher = dispatcher;
-        savedOrigUseState = origUseState;
-        dispatcher.useState = (initialState: unknown) => {
-          const currentIndex = callCount++;
-          if (currentIndex === 0) {
-            assert.equal(
-              initialState,
-              false,
-              `Expected InventoryRow useState #0 (isAdjusting) initial value to be false, got ${String(initialState)}`
-            );
-            return [isAdjusting, () => {}];
+    return renderMarkupWithReactUseStateMock(
+      () => React.createElement(InventoryRow, props),
+      {
+        componentName: 'InventoryRow',
+        restoreAtCallIndex: 5,
+        expectedCalls: 6,
+        overrides: {
+          0: {
+            assertInitial: (initialState) =>
+              assert.equal(
+                initialState,
+                false,
+                `Expected InventoryRow useState #0 (isAdjusting) initial value to be false, got ${String(initialState)}`
+              ),
+            value: isAdjusting
+          },
+          2: {
+            assertInitial: (initialState) =>
+              assert.equal(
+                initialState,
+                false,
+                `Expected ReorderPointEditor useState #2 (isSaving) initial value to be false, got ${String(initialState)}`
+              ),
+            value: isSaving
           }
-          if (currentIndex === 2) {
-            assert.equal(
-              initialState,
-              false,
-              `Expected ReorderPointEditor useState #2 (isSaving) initial value to be false, got ${String(initialState)}`
-            );
-            return [isSaving, () => {}];
-          }
-          if (currentIndex === 5) {
-            dispatcher.useState = origUseState;
-          }
-          return origUseState(initialState);
-        };
+        }
       }
-
-      return React.createElement(InventoryRow, props);
-    }
-
-    let html = '';
-    try {
-      html = renderToStaticMarkup(React.createElement(Wrapper));
-    } finally {
-      if (activeDispatcher && savedOrigUseState) {
-        activeDispatcher.useState = savedOrigUseState;
-      }
-    }
-
-    assert.equal(
-      callCount,
-      6,
-      `Expected InventoryRow tree to call useState exactly 6 times, got ${callCount}`
     );
-    return html;
   }
 
   function makeInventoryDrugRow(
@@ -204,7 +174,7 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     assert.ok(!html.includes('stock-negative'));
 
     const reorderInput = findOpeningTag(html, 'aria-label="アムロジピン錠5mgの発注点"', 'input');
-    assert.ok(!reorderInput.includes('disabled'), 'Reorder point input must be enabled when isSaving is false');
+    assert.doesNotMatch(reorderInput, /\sdisabled=""(?=[\s/>]|$)/, 'Reorder point input must be enabled when isSaving is false');
     assert.ok(reorderInput.includes('value="20"'));
 
     assert.ok(findOpeningTag(html, 'aria-label="棚番地パート1"', 'input').includes('value="A"'));
@@ -246,7 +216,7 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     const idleHtml = renderInventoryRowWithState(props, { isAdjusting: false, isSaving: false });
     assert.deepEqual(listDisabledOpeningTags(idleHtml), []);
     const idleBtn = findOpeningTag(idleHtml, '>0へ補正</button>', 'button');
-    assert.ok(!idleBtn.includes('disabled'), 'Negative stock adjustment button must be enabled when isAdjusting is false');
+    assert.doesNotMatch(idleBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Negative stock adjustment button must be enabled when isAdjusting is false');
     assert.ok(!idleHtml.includes('>補正中...</button>'));
     assert.equal((idleHtml.match(/stock-negative/g) || []).length, 2);
     assert.ok(idleHtml.includes('<td class="text-right">-</td>'));
@@ -283,6 +253,6 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     assert.equal(disabledTags[0], reorderInput);
 
     const adjustBtn = findOpeningTag(html, '0へ補正', 'button');
-    assert.ok(!adjustBtn.includes('disabled'), 'Adjustment button must stay enabled when only reorder point is saving');
+    assert.doesNotMatch(adjustBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Adjustment button must stay enabled when only reorder point is saving');
   });
 });

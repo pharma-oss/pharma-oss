@@ -4,8 +4,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   listDisabledOpeningTags,
-  findOpeningTag
+  findOpeningTag,
+  stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { buildOperationalKpis } from '@/lib/operational_kpi';
 import { DEFAULT_BACKUP_SCHEDULE_POLICY } from '@/lib/backup';
 import type { FacilitySettings } from '@/db/types';
@@ -78,41 +80,25 @@ function renderWithIsRecordingClosing(
   props: OperationalClosingSectionProps,
   isRecordingClosingOverride: boolean
 ): string {
-  let callCount = 0;
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 0) {
-          assert.equal(
-            initialState,
-            false,
-            `Expected OperationalClosingSection useState call #0 initial value to be false (isRecordingClosing), got ${String(initialState)}`
-          );
-          dispatcher.useState = origUseState;
-          return [isRecordingClosingOverride, () => {}];
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(OperationalClosingSection, props),
+    {
+      componentName: 'OperationalClosingSection',
+      restoreAtCallIndex: 0,
+      expectedCalls: 1,
+      overrides: {
+        0: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected OperationalClosingSection useState call #0 initial value to be false (isRecordingClosing), got ${String(initialState)}`
+            ),
+          value: isRecordingClosingOverride
         }
-        return origUseState(initialState);
-      };
+      }
     }
-    return React.createElement(OperationalClosingSection, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    1,
-    `Expected OperationalClosingSection to call useState exactly 1 time, got ${callCount}`
   );
-  return html;
 }
 
 describe('OperationalClosingSection component contracts', () => {
@@ -124,6 +110,8 @@ describe('OperationalClosingSection component contracts', () => {
     const props = createMockOperationalClosingSectionProps();
     const html = renderToStaticMarkup(React.createElement(OperationalClosingSection, props));
 
+    const cleanMarkup = stripStyleBlocks(html);
+
     // Structural expectations
     assert.ok(html.includes('日次・月次KPI'), 'Section header should contain title');
     assert.ok(
@@ -131,8 +119,16 @@ describe('OperationalClosingSection component contracts', () => {
       'Section header should contain description'
     );
     assert.ok(html.includes('本日完了率'), 'KPI card 本日完了率 should be rendered');
+    assert.ok(
+      cleanMarkup.includes('<span class="kpi-label">本日完了率</span><span class="kpi-value">0%</span><span class="kpi-sub">0/10件完了</span>'),
+      'KPI card 本日完了率 should display 0% and 0/10件完了 when no completed visits exist'
+    );
     assert.ok(html.includes('平均処理時間'), 'KPI card 平均処理時間 should be rendered');
     assert.ok(html.includes('閉店前残タスク'), 'KPI card 閉店前残タスク should be rendered');
+    assert.ok(
+      cleanMarkup.includes('<span class="kpi-label">閉店前残タスク</span><span class="kpi-value">0</span><span class="kpi-sub">主要キュー完了</span>'),
+      'KPI card 閉店前残タスク should display 0 and 主要キュー完了'
+    );
     assert.ok(html.includes('月次請求締め率'), 'KPI card 月次請求締め率 should be rendered');
     assert.ok(html.includes('バックアップ確認'), 'KPI card バックアップ確認 should be rendered');
 
@@ -271,6 +267,54 @@ describe('OperationalClosingSection component contracts', () => {
     assert.ok(
       blockedHtml.includes('section-count urgent'),
       'Blocked status should include urgent class on section-count'
+    );
+  });
+
+  it('displays non-zero completion rate, completed count, green tone, and average time from operational KPIs', () => {
+    const counts = createMockCounts({
+      todayReceptionCount: 2,
+      completedCount: 2
+    });
+    const kpis = buildOperationalKpis({
+      basisDate: new Date('2026-11-04T12:00:00+09:00'),
+      visits: [
+        {
+          visitId: 'v-kpi-1',
+          patientId: 'p-1',
+          issueDate: '2026-11-04T09:00:00+09:00',
+          status: 'completed',
+          claimLifecycle: { status: 'closed', closedAt: '2026-11-04T10:00:00+09:00' }
+        },
+        {
+          visitId: 'v-kpi-2',
+          patientId: 'p-2',
+          issueDate: '2026-11-04T10:00:00+09:00',
+          status: 'completed',
+          claimLifecycle: { status: 'closed', closedAt: '2026-11-04T11:00:00+09:00' }
+        }
+      ],
+      soapRecords: [
+        { visitId: 'v-kpi-1', updatedAt: '2026-11-04T09:30:00+09:00' },
+        { visitId: 'v-kpi-2', updatedAt: '2026-11-04T10:30:00+09:00' }
+      ],
+      counts
+    });
+    const props = createMockOperationalClosingSectionProps({ counts, kpis });
+    const html = renderToStaticMarkup(React.createElement(OperationalClosingSection, props));
+    const cleanMarkup = stripStyleBlocks(html);
+
+    assert.ok(
+      cleanMarkup.includes('<div class="kpi-card green">') &&
+      cleanMarkup.includes('<span class="kpi-label">本日完了率</span><span class="kpi-value">100%</span><span class="kpi-sub">2/2件完了</span>'),
+      'KPI card 本日完了率 should render green tone, 100%, and 2/2件完了'
+    );
+    assert.ok(
+      cleanMarkup.includes('<span class="kpi-label">平均処理時間</span><span class="kpi-value">30分</span>'),
+      'KPI card 平均処理時間 should render 30分'
+    );
+    assert.ok(
+      cleanMarkup.includes('<span class="kpi-label">月次請求締め率</span><span class="kpi-value">100%</span><span class="kpi-sub">2/2件締め</span>'),
+      'KPI card 月次請求締め率 should render 100% and 2/2件締め'
     );
   });
 });

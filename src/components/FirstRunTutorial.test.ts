@@ -7,18 +7,11 @@ import {
   listDisabledOpeningTags,
   stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import FirstRunTutorial, {
   DEMO_TUTORIAL_FIXTURE,
   tutorialStorageKey
 } from './FirstRunTutorial';
-
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
 
 function createTutorialProps() {
   return {
@@ -35,43 +28,21 @@ function renderWithOpenModalOnSsr(): {
   observedInitialStates: unknown[];
 } {
   const observedInitialStates: unknown[] = [];
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = observedInitialStates.length;
-      observedInitialStates.push(initialState);
-      if (idx === 0) {
-        return [true, () => {}];
+  const rawHtml = renderMarkupWithReactUseStateMock(
+    () => React.createElement(FirstRunTutorial, createTutorialProps()),
+    {
+      componentName: 'FirstRunTutorial',
+      restoreAtCallIndex: 2,
+      onUseState: ({ callIndex, initialState }) => {
+        observedInitialStates.push(initialState);
+        if (callIndex === 0) {
+          return [true, () => {}];
+        }
+        return undefined;
       }
-      if (idx === 2) {
-        dispatcher.useState = origUseState;
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(FirstRunTutorial, createTutorialProps());
-  }
-
-  try {
-    const html = stripStyleBlocks(renderToStaticMarkup(React.createElement(Wrapper)));
-    return { html, observedInitialStates };
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return { html: stripStyleBlocks(rawHtml), observedInitialStates };
 }
 
 describe('FirstRunTutorial UI rendering and isolation', () => {

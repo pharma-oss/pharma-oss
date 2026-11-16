@@ -6,6 +6,7 @@ import {
   listDisabledOpeningTags,
   findOpeningTag
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
 import {
   ClaimWorkbenchSection,
@@ -108,56 +109,38 @@ function renderWithStateOverrides(
   props: ClaimWorkbenchSectionProps,
   overrides: StateOverrides
 ): string {
-  let callCount = 0;
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(ClaimWorkbenchSection, props),
+    {
+      componentName: 'ClaimWorkbenchSection',
+      restoreAtCallIndex: 5,
+      expectedCalls: 6,
+      onUseState: ({ callIndex, initialState }) => {
         assert.equal(
           initialState,
           false,
-          `Expected ClaimWorkbenchSection useState call #${currentIndex} initial value to be false, got ${String(initialState)}`
+          `Expected ClaimWorkbenchSection useState call #${callIndex} initial value to be false, got ${String(initialState)}`
         );
 
         let overrideValue = false;
-        if (currentIndex === 0 && overrides.isExportingUke !== undefined) {
+        if (callIndex === 0 && overrides.isExportingUke !== undefined) {
           overrideValue = overrides.isExportingUke;
-        } else if (currentIndex === 1 && overrides.isExportingOfficialUke !== undefined) {
+        } else if (callIndex === 1 && overrides.isExportingOfficialUke !== undefined) {
           overrideValue = overrides.isExportingOfficialUke;
-        } else if (currentIndex === 2 && overrides.isCheckingOfficialReadiness !== undefined) {
+        } else if (callIndex === 2 && overrides.isCheckingOfficialReadiness !== undefined) {
           overrideValue = overrides.isCheckingOfficialReadiness;
-        } else if (currentIndex === 3 && overrides.isCheckingRules !== undefined) {
+        } else if (callIndex === 3 && overrides.isCheckingRules !== undefined) {
           overrideValue = overrides.isCheckingRules;
-        } else if (currentIndex === 4 && overrides.isImportingAcceptance !== undefined) {
+        } else if (callIndex === 4 && overrides.isImportingAcceptance !== undefined) {
           overrideValue = overrides.isImportingAcceptance;
-        } else if (currentIndex === 5 && overrides.isClosingAccepted !== undefined) {
+        } else if (callIndex === 5 && overrides.isClosingAccepted !== undefined) {
           overrideValue = overrides.isClosingAccepted;
         }
 
-        if (callCount === 6) {
-          dispatcher.useState = origUseState;
-        }
         return [overrideValue, () => {}];
-      };
+      }
     }
-    return React.createElement(ClaimWorkbenchSection, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    6,
-    `Expected ClaimWorkbenchSection to call useState exactly 6 times, got ${callCount}`
   );
-  return html;
 }
 
 describe('ClaimWorkbenchSection component contracts and UI disabled states', () => {

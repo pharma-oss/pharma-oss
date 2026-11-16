@@ -6,6 +6,7 @@ import {
   listDisabledOpeningTags,
   findOpeningTag
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import type { DashboardFollowUpCandidate } from '@/lib/dashboard_tasks';
 import {
   FollowUpModal,
@@ -48,41 +49,25 @@ function renderWithIsSubmitting(
   props: FollowUpModalProps,
   isSubmittingOverride: boolean
 ): string {
-  let callCount = 0;
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 4) {
-          assert.equal(
-            initialState,
-            false,
-            `Expected FollowUpModal useState call #4 initial value to be false (isSubmitting), got ${String(initialState)}`
-          );
-          dispatcher.useState = origUseState;
-          return [isSubmittingOverride, () => {}];
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(FollowUpModal, props),
+    {
+      componentName: 'FollowUpModal',
+      restoreAtCallIndex: 4,
+      expectedCalls: 5,
+      overrides: {
+        4: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected FollowUpModal useState call #4 initial value to be false (isSubmitting), got ${String(initialState)}`
+            ),
+          value: isSubmittingOverride
         }
-        return origUseState(initialState);
-      };
+      }
     }
-    return React.createElement(FollowUpModal, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    5,
-    `Expected FollowUpModal to call useState exactly 5 times, got ${callCount}`
   );
-  return html;
 }
 
 describe('FollowUpModal component contracts', () => {

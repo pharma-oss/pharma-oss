@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DailyCheckPanel } from './inventory/components/DailyCheckPanel';
 import { toInventoryDrugRow } from './inventory/types';
 import {
   DAILY_CONTROLLED_DRUG_DIFFERENCE_REASONS,
   DAILY_CONTROLLED_DRUG_SNAPSHOT_STORAGE_KEY,
-  hasDailyControlledDrugActualCount,
   getDailyControlledDrugCheckSummary,
   getDailyControlledDrugMissingReasonRows,
   type DailyControlledDrugCheckRow
@@ -158,8 +158,8 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
     const saveBtnTag = findOpeningTag(html, '棚卸し結果を保存', 'button');
     const saveTooltipSpan = findOpeningTag(html, '棚卸し結果を保存', 'span');
 
-    assert.ok(!fillBtnTag.includes('disabled'), 'Fill button must be enabled when controlled drugs exist');
-    assert.ok(!csvBtnTag.includes('disabled'), 'CSV export button must be enabled when controlled drugs exist');
+    assert.doesNotMatch(fillBtnTag, /\sdisabled=""(?=[\s/>]|$)/, 'Fill button must be enabled when controlled drugs exist');
+    assert.doesNotMatch(csvBtnTag, /\sdisabled=""(?=[\s/>]|$)/, 'CSV export button must be enabled when controlled drugs exist');
     assert.ok(clearBtnTag.includes('disabled=""'), 'Clear button must remain disabled when enteredCount is 0');
     assert.ok(saveBtnTag.includes('disabled=""'), 'Save button must remain disabled when enteredCount is 0');
     assert.ok(saveTooltipSpan.includes('data-disabled="true"'), 'Save wrapper must have data-disabled="true"');
@@ -180,55 +180,39 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
     overrides: DailyCheckStateOverrides = {}
   ): string {
     const { actualCounts = {}, isSavingInventory = false } = overrides;
-    let callCount = 0;
-
-    function Wrapper(): React.ReactNode {
-      const internals = (React as unknown as {
-        __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-          H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+    return renderMarkupWithReactUseStateMock(
+      () =>
+        React.createElement(DailyCheckPanel, {
+          db: null,
+          drugs,
+          pendingStockMap: new Map<string, number>()
+        }),
+      {
+        componentName: 'DailyCheckPanel',
+        restoreAtCallIndex: 7,
+        expectedCalls: 8,
+        overrides: {
+          0: {
+            assertInitial: (initialState) =>
+              assert.deepEqual(
+                initialState,
+                {},
+                `Expected DailyCheckPanel useState call #0 initial value to be {}, got ${JSON.stringify(initialState)}`
+              ),
+            value: actualCounts
+          },
+          7: {
+            assertInitial: (initialState) =>
+              assert.equal(
+                initialState,
+                false,
+                `Expected DailyCheckPanel useState call #7 initial value to be false (isSavingInventory), got ${String(initialState)}`
+              ),
+            value: isSavingInventory
+          }
         }
-      }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-      const dispatcher = internals?.H;
-      if (dispatcher?.useState) {
-        const origUseState = dispatcher.useState;
-        dispatcher.useState = (initialState: unknown) => {
-          const currentIndex = callCount++;
-          if (currentIndex === 0) {
-            assert.deepEqual(
-              initialState,
-              {},
-              `Expected DailyCheckPanel useState call #0 initial value to be {}, got ${JSON.stringify(initialState)}`
-            );
-            return [actualCounts, () => {}];
-          }
-          if (currentIndex === 7) {
-            assert.equal(
-              initialState,
-              false,
-              `Expected DailyCheckPanel useState call #7 initial value to be false (isSavingInventory), got ${String(initialState)}`
-            );
-            dispatcher.useState = origUseState;
-            return [isSavingInventory, () => {}];
-          }
-          return origUseState(initialState);
-        };
       }
-
-      return React.createElement(DailyCheckPanel, {
-        db: null,
-        drugs,
-        pendingStockMap: new Map<string, number>()
-      });
-    }
-
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.equal(
-      callCount,
-      8,
-      `Expected DailyCheckPanel to call useState exactly 8 times, got ${callCount}`
     );
-    return html;
   }
 
   it('pins per-row clear count button disabled state based on hasActualCount', () => {
@@ -269,8 +253,9 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
       'ジアゼパム錠5mgの実地棚在庫数をクリア',
       'button'
     );
-    assert.ok(
-      !rowClearEntered1.includes('disabled'),
+    assert.doesNotMatch(
+      rowClearEntered1,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Entered narcotic row clear button must be enabled: ${rowClearEntered1}`
     );
     assert.ok(
@@ -293,12 +278,14 @@ describe('DailyCheckPanel UI disabled states and markup pinning', () => {
     const saveBtnTag = findOpeningTag(html, 'btn-primary flex-center gap-2', 'button');
     const saveTooltipSpan = findOpeningTag(html, 'btn-tooltip-wrapper', 'span');
 
-    assert.ok(
-      !clearAllBtnTag.includes('disabled'),
+    assert.doesNotMatch(
+      clearAllBtnTag,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Clear all button must be enabled when enteredCount > 0: ${clearAllBtnTag}`
     );
-    assert.ok(
-      !saveBtnTag.includes('disabled'),
+    assert.doesNotMatch(
+      saveBtnTag,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Save button must be enabled when enteredCount > 0 and idle: ${saveBtnTag}`
     );
     assert.ok(

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
 import { MedicineNotebookStickerPrint } from './components/MedicineNotebookStickerPrint';
 import type { PharmacyInfo } from './types';
 
@@ -58,13 +59,46 @@ test('MedicineNotebookStickerPrint renders handbook sticker with drug info, dose
   assert.ok(html.includes('アムロジピンOD錠5mg「トーワ」'), '調剤薬品名が表示されていること');
   assert.ok(html.includes('14日分'), '日数が表示されていること');
 
-  // 4. 用法・用法補足・タイミングバッジ
+  const cleanMarkup = stripStyleBlocks(html);
+
+  // 4. 用法・用法補足・タイミングバッジ（用法文言ではなくバッジ行自体を検証する）
   assert.ok(html.includes('1日1回朝食後'), '用法が表示されていること');
   assert.ok(html.includes('（起床時血圧測定後に服用）'), '用法補足が表示されていること');
-  assert.ok(html.includes('朝食後'), 'タイミングバッジが表示されていること');
+  assert.ok(
+    cleanMarkup.includes('<div class="sticker-timing-row"><span>朝</span><span>食後</span></div>'),
+    'タイミングバッジ行に朝・食後が表示されていること'
+  );
 
   // 5. 薬局・担当薬剤師
   assert.ok(html.includes('みらい調剤薬局'), '薬局名が表示されていること');
   assert.ok(html.includes('03-1234-5678'), '薬局電話番号が表示されていること');
   assert.ok(html.includes('担当 薬剤 師範'), '担当薬剤師が表示されていること');
+});
+
+test('MedicineNotebookStickerPrint renders fallback timing badge when usage has no recognized timing keywords', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(MedicineNotebookStickerPrint, {
+      patientData: { name: '手帳 次郎', patientId: 'PAT-STICKER-002' },
+      prescriptionItems: [
+        {
+          itemId: 'sticker-item-2',
+          drugName: 'カロナール錠200',
+          amount: 1,
+          days: 5,
+          usage: '疼痛時服用',
+          rpNumber: 1,
+          unitText: '錠'
+        }
+      ],
+      pharmacyInfo: mockPharmacyInfo,
+      dispensingDateStr: '2026年10月6日',
+      renderIdentityMark: () => null
+    })
+  );
+
+  const cleanMarkup = stripStyleBlocks(html);
+  assert.ok(
+    cleanMarkup.includes('<div class="sticker-timing-row"><span>指示どおり</span></div>'),
+    'タイミングキーワードなし時は「指示どおり」バッジが表示されること'
+  );
 });

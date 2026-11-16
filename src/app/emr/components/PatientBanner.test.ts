@@ -16,11 +16,11 @@ import {
   buildPublicInsuranceBadgeList,
   toEditablePublicInsurances,
   toPublicInsurances,
-  getPublicInsuranceCategoryName,
   type EditablePublicInsurance
 } from '@/lib/patient_public_insurance';
 import type { PublicInsurance } from '@/db/types';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { FEATURE_AVAILABILITY } from '@/lib/feature_availability';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
@@ -35,36 +35,28 @@ function renderWithPatientBannerOverrides(overrides: {
   mynaReaderState?: unknown;
   editCopaymentSupport?: unknown;
 }): string {
-  let callCount = 0;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 0 && overrides.patientData !== undefined) {
-          return [overrides.patientData, () => {}];
-        }
-        if (currentIndex === 2 && overrides.isReading !== undefined) {
-          return [overrides.isReading, () => {}];
-        }
-        if (currentIndex === 3 && overrides.isReadingClinical !== undefined) {
-          return [overrides.isReadingClinical, () => {}];
-        }
-        if (currentIndex === 4 && overrides.mynaReaderState !== undefined) {
-          return [overrides.mynaReaderState, () => {}];
-        }
-        if (currentIndex === 7 && overrides.isModalOpen !== undefined) {
-          return [overrides.isModalOpen, () => {}];
-        }
-        if (currentIndex === 21 && overrides.editCopaymentSupport !== undefined) {
+  return renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(PatientBanner, {
+        patientAlerts: [],
+        targetVisitId: 'test-visit-id',
+        onOpenPicking: () => { }
+      }),
+    {
+      componentName: 'PatientBanner',
+      restoreAtCallIndex: 36,
+      minCalls: 37,
+      overrides: {
+        ...(overrides.patientData !== undefined ? { 0: { value: overrides.patientData } } : {}),
+        ...(overrides.isReading !== undefined ? { 2: { value: overrides.isReading } } : {}),
+        ...(overrides.isReadingClinical !== undefined ? { 3: { value: overrides.isReadingClinical } } : {}),
+        ...(overrides.mynaReaderState !== undefined ? { 4: { value: overrides.mynaReaderState } } : {}),
+        ...(overrides.isModalOpen !== undefined ? { 7: { value: overrides.isModalOpen } } : {}),
+        ...(overrides.questionnaireRawText !== undefined ? { 26: { value: overrides.questionnaireRawText } } : {}),
+        ...(overrides.isQuestionnaireProcessing !== undefined ? { 36: { value: overrides.isQuestionnaireProcessing } } : {})
+      },
+      onUseState: ({ callIndex, initialState }) => {
+        if (callIndex === 21 && overrides.editCopaymentSupport !== undefined) {
           assert.equal(
             typeof initialState,
             'object',
@@ -79,42 +71,20 @@ function renderWithPatientBannerOverrides(overrides: {
               ...(initialState as Record<string, unknown>),
               ...(overrides.editCopaymentSupport as Record<string, unknown>)
             },
-            () => {}
+            () => { }
           ];
         }
-        if (currentIndex === 26 && overrides.questionnaireRawText !== undefined) {
-          return [overrides.questionnaireRawText, () => {}];
-        }
-        if (currentIndex === 36) {
-          dispatcher.useState = origUseState;
-          if (overrides.isQuestionnaireProcessing !== undefined) {
-            return [overrides.isQuestionnaireProcessing, () => {}];
-          }
-        }
-        return origUseState(initialState);
-      };
+        return undefined;
+      }
     }
-
-    return React.createElement(PatientBanner, {
-      patientAlerts: [],
-      targetVisitId: 'test-visit-id',
-      onOpenPicking: () => {}
-    });
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.ok(
-    callCount >= 37,
-    `PatientBanner useState mock expected at least 37 calls, observed ${callCount}`
   );
-  return html;
 }
 
 test('PatientBanner renders initial fallback state without crashing and contains edit action', () => {
   const element = React.createElement(PatientBanner, {
     patientAlerts: [],
     targetVisitId: null,
-    onOpenPicking: () => {}
+    onOpenPicking: () => { }
   });
 
   const html = renderToStaticMarkup(element);
@@ -126,7 +96,7 @@ test('PatientBanner renders initial fallback state without crashing and contains
 
 test('PatientBanner keeps the Myna read button off until the connection is confirmed', () => {
   const html = renderToStaticMarkup(
-    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => {} })
+    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => { } })
   );
   const mynaButton = html.match(/<button[^>]*data-testid="myna-read-button"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
   assert.ok(mynaButton.length > 0, 'the Myna button must be rendered');
@@ -136,7 +106,7 @@ test('PatientBanner keeps the Myna read button off until the connection is confi
 
 test('PatientBanner disables the edit action while no patient is loaded, so the edit modal cannot open for an unselected patient', () => {
   const html = renderToStaticMarkup(
-    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => {} })
+    React.createElement(PatientBanner, { patientAlerts: [], targetVisitId: null, onOpenPicking: () => { } })
   );
   const editButton = html.match(/<button[^>]*class="btn-edit-insurance[^"]*"[^>]*>/)?.[0] ?? '';
   assert.ok(editButton.length > 0, 'edit button must be rendered');

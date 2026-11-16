@@ -1,11 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { DatabaseContext } from '@/db/DatabaseContext';
 import type { RecentDrug } from '@/lib/drug_recents';
 import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { findOpeningTag, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import type { Prescription } from '../types';
 import { PrescribedDrugInput, calculatePrescribedDrugSelectUpdates } from './PrescribedDrugInput';
 
@@ -98,14 +98,6 @@ test('calculatePrescribedDrugSelectUpdates suppresses unitText/unitCode when mas
   assert.equal(unitCodeUpdate, undefined);
 });
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 interface PrescribedDrugInputHookOverrides {
   suggestions?: DrugMasterRecord[];
   showDropdown?: boolean;
@@ -151,81 +143,62 @@ function renderPrescribedDrugInput(
   };
   const hooks = options.hooks ?? {};
 
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.ok(
-          Array.isArray(initialState) && initialState.length === 0,
-          'Hook #0 (suggestions) must initialize as empty array'
-        );
-        if (hooks.suggestions !== undefined) return [hooks.suggestions, () => {}];
-      }
-      if (idx === 1) {
-        assert.equal(initialState, false, 'Hook #1 (showDropdown) must initialize as false');
-        if (hooks.showDropdown !== undefined) return [hooks.showDropdown, () => {}];
-      }
-      if (idx === 2) {
-        assert.equal(initialState, -1, 'Hook #2 (focusedIndex) must initialize as -1');
-        if (hooks.focusedIndex !== undefined) return [hooks.focusedIndex, () => {}];
-      }
-      if (idx === 3) {
-        assert.equal(initialState, '', 'Hook #3 (typedQuery) must initialize as empty string');
-        if (hooks.typedQuery !== undefined) return [hooks.typedQuery, () => {}];
-      }
-      if (idx === 4) {
-        assert.ok(
-          Array.isArray(initialState) && initialState.length === 0,
-          'Hook #4 (recentDrugs) must initialize as empty array'
-        );
-        if (hooks.recentDrugs !== undefined) return [hooks.recentDrugs, () => {}];
-      }
-      if (idx === 5) {
-        assert.equal(initialState, false, 'Hook #5 (showRecents) must initialize as false');
-        dispatcher.useState = origUseState;
-        if (hooks.showRecents !== undefined) return [hooks.showRecents, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(PrescribedDrugInput, {
-      prescription,
-      index: options.index ?? 0,
-      onChange: () => {},
-      onOpenDrugSearch: () => {}
-    });
-  }
-
-  let html: string;
-  try {
-    html = renderToStaticMarkup(
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
       React.createElement(
         DatabaseContext.Provider,
         { value: null },
-        React.createElement(Wrapper)
-      )
-    );
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
+        React.createElement(PrescribedDrugInput, {
+          prescription,
+          index: options.index ?? 0,
+          onChange: () => { },
+          onOpenDrugSearch: () => { }
+        })
+      ),
+    {
+      componentName: 'PrescribedDrugInput',
+      restoreAtCallIndex: 5,
+      expectedCalls: 6,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.ok(
+              Array.isArray(v) && v.length === 0,
+              'Hook #0 (suggestions) must initialize as empty array'
+            ),
+          ...(hooks.suggestions !== undefined ? { value: hooks.suggestions } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #1 (showDropdown) must initialize as false'),
+          ...(hooks.showDropdown !== undefined ? { value: hooks.showDropdown } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.equal(v, -1, 'Hook #2 (focusedIndex) must initialize as -1'),
+          ...(hooks.focusedIndex !== undefined ? { value: hooks.focusedIndex } : {})
+        },
+        3: {
+          assertInitial: (v) =>
+            assert.equal(v, '', 'Hook #3 (typedQuery) must initialize as empty string'),
+          ...(hooks.typedQuery !== undefined ? { value: hooks.typedQuery } : {})
+        },
+        4: {
+          assertInitial: (v) =>
+            assert.ok(
+              Array.isArray(v) && v.length === 0,
+              'Hook #4 (recentDrugs) must initialize as empty array'
+            ),
+          ...(hooks.recentDrugs !== undefined ? { value: hooks.recentDrugs } : {})
+        },
+        5: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #5 (showRecents) must initialize as false'),
+          ...(hooks.showRecents !== undefined ? { value: hooks.showRecents } : {})
+        }
+      }
     }
-  }
-
-  assert.equal(callCount, 6, 'PrescribedDrugInput must call useState exactly 6 times');
+  );
   return stripStyleBlocks(html);
 }
 

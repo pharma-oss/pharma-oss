@@ -3,9 +3,10 @@ import assert from 'node:assert';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { findOpeningTag, listDisabledOpeningTags, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import PrescriptionQrReader from './PrescriptionQrReader';
 
-const noop = () => {};
+const noop = () => { };
 
 test('PrescriptionQrReader exports as callable React component', () => {
   assert.ok(PrescriptionQrReader, 'PrescriptionQrReader should be exported');
@@ -103,5 +104,129 @@ test('PrescriptionQrReader action controls disabled and aria-disabled states whe
   const cleanMarkup = stripStyleBlocks(htmlEnabled);
   assert.strictEqual(cleanMarkup.includes('QRコードを追加してください。'), true, '初期ステータスメッセージが表示されていること');
   assert.strictEqual(cleanMarkup.includes('読取済み 0'), true, '初期読取済み件数バッジが表示されていること');
+});
+
+type QrStateOverrides = {
+  segments?: Array<{ id: string; text: string; source: 'camera' | 'image' | 'manual' }>;
+  manualText?: string;
+  message?: string;
+  isCameraActive?: boolean;
+  isStartingCamera?: boolean;
+  isDecodingImage?: boolean;
+  isApplying?: boolean;
+};
+
+function renderWithQrState(
+  props: { disabled?: boolean; onApplyQrData: () => void },
+  overrides: QrStateOverrides
+): string {
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(PrescriptionQrReader, props),
+    {
+      componentName: 'PrescriptionQrReader',
+      restoreAtCallIndex: 6,
+      expectedCalls: 7,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.ok(
+              Array.isArray(v) && v.length === 0,
+              `Expected useState #0 initial value to be [] (segments), got ${String(v)}`
+            ),
+          ...('segments' in overrides ? { value: overrides.segments } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.strictEqual(
+              v,
+              '',
+              `Expected useState #1 initial value to be "" (manualText), got ${String(v)}`
+            ),
+          ...('manualText' in overrides ? { value: overrides.manualText } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.strictEqual(
+              v,
+              'QRコードを追加してください。',
+              `Expected useState #2 initial value to be default message, got ${String(v)}`
+            ),
+          ...('message' in overrides ? { value: overrides.message } : {})
+        },
+        3: {
+          assertInitial: (v) =>
+            assert.strictEqual(v, false, 'Expected useState #3 (isCameraActive) initial value false'),
+          ...('isCameraActive' in overrides ? { value: overrides.isCameraActive } : {})
+        },
+        4: {
+          assertInitial: (v) =>
+            assert.strictEqual(v, false, 'Expected useState #4 (isStartingCamera) initial value false'),
+          ...('isStartingCamera' in overrides ? { value: overrides.isStartingCamera } : {})
+        },
+        5: {
+          assertInitial: (v) =>
+            assert.strictEqual(v, false, 'Expected useState #5 (isDecodingImage) initial value false'),
+          ...('isDecodingImage' in overrides ? { value: overrides.isDecodingImage } : {})
+        },
+        6: {
+          assertInitial: (v) =>
+            assert.strictEqual(v, false, 'Expected useState #6 (isApplying) initial value false'),
+          ...('isApplying' in overrides ? { value: overrides.isApplying } : {})
+        }
+      }
+    }
+  );
+}
+
+test('PrescriptionQrReader pins disabled prop interaction with manualText and segments state', () => {
+  // manualText 入力あり: disabled=false なら「QRを追加」は有効、disabled=true なら「QRを追加」は無効
+  const withManualEnabledHtml = renderWithQrState(
+    { disabled: false, onApplyQrData: noop },
+    { manualText: 'JAHIS10\n1,テスト' }
+  );
+  const addManualEnabled = findOpeningTag(withManualEnabledHtml, 'QRを追加', 'button');
+  assert.doesNotMatch(addManualEnabled, /\sdisabled=""/, 'manualText入力あり・disabled=false時はQRを追加ボタンが有効であること');
+
+  const withManualDisabledHtml = renderWithQrState(
+    { disabled: true, onApplyQrData: noop },
+    { manualText: 'JAHIS10\n1,テスト' }
+  );
+  const addManualDisabled = findOpeningTag(withManualDisabledHtml, 'QRを追加', 'button');
+  assert.match(addManualDisabled, /\sdisabled=""/, 'manualText入力ありでもdisabled=true時はQRを追加ボタンが無効化されること');
+
+  // segments あり: disabled=false ならクリア・反映ボタンは有効、disabled=true なら両方無効
+  const sampleSegments = [{ id: 'qr-1', text: 'JAHIS10\n1,テスト', source: 'manual' as const }];
+  const withSegmentsEnabledHtml = renderWithQrState(
+    { disabled: false, onApplyQrData: noop },
+    { segments: sampleSegments }
+  );
+  const cleanSegmentsEnabled = stripStyleBlocks(withSegmentsEnabledHtml);
+  assert.ok(cleanSegmentsEnabled.includes('読取済み 1'), 'セグメント1件時は読取済み 1が表示されること');
+  assert.ok(cleanSegmentsEnabled.includes('1. スキャナー / 2行'), 'セグメント行数が一覧表示されること');
+  assert.doesNotMatch(
+    findOpeningTag(withSegmentsEnabledHtml, 'title="読取済みQRをクリア"', 'button'),
+    /\sdisabled=""/,
+    'segmentsあり・disabled=false時はクリアボタンが有効であること'
+  );
+  assert.doesNotMatch(
+    findOpeningTag(withSegmentsEnabledHtml, 'data-testid="prescription-qr-apply"', 'button'),
+    /\sdisabled=""/,
+    'segmentsあり・disabled=false時は反映ボタンが有効であること'
+  );
+
+  const withSegmentsDisabledHtml = renderWithQrState(
+    { disabled: true, onApplyQrData: noop },
+    { segments: sampleSegments }
+  );
+  assert.match(
+    findOpeningTag(withSegmentsDisabledHtml, 'title="読取済みQRをクリア"', 'button'),
+    /\sdisabled=""/,
+    'segmentsありでもdisabled=true時はクリアボタンが無効化されること'
+  );
+  assert.match(
+    findOpeningTag(withSegmentsDisabledHtml, 'data-testid="prescription-qr-apply"', 'button'),
+    /\sdisabled=""/,
+    'segmentsありでもdisabled=true時は反映ボタンが無効化されること'
+  );
 });
 

@@ -1,10 +1,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { DatabaseContext } from '@/db/DatabaseContext';
 import type { DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { findOpeningTag, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import {
   DISPENSED_DRUG_CANDIDATES_FETCH_ERROR_MESSAGE,
   NO_SUBSTITUTION_LABEL,
@@ -67,14 +67,6 @@ test('getDispensedDrugCandidateViewState returns empty status when candidates co
   assert.equal(state.candidateCount, 0);
 });
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 interface DispensedDrugInputHookOverrides {
   candidates?: DrugMasterRecord[];
   hasFetchError?: boolean;
@@ -118,70 +110,49 @@ function renderDispensedDrugInput(
   };
   const hooks = options.hooks ?? {};
 
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.ok(
-          Array.isArray(initialState) && initialState.length === 0,
-          'Hook #0 (candidates) must initialize as empty array'
-        );
-        if (hooks.candidates !== undefined) return [hooks.candidates, () => {}];
-      }
-      if (idx === 1) {
-        assert.equal(initialState, false, 'Hook #1 (hasFetchError) must initialize as false');
-        if (hooks.hasFetchError !== undefined) return [hooks.hasFetchError, () => {}];
-      }
-      if (idx === 2) {
-        assert.equal(initialState, false, 'Hook #2 (showDropdown) must initialize as false');
-        if (hooks.showDropdown !== undefined) return [hooks.showDropdown, () => {}];
-      }
-      if (idx === 3) {
-        assert.equal(initialState, -1, 'Hook #3 (focusedIndex) must initialize as -1');
-        dispatcher.useState = origUseState;
-        if (hooks.focusedIndex !== undefined) return [hooks.focusedIndex, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(DispensedDrugInput, {
-      prescription,
-      index: options.index ?? 0,
-      onChange: () => {},
-      onOpenDrugSearch: () => {}
-    });
-  }
-
-  let html: string;
-  try {
-    html = renderToStaticMarkup(
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
       React.createElement(
         DatabaseContext.Provider,
         { value: null },
-        React.createElement(Wrapper)
-      )
-    );
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
+        React.createElement(DispensedDrugInput, {
+          prescription,
+          index: options.index ?? 0,
+          onChange: () => {},
+          onOpenDrugSearch: () => {}
+        })
+      ),
+    {
+      componentName: 'DispensedDrugInput',
+      restoreAtCallIndex: 3,
+      expectedCalls: 4,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.ok(
+              Array.isArray(v) && v.length === 0,
+              'Hook #0 (candidates) must initialize as empty array'
+            ),
+          ...(hooks.candidates !== undefined ? { value: hooks.candidates } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #1 (hasFetchError) must initialize as false'),
+          ...(hooks.hasFetchError !== undefined ? { value: hooks.hasFetchError } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #2 (showDropdown) must initialize as false'),
+          ...(hooks.showDropdown !== undefined ? { value: hooks.showDropdown } : {})
+        },
+        3: {
+          assertInitial: (v) =>
+            assert.equal(v, -1, 'Hook #3 (focusedIndex) must initialize as -1'),
+          ...(hooks.focusedIndex !== undefined ? { value: hooks.focusedIndex } : {})
+        }
+      }
     }
-  }
-
-  assert.equal(callCount, 4, 'DispensedDrugInput must call useState exactly 4 times');
+  );
   return stripStyleBlocks(html);
 }
 

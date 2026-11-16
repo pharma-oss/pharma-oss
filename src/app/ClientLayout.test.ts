@@ -12,10 +12,10 @@ import {
   SESSION_ACTIVITY_EVENTS
 } from '@/hooks/useSessionLock';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import ClientLayout from './ClientLayout';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
@@ -23,8 +23,6 @@ function renderClientLayoutWithSetupState(overrides: {
   isCreatingInitialAdmin?: boolean;
   isResumingGuestDemo?: boolean;
 }): string {
-  let callCount = 0;
-
   const mockRouter = {
     push: () => {},
     replace: () => {},
@@ -34,72 +32,61 @@ function renderClientLayoutWithSetupState(overrides: {
     prefetch: () => {}
   };
 
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+  return renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(
+        AppRouterContext.Provider,
+        { value: mockRouter as never },
+        React.createElement(ClientLayout, null, 'child-content')
+      ),
+    {
+      componentName: 'ClientLayout',
+      restoreAtCallIndex: 22,
+      minCalls: 23,
+      overrides: {
+        2: {
+          assertInitial: (initialState) =>
+            assert.deepStrictEqual(
+              initialState,
+              [],
+              `Expected ClientLayout useState call #2 initial value to be [] (users), got ${JSON.stringify(initialState)}`
+            ),
+          value: [{ userId: 'initial_admin', name: '管理者', role: 'admin' }]
+        },
+        3: {
+          assertInitial: (initialState) =>
+            assert.strictEqual(
+              initialState,
+              false,
+              `Expected ClientLayout useState call #3 initial value to be false (hasLoadedUsers), got ${String(initialState)}`
+            ),
+          value: true
+        },
+        21: {
+          assertInitial: (initialState) =>
+            assert.strictEqual(
+              initialState,
+              false,
+              `Expected ClientLayout useState call #21 initial value to be false (isCreatingInitialAdmin), got ${String(initialState)}`
+            ),
+          ...(overrides.isCreatingInitialAdmin !== undefined
+            ? { value: overrides.isCreatingInitialAdmin }
+            : {})
+        },
+        22: {
+          assertInitial: (initialState) =>
+            assert.strictEqual(
+              initialState,
+              false,
+              `Expected ClientLayout useState call #22 initial value to be false (isResumingGuestDemo), got ${String(initialState)}`
+            ),
+          ...(overrides.isResumingGuestDemo !== undefined
+            ? { value: overrides.isResumingGuestDemo }
+            : {})
+        }
       }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 2) {
-          assert.deepStrictEqual(
-            initialState,
-            [],
-            `Expected ClientLayout useState call #2 initial value to be [] (users), got ${JSON.stringify(initialState)}`
-          );
-          return [[{ userId: 'initial_admin', name: '管理者', role: 'admin' }], () => {}];
-        }
-        if (currentIndex === 3) {
-          assert.strictEqual(
-            initialState,
-            false,
-            `Expected ClientLayout useState call #3 initial value to be false (hasLoadedUsers), got ${String(initialState)}`
-          );
-          return [true, () => {}];
-        }
-        if (currentIndex === 21) {
-          assert.strictEqual(
-            initialState,
-            false,
-            `Expected ClientLayout useState call #21 initial value to be false (isCreatingInitialAdmin), got ${String(initialState)}`
-          );
-          if (overrides.isCreatingInitialAdmin !== undefined) {
-            return [overrides.isCreatingInitialAdmin, () => {}];
-          }
-        }
-        if (currentIndex === 22) {
-          assert.strictEqual(
-            initialState,
-            false,
-            `Expected ClientLayout useState call #22 initial value to be false (isResumingGuestDemo), got ${String(initialState)}`
-          );
-          dispatcher.useState = origUseState;
-          if (overrides.isResumingGuestDemo !== undefined) {
-            return [overrides.isResumingGuestDemo, () => {}];
-          }
-        }
-        return origUseState(initialState);
-      };
     }
-
-    return React.createElement(
-      AppRouterContext.Provider,
-      { value: mockRouter as never },
-      React.createElement(ClientLayout, null, 'child-content')
-    );
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.ok(
-    callCount >= 23,
-    `Expected ClientLayout to reach at least 23 useState calls before restoring dispatcher, got ${callCount}`
   );
-  return html;
 }
 
 describe('ClientLayout and session lock contracts', () => {

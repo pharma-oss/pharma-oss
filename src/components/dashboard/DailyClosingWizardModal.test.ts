@@ -7,6 +7,7 @@ import {
   findOpeningTag,
   stripStyleBlocks,
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import {
   BACKUP_PASSWORD_TOO_SHORT_MESSAGE,
   CLOSING_CHECK_FAILED_CONFIRM_MESSAGE,
@@ -753,8 +754,6 @@ function renderDailyClosingWizardModal(
   props: { isOpen: boolean; onClose?: () => void; onComplete?: () => void },
   stateOverrides?: DailyClosingWizardModalMockState
 ): string {
-  let callCount = 0;
-  const cleanupRef: { restore?: () => void } = {};
   const expectedInitials: Record<number, unknown> = {
     0: 1, // step
     1: false, // isProcessing
@@ -766,66 +765,41 @@ function renderDailyClosingWizardModal(
     7: null, // permissionError
   };
 
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      cleanupRef.restore = () => {
-        dispatcher.useState = origUseState;
-      };
-
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        const expectedInit = expectedInitials[currentIndex];
+  return renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(DailyClosingWizardModal, {
+        isOpen: props.isOpen,
+        onClose: props.onClose ?? (() => {}),
+        onComplete: props.onComplete ?? (() => {}),
+      }),
+    {
+      componentName: 'DailyClosingWizardModal',
+      restoreAtCallIndex: 7,
+      expectedCalls: 8,
+      onUseState: ({ callIndex, initialState }) => {
+        const expectedInit = expectedInitials[callIndex];
         assert.strictEqual(
           initialState,
           expectedInit,
-          `Expected DailyClosingWizardModal useState call #${currentIndex} initial value to be ${String(expectedInit)}, got ${String(initialState)}`
+          `Expected DailyClosingWizardModal useState call #${callIndex} initial value to be ${String(expectedInit)}, got ${String(initialState)}`
         );
 
         let value = initialState;
         if (stateOverrides) {
-          if (currentIndex === 0 && stateOverrides.step !== undefined) value = stateOverrides.step;
-          if (currentIndex === 1 && stateOverrides.isProcessing !== undefined) value = stateOverrides.isProcessing;
-          if (currentIndex === 2 && stateOverrides.saveStatus !== undefined) value = stateOverrides.saveStatus;
-          if (currentIndex === 3 && stateOverrides.password !== undefined) value = stateOverrides.password;
-          if (currentIndex === 4 && stateOverrides.checkSummary !== undefined) value = stateOverrides.checkSummary;
-          if (currentIndex === 5 && stateOverrides.isChecking !== undefined) value = stateOverrides.isChecking;
-          if (currentIndex === 6 && stateOverrides.hasCheckError !== undefined) value = stateOverrides.hasCheckError;
-          if (currentIndex === 7 && stateOverrides.permissionError !== undefined) value = stateOverrides.permissionError;
+          if (callIndex === 0 && stateOverrides.step !== undefined) value = stateOverrides.step;
+          if (callIndex === 1 && stateOverrides.isProcessing !== undefined) value = stateOverrides.isProcessing;
+          if (callIndex === 2 && stateOverrides.saveStatus !== undefined) value = stateOverrides.saveStatus;
+          if (callIndex === 3 && stateOverrides.password !== undefined) value = stateOverrides.password;
+          if (callIndex === 4 && stateOverrides.checkSummary !== undefined) value = stateOverrides.checkSummary;
+          if (callIndex === 5 && stateOverrides.isChecking !== undefined) value = stateOverrides.isChecking;
+          if (callIndex === 6 && stateOverrides.hasCheckError !== undefined) value = stateOverrides.hasCheckError;
+          if (callIndex === 7 && stateOverrides.permissionError !== undefined) value = stateOverrides.permissionError;
         }
 
-        if (currentIndex === 7) {
-          dispatcher.useState = origUseState;
-          delete cleanupRef.restore;
-        }
         return [value, () => {}];
-      };
+      }
     }
-    return React.createElement(DailyClosingWizardModal, {
-      isOpen: props.isOpen,
-      onClose: props.onClose ?? (() => {}),
-      onComplete: props.onComplete ?? (() => {}),
-    });
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.strictEqual(
-      callCount,
-      8,
-      `Expected DailyClosingWizardModal to call useState exactly 8 times, got ${callCount}`
-    );
-    return html;
-  } finally {
-    cleanupRef.restore?.();
-  }
+  );
 }
 
 describe('DailyClosingWizardModal UI rendering and button disabled states', () => {

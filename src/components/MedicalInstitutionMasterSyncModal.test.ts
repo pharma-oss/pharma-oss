@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { importMedicalInstitutionMasterJson } from '@/lib/master-data/medical_institution_master';
 import {
   findOpeningTag,
   listDisabledOpeningTags,
   stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { MedicalInstitutionMasterSyncModal } from './MedicalInstitutionMasterSyncModal';
 
 interface MasterSyncHookOverrides {
@@ -19,71 +19,45 @@ interface MasterSyncHookOverrides {
   message?: { text: string; isError: boolean } | null;
 }
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 function renderMasterSyncModal(
   isOpen: boolean,
   overrides: MasterSyncHookOverrides = {}
 ): string {
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.ok(
-          typeof initialState === 'object' &&
-            initialState !== null &&
-            'totalCount' in (initialState as Record<string, unknown>),
-          'Hook #0 (stats) must initialize as stats object'
-        );
-        if (overrides.stats !== undefined) return [overrides.stats, () => {}];
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(MedicalInstitutionMasterSyncModal, {
+        isOpen,
+        onClose: () => { }
+      }),
+    {
+      componentName: 'MedicalInstitutionMasterSyncModal',
+      restoreAtCallIndex: 2,
+      minCalls: 3,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.ok(
+              typeof v === 'object' &&
+              v !== null &&
+              'totalCount' in (v as Record<string, unknown>),
+              'Hook #0 (stats) must initialize as stats object'
+            ),
+          ...(overrides.stats !== undefined ? { value: overrides.stats } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(typeof v, 'boolean', 'Hook #1 (isProcessing) must initialize as boolean'),
+          ...(overrides.isProcessing !== undefined ? { value: overrides.isProcessing } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #2 (message) must initialize as null'),
+          ...(overrides.message !== undefined ? { value: overrides.message } : {})
+        }
       }
-      if (idx === 1) {
-        assert.equal(typeof initialState, 'boolean', 'Hook #1 (isProcessing) must initialize as boolean');
-        if (overrides.isProcessing !== undefined) return [overrides.isProcessing, () => {}];
-      }
-      if (idx === 2) {
-        dispatcher.useState = origUseState;
-        assert.equal(initialState, null, 'Hook #2 (message) must initialize as null');
-        if (overrides.message !== undefined) return [overrides.message, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(MedicalInstitutionMasterSyncModal, {
-      isOpen,
-      onClose: () => {}
-    });
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.ok(callCount >= 3, `Expected at least 3 useState calls, observed ${callCount}`);
-    return stripStyleBlocks(html);
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('MedicalInstitutionMasterSyncModal UI states', () => {

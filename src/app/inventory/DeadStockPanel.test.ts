@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { Drug, DrugStock } from '@/db/types';
 import {
   DEAD_STOCK_EMPTY_MESSAGE,
@@ -14,6 +13,7 @@ import {
   listDisabledOpeningTags,
   stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DeadStockPanel } from './components/DeadStockPanel';
 import { toInventoryDrugRow, type DrugWithSearchCache } from './types';
 
@@ -24,14 +24,6 @@ interface DeadStockHookOverrides {
     visits: Array<{ visitId: string; issueDate?: string; status?: string }>;
   } | null;
   hasLoadError?: boolean;
-}
-
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
 }
 
 function makeDrug(overrides: Partial<Drug> & { code: string; name: string }): DrugWithSearchCache {
@@ -48,56 +40,38 @@ function renderDeadStockPanel(
   } = {},
   overrides: DeadStockHookOverrides = {}
 ): string {
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.equal(initialState, 90, 'Hook #0 (thresholdDays) must initialize as 90');
-        if (overrides.thresholdDays !== undefined) return [overrides.thresholdDays, () => {}];
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(DeadStockPanel, {
+        db: null,
+        drugs: props.drugs ?? [],
+        stockLots: props.stockLots ?? [],
+        onOpenTransfer: () => {}
+      }),
+    {
+      componentName: 'DeadStockPanel',
+      restoreAtCallIndex: 2,
+      minCalls: 3,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.equal(v, 90, 'Hook #0 (thresholdDays) must initialize as 90'),
+          ...(overrides.thresholdDays !== undefined ? { value: overrides.thresholdDays } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #1 (movementSources) must initialize as null'),
+          ...(overrides.movementSources !== undefined ? { value: overrides.movementSources } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #2 (hasLoadError) must initialize as false'),
+          ...(overrides.hasLoadError !== undefined ? { value: overrides.hasLoadError } : {})
+        }
       }
-      if (idx === 1) {
-        assert.equal(initialState, null, 'Hook #1 (movementSources) must initialize as null');
-        if (overrides.movementSources !== undefined) return [overrides.movementSources, () => {}];
-      }
-      if (idx === 2) {
-        dispatcher.useState = origUseState;
-        assert.equal(initialState, false, 'Hook #2 (hasLoadError) must initialize as false');
-        if (overrides.hasLoadError !== undefined) return [overrides.hasLoadError, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(DeadStockPanel, {
-      db: null,
-      drugs: props.drugs ?? [],
-      stockLots: props.stockLots ?? [],
-      onOpenTransfer: () => {}
-    });
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.ok(callCount >= 3, `Expected at least 3 useState calls, observed ${callCount}`);
-    return stripStyleBlocks(html);
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('DeadStockPanel UI states and table rendering', () => {

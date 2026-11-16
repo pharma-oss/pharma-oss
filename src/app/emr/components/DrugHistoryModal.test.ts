@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { DatabaseContext } from '@/db/DatabaseContext';
 import type {
   MedHistoryPrescriptionItem,
@@ -9,6 +8,7 @@ import type {
   MedHistoryVisit
 } from '@/lib/drug_medication_history';
 import { findOpeningTag, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import DrugHistoryModal, {
   DRUG_HISTORY_EMPTY_MESSAGE,
   DRUG_HISTORY_LOAD_ERROR_MESSAGE,
@@ -25,87 +25,65 @@ interface DrugHistoryHookOverrides {
   selectedDrugId?: string | null;
 }
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 function renderDrugHistoryModal(
   props: { open?: boolean; targetVisitId?: string | null; onClose?: () => void } = {},
   overrides: DrugHistoryHookOverrides = {}
 ): string {
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.equal(typeof initialState, 'boolean', 'Hook #0 (loading) must initialize as boolean');
-        if (overrides.loading !== undefined) return [overrides.loading, () => {}];
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(
+        DatabaseContext.Provider,
+        { value: null },
+        React.createElement(DrugHistoryModal, {
+          targetVisitId: props.targetVisitId ?? 'V-001',
+          open: props.open ?? true,
+          onClose: props.onClose ?? (() => {})
+        })
+      ),
+    {
+      componentName: 'DrugHistoryModal',
+      restoreAtCallIndex: 6,
+      minCalls: 7,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.equal(typeof v, 'boolean', 'Hook #0 (loading) must initialize as boolean'),
+          ...(overrides.loading !== undefined ? { value: overrides.loading } : {})
+        },
+        1: {
+          assertInitial: (v) =>
+            assert.equal(typeof v, 'boolean', 'Hook #1 (hasLoadError) must initialize as boolean'),
+          ...(overrides.hasLoadError !== undefined ? { value: overrides.hasLoadError } : {})
+        },
+        2: {
+          assertInitial: (v) =>
+            assert.ok(Array.isArray(v), 'Hook #2 (visits) must initialize as array'),
+          ...(overrides.visits !== undefined ? { value: overrides.visits } : {})
+        },
+        3: {
+          assertInitial: (v) =>
+            assert.ok(Array.isArray(v), 'Hook #3 (items) must initialize as array'),
+          ...(overrides.items !== undefined ? { value: overrides.items } : {})
+        },
+        4: {
+          assertInitial: (v) =>
+            assert.ok(Array.isArray(v), 'Hook #4 (soaps) must initialize as array'),
+          ...(overrides.soaps !== undefined ? { value: overrides.soaps } : {})
+        },
+        5: {
+          assertInitial: (v) =>
+            assert.ok(v instanceof Map, 'Hook #5 (drugNamesById) must initialize as Map'),
+          ...(overrides.drugNamesById !== undefined ? { value: overrides.drugNamesById } : {})
+        },
+        6: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #6 (selectedDrugId) must initialize as null'),
+          ...(overrides.selectedDrugId !== undefined ? { value: overrides.selectedDrugId } : {})
+        }
       }
-      if (idx === 1) {
-        assert.equal(typeof initialState, 'boolean', 'Hook #1 (hasLoadError) must initialize as boolean');
-        if (overrides.hasLoadError !== undefined) return [overrides.hasLoadError, () => {}];
-      }
-      if (idx === 2) {
-        assert.ok(Array.isArray(initialState), 'Hook #2 (visits) must initialize as array');
-        if (overrides.visits !== undefined) return [overrides.visits, () => {}];
-      }
-      if (idx === 3) {
-        assert.ok(Array.isArray(initialState), 'Hook #3 (items) must initialize as array');
-        if (overrides.items !== undefined) return [overrides.items, () => {}];
-      }
-      if (idx === 4) {
-        assert.ok(Array.isArray(initialState), 'Hook #4 (soaps) must initialize as array');
-        if (overrides.soaps !== undefined) return [overrides.soaps, () => {}];
-      }
-      if (idx === 5) {
-        assert.ok(initialState instanceof Map, 'Hook #5 (drugNamesById) must initialize as Map');
-        if (overrides.drugNamesById !== undefined) return [overrides.drugNamesById, () => {}];
-      }
-      if (idx === 6) {
-        dispatcher.useState = origUseState;
-        assert.equal(initialState, null, 'Hook #6 (selectedDrugId) must initialize as null');
-        if (overrides.selectedDrugId !== undefined) return [overrides.selectedDrugId, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(
-      DatabaseContext.Provider,
-      { value: null },
-      React.createElement(DrugHistoryModal, {
-        targetVisitId: props.targetVisitId ?? 'V-001',
-        open: props.open ?? true,
-        onClose: props.onClose ?? (() => {})
-      })
-    );
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.ok(callCount >= 7, `Expected at least 7 useState calls, observed ${callCount}`);
-    return stripStyleBlocks(html);
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('getDrugHistoryModalBodyState helper', () => {

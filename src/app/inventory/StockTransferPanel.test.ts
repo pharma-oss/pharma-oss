@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { Drug, DrugStock } from '@/db/types';
 import {
   STOCK_TRANSFER_HISTORY_EMPTY_MESSAGE,
@@ -16,6 +15,7 @@ import {
   listDisabledOpeningTags,
   stripStyleBlocks
 } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { StockTransferPanel } from './components/StockTransferPanel';
 import { toInventoryDrugRow, type DrugWithSearchCache } from './types';
 
@@ -37,14 +37,6 @@ interface StockTransferHookOverrides {
   fallbackDrug?: { code: string; name: string; stockQuantity?: number; location?: string } | null;
 }
 
-type ReactUseStateHook = (initialState: unknown) => [unknown, (next: unknown) => void];
-
-interface ReactInternalsWithDispatcher {
-  H?: {
-    useState?: ReactUseStateHook;
-  };
-}
-
 function makeDrug(overrides: Partial<Drug> & { code: string; name: string }): DrugWithSearchCache {
   return toInventoryDrugRow({
     isGeneric: false,
@@ -59,76 +51,61 @@ function renderStockTransferPanel(
   } = {},
   overrides: StockTransferHookOverrides = {}
 ): string {
-  let callCount = 0;
-  let capturedDispatcher: { useState?: ReactUseStateHook } | undefined;
-  let capturedOrigUseState: ReactUseStateHook | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: ReactInternalsWithDispatcher;
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const dispatcher = internals?.H;
-    assert.ok(dispatcher?.useState, 'React SSR dispatcher.useState must be present during render');
-
-    const origUseState = dispatcher.useState;
-    capturedDispatcher = dispatcher;
-    capturedOrigUseState = origUseState;
-
-    dispatcher.useState = (initialState: unknown) => {
-      const idx = callCount++;
-      if (idx === 0) {
-        assert.equal(initialState, 'out', 'Hook #0 (direction) must initialize as out');
-        if (overrides.direction !== undefined) return [overrides.direction, () => {}];
+  const html = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(StockTransferPanel, {
+        db: null,
+        drugs: props.drugs ?? [],
+        stockLots: props.stockLots ?? []
+      }),
+    {
+      componentName: 'StockTransferPanel',
+      restoreAtCallIndex: 14,
+      minCalls: 15,
+      overrides: {
+        0: {
+          assertInitial: (v) =>
+            assert.equal(v, 'out', 'Hook #0 (direction) must initialize as out'),
+          ...(overrides.direction !== undefined ? { value: overrides.direction } : {})
+        },
+        ...(overrides.drugQuery !== undefined ? { 1: { value: overrides.drugQuery } } : {}),
+        ...(overrides.selectedDrugCode !== undefined ? { 2: { value: overrides.selectedDrugCode } } : {}),
+        ...(overrides.quantityInput !== undefined ? { 3: { value: overrides.quantityInput } } : {}),
+        ...(overrides.lotId !== undefined ? { 4: { value: overrides.lotId } } : {}),
+        ...(overrides.lotNumberInput !== undefined ? { 5: { value: overrides.lotNumberInput } } : {}),
+        ...(overrides.expirationInput !== undefined ? { 6: { value: overrides.expirationInput } } : {}),
+        ...(overrides.partnerName !== undefined ? { 7: { value: overrides.partnerName } } : {}),
+        ...(overrides.partnerAddress !== undefined ? { 8: { value: overrides.partnerAddress } } : {}),
+        ...(overrides.note !== undefined ? { 9: { value: overrides.note } } : {}),
+        10: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #10 (isSubmitting) must initialize as false'),
+          ...(overrides.isSubmitting !== undefined ? { value: overrides.isSubmitting } : {})
+        },
+        11: {
+          assertInitial: (v) =>
+            assert.equal(v, 0, 'Hook #11 (historyReloadKey) must initialize as 0'),
+          ...(overrides.historyReloadKey !== undefined ? { value: overrides.historyReloadKey } : {})
+        },
+        12: {
+          assertInitial: (v) =>
+            assert.ok(Array.isArray(v), 'Hook #12 (history) must initialize as array'),
+          ...(overrides.history !== undefined ? { value: overrides.history } : {})
+        },
+        13: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #13 (hasHistoryLoadError) must initialize as false'),
+          ...(overrides.hasHistoryLoadError !== undefined ? { value: overrides.hasHistoryLoadError } : {})
+        },
+        14: {
+          assertInitial: (v) =>
+            assert.equal(v, null, 'Hook #14 (fallbackDrug) must initialize as null'),
+          ...(overrides.fallbackDrug !== undefined ? { value: overrides.fallbackDrug } : {})
+        }
       }
-      if (idx === 1 && overrides.drugQuery !== undefined) return [overrides.drugQuery, () => {}];
-      if (idx === 2 && overrides.selectedDrugCode !== undefined) return [overrides.selectedDrugCode, () => {}];
-      if (idx === 3 && overrides.quantityInput !== undefined) return [overrides.quantityInput, () => {}];
-      if (idx === 4 && overrides.lotId !== undefined) return [overrides.lotId, () => {}];
-      if (idx === 5 && overrides.lotNumberInput !== undefined) return [overrides.lotNumberInput, () => {}];
-      if (idx === 6 && overrides.expirationInput !== undefined) return [overrides.expirationInput, () => {}];
-      if (idx === 7 && overrides.partnerName !== undefined) return [overrides.partnerName, () => {}];
-      if (idx === 8 && overrides.partnerAddress !== undefined) return [overrides.partnerAddress, () => {}];
-      if (idx === 9 && overrides.note !== undefined) return [overrides.note, () => {}];
-      if (idx === 10) {
-        assert.equal(initialState, false, 'Hook #10 (isSubmitting) must initialize as false');
-        if (overrides.isSubmitting !== undefined) return [overrides.isSubmitting, () => {}];
-      }
-      if (idx === 11) {
-        assert.equal(initialState, 0, 'Hook #11 (historyReloadKey) must initialize as 0');
-        if (overrides.historyReloadKey !== undefined) return [overrides.historyReloadKey, () => {}];
-      }
-      if (idx === 12) {
-        assert.ok(Array.isArray(initialState), 'Hook #12 (history) must initialize as array');
-        if (overrides.history !== undefined) return [overrides.history, () => {}];
-      }
-      if (idx === 13) {
-        assert.equal(initialState, false, 'Hook #13 (hasHistoryLoadError) must initialize as false');
-        if (overrides.hasHistoryLoadError !== undefined) return [overrides.hasHistoryLoadError, () => {}];
-      }
-      if (idx === 14) {
-        dispatcher.useState = origUseState;
-        assert.equal(initialState, null, 'Hook #14 (fallbackDrug) must initialize as null');
-        if (overrides.fallbackDrug !== undefined) return [overrides.fallbackDrug, () => {}];
-      }
-      return origUseState(initialState);
-    };
-
-    return React.createElement(StockTransferPanel, {
-      db: null,
-      drugs: props.drugs ?? [],
-      stockLots: props.stockLots ?? []
-    });
-  }
-
-  try {
-    const html = renderToStaticMarkup(React.createElement(Wrapper));
-    assert.ok(callCount >= 15, `Expected at least 15 useState calls, observed ${callCount}`);
-    return stripStyleBlocks(html);
-  } finally {
-    if (capturedDispatcher && capturedOrigUseState) {
-      capturedDispatcher.useState = capturedOrigUseState;
     }
-  }
+  );
+  return stripStyleBlocks(html);
 }
 
 describe('StockTransferPanel UI states and form branches', () => {

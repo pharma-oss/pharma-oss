@@ -361,12 +361,14 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     const inputTagNoError = extractStandbyRegistrationOpeningTag(htmlNoError, 'input');
     const buttonTagNoError = extractStandbyRegistrationOpeningTag(htmlNoError, 'button');
 
-    assert.ok(
-      !inputTagNoError.includes('disabled'),
+    assert.doesNotMatch(
+      inputTagNoError,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Input tag must not include disabled when registration is not blocked (errorMessage is null). Tag: ${inputTagNoError}`
     );
-    assert.ok(
-      !buttonTagNoError.includes('disabled'),
+    assert.doesNotMatch(
+      buttonTagNoError,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Register button tag must not include disabled when registration is not blocked (errorMessage is null). Tag: ${buttonTagNoError}`
     );
 
@@ -386,12 +388,14 @@ describe('TerminalSyncPanelView renderToStaticMarkup contracts', () => {
     const inputTagCorrupted = extractStandbyRegistrationOpeningTag(htmlCorrupted, 'input');
     const buttonTagCorrupted = extractStandbyRegistrationOpeningTag(htmlCorrupted, 'button');
 
-    assert.ok(
-      !inputTagCorrupted.includes('disabled'),
+    assert.doesNotMatch(
+      inputTagCorrupted,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Input tag must not include disabled when registration is not blocked (corrupted error). Tag: ${inputTagCorrupted}`
     );
-    assert.ok(
-      !buttonTagCorrupted.includes('disabled'),
+    assert.doesNotMatch(
+      buttonTagCorrupted,
+      /\sdisabled=""(?=[\s/>]|$)/,
       `Register button tag must not include disabled when registration is not blocked (corrupted error). Tag: ${buttonTagCorrupted}`
     );
   });

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
 import { ReceiptPrint } from './components/ReceiptPrint';
 import type { PharmacyInfo } from './types';
 
@@ -57,9 +58,21 @@ test('ReceiptPrint renders official receipt with patient copay, insurance breakd
   assert.ok(html.includes('発行日 2026年10月6日'), '発行日が表示されていること');
   assert.ok(html.includes('領収証'), '領収証タイトルが表示されること');
 
-  // 2. 氏名と領収金額（患者負担）
-  assert.ok(html.includes('領収 太郎 様'), '患者名が表示されていること');
-  assert.ok(html.includes('¥250'), '領収金額が表示されていること');
+  const cleanMarkup = stripStyleBlocks(html);
+
+  // 2. 氏名と領収金額（患者負担）— 控え欄とは独立して本体欄を検証する
+  assert.ok(
+    cleanMarkup.includes('<div class="receipt-payee-line"><span>氏名</span><strong>領収 太郎 様</strong></div>'),
+    '本体氏名欄に患者名が表示されていること'
+  );
+  assert.ok(
+    cleanMarkup.includes('<div class="receipt-money-panel"><span>領収金額</span><strong>¥250</strong>'),
+    '本体領収金額欄に患者負担金額が表示されていること'
+  );
+  assert.ok(
+    cleanMarkup.includes('<div class="receipt-stub"><span>薬局控え</span><strong>領収 太郎 様 / ¥250</strong><span>処方日 2026年10月6日 / 調剤日 2026年10月6日</span></div>'),
+    '薬局控え欄に患者名・領収金額・日付が表示されていること'
+  );
   assert.ok(html.includes('保険調剤一部負担金として上記正に領収いたしました'), '領収文言が表示されていること');
 
   // 3. 総点数・保険診療総額・保険者負担額・患者負担割合

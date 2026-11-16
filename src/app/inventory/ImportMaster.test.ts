@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { Drug } from '@/db/types';
 import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { ImportMaster, type ImportMasterProps } from './components/ImportMaster';
 import { toInventoryDrugRow, type DrugWithSearchCache } from './types';
 
@@ -45,70 +45,42 @@ function renderImportMasterWithState(
   overrides: ImportMasterStateOverrides = {}
 ): string {
   const { parsedData = [], isImporting = false, isOcrProcessing = false } = overrides;
-  let callCount = 0;
-  let activeDispatcher: { useState?: (init: unknown) => [unknown, (v: unknown) => void] } | undefined;
-  let savedOrigUseState: ((init: unknown) => [unknown, (v: unknown) => void]) | undefined;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] };
-      };
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      activeDispatcher = dispatcher;
-      savedOrigUseState = origUseState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 0) {
-          assert.ok(
-            Array.isArray(initialState) && initialState.length === 0,
-            `Expected ImportMaster useState #0 (parsedData) initial value to be empty array, got ${String(initialState)}`
-          );
-          return [parsedData, () => {}];
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(ImportMaster, props),
+    {
+      componentName: 'ImportMaster',
+      restoreAtCallIndex: 2,
+      expectedCalls: 3,
+      overrides: {
+        0: {
+          assertInitial: (initialState) =>
+            assert.ok(
+              Array.isArray(initialState) && initialState.length === 0,
+              `Expected ImportMaster useState #0 (parsedData) initial value to be empty array, got ${String(initialState)}`
+            ),
+          value: parsedData
+        },
+        1: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected ImportMaster useState #1 (isImporting) initial value to be false, got ${String(initialState)}`
+            ),
+          value: isImporting
+        },
+        2: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected ImportMaster useState #2 (isOcrProcessing) initial value to be false, got ${String(initialState)}`
+            ),
+          value: isOcrProcessing
         }
-        if (currentIndex === 1) {
-          assert.equal(
-            initialState,
-            false,
-            `Expected ImportMaster useState #1 (isImporting) initial value to be false, got ${String(initialState)}`
-          );
-          return [isImporting, () => {}];
-        }
-        if (currentIndex === 2) {
-          assert.equal(
-            initialState,
-            false,
-            `Expected ImportMaster useState #2 (isOcrProcessing) initial value to be false, got ${String(initialState)}`
-          );
-          dispatcher.useState = origUseState;
-          return [isOcrProcessing, () => {}];
-        }
-        return origUseState(initialState);
-      };
+      }
     }
-
-    return React.createElement(ImportMaster, props);
-  }
-
-  let html = '';
-  try {
-    html = renderToStaticMarkup(React.createElement(Wrapper));
-  } finally {
-    if (activeDispatcher && savedOrigUseState) {
-      activeDispatcher.useState = savedOrigUseState;
-    }
-  }
-
-  assert.equal(
-    callCount,
-    3,
-    `Expected ImportMaster to call useState exactly 3 times, got ${callCount}`
   );
-  return html;
 }
 
 describe('ImportMaster UI disabled states and markup pinning', () => {
@@ -118,7 +90,7 @@ describe('ImportMaster UI disabled states and markup pinning', () => {
     const idleHtml = renderImportMasterWithState(props, { isOcrProcessing: false });
     assert.deepEqual(listDisabledOpeningTags(idleHtml), []);
     const idleInput = findOpeningTag(idleHtml, 'accept=".png,.jpg,.jpeg"', 'input');
-    assert.ok(!idleInput.includes('disabled'), 'OCR file input must be enabled when isOcrProcessing is false');
+    assert.doesNotMatch(idleInput, /\sdisabled=""(?=[\s/>]|$)/, 'OCR file input must be enabled when isOcrProcessing is false');
     assert.ok(idleHtml.includes('納品書の画像を選択 (PNG, JPG)'));
     assert.ok(!idleHtml.includes('読み取り中...'));
     assert.ok(!idleHtml.includes('is-busy'));
@@ -140,7 +112,7 @@ describe('ImportMaster UI disabled states and markup pinning', () => {
     const emptyHtml = renderImportMasterWithState(props, { parsedData: [] });
     assert.deepEqual(listDisabledOpeningTags(emptyHtml), []);
     const csvInput = findOpeningTag(emptyHtml, 'accept=".csv"', 'input');
-    assert.ok(!csvInput.includes('disabled'));
+    assert.doesNotMatch(csvInput, /\sdisabled=""(?=[\s/>]|$)/);
     assert.ok(emptyHtml.includes('卸データ（CSV）から入荷インポート'));
     assert.ok(!emptyHtml.includes('プレビュー'));
     assert.ok(!emptyHtml.includes('インポート実行'));
@@ -207,7 +179,7 @@ describe('ImportMaster UI disabled states and markup pinning', () => {
     assert.ok(readyHtml.includes('未抽出'));
 
     const readyBtn = findOpeningTag(readyHtml, 'インポート実行</button>', 'button');
-    assert.ok(!readyBtn.includes('disabled'), 'Import button must be enabled when matched data exists and not importing');
+    assert.doesNotMatch(readyBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Import button must be enabled when matched data exists and not importing');
     const readyWrapper = findOpeningTag(readyHtml, 'class="btn-tooltip-wrapper"', 'span');
     assert.ok(readyWrapper.includes('data-disabled="false"'));
     assert.ok(!readyHtml.includes('インポート中...</button>'));
