@@ -2,8 +2,19 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { TracingReportModal, type TracingReportModalProps } from './components/TracingReportModal';
-import type { VisitTracingReport } from '@/db/types';
+import {
+  submitTracingReportForm,
+  TracingReportModal,
+  type TracingReportModalProps
+} from './components/TracingReportModal';
+import {
+  executeSaveTracingReport,
+  TRACING_REPORT_ACTIVE_VISIT_NOT_FOUND_MESSAGE,
+  TRACING_REPORT_DB_NOT_READY_MESSAGE,
+  type ExecuteSaveTracingReportParams,
+  type TracingReportVisitHandle
+} from '@/hooks/useEmrTracingReport';
+import type { Visit, VisitTracingReport } from '@/db/types';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 
@@ -164,10 +175,8 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
     const defaultProps = createMockTracingReportModalProps();
     const defaultHtml = renderToStaticMarkup(React.createElement(TracingReportModal, defaultProps));
     const defaultBtnTag = findOpeningTag(defaultHtml, '<span>保存</span>', 'button');
-    assert.ok(
-      !DISABLED_ATTRIBUTE_PATTERN.test(defaultBtnTag),
-      `Save button must be enabled with auto-drafted subject: ${defaultBtnTag}`
-    );
+    assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(defaultBtnTag), `Save button must be enabled: ${defaultBtnTag}`);
+    assert.match(defaultBtnTag, /\saria-busy="false"(?=[\s/>]|$)/);
     assert.ok(defaultHtml.includes('<span>保存</span>'), 'Save button label should be "保存"');
 
     // Case 2: Valid explicit subject from existingReport
@@ -197,7 +206,123 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
       DISABLED_ATTRIBUTE_PATTERN.test(savingBtnTag),
       `Save button must be disabled when isSaving is true even with valid subject: ${savingBtnTag}`
     );
+    assert.match(savingBtnTag, /\saria-busy="true"(?=[\s/>]|$)/);
     assert.ok(savingHtml.includes('<span>保存中...</span>'), 'Save button label should change to "保存中..."');
     assert.ok(!savingHtml.includes('<span>保存</span>'), 'Save button label should not remain "保存"');
+  });
+});
+
+const SAMPLE_TRACING_REPORT: VisitTracingReport = {
+  reportId: 'tr-test-001',
+  status: 'draft',
+  reportDate: '2026-11-16',
+  destinationInstitution: '中央病院',
+  destinationInstitutionCode: '1310001',
+  destinationDepartment: '内科',
+  destinationDoctor: '山田 医師',
+  subject: '残薬調整のご報告',
+  medicationSummary: 'アムロジピン錠5mg',
+  patientCondition: '残薬あり',
+  assessment: 'アドヒアランス確認',
+  proposal: '日数調整を提案',
+  followUpPlan: '次回確認',
+  createdAt: '2026-11-16T09:00:00.000Z',
+  updatedAt: '2026-11-16T09:00:00.000Z'
+};
+
+async function runSaveTracingCase(
+  overrides: Partial<ExecuteSaveTracingReportParams> = {},
+  options: { patchError?: Error } = {}
+) {
+  const notifications: Array<{ kind: 'success' | 'warning' | 'error'; message: string }> = [];
+  const stateReports: VisitTracingReport[][] = [];
+  const patchedPayloads: Array<NonNullable<Visit['careCommunication']>> = [];
+  const visitDoc: Visit = {
+    visitId: 'v-tr-1',
+    patientId: 'p-tr-1',
+    prescriptionDate: '2026-11-16',
+    dispensingDate: '2026-11-16',
+    issueDate: '2026-11-16T09:00:00.000Z',
+    status: 'processing'
+  };
+  const visit: TracingReportVisitHandle = {
+    patientId: visitDoc.patientId,
+    toJSON: () => visitDoc,
+    patch: async ({ careCommunication }) => {
+      if (options.patchError) throw options.patchError;
+      visitDoc.careCommunication = careCommunication;
+      patchedPayloads.push(careCommunication);
+    }
+  };
+  const ok = await executeSaveTracingReport({
+    isDbReady: true,
+    findActiveVisit: async () => visit,
+    report: SAMPLE_TRACING_REPORT,
+    currentPatientName: '試験 患者',
+    setTracingReports: (reports) => stateReports.push(reports),
+    notifySuccess: (message) => notifications.push({ kind: 'success', message }),
+    notifyWarning: (message) => notifications.push({ kind: 'warning', message }),
+    notifyError: (message) => notifications.push({ kind: 'error', message }),
+    logAudit: async () => true,
+    now: '2026-11-16T10:00:00.000Z',
+    currentUserName: '薬剤師 テスト',
+    ...overrides
+  });
+  return { ok, notifications, stateReports, patchedPayloads };
+}
+
+describe('TracingReport save outcome and error handling contracts', () => {
+  it('keeps modal open on empty subject, false save result, and thrown save errors', async () => {
+    let calls = 0;
+    assert.deepEqual(
+      await submitTracingReportForm({ subject: '  ', onSave: async () => { calls += 1; return true; } }),
+      { shouldClose: false, alertMessage: null }
+    );
+    assert.equal(calls, 0);
+
+    const cases: Array<{ label: string; onSave: () => Promise<boolean | void>; expected: { shouldClose: boolean; alertMessage: string | null } }> = [
+      { label: 'false return', onSave: async () => false, expected: { shouldClose: false, alertMessage: null } },
+      { label: 'Japanese throw', onSave: async () => { throw new Error('通信に失敗しました'); }, expected: { shouldClose: false, alertMessage: '通信に失敗しました' } },
+      { label: 'internal throw', onSave: async () => { throw new Error('IDB_ERR'); }, expected: { shouldClose: false, alertMessage: 'トレーシングレポートの保存に失敗しました' } },
+      { label: 'true return', onSave: async () => true, expected: { shouldClose: true, alertMessage: null } },
+      { label: 'void return', onSave: async () => {}, expected: { shouldClose: true, alertMessage: null } }
+    ];
+    for (const c of cases) {
+      assert.deepEqual(await submitTracingReportForm({ subject: '件名', onSave: c.onSave }), c.expected, c.label);
+    }
+  });
+
+  it('returns false and notifies on missing db, missing visit, and patch failure without clearing form state', async () => {
+    const noDb = await runSaveTracingCase({ isDbReady: false });
+    assert.equal(noDb.ok, false);
+    assert.deepEqual(noDb.notifications, [{ kind: 'error', message: TRACING_REPORT_DB_NOT_READY_MESSAGE }]);
+    assert.equal(noDb.stateReports.length, 0);
+
+    const noVisit = await runSaveTracingCase({ findActiveVisit: async () => null });
+    assert.equal(noVisit.ok, false);
+    assert.deepEqual(noVisit.notifications, [{ kind: 'error', message: TRACING_REPORT_ACTIVE_VISIT_NOT_FOUND_MESSAGE }]);
+    assert.equal(noVisit.stateReports.length, 0);
+
+    const patchFail = await runSaveTracingCase({}, { patchError: new Error('IDB_PATCH_FAILED') });
+    assert.equal(patchFail.ok, false);
+    assert.deepEqual(patchFail.notifications, [{ kind: 'error', message: 'トレーシングレポートの保存に失敗しました' }]);
+    assert.equal(patchFail.stateReports.length, 0);
+  });
+
+  it('persists tracing report, records sent metadata when sent, warns on audit failure, and returns true', async () => {
+    const auditWarn = await runSaveTracingCase({
+      report: { ...SAMPLE_TRACING_REPORT, status: 'sent' },
+      logAudit: async () => false
+    });
+    assert.equal(auditWarn.ok, true);
+    assert.equal(auditWarn.stateReports[0][0].sentBy, '薬剤師 テスト');
+    assert.equal(auditWarn.stateReports[0][0].sentAt, '2026-11-16T10:00:00.000Z');
+    assert.deepEqual(auditWarn.notifications, [{ kind: 'warning', message: 'レポートは保存しましたが、監査ログ記録に失敗しました。' }]);
+
+    const draftOk = await runSaveTracingCase();
+    assert.equal(draftOk.ok, true);
+    assert.equal(draftOk.stateReports[0][0].sentBy, undefined);
+    assert.equal(draftOk.patchedPayloads.length, 1);
+    assert.deepEqual(draftOk.notifications, [{ kind: 'success', message: 'トレーシングレポートを保存しました' }]);
   });
 });

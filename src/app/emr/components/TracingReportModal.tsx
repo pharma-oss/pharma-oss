@@ -8,7 +8,37 @@ import {
   buildAutoTracingReportDraft,
   generateTracingReportPrintHtml
 } from '@/lib/tracing_report';
+import { userFacingErrorMessage } from '@/lib/user_facing_error';
 import { MedicalInstitutionAutoComplete } from '@/components/MedicalInstitutionAutoComplete';
+
+export interface TracingReportSubmitOutcome {
+  shouldClose: boolean;
+  alertMessage: string | null;
+}
+
+/**
+ * トレーシングレポート保存時の必須チェックと保存結果から、モーダル閉鎖・警告表示を判定する。
+ */
+export async function submitTracingReportForm(params: {
+  subject: string | undefined;
+  onSave: () => Promise<boolean | void>;
+}): Promise<TracingReportSubmitOutcome> {
+  if (!params.subject?.trim()) {
+    return { shouldClose: false, alertMessage: null };
+  }
+  try {
+    const result = await params.onSave();
+    return {
+      shouldClose: result !== false,
+      alertMessage: null
+    };
+  } catch (error) {
+    return {
+      shouldClose: false,
+      alertMessage: userFacingErrorMessage(error, 'トレーシングレポートの保存に失敗しました')
+    };
+  }
+}
 
 export interface TracingReportModalProps {
   isOpen: boolean;
@@ -27,7 +57,7 @@ export interface TracingReportModalProps {
     pharmacyFax?: string;
     defaultPharmacistName?: string;
   };
-  onSaveReport: (report: VisitTracingReport) => Promise<void>;
+  onSaveReport: (report: VisitTracingReport) => Promise<boolean | void>;
 }
 
 const EMPTY_PRESCRIPTION_ITEMS: Array<{ drugName: string; quantity?: number; usage?: string }> = [];
@@ -100,7 +130,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (!report.subject?.trim()) return;
+    if (!report.subject?.trim() || isSaving) return;
     setIsSaving(true);
     try {
       const now = new Date().toISOString();
@@ -122,8 +152,16 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         createdAt: report.createdAt || now,
         updatedAt: now
       };
-      await onSaveReport(fullReport);
-      onClose();
+      const outcome = await submitTracingReportForm({
+        subject: report.subject,
+        onSave: () => onSaveReport(fullReport)
+      });
+      if (outcome.alertMessage) {
+        alert(outcome.alertMessage);
+      }
+      if (outcome.shouldClose) {
+        onClose();
+      }
     } finally {
       setIsSaving(false);
     }
@@ -304,6 +342,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
             type="button"
             className="btn-primary flex-center gap-1"
             disabled={isSaving || !report.subject?.trim()}
+            aria-busy={isSaving}
             onClick={() => void handleSave()}
           >
             <Save size={16} />
