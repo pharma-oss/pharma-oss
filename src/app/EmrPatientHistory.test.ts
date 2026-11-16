@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   buildPastProblemSuggestions,
-  buildPrescriptionTimeline,
-  buildSoapHistoryTimeline
+  buildPrescriptionTimeline
 } from '../lib/emr_patient_history';
 
 test('buildPastProblemSuggestions extracts unique problem titles', () => {

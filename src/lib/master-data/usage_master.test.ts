@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ELECTRONIC_USAGE_OPTIONS,
-  INTERNAL_DROP_USAGE_PRESCRIPTION_CODES,
   filterUsageOptionsByCategory
 } from './usage_master';
 

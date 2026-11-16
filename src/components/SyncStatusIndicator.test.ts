@@ -5,8 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   resolveSyncIndicatorState,
   getSyncIndicatorPresentation,
-  SyncStatusIndicatorView,
-  type SyncIndicatorState
+  SyncStatusIndicatorView
 } from './SyncStatusIndicator';
 import type { SatelliteQueueHealth } from '../lib/sync/satellite_local_queue';
 
@@ -152,7 +151,7 @@ describe('getSyncIndicatorPresentation pure presentation contracts', () => {
       byCollection: {},
       expiredCount: 0,
       oldestEnqueuedAt: null,
-    newestEnqueuedAt: null,
+      newestEnqueuedAt: null,
       isNearLimit: true,
       isLimitExceeded: true,
       hasExpired: false
@@ -172,7 +171,7 @@ describe('getSyncIndicatorPresentation pure presentation contracts', () => {
       byCollection: {},
       expiredCount: 4,
       oldestEnqueuedAt: null,
-    newestEnqueuedAt: null,
+      newestEnqueuedAt: null,
       isNearLimit: false,
       isLimitExceeded: false,
       hasExpired: true
@@ -192,7 +191,7 @@ describe('getSyncIndicatorPresentation pure presentation contracts', () => {
       byCollection: {},
       expiredCount: 0,
       oldestEnqueuedAt: null,
-    newestEnqueuedAt: null,
+      newestEnqueuedAt: null,
       isNearLimit: true,
       isLimitExceeded: false,
       hasExpired: false
@@ -266,7 +265,7 @@ describe('SyncStatusIndicatorView renderToStaticMarkup contracts', () => {
       byCollection: {},
       expiredCount: 0,
       oldestEnqueuedAt: null,
-    newestEnqueuedAt: null,
+      newestEnqueuedAt: null,
       isNearLimit: true,
       isLimitExceeded: true,
       hasExpired: false

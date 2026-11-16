@@ -308,7 +308,7 @@ test('LocationMaster enables delete unused locations button when unassigned loca
     })
   );
   const deleteBtnTag = findOpeningTag(htmlUnusedExist, '未使用の棚番を一括削除', 'button');
-  assert.ok(!deleteBtnTag.includes('disabled'), `Delete unused button must be enabled when unassigned locations exist: ${deleteBtnTag}`);
+  assert.doesNotMatch(deleteBtnTag, /\sdisabled=""(?=[\s/>]|$)/, `Delete unused button must be enabled when unassigned locations exist: ${deleteBtnTag}`);
   assert.ok(htmlUnusedExist.includes('登録 2件 / 未使用 1件'), 'Location badge must reflect registered and unused count');
 });
 

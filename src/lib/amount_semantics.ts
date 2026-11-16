@@ -2,7 +2,7 @@
 // 「1日量か全量か」の軸のみがここの責務で、算定上の剤形区分そのものは dosage_category.ts が正本。
 
 import type { PrescriptionItem } from '@/db/types';
-import { resolveDosageCategory, resolveEffectiveDosageCategory } from './dosage_category.ts';
+import { resolveEffectiveDosageCategory } from './dosage_category.ts';
 
 export type AmountSemanticsItem = Partial<Pick<
   PrescriptionItem,

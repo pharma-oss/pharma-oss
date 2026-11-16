@@ -104,12 +104,6 @@ function categoryLabelToRecordCategory(label: BureauInstitutionCategoryLabel): M
   }
 }
 
-function colToNum(col: string): number {
-  let n = 0;
-  for (const ch of col) n = n * 26 + (ch.charCodeAt(0) - 64);
-  return n;
-}
-
 /**
  * グリッドをブロック(A列に連番が入る行から次の連番行の手前まで)へ分割し、
  * 各施設の生データを組み立てる。ZIP解凍やXLSX解析には依存しない純粋なロジック。

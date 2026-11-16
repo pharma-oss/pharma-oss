@@ -589,7 +589,7 @@ test('MedicineBagPrint renders usage supplement text next to usage hero (G6-4)',
           drugName: 'ロヒプノール錠1mg',
           amount: 1,
           days: 14,
-          dosageCategory: 'internal',
+          dosageCategory: 'internal' as const,
           usageSupplementText: '就寝30分前に水で服用'
         }
       ]

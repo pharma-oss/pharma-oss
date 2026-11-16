@@ -11,7 +11,6 @@ import { AuditLogFailedError, ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts
 import {
   applyDrugMergeExecutionPlan,
   applyDrugMergeExecutionPlanWithAudit,
-  applyDrugMergeOperation,
   DRUG_MERGE_AUDIT_ROLLED_BACK,
   createRxdbDrugMergeExecutionStore,
   DrugMergeExecutionError,

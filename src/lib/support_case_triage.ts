@@ -73,21 +73,11 @@ function highestPriority(items: SupportCaseFocusArea[]): SupportCasePriority {
     .sort((left, right) => comparePriority(left, right))[0] ?? 'watch';
 }
 
-function statusToPriority(status: string | undefined, blockedPriority: SupportCasePriority, attentionPriority: SupportCasePriority): SupportCasePriority {
-  if (status === 'blocked' || status === 'open') return blockedPriority;
-  if (status === 'attention' || status === 'partial') return attentionPriority;
-  return 'watch';
-}
-
 function addFocusArea(items: SupportCaseFocusArea[], item: Omit<SupportCaseFocusArea, 'priorityLabel'>) {
   items.push({
     ...item,
     priorityLabel: priorityLabel(item.priority)
   });
-}
-
-function summarizeStatusLabel(status: string | undefined, fallback: string): string {
-  return status || fallback;
 }
 
 function totalCollectionRows(diagnostic: AnonymousDiagnosticExport): number {

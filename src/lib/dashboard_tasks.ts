@@ -1,6 +1,5 @@
 import type { Alert, Drug, DrugStock, FacilitySettings, Patient, PrescriptionItem, Visit } from '@/db/types';
 import { calculateDispensingFees, getTotalPoints, type ItemWithPrice } from './calculator';
-import { isActivePatientAlert } from './patient_alerts';
 import { validateDispensingClaim, type ClaimValidationItem, type ClaimValidationIssue } from './claim_validation';
 import { buildClaimRiskSummary } from './claim_risk';
 import { buildPrescriptionInputAudit, type PrescriptionInputAuditItem } from './prescription_input_audit';
@@ -15,7 +14,7 @@ import {
   shouldIncludeInMonthlyClaimWorkbench,
   type ClaimWorkbenchStatus
 } from './claim_workbench';
-import { calculateRequiredStockAmount, getStockDrugId, getTotalStock } from './stock';
+import { calculateRequiredStockAmount, getStockDrugId } from './stock';
 import { isDemoVisit } from './demo_data';
 import { getPublicInsuranceCategoryName } from './patient_public_insurance';
 import { evaluateInsuranceEligibility } from './insurance_eligibility';

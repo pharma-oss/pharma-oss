@@ -7,8 +7,7 @@ import {
   fromEditableCopaymentSupport,
   buildHighCostCopaymentBadges,
   buildVisitCopaymentGuidance,
-  validateCopaymentSupportReadiness,
-  type EditableCopaymentSupport
+  validateCopaymentSupportReadiness
 } from '../patient_copayment_support';
 
 function createSamplePatient(insuranceInfoOverrides: Partial<NonNullable<Patient['insuranceInfo']>> = {}): Patient {

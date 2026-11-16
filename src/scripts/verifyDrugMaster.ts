@@ -55,10 +55,6 @@ function checkIsGeneric(name: string, yjCode?: string): boolean {
     return true;
   }
   if (yjCode && yjCode.length >= 12) {
-    // In YJ code, if the 10th character is '1', it is often brand name.
-    // If it is '0' or '2' or later, it is often generic.
-    // Alternatively, check brand name flag or common generic maker suffixes in Japan.
-    const makerChar = yjCode.charAt(9);
     const brandType = yjCode.charAt(11);
     // Generic drug YJ Code pattern often ends with non-1 or matches generic class
     if (brandType === '2' || brandType === '3' || brandType === '4') {

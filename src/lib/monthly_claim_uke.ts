@@ -30,7 +30,6 @@ import {
 } from '@/lib/prescription_intervention_support';
 import {
   buildOfficialCopaymentRecords,
-  buildOfficialDailyFields,
   buildOfficialDispensingDateRecords,
   buildOfficialSplitDispensingRecords,
   buildOfficialSupplementalRecords

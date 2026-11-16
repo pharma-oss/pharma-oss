@@ -9,7 +9,7 @@ import { logAuditAction } from '@/lib/audit';
 import { runWithAuditRollback } from '@/lib/audit_guard';
 import { compareStockLotsByExpiration } from '@/lib/stock';
 import { restoreFields } from '@/lib/rxdb_restore';
-import type { DrugStock, PharmacyDatabase } from '@/db/types';
+import type { PharmacyDatabase } from '@/db/types';
 
 export interface StockTransferDrugDocLike {
   name?: unknown;

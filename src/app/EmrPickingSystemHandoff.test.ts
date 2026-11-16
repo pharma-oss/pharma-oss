@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import {
   buildPickingInstruction,
   buildPickingInstructionCsv,
-  buildPickingInstructionFileName,
   parsePickingSystemResult
 } from '../lib/picking_system';
 import { PickingSupportModal } from './emr/components/PickingSupportModal';

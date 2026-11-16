@@ -10,8 +10,6 @@ import {
   flushUnsentLocalQueue,
   isRecordExpired,
   getSatelliteQueueHealth,
-  resetSatelliteQueueErrors,
-  SATELLITE_QUEUE_LIMITS,
 } from './satellite_local_queue.ts';
 
 test('satellite local queue enqueues encrypted items with true SHA-256 checksum and docId', () => {
@@ -226,7 +224,7 @@ test('getSatelliteQueueHealth flags expiredCount > 0 without deleting expired re
   const now = new Date('2026-08-24T12:00:00.000Z');
 
   // レコードを登録
-  const record = enqueueUnsentRecord('patients', { id: 'p_expired', name: '前日未送信患者' });
+  enqueueUnsentRecord('patients', { id: 'p_expired', name: '前日未送信患者' });
   // enqueuedAt を 30時間前に設定して保存
   const queue = getUnsentLocalQueue();
   queue[0].enqueuedAt = '2026-08-23T06:00:00.000Z';

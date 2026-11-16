@@ -1,4 +1,4 @@
-import type { Visit, Patient } from '@/db/types';
+import type { Visit } from '@/db/types';
 import type { UkeRecord } from './uke_generator';
 
 /**

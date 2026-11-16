@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   DEFAULT_PRINT_PRESETS,
-  getPrintPresetsForDocument,
-  type PrintPreset
+  getPrintPresetsForDocument
 } from './print_presets.ts';
 
 test('DEFAULT_PRINT_PRESETS contains presets for all target document types', () => {

@@ -1,4 +1,4 @@
-import type { Patient, PublicInsurance } from '@/db/types';
+import type { PublicInsurance } from '@/db/types';
 import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
 
 /**

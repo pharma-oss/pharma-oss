@@ -379,15 +379,6 @@ test('calculateDispensingFees should calculate tonpuku appropriately by total am
 });
 
 test('calculateDispensingFees should separate Tonpuku medicines with same usage but different doses', () => {
-  const items: ItemWithPrice[] = [
-    { itemId: '1', visitId: '1', drugId: '1', amount: 10, days: 0, drugPrice: 15.1, usage: '頭痛時 頓服' },
-    { itemId: '2', visitId: '1', drugId: '2', amount: 5, days: 0, drugPrice: 15.1, usage: '頭痛時 頓服' }
-  ];
-  // 15.1 * 10 = 151 -> 15.1 -> 15 points
-  // 15.1 * 5 = 75.5 -> 7.55 -> 8 points
-  // Total = 23 points.
-  // If grouped incorrectly, 15.1 * 15 = 226.5 -> 22.65 -> 23 points.
-  // Wait, let's use prices that differentiate grouped vs separated.
   // Grouped: 5.6 * 15 = 84 -> 8 points.
   // Separated: 5.6 * 10 = 56 -> 6 points. 5.6 * 5 = 28 -> 3 points. Total = 9 points.
 

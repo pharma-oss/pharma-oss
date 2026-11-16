@@ -20,8 +20,7 @@ import {
   calculateDashboardStockShortages,
   getEffectiveAvailableStock,
   buildClaimPublicInsuranceSummary,
-  hasActualDispensedDrug,
-  EMPTY_COUNTS
+  hasActualDispensedDrug
 } from './dashboard_tasks';
 
 describe('dashboard_tasks pure functions', () => {

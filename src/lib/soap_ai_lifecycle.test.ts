@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { SOAP_RECORD_SCHEMA } from '../db/schema.ts';
 import { buildSoapAiDraftSuggestions } from './soap_ai_draft.ts';
 import { buildAutoTracingReportDraft } from './tracing_report.ts';
-import { escapeCsvCell, buildCsvRow, buildCsvDocument } from './csv_escape.ts';
+import { escapeCsvCell, buildCsvDocument } from './csv_escape.ts';
 import type { SoapRecord } from '../db/types.ts';
 
 describe('P2-7 AI Output Lifecycle & Safety Suite', () => {

@@ -1,7 +1,7 @@
 import { test, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
-import { useDatabase, DatabaseContext } from './DatabaseContext.ts';
+import { useDatabase } from './DatabaseContext.ts';
 
 // Mock React 19's useContext via internal dispatcher
 const ReactInternals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;

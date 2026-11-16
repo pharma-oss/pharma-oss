@@ -5,13 +5,11 @@ import type { InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
 import {
   getPublicInsuranceCategoryName,
   sanitizeDigits,
-  createEmptyEditablePublicInsurance,
   toEditablePublicInsurances,
   sanitizePublicInsurance,
   toPublicInsurances,
   mergePreservingUneditedPublicInsurances,
-  buildPublicInsuranceBadgeList,
-  MAX_PUBLIC_INSURANCES
+  buildPublicInsuranceBadgeList
 } from './patient_public_insurance';
 
 test('getPublicInsuranceCategoryName resolves known legal category prefixes and handles edges', () => {

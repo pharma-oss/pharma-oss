@@ -810,11 +810,6 @@ function csvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function yesNo(value: boolean | undefined): string {
-  if (value === undefined) return '未記録';
-  return value ? 'OK' : '要確認';
-}
-
 export function buildSupportIncidentSlaCsv(review: SupportIncidentSlaReview): string {
   const rows = [
     ['区分', '判定', '対象', '目標', '実績', '次の対応'],

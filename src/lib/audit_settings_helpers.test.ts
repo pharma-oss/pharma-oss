@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import {
-  AUDIT_ACTION_LABELS,
   auditActionLabel,
   getAuditIntegrityStatus,
   getAuditRetentionColors,

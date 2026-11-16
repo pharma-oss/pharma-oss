@@ -46,15 +46,15 @@ function setupMockLocalStorage() {
     },
     sessionStorage: {
       getItem() { return null; },
-      setItem() {},
-      removeItem() {}
+      setItem() { },
+      removeItem() { }
     }
   };
   return store;
 }
 
 test('1. Staff info cache and PBKDF2 password verification (success and mismatch)', async () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const salt = 'mock_salt_123';
   const password = 'CorrectPassword123!';
   const passwordHash = await hashPassword(password, salt);
@@ -85,7 +85,7 @@ test('1. Staff info cache and PBKDF2 password verification (success and mismatch
 });
 
 test('2. 24-hour TTL: Success within 24h, blocked after 24h (25h later)', async () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const salt = 'salt_ttl';
   const passwordHash = await hashPassword('pass123', salt);
   const user: User = { userId: 'u1', name: '薬剤師A', role: 'pharmacist', salt, passwordHash };
@@ -149,7 +149,7 @@ test('4. Terminal revocation triggers purgeSatelliteAllCaches and records revoca
 });
 
 test('5. Revoked terminal CANNOT break into offline login even after LAN cable is unplugged (offline)', async () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const salt = 'salt_tomb';
   const passwordHash = await hashPassword('pass123', salt);
   const user: User = { userId: 'u_tomb', name: '管理者', role: 'admin', salt, passwordHash };
@@ -268,7 +268,7 @@ test('9. resolveOfflineAuthStaffLoadOutcome correctly handles ok, corrupted, exp
 });
 
 test('10. Revocation tombstone is preserved in memory even if localStorage.setItem throws (SW-C-30)', async () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const salt = 'salt_tomb_err';
   const passwordHash = await hashPassword('pass123', salt);
   const user: User = { userId: 'u_tomb_err', name: '管理者', role: 'admin', salt, passwordHash };
@@ -361,7 +361,7 @@ test('12. Purge keeps removing the other cache entries when one removal throws',
 });
 
 test('13. saveStandbyHubAllowlist returns true on success, false on exception, and preserves existing items on failure', () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const initialEntries: StandbyHubEntry[] = [
     { endpoint: 'https://standby1.local:3000', issuedAt: '2026-10-21T00:00:00.000Z', signature: 'sig1' }
   ];
@@ -405,7 +405,7 @@ test('14. resolveStandbyEndpointRegistrationOutcome handles success and failure 
 });
 
 test('15. saveOfflineAuthCache returns saved on success, failed on exception, and noop when revoked or zero valid users', async () => {
-  const store = setupMockLocalStorage();
+  setupMockLocalStorage();
   const salt = 'salt_offline_15';
   const passwordHash = await hashPassword('Pass1234!', salt);
   const user: User = { userId: 'admin_15', name: '管理者15', role: 'admin', salt, passwordHash };

@@ -66,19 +66,6 @@ function fetchToHub(store: HubStore, calls: { url: string; headers: Headers }[] 
   };
 }
 
-function restoredStandbyHub(options: { token?: string; withUsers?: boolean } = {}): { store: HubStore } {
-  const store = openHubStore({ dbPath: ':memory:', encryptionKey: randomBytes(32) });
-  store.rotateTerminalToken('sat-1', 'テスト');
-  if (options.token !== undefined) {
-    // 端末の登録(トークンのハッシュ)は、復旧したハブストアの中身そのもの
-    store.revokeTerminal('sat-1');
-  }
-  if (options.withUsers !== false) {
-    store.push('users', 'hub-local', [{ docId: 'u1', newDocumentState: { userId: 'u1', name: '管理者', _deleted: false } }]);
-  }
-  return { store };
-}
-
 function registeredHub(withUsers = true): { store: HubStore; token: string } {
   const store = openHubStore({ dbPath: ':memory:', encryptionKey: randomBytes(32) });
   const { token } = store.registerTerminal('sat-1', 'テスト');

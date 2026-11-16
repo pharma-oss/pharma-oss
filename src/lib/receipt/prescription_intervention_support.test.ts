@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  INTERVENTION_CATEGORY_LABELS,
   buildInterventionAuditDetail,
   buildInterventionEvent,
   buildInterventionRecord,
