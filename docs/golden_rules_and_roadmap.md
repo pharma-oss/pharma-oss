@@ -182,29 +182,30 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ---
 
-# 第Ⅱ部 現在地（2026-10-02 実測）
+# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-17 実測。§4 以降は 2026-10-02 のまま）
 
 ## 1. 品質ゲート
 
-2026-10-02 にトラック I-1 / I-3 の検証是正、G-2 欠品予測データパイプライン接続、調剤録法的根拠是正、および E2E ドリル再走後に再実行した結果。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-11-17 に Q-1（`VISIT_SCHEMA` v25 化）・P6-1（スキーマ形ハッシュ監視）・Q-2（T-36〜T-93 検証）実施後に再計測した結果。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
-| Lint | `npm run lint` | error 0 / warning 11（`react-hooks/exhaustive-deps` 等） |
-| ユニット/契約テスト | `npm test`（BypassSandbox: true） | 1,851 pass / 0 fail / 78 suites、skip 0（exit 0、約 54 秒） |
-| 本番ビルド | `npm run build` | 成功（28/28 ページ、exit 0）。複数 lockfile によるルート推定と Node.js SQLite 実験機能の警告あり |
-| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 4画面×3幅（1280/768/375px）で overflowPx = 0px、公式UKEモーダル起動・Escape閉鎖、全14枚画像保全（exit 0） |
+| Lint | `npm run lint` | error 0 / warning 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,102 pass / 0 fail / 198 suites、skip 0（exit 0。`6d57f2a` 時点で全件通過、その後はドキュメント更新のみ） |
+| 本番ビルド | `npm run build` | 成功（32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
+| SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 67 / `as any` 30） |
+| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | **2026-11-17 は未実行**（下の 2026-10-02 の記録のまま）。`npm run build` は `d3a3aa6` 時点で実行（その後はテスト 2 ファイルと文書更新のみ） |
 
-`npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボード、薬歴画面（/emr）、処方受付画面（/ocr）、印刷・調剤録画面（/print/[visitId]）、在庫管理・発注画面（/inventory）は幅1280 / 768 / 375pxの実ブラウザ表示と主要操作を通しドリルで確認した。
+以下の段落は 2026-10-02 の記録。`npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボード、薬歴画面（/emr）、処方受付画面（/ocr）、印刷・調剤録画面（/print/[visitId]）、在庫管理・発注画面（/inventory）は幅1280 / 768 / 375pxの実ブラウザ表示と主要操作を通しドリルで確認した。
 
 ## 2. 規模
 
 | 項目 | 実測 |
 |---|---|
-| `src/` の TS/TSX（テスト除く） | 308 ファイル |
-| テストファイル | 227 ファイル |
-| 主要 6 画面の行数 | 9,908 行（ocr 3,223 / emr 2,464 / print 2,068 / inventory 866 / settings 793 / dashboard 494） |
+| `src/` の TS/TSX（テスト除く） | 368 ファイル |
+| テストファイル | 346 ファイル（`6d57f2a` 時点） |
+| 主要 6 画面の行数 | 9,380 行（ocr 2,194 / emr 2,576 / print 2,434 / inventory 832 / settings 844 / dashboard〔`src/app/app/page.tsx`〕500。※ 上位 3 画面は P7 行数予算テストで固定） |
 | `scripts/` | 63 ファイル、npm scripts 44 本 |
 | ソースを `readFileSync` するテスト | 5 ファイル（`PrintPickingFlow` 202 assert / `DrugInfoItemCard` 58 / `PrintLayoutRegression` 43 / `DrugInfoClaimTools` 16 / `TerminalSyncPanel` 3）。※ `PrintPickingFlow` は `DispensingRecordPrint.tsx` の個別 readFileSync を撤廃し実描画化（26 assert）したが、先頭に 7 箇所の readFileSync と 202 assert のソース由来検査が依然残存（「0件」は誤り） |
 | インライン `style={{}}` | **3 箇所**（`AuditSettingsTab` 2、印刷ページ 1）。すべて動的 CSS 変数（`--bar-height` / `--print-*`）の正当な受け渡しのみ。`TerminalSyncPanel` 18 箇所と `ClientLayout` 6 箇所は CSS クラスへ移行完了し、予算上限 3 を `TerminalSyncPanel.test.ts` で自動防壁化 |
@@ -215,9 +216,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | コレクション | 版 | | コレクション | 版 |
 |---|---|---|---|---|
-| `visits` | 23 | | `drugs` | 10 |
+| `visits` | 25 | | `drugs` | 10 |
 | `audit_logs` | 20 | | `drug_stocks` | 5 |
-| `prescription_items` | 18 | | `facility_settings` | 5 |
+| `prescription_items` | 18 | | `facility_settings` | 6 |
 | `patients` | 4 | | `interventions` | 3 |
 | `soap_records` | 4 | | `users` | 2 |
 | `drug_infos`（SQLite WASM 側へ退避済み） | 2 | | `locations` / `alerts` / `medication_guidances` / `patient_medication_info_templates` | 1 |
@@ -262,6 +263,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **実施順序**: 完了済みの A-5 / B-2 / C-4 / D-2 / G-2 / I-3 を待ち行列から外し、一部完了・残存作業ありの C-1（旧形式完全廃止条件判定待ち）/ F-2（公式UKE摘要自動印字配線判断待ち）/ I-1（残り7箇所 readFileSync 移行）、および A-1〜A-4 / B-1 / C-2 / C-3 / D-1 / E-1 / E-2 / F-1 / F-3 / F-4 / G-1 / H-1〜H-4 / I-2 / I-4 / I-5 の判断待ち・現地証跡待ちを明示した。判断が不要な調査・再現確認は先行できる。
 - **デザイン改善**: ダッシュボード（第1段）、薬歴画面（第2段）、処方受付画面（第3段）、印刷・調剤録画面（第4段）、在庫管理・発注画面（第5段）、設定画面（第6段）のデザイン・日常操作・レスポンシブ改善を実施した。
 - 今回は公式資料の再取得、実プリンタ・現地機器・実症例での確認を実施していない。実ブラウザ確認と領域別の本番証跡は区別し、領域別 status の引き上げは行わない。
+- **2026-10-30〜11-17 の追補（第Ⅲ部トラック位置づけはユーザー判断待ち）**: 算定条件（手帳有無・時間外等区分・特管、`claim_conditions.ts`、`facility_settings` v6）、領収証検証用バーコード（`receipt_barcode.ts`）、自費患者の請求除外（`b73d7f3`）、およびマイナ読取の実機仕様突合について、第Ⅲ部トラックへの編入位置づけをユーザーと確認する（Q-5）。
 
 ---
 

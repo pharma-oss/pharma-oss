@@ -190,6 +190,10 @@ cat docs/gemini_continuous_improvement_guide.md                          # 最�
 
 金科玉条 第Ⅲ部 §0 の優先順位に従う: **臨床安全 > 請求の正確性 > データ保全 > 本番接続の証跡 > 現場の運用効率 > コード品質。** 迷ったら、影響範囲（触るファイル数）の小さい方を先にする。
 
+> **[Q-3 規則案（ユーザー確認待ち）]**:
+> - 実行者がテーマを自分で選ぶ場合、範囲は**テスト追加（SW-T）と型付け（SW-E）のみ**とする。`fix:`・スキーマ変更・請求ロック判定は、検証者が事前に洗い出して割り当てたテーマ以外には着手しない。
+> - 報告ファイル（`artifacts/improvement/*-reports/`）およびベースライン／ファイナルのゲート保存（`*-baseline/`・`*-final/`）が無いコミットは受け取らない。
+
 ### 4.2 掃引メニュー
 
 過去の監査で「画面は成功と言うが実際は失敗していた」型のバグが繰り返し見つかっている。**同じ型の取りこぼしを、機械的に探して潰す**のが継続改善の主軸である。
@@ -266,11 +270,20 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
 
 15 回目の起動（SW-C-35 `c1c1f50`、SW-C-36 `7cb33b4`、調査 SW-C-37・SW-C-32-fix3）も完了・検証済み（コミット 2 件は受け入れ。r4 は実質合格で、要目視の節は定型文。SW-C-37 は結論は妥当だが #82 の画面の文言が捏造。SW-C-36 の `status` が未読のまま残り、baseline 再実行の `duration_ms` が保存ファイルに無い値だった）。14 回目の起動（SW-C-33 `855be71`、SW-C-34 `b979c1c`、調査 SW-C-32-fix2）も完了・検証済み（コミット 2 件は受け入れ。r3 は行番号 6 件と #14・#24 の判定に誤りがあり、15 回目の r4 で直す。SW-C-33 のチャット報告だけ stat・保存先・`duration_ms` が保存ファイルと違った）。13 回目の起動（SW-E-1 `4aede10`、SW-E-2 `9b8d06e`、調査 SW-C-32）も完了・検証済み（コミット 2 件は受け入れ。SW-C-32 の表は『確かめた引用』が偽で、検証者が書き直させた。検証者が #97 を `05a7b74` で修正した）。
 
-1. **26 回目の起動（T-13。1 テーマ）**（プロンプトは `artifacts/improvement/20261026-next-agent-prompt-26th.txt`。付録 B の例と同じ。検証者の実測は `artifacts/improvement/20261026-2256-prep-26th-survey/`〔`probe-backup-settings-tab.txt`・`mutations/`・`baseline-cfd4944/`〕。実画面は要らない）:
-   - **T-13（`test(ui):`、SW-T、触るのは既存の `src/app/SettingsBackup.test.ts` の 1 つだけ。補助ファイルと本番のコンポーネントは変えない）**: `BackupSettingsTab.tsx` の権限の項 13 か所〔378・403・446・513・680・688・726・734・822・839・939・993・1103 行目。全部 `canManageBackups`〕を、描画テストで固定する。このコンポーネントには描画テストが無いので、props のモック〔`BackupSettingsTabProps` の全部〕から作る。状態を満たした描画〔重複レポート、受領書・CSV・バックアップの各ファイル〕で、`canManageBackups` が false なら disabled 13 個、true なら 0 個。**エスクローの入力は内部の `React.useState`〔全部で 9 個〕なので、688・734 行目のボタンは props だけでは権限あり側で有効にならない**。`node:test` の `mock.method(React, 'useState', …)` で 1・5・6 番目だけ差し替えて固定する〔初期値が `''` であることと呼び出しが 9 回であることを assert で守る〕。差し替えない描画で『権限ありでも disabled はエスクローの 2 個だけ』も記録する。文言で探すボタン〔予定を保存・外部保存を記録・受領書を監査ログへ記録・CSVを変換してプレビュー・バックアップを復旧する〕は、`<span>文言</span>` を含む 1 個を探して開始タグを取り出す。fail-first=13 件が SURVIVED→CAUGHT〔検証者が試作で再現済み。`ℹ tests` は +2 の見込み〕。洗い出しは、`disabled=` の全 22 行を表にする〔権限の項が無い 9 行は、なぜ無いかと、ハンドラの権限確認を行の引用つきで書く〕。状態の項は範囲外で、生き残りを報告するだけ。
-2. **T-14 以降の候補（ユーザーが決める）**: 他の設定タブの権限の項の固定。検証者の実測で生き残りが多い順に、`FacilitySettingsTab` 12、`MedicationInfoTemplateSettingsTab` 3、`AuditSettingsTab` 2〔`canApproveDailyClosing` の 631・640〕。内部の `useState` に隠れる状態の項があるタブは `mock.method(React, 'useState', …)` を使う〔T-13 で確立〕。前回の表は単一行の `disabled={…}` だけを数えたので、`const disabled = …` のように変数を経由するものは別に洗い出す。権限の項と並ぶ状態の項〔`StaffSettingsTab` の 433 のパスワード長・528 の `isLastCredentialedAdmin`・454 の `!staffRecoveryTarget`・362 の `isHandlingStaffRecovery`、`BackupSettingsTab` の 939・993・1103 の対象ファイルなし〕は T-12・T-13 の後も生き残るので、固定するテーマも候補。印刷画面の部品〔`print/[visitId]/page.tsx`・`DrugInfoItemCard.tsx`・`DrugInfoClaimTools.tsx`・`ElectronicPrescriptionPrintPanel.tsx`〕と `settings/page.tsx` は未測定。『常に付ける』変異が生き残る属性の assert〔`SingleOfficialUkeModal.test.ts:207` の `title`、`DashboardWorkflowSection.test.ts:34` の `aria-busy`〕は、否定側の描画の対を足す小テーマ。
-3. **SW-E の続き**: 別のファイルから（§2.6 を守る。型付けの検証は変更前後の JavaScript の一致で行う。変換した `.js` は `artifacts/improvement/` に置かない）。`0c4f2cb` の他の挙動変更には触らない
-4. **検証者が決めること（Gemini に渡さない）**: F-1 薬剤別指導テンプレート（`medication_guidances` を使う将来構想。承認フローを薬情テンプレと共通化するか要判断）
+1. **T-13〜T-93・`2f035a9`・Q-1/P6-1/Q-2/P7 の実績（2026-10-26〜2026-11-17）**:
+   - **T-13〜T-68**: 各画面・設定タブの `disabled` 等の描画テスト固定（テストのみ 41 コミット、`f39caa9` の `react_use_state_mock.ts` を含む）。
+   - **T-69〜T-88**: SW-E による `: any` 削減（209 → 67 件、`as any` 34 → 30 件）。
+   - **T-89〜T-90**: 印刷コンポーネントの実描画テスト拡充。
+   - **T-91〜T-93・`2f035a9`**: 本番挙動の変更（`MedicationGuidanceModal` 未知種別丸め、`print/helpers.ts` プレースホルダ除外、`EmrInterventionModal` / `TracingReportModal` 保存失敗時モーダル維持・請求ロック判定・`destinationInstitutionCode` 追加）。
+   - **Q-1 / P6-1（`d3a3aa6`）・Q-2（`artifacts/improvement/20261117-0054-verify-t36-93/findings.md`）・`6d57f2a`**: `2f035a9` で `VISIT_SCHEMA` の版が 24 のままだった欠陥を v25 へ修正し、スキーマ形ハッシュによる版上げ忘れ防止テスト（`schema_version_guard.test.ts`）を追加。T-36〜T-93＋`2f035a9` の 70 コミットを検証し全件受け入れ。あわせて `PatientBanner.tsx` の残存 `disabled` 変異 2 件（575/581 行）を解消し（75/75 検出）、P7（`screen_line_budget.test.ts`）を導入した。
+2. **T-94 以降の待ち行列（`artifacts/proposals/20261116-improvement-plan.md` §4 より）**:
+   1. 保存失敗時にモーダルが閉じて入力が消える型の横展開（SW-C、1 起動 1 モーダル。保存中身・スキーマ・請求ロックに触れる候補は除外）。
+   2. **P5-2**: 保存の永続化拒否／旧鍵のままを `DbSecurityBanner` に表示する（`fix:`）。
+   3. **SW-E の残り**: `: any` 67 件・`as any` 30 件の段階的解消（`ClientLayout.tsx`・`emr/page.tsx`・`PatientBanner.tsx`・`claim_actions.ts` 等。`db/index.ts` と `electronic_prescription_client.ts` は対象外）。
+   4. **SW-I**: 絞り込み無し全件 `find()` 27 件の分類表（P2-1 の実ブラウザ計測後）。
+   5. 小さな掃除: `getRecordNotes` の未使用第 2 引数、`TracingReportModal.tsx` の `as any` 2 件。
+   - 保留: `0.75rem` 以上 `1rem` 未満の生 `font-size` 41 件（§8.2 前後実測必須）、I-1 `PrintPickingFlow.test.ts`（対面で 1 件ずつ）。
+3. **検証者が決めること（Gemini に渡さない）**: F-1 薬剤別指導テンプレート、P3（`next` 更新と CI 監査）。
 
 ### 4.4 着手しない領域
 
