@@ -1,6 +1,10 @@
 import React from 'react';
 import { FileCheck2, CheckCircle, RefreshCw, Pencil, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
-import type { VisitElectronicPrescription } from '@/db/types';
+import type {
+  VisitElectronicPrescription,
+  VisitElectronicPrescriptionLaboratoryResult,
+  VisitElectronicPrescriptionSupplementaryInformation
+} from '@/db/types';
 import type { ElectronicPrescriptionOperationKind } from '@/lib/electronic_prescription';
 import {
   ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS,
@@ -33,8 +37,8 @@ export interface ElectronicPrescriptionPrintPanelProps {
   electronicPrescriptionDispensingInformationSignedAtText?: string;
   electronicPrescriptionDispensingInformationHashText: string;
   electronicPrescriptionComments: string[];
-  electronicPrescriptionLaboratoryResults: any[];
-  electronicPrescriptionNarcoticAdministration?: any;
+  electronicPrescriptionLaboratoryResults: VisitElectronicPrescriptionLaboratoryResult[];
+  electronicPrescriptionNarcoticAdministration?: VisitElectronicPrescriptionSupplementaryInformation['narcoticAdministration'];
   prescriptionAuditErrorCount: number;
   electronicPrescriptionLifecycleDecision: (op: ElectronicPrescriptionOperationKind) => { allowed: boolean; message?: string };
   handleElectronicPrescriptionOperation: (operation: ElectronicPrescriptionOperationKind) => void;
