@@ -1,4 +1,3 @@
-import React from 'react';
 import { Loader2, RefreshCw, Network } from 'lucide-react';
 import type { ExternalConnectorReadinessReport } from '@/lib/external_connector_readiness';
 

@@ -6,8 +6,7 @@ import type { VisitTracingReport, SoapStructuredAssessment, TracingReportStatus 
 import { tracingStatusLabel } from '@/lib/emr_helpers';
 import {
   buildAutoTracingReportDraft,
-  generateTracingReportPrintHtml,
-  type TracingReportDraftInput
+  generateTracingReportPrintHtml
 } from '@/lib/tracing_report';
 import { MedicalInstitutionAutoComplete } from '@/components/MedicalInstitutionAutoComplete';
 

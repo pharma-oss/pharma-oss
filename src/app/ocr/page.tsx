@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { useMynaReaderAvailability } from '@/hooks/useMynaReaderAvailability';
 import { buildReceptionInsuranceNumberPatch, checkMynaReadMatchesPatient, getMynaReaderButtonView, pickReceptionInsuranceNumber } from '@/lib/myna_read_display';
 import { useDatabase } from '@/db/DatabaseProvider';
-import type { Alert, Drug, InsuranceEligibilityStatus, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
+import type { Patient, Visit } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import {
   FEATURE_AVAILABILITY,
@@ -16,7 +16,6 @@ import {
   isFeatureImplemented,
   labelWithAvailability
 } from '@/lib/feature_availability';
-import { parseFlexibleDateInput } from '@/lib/date_input';
 import { normalizeInsuranceNumber } from '@/lib/patient_matching';
 import { buildPatientSearchQuery, extractPatientHintsFromQuery } from '@/lib/patient_search';
 import {
@@ -29,9 +28,7 @@ import { describePatientMasterChanges } from '@/lib/patient_master_update';
 import {
   buildPatientMergeExecutionPlan,
   buildPatientMergePlan,
-  type PatientMergeExecutionPlan,
-  type PatientMergeOperation,
-  type PatientMergePlan
+  type PatientMergeOperation
 } from '@/lib/patient_merge';
 import {
   applyPatientMergeExecutionPlanWithAudit,
@@ -43,42 +40,23 @@ import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@/lib/prescription_registration';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { buildReceptionClaimOptions, judgeAfterHoursCategory } from '@/lib/claim_conditions';
-import {
-  formatOnlineEligibilityFieldMappingReport,
-  normalizeOnlineEligibilityResponse,
-  type NormalizedOnlineEligibilityResult
-} from '@/lib/online_eligibility';
-import { findDrugMasterRecordByCode, findSubstitutionCandidates, isGeneralNameDrugRecord, searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
+import { formatOnlineEligibilityFieldMappingReport } from '@/lib/online_eligibility';
+import { findDrugMasterRecordByCode, isGeneralNameDrugRecord, searchDrugMaster, type DrugMasterRecord } from '@/lib/master-data/drug_master';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
 import { buildProviderHistory, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
-import { buildPrescriptionInputAudit, type PrescriptionInputAuditResult } from '@/lib/prescription_input_audit';
-import { comparePrescriptionHistoryTimeline, type PrescriptionHistoryItem, type PrescriptionHistorySnapshot, type PrescriptionHistoryTimelineEntry } from '@/lib/prescription_history_compare';
-import {
-  buildPreviousDoPrescriptions,
-  type PreviousDoSnapshot,
-  type PreviousDoSourceItem
-} from '@/lib/previous_prescription_do';
-import { buildOcrConfidenceReport, type OcrConfidenceReport } from '@/lib/ocr_confidence';
+import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
+import { buildPreviousDoPrescriptions } from '@/lib/previous_prescription_do';
+import { buildOcrConfidenceReport } from '@/lib/ocr_confidence';
 import { parseJahisQr, parsePrescriptionOcrText, type DrugItem as JahisDrugItem } from '@/lib/ocr/processor';
-import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
-import {
-  buildElectronicPrescriptionApplyDecision,
-  normalizeElectronicPrescriptionFetchKey,
-  type ElectronicPrescriptionFetchKeyKind,
-  type ElectronicPrescriptionFetchResult
-} from '@/lib/electronic_prescription';
-import { evaluateInsuranceEligibility, type InsuranceEligibilityIssue } from '@/lib/insurance_eligibility';
-import {
-  buildPublicInsuranceBadgeList,
-  getPublicInsuranceCategoryName,
-  type PublicInsuranceBadgeItem
-} from '@/lib/patient_public_insurance';
+import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
+import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
+import { buildPublicInsuranceBadgeList } from '@/lib/patient_public_insurance';
 import { buildHighCostCopaymentBadges } from '@/lib/patient_copayment_support';
 import DrugSearchModal from './components/DrugSearchModal';
 import PrescriptionQrReader from './components/PrescriptionQrReader';
 import { PatientRegistrationModal } from './components/PatientRegistrationModal';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
-import type { Prescription, PrescriptionGroup, PrescriptionFieldValue } from './types';
+import type { Prescription, PrescriptionFieldValue } from './types';
 import { groupPrescriptionsByRp } from './types';
 import {
   toPatientEligibilityStatus,
@@ -88,10 +66,6 @@ import {
   getPatientRegistrationPrompt,
   getPreviousDoViewState,
   getDrugAuditMeta,
-  getDispensedDrugAuditMeta,
-  clearDispensedDrugAuditMeta,
-  auditSeverityLabel,
-  historyChangeLabel,
   createEmptyPrescription,
   buildPrescriptionFromElectronicItem,
   toDateInputValue,
@@ -99,28 +73,18 @@ import {
   normalizeDateInputValue,
   normalizeJahisDateInputValue,
   getGroupDosageCategory,
-  attachStockQuantities,
-  stockTitle,
-  stockClassName,
   formatVisitDateLabel,
-  getVisitSortTime,
-  isGeneralNameDrug,
-  sortDrugSuggestions,
   NO_SUBSTITUTION_LABEL,
   isNoSubstitutionValue,
   getProviderHistoryCandidateViewState,
-  PROVIDER_HISTORY_FETCH_ERROR_ALERT_MESSAGE,
   PROVIDER_HISTORY_FETCH_ERROR_TOAST_MESSAGE
 } from './helpers';
 import { OcrRawTextArea, OcrConfidencePanel } from './components/OcrConfidencePanel';
-import { PrescribedDrugInput } from './components/PrescribedDrugInput';
-import { DispensedDrugInput } from './components/DispensedDrugInput';
-import { PrescriptionRow } from './components/PrescriptionRow';
 import { PrescriptionGroupEditor } from './components/PrescriptionGroupEditor';
 import { PrescriptionAuditPanel } from './components/PrescriptionAuditPanel';
 import { PrescriptionHistoryComparePanel } from './components/PrescriptionHistoryComparePanel';
 import { useOcrElectronicPrescription } from '@/hooks/useOcrElectronicPrescription';
-import { useOcrPatientEligibility, type PatientCandidate, type PatientMergeReview } from '@/hooks/useOcrPatientEligibility';
+import { useOcrPatientEligibility, type PatientCandidate } from '@/hooks/useOcrPatientEligibility';
 import { useOcrPreviousPrescriptions } from '@/hooks/useOcrPreviousPrescriptions';
 import { useOcrDrugSearchModal } from '@/hooks/useOcrDrugSearchModal';
 
@@ -319,7 +283,6 @@ export default function OcrPage() {
     electronicPrescriptionIntegrityHash,
     setElectronicPrescriptionIntegrityHash,
     isFetchingElectronicPrescription,
-    setIsFetchingElectronicPrescription,
     pendingElectronicPrescription,
     setPendingElectronicPrescription,
     electronicPrescriptionPaperOriginalConfirmed,
@@ -327,8 +290,7 @@ export default function OcrPage() {
     appliedElectronicPrescription,
     setAppliedElectronicPrescription,
     electronicPrescriptionApplyDecision,
-    handleElectronicPrescriptionFetch,
-    clearPendingElectronicPrescription
+    handleElectronicPrescriptionFetch
   } = useOcrElectronicPrescription();
 
   // Hook: 患者照会・マイナ・資格確認
@@ -352,7 +314,6 @@ export default function OcrPage() {
     patientMergeMessage,
     setPatientMergeMessage,
     activePatientAlerts,
-    setActivePatientAlerts,
     hasPatientAlertsFetchError,
     isReadingMyna,
     mynaMessage,
@@ -381,7 +342,6 @@ export default function OcrPage() {
 
   // Hook: 過去処方・Do処方
   const {
-    previousPrescriptions,
     setPreviousPrescriptions,
     isLoadingPreviousPrescription,
     hasPreviousPrescriptionsError,
@@ -400,12 +360,10 @@ export default function OcrPage() {
   const {
     isModalOpen,
     setIsModalOpen,
-    editingRowId,
     modalInitialQuery,
     modalTargetField,
     modalPrescribedCode,
     handleOpenDrugSearch,
-    handleModalClose,
     handleModalSelect
   } = useOcrDrugSearchModal({ setPrescriptions });
 

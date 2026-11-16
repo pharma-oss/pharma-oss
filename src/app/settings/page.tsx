@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useDatabase } from '@/db/DatabaseProvider';
 import {
   Building2,
@@ -53,7 +53,6 @@ import {
   type InitialSetupTab
 } from '@/lib/onboarding';
 import { getOfficialAuditBlockers, getOfficialAuditSummary } from '@/lib/official_audit';
-import { downloadTextFile } from '@/lib/blob_download';
 
 type SettingsTab = 'facility' | 'external' | 'master' | 'medicationInfo' | 'backup' | 'officialAudit' | 'audit' | 'staff' | 'terminalSync';
 
@@ -174,7 +173,7 @@ export default function SettingsPage() {
     getDrugInfoReferenceCount,
     ensurePermission
   });
-  const { auditLogs, auditIntegrity, isCheckingAuditIntegrity, fetchAuditLogs } = auditSettings;
+  const { auditLogs, auditIntegrity, fetchAuditLogs } = auditSettings;
 
   const backupSettings = useBackupSettings({
     db: db ?? null,
@@ -303,16 +302,6 @@ export default function SettingsPage() {
     staff: staffSettings.staffList,
     auditLogs
   });
-  const initialSetupStatusColor = initialSetupChecklist.status === 'complete'
-    ? '#15803d'
-    : initialSetupChecklist.status === 'attention'
-      ? '#b45309'
-      : '#b91c1c';
-  const initialSetupStatusBackground = initialSetupChecklist.status === 'complete'
-    ? '#f0fdf4'
-    : initialSetupChecklist.status === 'attention'
-      ? '#fffbeb'
-      : '#fef2f2';
 
   return (
     <div className="settings-container">

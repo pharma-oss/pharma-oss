@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, Search, Check } from 'lucide-react';
 import {
   findMedicalInstitutionByCode,
   isUsingSeedMedicalInstitutionData,

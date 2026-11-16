@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Clipboard, Download, CheckCircle2, PackageCheck, AlertTriangle, ArrowRightLeft, Layers, CalendarClock } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Clipboard, Download, CheckCircle2, PackageCheck, AlertTriangle, ArrowRightLeft, CalendarClock } from 'lucide-react';
 import { type InventoryOrderRisk, getOrderWorkbenchRestoreErrorBannerMessage } from '@/lib/inventory_order';
-import { type EnhancedInventoryOrderRisk, type OrderRiskReason } from '@/lib/inventory_reorder_support';
+import { type EnhancedInventoryOrderRisk } from '@/lib/inventory_reorder_support';
 import {
   type ReceivingDraft,
   defaultReceivingDraft,

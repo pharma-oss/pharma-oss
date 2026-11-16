@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -94,9 +94,6 @@ export function OperationalClosingSection({
 
   const getClosingReport = useCallback((generatedAt = new Date()) => {
     const todayLogs = auditLogs.filter((log) => isSameLocalDay(log.timestamp, generatedAt));
-    const controlledDrugInventoryCount = todayLogs.filter(
-      (log) => log.actionType === 'stock_update' && log.details.includes('麻薬・向精神薬')
-    ).length;
     const inventoryReceivingCount = countInventoryReceivingLogs(todayLogs, generatedAt);
     const remoteSupportLoadCount = countSupportLoadLogs(todayLogs, generatedAt);
 

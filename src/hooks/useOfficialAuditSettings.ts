@@ -7,8 +7,7 @@ import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import {
   DISPENSING_UKE_RECORD_SPEC_SOURCE,
   buildDispensingUkeOfficialAllFieldDefinitionGate,
-  buildDispensingUkeOfficialAllFieldDefinitionGateCsv,
-  formatDispensingUkeOfficialAllFieldDefinitionGate
+  buildDispensingUkeOfficialAllFieldDefinitionGateCsv
 } from '@/lib/receipt/dispensing_uke_validation';
 import {
   makeDispensingUkeOfficialAllFieldsGateCsvFileName,

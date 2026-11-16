@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { Copy, Download, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { buildInventoryOrderCsv, buildInventoryOrderMemo, formatDateForFileName, formatInventoryAmount } from '@/lib/inventory_order';
+import { buildInventoryOrderCsv, buildInventoryOrderMemo, formatDateForFileName } from '@/lib/inventory_order';
 import { downloadUtf8Csv } from '@/lib/dashboard_helpers';
 import { EmptyState } from './DashboardCards';
 import { InventoryRiskRow } from './DashboardRows';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Laptop, KeyRound, ShieldOff, RefreshCw, Copy, CheckCircle2, AlertTriangle, AlertOctagon, Clock, Database, Server, Radio, ShieldCheck, ArrowRightLeft } from 'lucide-react';
+import { Laptop, KeyRound, ShieldOff, RefreshCw, Copy, CheckCircle2, AlertTriangle, AlertOctagon, Clock, Database, Server, ShieldCheck, ArrowRightLeft } from 'lucide-react';
 import { resolveClientSyncIdentity, type ClientSyncRole } from '@/lib/sync/client_role';
 import { getSatelliteQueueHealth, flushUnsentLocalQueue, type SatelliteQueueHealth } from '@/lib/sync/satellite_local_queue';
 import {

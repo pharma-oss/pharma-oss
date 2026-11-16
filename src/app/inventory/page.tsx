@@ -1,22 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
 import './inventory.css';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
-import { Drug, Location, DrugStock } from '@/db/types';
+import { Location, DrugStock } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
-import { calculateRequiredStockAmount, getStockDrugId, getTotalStock } from '@/lib/stock';
+import { calculateRequiredStockAmount, getStockDrugId } from '@/lib/stock';
 import { isGeneralNameDrugRecord } from '@/lib/master-data/drug_master';
-import { logAuditAction, getCurrentUser } from '@/lib/audit';
+import { logAuditAction } from '@/lib/audit';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
   AlertTriangle,
   ArrowLeftRight,
-  CheckCircle2,
-  Download,
   LayoutGrid,
-  Loader2,
   MapPin,
   PackageX,
   ScanLine,
@@ -27,15 +24,9 @@ import {
   X
 } from 'lucide-react';
 import {
-  buildInventoryOrderCsv,
-  buildInventoryOrderMemo,
   buildInventoryReceivingChecklistCsv,
   buildInventoryReceivingChecklistMemo,
-  choosePrimarySupplier,
   formatDateForFileName,
-  formatInventoryAmount,
-  getInventoryOrderActionLabel,
-  getInventoryOrderPriority,
   type InventoryOrderRisk
 } from '@/lib/inventory_order';
 import {
@@ -50,7 +41,6 @@ import {
   type ReceivingDraft,
   defaultReceivingDraft,
   todayDateKey,
-  toHalfWidth,
   toInventoryDrugRow
 } from './types';
 import { LocationMaster } from './components/LocationMaster';

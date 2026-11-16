@@ -3,7 +3,7 @@ import { CreditCard, Activity, CheckCircle2, Loader2, Camera, Upload, ClipboardL
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { getCurrentUser } from '@/lib/audit';
-import type { Alert, Visit, PublicInsurance, InsuranceEligibilityStatus, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import type { Alert, Visit, InsuranceEligibilityStatus, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
 import { formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import {
   toDateInputValue,

@@ -1,4 +1,3 @@
-import React from 'react';
 import { ShieldCheck, AlertTriangle, Loader2, FileText, Download, Search } from 'lucide-react';
 import {
   OFFICIAL_AUDIT_ITEMS,

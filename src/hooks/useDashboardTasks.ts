@@ -6,7 +6,7 @@ import { useDatabase } from '@/db/DatabaseProvider';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isActivePatientAlert } from '@/lib/patient_alerts';
 import { buildOperationalKpis, type OperationalKpiSoapRecord, type OperationalKpis } from '@/lib/operational_kpi';
-import { hasTutorialDemoData, isDemoVisit } from '@/lib/demo_data';
+import { hasTutorialDemoData } from '@/lib/demo_data';
 import {
   type DashboardTask,
   type DashboardCounts,
@@ -188,7 +188,6 @@ export function useDashboardTasks() {
 
         const {
           itemsByVisitId,
-          drugIdSetForItems,
           requiredByStockDrugId,
           requiredVisitIdsByStockDrugId,
           pickingShortageByStockDrugId,

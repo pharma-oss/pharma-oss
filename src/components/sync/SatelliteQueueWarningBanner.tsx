@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, AlertOctagon, RefreshCw, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, AlertOctagon, RefreshCw, ArrowRight } from 'lucide-react';
 import { resolveClientSyncIdentity } from '@/lib/sync/client_role';
 import {
   getSatelliteQueueHealth,

@@ -4,7 +4,6 @@ import { User } from '@/db/types';
 import { getPermissionDeniedMessage } from '@/lib/audit';
 import {
   type BackupSchedulePolicy,
-  type BackupCollectionName,
   type CollectionDiff,
   type BackupRestoreDrillReport,
   type YakurekiBackup,
@@ -33,8 +32,6 @@ import {
   getLocalStoredDbPassword,
   saveRestoredDbPassword
 } from '@/lib/db_key_escrow';
-
-import { getBackupDrillStatusStyle as backupDrillStatusStyle } from '@/lib/backup_settings_helpers';
 
 interface DuplicateMergeReview {
   groupId: string;

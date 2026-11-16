@@ -8,7 +8,6 @@ import type { DrugMasterSpecificationPdfDiffReview } from '@/lib/drug_master_spe
 import { drugMasterCandidateKindLabel, drugMasterSpecPdfDiffFieldLabel } from '@/lib/drug_master_update_ui';
 import type { DrugDuplicateGroup, DrugDuplicateScanReport } from '@/lib/drug_duplicate_review';
 import type { DrugMergeExecutionPlan, DrugMergePlan } from '@/lib/drug_merge';
-import { formatDrugPriceRevisionLabel } from '@/lib/drug_price_history';
 import type {
   DrugPriceHistoryDraftRow,
   DrugPriceHistoryEditPlan

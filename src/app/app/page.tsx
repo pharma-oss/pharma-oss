@@ -16,7 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DailyClosingWizardModal } from '@/components/dashboard/DailyClosingWizardModal';
 import '../dashboard.css';
@@ -66,7 +66,6 @@ export default function Dashboard() {
     claimRisks,
     claimWorkItems,
     followUpCandidates,
-    completeFollowUpCandidate,
     recordFollowUpCandidate,
     hasDemoData,
     refresh,

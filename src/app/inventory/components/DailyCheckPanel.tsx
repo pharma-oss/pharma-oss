@@ -17,7 +17,6 @@ import {
   getDailyControlledDrugCheckSummary,
   getDailyControlledDrugDiff,
   buildDailyCheckSaveNoticeMessage,
-  getDailyControlledDrugDifferenceReasonLabel,
   getDailyControlledDrugMissingReasonRows,
   mergeDailyControlledDrugCheckSnapshot,
   resolveRestoreErrorAfterSave,
@@ -198,7 +197,6 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
       if (missingReasonRows.length > 0) {
           const sampleNames = missingReasonRows.slice(0, 3).map(r => r.drugName).join('、');
           alert(`差異がある品目の差異理由を選択してください。\n未選択: ${missingReasonRows.length}件 (${sampleNames})`);
-          const firstMissing = missingReasonRows[0];
           return;
       }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, ShieldCheck, HardDrive, FileCheck, X, AlertTriangle } from 'lucide-react';
 import { isFileSystemAccessSupported, saveBackupToDirectory } from '@/lib/file_system_backup';
 import { makeBackupFileName, buildDatabaseBackup, encryptBackupPayload } from '@/lib/backup';

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DrugStock, type PharmacyDatabase } from '@/db/types';
 import {
   applyStockTransferIn,

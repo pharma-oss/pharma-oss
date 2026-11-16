@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Pill, Stethoscope, CalendarDays, FileText, Loader2, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';

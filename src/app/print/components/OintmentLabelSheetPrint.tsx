@@ -3,7 +3,6 @@ import { Paintbrush } from 'lucide-react';
 import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
-  getAmountText,
   getTotalAmountText,
   type AmountTextSourceItem
 } from '../helpers';

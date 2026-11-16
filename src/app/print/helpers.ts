@@ -1,8 +1,7 @@
-import React from 'react';
 import type { PrescriptionItem, VisitElectronicPrescription } from '@/db/types';
 import type { ElectronicPrescriptionDocumentKind } from '@/lib/electronic_prescription';
 import { isDailyAmountItem, type AmountSemanticsItem } from '@/lib/amount_semantics';
-import { resolveDosageCategory, resolveEffectiveDosageCategory, resolveGroupDosageCategory, type DosageCategory, type DosageCategorySourceItem } from '@/lib/dosage_category';
+import { resolveGroupDosageCategory, type DosageCategory, type DosageCategorySourceItem } from '@/lib/dosage_category';
 import { getFormulationType, type FeeCode, type FormulationType } from '@/lib/calculator';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import type { PrescriptionInputAuditIssue, PrescriptionInputAuditItem } from '@/lib/prescription_input_audit';

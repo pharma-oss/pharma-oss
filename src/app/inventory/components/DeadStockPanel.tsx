@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { DrugStock, type PharmacyDatabase } from '@/db/types';

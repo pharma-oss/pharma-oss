@@ -3,7 +3,6 @@ import { Plus, Fingerprint, Loader2, Save, Download, KeyRound, ShieldCheck, Tras
 import { User } from '@/db/types';
 import {
   ALL_PERMISSION_ACTIONS,
-  canUserPerform,
   getPermissionDeniedMessage,
   getPermissionLabel,
   getRoleLabel,
@@ -14,8 +13,7 @@ import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
 import {
   STAFF_RECOVERY_REASON_LABELS,
   type StaffRecoveryChecklist,
-  type StaffRecoveryReason,
-  type StaffRecoveryStepStatus
+  type StaffRecoveryReason
 } from '@/lib/staff_recovery';
 
 const ROLE_PERMISSION_SETTING_ROLES: User['role'][] = ['admin', 'pharmacist', 'clerk'];

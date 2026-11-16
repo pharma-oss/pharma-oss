@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   CheckCircle2,
   Copy,
@@ -347,7 +347,7 @@ export function ClaimWorkbenchSection({
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
-      const { cases, selfPayExcluded, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`公式UKE作成前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;
@@ -483,7 +483,7 @@ export function ClaimWorkbenchSection({
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
     try {
-      const { cases, selfPayExcluded, missingMessages, visits, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
+      const { cases, selfPayExcluded, missingMessages, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
         alert(`オンライン請求受付前チェック前に確認が必要な受付があります。\n\n${missingMessages.slice(0, 8).join('\n')}${missingMessages.length > 8 ? `\nほか${missingMessages.length - 8}件` : ''}`);
         return;

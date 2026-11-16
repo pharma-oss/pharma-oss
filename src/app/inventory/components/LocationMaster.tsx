@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import type { Location, PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';

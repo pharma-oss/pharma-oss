@@ -1,16 +1,15 @@
 'use client';
 
 import React from 'react';
-import { BookOpen, ChevronDown, Clock, History, Save, MessageSquare, AlertTriangle, Activity, FileText, CreditCard, Loader2, CheckCircle2, Plus, Printer, Trash2, Sparkles, Camera, Upload, ClipboardList, Download } from 'lucide-react';
+import { Clock, History, Save, MessageSquare, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { useDatabase } from '@/db/DatabaseProvider';
-import type { Alert, FacilitySettings, InsuranceEligibilityStatus, PrescriptionItem, PublicInsurance, SoapRecord as DbSoapRecord, SoapStructuredAssessment, TracingReportStatus, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport, VisitTracingReport } from '@/db/types';
-import { evaluateUsageWarning, evaluateUsageWarningCondition } from '@/lib/clinical_rules';
+import type { Alert, FacilitySettings, PrescriptionItem, SoapRecord as DbSoapRecord, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import { evaluateUsageWarning } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
 import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
-import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
+import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
@@ -27,42 +26,25 @@ import {
   filterAiAssistItemsByMode,
   normalizeAiAssistMode
 } from '@/lib/ai_assist_policy';
-import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
 import {
-  buildMynaReadInsuranceDisplay,
-  formatPatientInsuranceInfo,
-  type MynaReadInsuranceDisplay
-} from '@/lib/myna_read_display';
-import {
-  buildPastProblemSuggestions,
   buildPrescriptionTimeline,
   buildSoapHistoryTimeline,
   getEmrHistoryViewState,
   type PrescriptionTimelineEntry,
   type SoapHistoryTimelineEntry
 } from '@/lib/emr_patient_history';
-import {
-  createDefaultSoapStructuredAssessment,
-  getMissingSoapStructuredAssessmentFields,
-  normalizeSoapStructuredAssessment
-} from '@/lib/soap_structured_assessment';
 import { findDrugInfosByDrugNames } from '@/lib/drug_info_reference';
 import { findDrugInteractionWarnings } from '@/lib/drug_interaction_check';
 import {
   buildContraindicatedConditionPatientTexts,
   findContraindicatedConditionWarnings
 } from '@/lib/drug_contraindicated_condition_check';
-import { extractInitialQuestionnaireOcrDraft } from '@/lib/initial_questionnaire_ocr';
 import {
-  compressQuestionnaireImage,
   consumeFromStockLot,
-  inquiryMethodLabel,
   inquiryStatusLabel,
   applyReversiblePatches,
   rollbackAppliedPatches,
   safeStockQuantity,
-  toDateInputValue,
-  todayDateInputValue,
   tracingStatusLabel,
   type ReversiblePatch
 } from '@/lib/emr_helpers';
@@ -79,14 +61,7 @@ import { useEmrTracingReport } from '@/hooks/useEmrTracingReport';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 import {
   SoapHistoryQuickCard,
-  SoapHistoryPanel,
-  SoapStructuredAssessmentPanel,
-  SoapSaveStatusIndicator,
-  SoapEntryBox,
-  soapEntryTypeMeta,
-  type SoapSaveStatus,
-  type SoapEntryType,
-  type SoapProblem
+  SoapHistoryPanel
 } from './components/SoapComponents';
 import {
   CareChecklistCard,
@@ -408,7 +383,6 @@ export default function EmrPage() {
     intConsented,
     setIntConsented,
     handleAddIntervention,
-    handleDeleteIntervention,
     resetInterventionForm
   } = useEmrIntervention({
     db,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { UploadCloud, AlertTriangle, Loader2, Save, FileText, Search, Fingerprint, KeyRound, Plus, Trash2, Download, CheckCircle } from 'lucide-react';
+import { UploadCloud, AlertTriangle, Loader2, Save, FileText, Search, Plus, Trash2, Download, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { PatientMedicationInfoTemplate } from '@/db/types';
 import {

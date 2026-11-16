@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Lock } from 'lucide-react';
 
 import { getDbPassword } from '@/lib/env';
