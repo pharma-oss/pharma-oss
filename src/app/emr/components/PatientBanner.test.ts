@@ -117,6 +117,23 @@ test('PatientBanner disables the edit action while no patient is loaded, so the 
   assert.ok(wrapper.includes('data-disabled="true"'), 'wrapper must mark the disabled state for the not-allowed cursor');
 });
 
+test('PatientBanner enables the edit action and clears data-disabled when a patient is loaded without errors', () => {
+  const html = renderWithPatientBannerOverrides({
+    patientData: {
+      patientId: 'pt_loaded_1',
+      name: '佐藤 花子',
+      kana: 'サトウ ハナコ',
+      birthDate: '1985-04-01'
+    }
+  });
+  const editButton = html.match(/<button[^>]*class="btn-edit-insurance[^"]*"[^>]*>/)?.[0] ?? '';
+  assert.ok(editButton.length > 0, 'edit button must be rendered');
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(editButton), 'edit button must be enabled when a patient is loaded');
+  const wrapper = html.match(/<span[^>]*>(?=<button[^>]*class="btn-edit-insurance)/)?.[0] ?? '';
+  assert.ok(wrapper.includes(`title="${PATIENT_BANNER_EDIT_TITLE}"`), 'tooltip must show active edit title');
+  assert.ok(!wrapper.includes('data-disabled="true"'), 'wrapper must not mark data-disabled when enabled');
+});
+
 test('getPatientBannerEditButtonState keeps the edit action off while the patient failed to load, and on only for a loaded patient', () => {
   assert.deepStrictEqual(getPatientBannerEditButtonState(null, true), {
     isDisabled: true,
