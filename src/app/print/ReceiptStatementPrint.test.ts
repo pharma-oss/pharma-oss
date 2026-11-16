@@ -34,21 +34,21 @@ test('ReceiptStatementPrint renders full dispensing statement with points, yen b
 
   const calculatedFees = [
     {
-      code: 'base_fee',
+      code: 'base_fee' as const,
       name: '調剤基本料1',
       rationale: '基本料1 (45点)',
       points: 45,
       receiptFeeCode: '410004110'
     },
     {
-      code: 'drug_preparation',
+      code: 'drug_preparation' as const,
       name: '薬剤調製料 (内服薬)',
       rationale: '内服薬 14日分 (24点)',
       points: 24,
       receiptFeeCode: '420001810'
     },
     {
-      code: 'drug_fee',
+      code: 'drug_fee' as const,
       name: '薬剤料',
       rationale: 'アムロジピン他 (14点)',
       points: 14,

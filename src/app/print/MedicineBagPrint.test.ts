@@ -30,7 +30,7 @@ test('MedicineBagPrint renders internal medicine bag with accurate usage, timing
       days: 14,
       usage: '1日1回朝食後',
       usageSupplementText: '起床時血圧測定後に服用',
-      dosageCategory: 'internal',
+      dosageCategory: 'internal' as const,
       unit: '錠'
     },
     {
@@ -39,7 +39,7 @@ test('MedicineBagPrint renders internal medicine bag with accurate usage, timing
       amount: 1,
       days: 14,
       usage: '1日1回朝食後',
-      dosageCategory: 'internal',
+      dosageCategory: 'internal' as const,
       unit: '錠'
     }
   ];
@@ -104,7 +104,7 @@ test('MedicineBagPrint renders external medicine bag with external-bag styling a
       amount: 50,
       days: 0,
       usage: '1日2回患部に塗布',
-      dosageCategory: 'external',
+      dosageCategory: 'external' as const,
       unit: 'g'
     }
   ];

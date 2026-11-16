@@ -335,8 +335,8 @@ describe('Dashboard component contracts and routing handlers', () => {
       const memoBtn = findOpeningTag(html, '<span>発注メモ</span>', 'button');
       const csvBtn = findOpeningTag(html, '<span>CSV</span>', 'button');
 
-      assert.ok(!memoBtn.includes('disabled'), 'Memo button must be enabled when risks exist');
-      assert.ok(!csvBtn.includes('disabled'), 'CSV button must be enabled when risks exist');
+      assert.doesNotMatch(memoBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Memo button must be enabled when risks exist');
+      assert.doesNotMatch(csvBtn, /\sdisabled=""(?=[\s/>]|$)/, 'CSV button must be enabled when risks exist');
       assert.ok(html.includes('至急 1'));
       assert.ok(html.includes('1品目'));
       assert.ok(html.includes('ロキソニン錠60mg'));
@@ -366,7 +366,7 @@ describe('Dashboard component contracts and routing handlers', () => {
 
       assert.deepEqual(listDisabledOpeningTags(html), []);
       const completeBtn = findOpeningTag(html, '<span>対応記録</span>', 'button');
-      assert.ok(!completeBtn.includes('disabled'), 'Complete button must be enabled when isCompleting is false');
+      assert.doesNotMatch(completeBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Complete button must be enabled when isCompleting is false');
       assert.ok(html.includes('followup-row priority-medium'));
       assert.ok(html.includes('リスク 42'));
       assert.ok(html.includes('10:30・2薬 / 本日中'));
@@ -400,7 +400,7 @@ describe('Dashboard component contracts and routing handlers', () => {
       const disabledTags = listDisabledOpeningTags(html);
       assert.equal(disabledTags.length, 1);
       const completeBtn = findOpeningTag(html, '<span>更新中</span>', 'button');
-      assert.ok(completeBtn.includes('disabled'), 'Complete button must be disabled when isCompleting is true');
+      assert.match(completeBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Complete button must be disabled when isCompleting is true');
       assert.equal(disabledTags[0], completeBtn);
       assert.ok(html.includes('followup-row priority-high'));
       assert.ok(html.includes('リスク 88'));

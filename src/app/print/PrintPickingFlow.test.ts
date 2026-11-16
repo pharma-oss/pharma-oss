@@ -767,7 +767,7 @@ test('print page renders MedicineBagPrint component with true DOM structure', ()
         days: 14,
         usage: '1日1回朝食後',
         usageSupplementText: '血圧測定後に服用',
-        dosageCategory: 'internal',
+        dosageCategory: 'internal' as const,
         unit: '錠'
       }
     ]
@@ -817,8 +817,8 @@ test('print page renders ReceiptStatementPrint and ReceiptPrint components with 
     pharmacistName: 'テスト 薬剤師'
   };
   const calculatedFees = [
-    { code: 'base_fee', name: '調剤基本料1', rationale: '基本料1 (45点)', points: 45, receiptFeeCode: '410004110' },
-    { code: 'drug_fee', name: '薬剤料', rationale: '薬剤料 (14点)', points: 14, receiptFeeCode: '620000001' }
+    { code: 'base_fee' as const, name: '調剤基本料1', rationale: '基本料1 (45点)', points: 45, receiptFeeCode: '410004110' },
+    { code: 'drug_fee' as const, name: '薬剤料', rationale: '薬剤料 (14点)', points: 14, receiptFeeCode: '620000001' }
   ];
   const insuranceAmounts = {
     burdenRatio: 30,
