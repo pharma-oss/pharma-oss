@@ -2,6 +2,7 @@ import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import {
   PickingSupportModal,
   getPickingLoadErrorBannerMessage,
@@ -66,62 +67,43 @@ function renderWithStateOverrides(
   overrides: PickingStateOverrides = {}
 ): string {
   const { scanInput = '', isVerifyingScan = false, isImportingSystemResult = false } = overrides;
-  let callCount = 0;
-
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(PickingSupportModal, props),
+    {
+      componentName: 'PickingSupportModal',
+      restoreAtCallIndex: 6,
+      expectedCalls: 7,
+      overrides: {
+        0: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              '',
+              `Expected PickingSupportModal useState call #0 initial value to be '', got ${String(initialState)}`
+            ),
+          value: scanInput
+        },
+        2: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected PickingSupportModal useState call #2 initial value to be false (isVerifyingScan), got ${String(initialState)}`
+            ),
+          value: isVerifyingScan
+        },
+        6: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected PickingSupportModal useState call #6 initial value to be false (isImportingSystemResult), got ${String(initialState)}`
+            ),
+          value: isImportingSystemResult
+        }
       }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 0) {
-          // 0: const [scanInput, setScanInput] = useState('');
-          assert.equal(
-            initialState,
-            '',
-            `Expected PickingSupportModal useState call #0 initial value to be '', got ${String(initialState)}`
-          );
-          return [scanInput, () => {}];
-        }
-        if (currentIndex === 2) {
-          // 2: const [isVerifyingScan, setIsVerifyingScan] = useState(false);
-          assert.equal(
-            initialState,
-            false,
-            `Expected PickingSupportModal useState call #2 initial value to be false (isVerifyingScan), got ${String(initialState)}`
-          );
-          return [isVerifyingScan, () => {}];
-        }
-        if (currentIndex === 6) {
-          // 6: const [isImportingSystemResult, setIsImportingSystemResult] = useState(false);
-          assert.equal(
-            initialState,
-            false,
-            `Expected PickingSupportModal useState call #6 initial value to be false (isImportingSystemResult), got ${String(initialState)}`
-          );
-          // Restore immediately after the last hook of PickingSupportModal so children use unpatched hook
-          dispatcher.useState = origUseState;
-          return [isImportingSystemResult, () => {}];
-        }
-        return origUseState(initialState);
-      };
     }
-    return React.createElement(PickingSupportModal, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    7,
-    `Expected PickingSupportModal to call useState exactly 7 times before children, got ${callCount}`
   );
-  return html;
 }
 
 describe('PickingSupportModal renderToStaticMarkup contracts', () => {

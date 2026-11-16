@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { TracingReportModal, type TracingReportModalProps } from './components/TracingReportModal';
 import type { VisitTracingReport } from '@/db/types';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
@@ -44,42 +45,25 @@ function renderWithIsSaving(
   props: TracingReportModalProps,
   isSavingOverride: boolean
 ): string {
-  let callCount = 0;
-  function Wrapper(): React.ReactNode {
-    const internals = (React as unknown as {
-      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: {
-        H?: { useState?: (init: unknown) => [unknown, (v: unknown) => void] }
-      }
-    }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-
-    const dispatcher = internals?.H;
-    if (dispatcher?.useState) {
-      const origUseState = dispatcher.useState;
-      dispatcher.useState = (initialState: unknown) => {
-        const currentIndex = callCount++;
-        if (currentIndex === 1) {
-          assert.equal(
-            initialState,
-            false,
-            `Expected TracingReportModal useState call #1 initial value to be false (isSaving), got ${String(initialState)}`
-          );
-          // Restore immediately so children (e.g. MedicalInstitutionAutoComplete) use unpatched useState
-          dispatcher.useState = origUseState;
-          return [isSavingOverride, () => {}];
+  return renderMarkupWithReactUseStateMock(
+    () => React.createElement(TracingReportModal, props),
+    {
+      componentName: 'TracingReportModal',
+      restoreAtCallIndex: 1,
+      expectedCalls: 2,
+      overrides: {
+        1: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected TracingReportModal useState call #1 initial value to be false (isSaving), got ${String(initialState)}`
+            ),
+          value: isSavingOverride
         }
-        return origUseState(initialState);
-      };
+      }
     }
-    return React.createElement(TracingReportModal, props);
-  }
-
-  const html = renderToStaticMarkup(React.createElement(Wrapper));
-  assert.equal(
-    callCount,
-    2,
-    `Expected TracingReportModal to call useState exactly 2 times, got ${callCount}`
   );
-  return html;
 }
 
 describe('TracingReportModal renderToStaticMarkup contracts', () => {
