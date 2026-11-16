@@ -77,6 +77,7 @@ import {
 } from '@/lib/drug_merge_execution';
 import { downloadTextFile } from '@/lib/blob_download';
 import { AuditLogFailedError, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { drugRecordFromDocument } from '@/lib/drug_record';
 import { restoreDrugMasterFromRollback, buildDrugMasterPartialImportErrorMessage, type DrugMasterRestoreResult } from '@/lib/drug_master_rollback';
 import { drugMasterCandidateKindLabel } from '@/lib/drug_master_update_ui';
@@ -183,7 +184,7 @@ export function useDrugMasterSettings({
           : '公式ページを取得しましたが、更新候補を抽出できませんでした。'
       );
       toast.success('公式ページを取得しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '公式ページを取得できませんでした。';
       setDrugMasterCandidateMessage(message);
       toast.error(message);
@@ -268,7 +269,7 @@ export function useDrugMasterSettings({
         setDrugMasterSpecPdfReviewLabel(label);
         toast.success('公式仕様PDFを取得しました。');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '仕様PDFを取得できませんでした。';
       setDrugMasterSpecPdfReviewLabel(message);
       toast.error(message);
@@ -287,8 +288,8 @@ export function useDrugMasterSettings({
       let normalizedSourceUrl: string | undefined;
       try {
         normalizedSourceUrl = normalizeDrugMasterSourceUrl(source.sourceUrl ?? drugMasterSourceUrl);
-      } catch (urlError: any) {
-        toast.error(urlError.message || '更新元URLを確認してください。');
+      } catch (urlError: unknown) {
+        toast.error(extractErrorMessage(urlError) || '更新元URLを確認してください。');
         return false;
       }
       const sourceUrlReview = reviewDrugMasterSourceUrl(normalizedSourceUrl);
@@ -317,7 +318,7 @@ export function useDrugMasterSettings({
 
       const csvText = encoding.codeToString(unicodeArray as number[]);
       const parsedMasterCsv = parseDrugMasterUpdateCsv(csvText, { today: new Date() });
-      const parseError = parsedMasterCsv.issues.find((issue: any) => issue.severity === 'error');
+      const parseError = parsedMasterCsv.issues.find((issue) => issue.severity === 'error');
       if (parseError) {
         toast.error(parseError.message);
         return false;
@@ -352,7 +353,7 @@ export function useDrugMasterSettings({
         toast.error(`医薬品マスターの仕様PDF版チェックを確認できません。${specificationRevisionReviewLabel}`);
         return false;
       }
-      const warningIssues = parsedMasterCsv.issues.filter((issue: any) => issue.severity === 'warning');
+      const warningIssues = parsedMasterCsv.issues.filter((issue) => issue.severity === 'warning');
       if (warningIssues.length > 0) {
         toast.warning(`医薬品マスターCSVの一部行を確認してください（${warningIssues.length}件）。${warningIssues[0].message}`);
       }
@@ -373,7 +374,7 @@ export function useDrugMasterSettings({
         specificationRevisionLabel: specificationRevisionReviewLabel,
         specificationSourceUrl: DRUG_MASTER_SPECIFICATION_SOURCE.url
       });
-      const codes = new Set(parsedMasterCsv.rows.map((row: any) => String(row.code)));
+      const codes = new Set(parsedMasterCsv.rows.map((row) => String(row.code)));
 
       const existingDrugsMap = await db.drugs.findByIds(Array.from(codes)).exec();
       const beforeRows: Partial<Drug>[] = Array.from(existingDrugsMap.values()).map((existingDrugDoc) => drugRecordFromDocument(existingDrugDoc));
@@ -381,9 +382,9 @@ export function useDrugMasterSettings({
       // 取込済みより古いマスターを取り込むと、版を持たない薬品の現在薬価が巻き戻る。
       // ファイル全体の変更年月日と、取込済みの版の適用開始日で新旧を判定する。
       const masterVintage = reviewDrugMasterVintage({
-        changeDates: parsedMasterCsv.rows.map((row: any) => row.changeDate),
+        changeDates: parsedMasterCsv.rows.map((row) => row.changeDate),
         storedRevisionDates: Array.from(existingDrugsMap.values())
-          .flatMap((doc: any) => (doc.priceHistory || []).map((revision: any) => revision?.effectiveFrom))
+          .flatMap((doc) => (doc.priceHistory || []).map((revision) => revision?.effectiveFrom))
       });
 
       const bulkUpsertMap = new Map<string, Drug>();
@@ -523,9 +524,9 @@ export function useDrugMasterSettings({
         );
       }
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to upload drug master securely:', error);
-      toast.error(error?.message || 'マスタの更新に失敗しました。');
+      toast.error(extractErrorMessage(error) || 'マスタの更新に失敗しました。');
       return false;
     }
   };
@@ -592,8 +593,8 @@ export function useDrugMasterSettings({
       if (ok) {
         setDrugMasterSourceUrl(sourceUrl);
       }
-    } catch (error: any) {
-      toast.error(error?.message || '公式ファイルを取得して更新できませんでした。');
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error) || '公式ファイルを取得して更新できませんでした。');
     } finally {
       setIsImportingDrugMasterFromUrl(false);
     }
@@ -656,9 +657,9 @@ export function useDrugMasterSettings({
 
       toast.success(`医薬品マスターを版 ${payload.versionId} の更新前へ戻しました。`);
       setRollbackFile(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to rollback drug master securely:', error);
-      toast.error(`医薬品マスターのロールバックに失敗しました: ${error.message || error}`);
+      toast.error(`医薬品マスターのロールバックに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsRollingBackDrugMaster(false);
     }
@@ -792,7 +793,7 @@ export function useDrugMasterSettings({
       setDrugMergeReview(null);
       toast.success('薬品統合を実行しました。');
       await handleScanDrugDuplicates();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to apply drug merge:', error);
       if (error instanceof AuditLogFailedError) {
         setDrugDuplicateMessage(`${error.message} 候補を確認し直してください。`);
@@ -1025,9 +1026,9 @@ export function useDrugMasterSettings({
 
       toast.success('薬価の版を訂正しました。');
       await handleSelectDrugForPriceHistory(priceHistoryDrug.code);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to apply drug price history edit:', error);
-      toast.error(`薬価の版の訂正に失敗しました: ${error?.message || error}`);
+      toast.error(`薬価の版の訂正に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsApplyingPriceHistory(false);
     }

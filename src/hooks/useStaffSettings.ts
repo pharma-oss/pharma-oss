@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { PharmacyDatabase, User, AuditLog } from '@/db/types';
 import {
@@ -18,7 +18,6 @@ import { hasLoginCredential } from '@/lib/initial_staff';
 import {
   buildStaffRecoveryChecklist,
   buildStaffCredentialRecoveryAuditDetail,
-  type StaffRecoveryChecklist,
   type StaffRecoveryReason
 } from '@/lib/staff_recovery';
 import {
@@ -28,6 +27,7 @@ import {
 } from '@/lib/staff_access_recovery_review';
 import { verifyAuditLogIntegrity, type AuditIntegrityReport } from '@/lib/audit_integrity';
 import { patchWithAuditRollback } from '@/lib/doc_audit_write';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 
 interface UseStaffSettingsProps {
   db: PharmacyDatabase | null;
@@ -51,8 +51,7 @@ export function useStaffSettings({
   auditIntegrity,
   fetchAuditLogs,
   ensurePermission,
-  isOnboardingStaffSetup: externalIsOnboardingStaffSetup,
-  setIsOnboardingStaffSetup: externalSetIsOnboardingStaffSetup
+  isOnboardingStaffSetup: externalIsOnboardingStaffSetup
 }: UseStaffSettingsProps) {
   const [staffList, setStaffList] = useState<User[]>([]);
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
@@ -60,9 +59,8 @@ export function useStaffSettings({
   const [newStaffRole, setNewStaffRole] = useState<'pharmacist' | 'clerk' | 'admin'>('pharmacist');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
-  const [localIsOnboardingStaffSetup, setLocalIsOnboardingStaffSetup] = useState(false);
+  const [localIsOnboardingStaffSetup] = useState(false);
   const isOnboardingStaffSetup = externalIsOnboardingStaffSetup ?? localIsOnboardingStaffSetup;
-  const setIsOnboardingStaffSetup = externalSetIsOnboardingStaffSetup ?? setLocalIsOnboardingStaffSetup;
   const [rolePermissionPolicy, setRolePermissionPolicy] = useState<RolePermissionPolicy>(DEFAULT_ROLE_PERMISSION_POLICY);
   const [isSavingRolePermissionPolicy, setIsSavingRolePermissionPolicy] = useState(false);
   const [staffRecoveryReason, setStaffRecoveryReason] = useState<StaffRecoveryReason>('passkey_lost');
@@ -163,9 +161,9 @@ export function useStaffSettings({
       setIsAddStaffOpen(false);
       setNewStaffName('');
       setNewStaffPassword('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to add staff:', err);
-      toast.error(`スタッフの追加に失敗しました: ${err.message || err}`);
+      toast.error(`スタッフの追加に失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsSubmittingStaff(false);
     }
@@ -202,9 +200,9 @@ export function useStaffSettings({
           setIsAddStaffOpen(true);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to register passkey:', err);
-      toast.error(err.message || 'パスキーの登録に失敗しました。');
+      toast.error(extractErrorMessage(err) || 'パスキーの登録に失敗しました。');
     }
   };
 
@@ -242,9 +240,9 @@ export function useStaffSettings({
         
         toast.success(`スタッフ「${staff.name}」を削除しました。`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete staff:', err);
-      toast.error(`スタッフの削除に失敗しました: ${err.message || err}`);
+      toast.error(`スタッフの削除に失敗しました: ${extractErrorMessage(err) || err}`);
     }
   };
 
@@ -293,9 +291,9 @@ export function useStaffSettings({
       setStaffRecoveryPassword('');
       await fetchAuditLogs();
       toast.success(`スタッフ「${staffRecoveryTarget.name}」のパスワードを再設定しました。`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to reset staff password:', err);
-      toast.error(`パスワード再設定に失敗しました: ${err.message || err}`);
+      toast.error(`パスワード再設定に失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsHandlingStaffRecovery(false);
     }
@@ -345,9 +343,9 @@ export function useStaffSettings({
 
       await fetchAuditLogs();
       toast.success(`スタッフ「${staffRecoveryTarget.name}」のパスキーを解除しました。`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to clear staff passkey:', err);
-      toast.error(`パスキー解除に失敗しました: ${err.message || err}`);
+      toast.error(`パスキー解除に失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsHandlingStaffRecovery(false);
     }
@@ -384,9 +382,9 @@ export function useStaffSettings({
 
       await fetchAuditLogs();
       toast.success(`スタッフ「${staffRecoveryTarget.name}」の退職前チェックを記録しました。`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to record staff retirement check:', err);
-      toast.error(`退職前チェックの記録に失敗しました: ${err.message || err}`);
+      toast.error(`退職前チェックの記録に失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsHandlingStaffRecovery(false);
     }
@@ -445,9 +443,9 @@ export function useStaffSettings({
 
       await fetchAuditLogs();
       toast.success(`スタッフ復旧・退職対応月次棚卸CSVを書き出しました（${review.statusLabel}）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export staff access recovery monthly review CSV:', error);
-      toast.error(`スタッフ復旧・退職対応月次棚卸CSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`スタッフ復旧・退職対応月次棚卸CSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingStaffAccessRecoveryMonthlyReview(false);
     }
@@ -478,9 +476,9 @@ export function useStaffSettings({
       }
 
       toast.success('権限ロール設定を保存しました。');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to save role permission policy:', err);
-      toast.error(`権限ロール設定の保存に失敗しました: ${err.message || err}`);
+      toast.error(`権限ロール設定の保存に失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsSavingRolePermissionPolicy(false);
     }
@@ -512,9 +510,9 @@ export function useStaffSettings({
       }
 
       toast.success('権限ロール設定を標準設定へ戻しました。');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to reset role permission policy:', err);
-      toast.error(`権限ロール設定のリセットに失敗しました: ${err.message || err}`);
+      toast.error(`権限ロール設定のリセットに失敗しました: ${extractErrorMessage(err) || err}`);
     } finally {
       setIsSavingRolePermissionPolicy(false);
     }

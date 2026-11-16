@@ -5,6 +5,19 @@
 // 画面が「保存に失敗しました」だけだと、監査ログが原因のときも、入力し直して同じ失敗を繰り返してしまう。
 const JAPANESE_TEXT = /[ぁ-ゖァ-ヺ一-鿿]/;
 
+export function extractErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) return error.message || undefined;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message || undefined;
+  }
+  return undefined;
+}
+
 export function userFacingErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && JAPANESE_TEXT.test(error.message) ? error.message : fallback;
 }

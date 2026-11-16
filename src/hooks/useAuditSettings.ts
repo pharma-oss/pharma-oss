@@ -11,8 +11,7 @@ import {
   buildAuditLogRetentionMonthlyReview,
   buildAuditLogRetentionMonthlyReviewCsv,
   verifyAuditLogIntegrity,
-  type AuditIntegrityReport,
-  type AuditLogRetentionMonthlyReview
+  type AuditIntegrityReport
 } from '@/lib/audit_integrity';
 import {
   buildOperationalClosingMonthlyReview,
@@ -20,14 +19,12 @@ import {
   buildOperationalClosingStoreBenchmarkActionAuditDetail,
   buildOperationalClosingStoreBenchmarkActionPostponementAuditDetail,
   buildOperationalClosingStoreBenchmarkBiExport,
-  type OperationalClosingMonthlyReview,
   type OperationalClosingStoreBenchmarkActionTemplate
 } from '@/lib/operational_closing_review';
 import {
   buildAiSuggestionFeedbackBiExport,
   buildAiSuggestionFeedbackMonthlyReview,
-  buildAiSuggestionFeedbackMonthlyReviewCsv,
-  type AiSuggestionFeedbackMonthlyReview
+  buildAiSuggestionFeedbackMonthlyReviewCsv
 } from '@/lib/ai_suggestion_feedback';
 import {
   AI_ASSIST_MODE_LABELS,
@@ -61,6 +58,7 @@ import { buildBackupGenerationReview, buildBackupScheduleReview } from '@/lib/ba
 import { buildAnonymousDiagnosticExportJson, makeAnonymousDiagnosticExportFileName } from '@/lib/anonymous_diagnostic_export';
 import type { OfficialAuditSummary, OfficialAuditItem } from '@/lib/official_audit';
 import type { PermissionAction } from '@/lib/audit';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 
 export interface UseAuditSettingsOptions {
   db: PharmacyDatabase | null;
@@ -87,7 +85,6 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
     canManageBackups,
     onAiAssistModeApplied,
     settings,
-    staffList = [],
     officialAuditSummary,
     officialAuditBlockers,
     backupSchedulePolicy,
@@ -177,8 +174,6 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
     [auditLogs, settings.pharmacyName, settings.pharmacyCode]
   );
 
-  const dailyClosingComparison = dailyClosingReview.previousMonthComparison;
-
   const handleExportAuditLogs = async () => {
     if (!ensurePermission('view_audit_logs')) return;
     if (!db) {
@@ -222,9 +217,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`監査ログJSONを書き出しました（${auditLogs.length}件、責任者保全欄付き）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export audit logs:', error);
-      toast.error(`監査ログJSONの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`監査ログJSONの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAuditLogs(false);
     }
@@ -365,9 +360,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success('個人情報なし診断JSONを書き出しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export support diagnostic JSON:', error);
-      toast.error(`個人情報なし診断JSONの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`個人情報なし診断JSONの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAnonymousDiagnostic(false);
     }
@@ -417,9 +412,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success('監査ログ保全台帳CSVを書き出しました（外部WORM保存確認欄付き）。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export audit retention ledger CSV:', error);
-      toast.error(`監査ログ保全台帳CSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`監査ログ保全台帳CSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAuditRetentionLedger(false);
     }
@@ -468,9 +463,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`監査ログ保全月次棚卸CSVを書き出しました（${review.statusLabel}）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export audit retention monthly review CSV:', error);
-      toast.error(`監査ログ保全月次棚卸CSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`監査ログ保全月次棚卸CSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAuditRetentionReview(false);
     }
@@ -512,9 +507,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       } else {
         toast.warning('監査ログ保全の差し戻し記録を残しました。');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to record audit retention manager review:', error);
-      toast.error(`責任者確認の記録に失敗しました: ${error.message || error}`);
+      toast.error(`責任者確認の記録に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsRecordingAuditRetentionManagerReview(false);
     }
@@ -549,9 +544,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`日次締め月次レビューCSVを書き出しました（${review.approvalCount}件）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export daily closing review CSV:', error);
-      toast.error(`日次締め月次レビューCSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`日次締め月次レビューCSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingDailyClosingReview(false);
     }
@@ -586,9 +581,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`店舗別KPIベンチマークJSONを書き出しました（${review.storeBenchmark.storeCount}店舗）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export daily closing store benchmark JSON:', error);
-      toast.error(`店舗別KPIベンチマークJSONの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`店舗別KPIベンチマークJSONの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingDailyClosingStoreBenchmark(false);
     }
@@ -622,9 +617,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`KPI改善アクションを記録しました: ${latestTemplate.title}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to record KPI action:', error);
-      toast.error(`KPI改善アクションの記録に失敗しました: ${error.message || error}`);
+      toast.error(`KPI改善アクションの記録に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setRecordingDailyClosingKpiActionId(null);
     }
@@ -669,9 +664,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.info(`KPI改善アクションの見送りを記録しました: ${latestTemplate.title}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to postpone KPI action:', error);
-      toast.error(`KPI改善アクション見送りの記録に失敗しました: ${error.message || error}`);
+      toast.error(`KPI改善アクション見送りの記録に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setPostponingDailyClosingKpiActionId(null);
     }
@@ -707,9 +702,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`AI補助フィードバックCSVを書き出しました（${review.totalCount}件）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export AI suggestion feedback review CSV:', error);
-      toast.error(`AI補助フィードバックCSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`AI補助フィードバックCSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAiSuggestionFeedbackReview(false);
     }
@@ -746,9 +741,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`AI補助フィードバックBI JSONを書き出しました（${review.storeComparison.storeCount}店舗）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export AI suggestion feedback BI JSON:', error);
-      toast.error(`AI補助フィードバックBI JSONの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`AI補助フィードバックBI JSONの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingAiSuggestionFeedbackBi(false);
     }
@@ -785,9 +780,9 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
       setAuditLogs(refreshedRows);
       setAuditIntegrity(await verifyAuditLogIntegrity(refreshedRows));
       toast.success(`AI補助を「${AI_ASSIST_MODE_LABELS[recommendedMode]}」へ変更しました。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to apply AI quality gate recommendation:', error);
-      toast.error(`AI補助モードを変更できませんでした: ${error.message || error}`);
+      toast.error(`AI補助モードを変更できませんでした: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsApplyingAiQualityMode(false);
     }

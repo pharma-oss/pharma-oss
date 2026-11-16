@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { userFacingErrorMessage } from './user_facing_error.ts';
+import { extractErrorMessage, userFacingErrorMessage } from './user_facing_error.ts';
 import { AuditLogFailedError } from './audit_guard.ts';
 
 const FALLBACK = '保存に失敗しました';
@@ -17,4 +17,13 @@ test('internal errors (English, codes) and non-errors are replaced by the fallba
   assert.strictEqual(userFacingErrorMessage('文字列のエラー', FALLBACK), FALLBACK);
   assert.strictEqual(userFacingErrorMessage(undefined, FALLBACK), FALLBACK);
   assert.strictEqual(userFacingErrorMessage(new Error(''), FALLBACK), FALLBACK);
+});
+
+test('extractErrorMessage safely extracts non-empty Error or object messages', () => {
+  assert.strictEqual(extractErrorMessage(new Error('boom')), 'boom');
+  assert.strictEqual(extractErrorMessage(new Error('')), undefined);
+  assert.strictEqual(extractErrorMessage({ message: 'failed' }), 'failed');
+  assert.strictEqual(extractErrorMessage({ message: 123 }), undefined);
+  assert.strictEqual(extractErrorMessage('plain string'), undefined);
+  assert.strictEqual(extractErrorMessage(null), undefined);
 });

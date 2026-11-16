@@ -26,6 +26,7 @@ import {
 import { downloadTextFile } from '@/lib/blob_download';
 import { exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
 import { saveFacilitySettingsWithAudit } from '@/lib/facility_settings_save';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 
 interface UseFacilitySettingsProps {
   db: PharmacyDatabase | null;
@@ -147,9 +148,9 @@ export function useFacilitySettings({
         download();
       }
       toast.success('公式算定コードCSVを書き出しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('handleExportOfficialFeeCodeCsv failed:', error);
-      toast.error(`公式算定コードCSVを書き出せませんでした: ${error.message || error}`);
+      toast.error(`公式算定コードCSVを書き出せませんでした: ${extractErrorMessage(error) || error}`);
     }
   };
 
@@ -180,9 +181,9 @@ export function useFacilitySettings({
       }));
       const warningSuffix = parsed.skippedCount > 0 ? ` / 読み飛ばし ${parsed.skippedCount}行` : '';
       toast.success(`公式算定コードCSVを反映しました（設定 ${parsed.importedCount}件、空欄 ${parsed.clearedCount}件${warningSuffix}）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to import official fee code CSV:', error);
-      toast.error(`公式算定コードCSVを読み込めませんでした: ${error.message || error}`);
+      toast.error(`公式算定コードCSVを読み込めませんでした: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsImportingOfficialFeeCodeCsv(false);
     }
@@ -215,9 +216,9 @@ export function useFacilitySettings({
       } else {
         toast.warning('公式表CSVから反映できる候補が見つかりませんでした。');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to review official fee code master CSV:', error);
-      toast.error(`公式表CSVを読み込めませんでした: ${error.message || error}`);
+      toast.error(`公式表CSVを読み込めませんでした: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsReviewingOfficialFeeCodeMasterCsv(false);
     }
@@ -285,9 +286,9 @@ export function useFacilitySettings({
         download();
       }
       toast.success('公式算定コードの照合結果CSVを書き出しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('handleExportOfficialFeeCodeMasterProposalReviewCsv failed:', error);
-      toast.error(`公式算定コードの照合結果CSVを書き出せませんでした: ${error.message || error}`);
+      toast.error(`公式算定コードの照合結果CSVを書き出せませんでした: ${extractErrorMessage(error) || error}`);
     }
   };
 
@@ -314,9 +315,10 @@ export function useFacilitySettings({
       }
 
       toast.success('施設基準を保存しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save facility settings securely:', error);
-      toast.error(error?.message ? `保存に失敗しました。${error.message}` : '保存に失敗しました。');
+      const message = extractErrorMessage(error);
+      toast.error(message ? `保存に失敗しました。${message}` : '保存に失敗しました。');
     } finally {
       setIsSavingSettings(false);
     }

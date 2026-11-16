@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { PharmacyDatabase, User, Patient, AuditLog } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
@@ -32,6 +32,7 @@ import {
   type BackupCollectionName,
   type CollectionDiff,
   type BackupRestoreDrillReport,
+  type BackupPayload,
   type YakurekiBackup
 } from '@/lib/backup';
 import {
@@ -67,6 +68,7 @@ import {
 } from '@/lib/backup_settings_helpers';
 import { downloadTextFile } from '@/lib/blob_download';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import type { AiSuggestionFeedbackMonthlyReview } from '@/lib/ai_suggestion_feedback';
 
 function makeBackupGenerationReviewCsvFileName(formatDateTimeStamp: (date: Date) => string, date = new Date()): string {
@@ -210,9 +212,9 @@ export function useBackupSettings({
 
       await fetchAuditLogs();
       toast.success('閉店時バックアップ予定を保存しました。');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save backup schedule policy:', error);
-      toast.error(`閉店時バックアップ予定の保存に失敗しました: ${error.message || error}`);
+      toast.error(`閉店時バックアップ予定の保存に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsSavingBackupSchedule(false);
     }
@@ -329,7 +331,7 @@ export function useBackupSettings({
       setDuplicateMergeReview(null);
       toast.success('患者統合を実行しました。');
       await handleScanPatientDuplicates();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to apply duplicate merge:', error);
       const outcome = await recoverFromPatientMergeFailure(store, error);
       setPatientDuplicateMessage(outcome.message);
@@ -365,7 +367,7 @@ export function useBackupSettings({
     try {
       const backup = await buildDatabaseBackup(db);
       const fileName = makeBackupFileName(new Date(backup.createdAt));
-      let payloadToSave: any = backup;
+      let payloadToSave: BackupPayload = backup;
       let auditDetail = `バックアップ書き出し: ${fileName} に ${countBackupRows(backup)}件のローカルデータを書き出しました。`;
 
       if (useEncryption) {
@@ -437,9 +439,9 @@ export function useBackupSettings({
       setExternalBackupImmutableVerified(false);
       toast.success(`バックアップを書き出しました（${rowCount}件）。${useEncryption ? '暗号化済み。' : ''}${externalTransferManifestContent ? '外部保存連携JSONも出力しました。' : ''}`);
       setExportPassword('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export backup:', error);
-      toast.error(`バックアップの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`バックアップの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingBackup(false);
     }
@@ -484,9 +486,9 @@ export function useBackupSettings({
       } else {
         toast.warning(`外部保存確認を記録しました（${evidence.statusLabel}）。`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to record backup external storage:', error);
-      toast.error(`外部保存確認の記録に失敗しました: ${error.message || error}`);
+      toast.error(`外部保存確認の記録に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsRecordingExternalBackupStorage(false);
     }
@@ -550,9 +552,9 @@ export function useBackupSettings({
       } else {
         toast.warning(`外部保存ジョブ受領書を記録しました（${evidence.statusLabel}）。`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to record backup external transfer receipt:', error);
-      toast.error(`外部保存ジョブ受領書の記録に失敗しました: ${error.message || error}`);
+      toast.error(`外部保存ジョブ受領書の記録に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsRecordingExternalBackupReceipt(false);
     }
@@ -582,9 +584,9 @@ export function useBackupSettings({
       downloadTextFile(fileName, `\ufeff${buildBackupGenerationReviewCsv(review)}`, 'text/csv;charset=utf-8');
       await fetchAuditLogs();
       toast.success(`バックアップ世代管理CSVを書き出しました（${review.statusLabel}）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export backup generation review CSV:', error);
-      toast.error(`バックアップ世代管理CSVの書き出しに失敗しました: ${error.message || error}`);
+      toast.error(`バックアップ世代管理CSVの書き出しに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsExportingBackupGenerationReview(false);
     }
@@ -603,9 +605,9 @@ export function useBackupSettings({
         migrationRequiredCollections: options.migrationRequiredCollections
       }));
       setPendingBackupPayload(backup);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to analyze backup diff:', error);
-      toast.error(`バックアップ差分の解析に失敗しました: ${error.message || error}`);
+      toast.error(`バックアップ差分の解析に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsAnalyzingDiff(false);
     }
@@ -632,8 +634,8 @@ export function useBackupSettings({
 
       analyzeBackupPayload(validation.backup);
       toast.success('バックアップの復号に成功しました。');
-    } catch (error: any) {
-      toast.error(error.message || '復号に失敗しました。パスワードを確認してください。');
+    } catch (error: unknown) {
+      toast.error(extractErrorMessage(error) || '復号に失敗しました。パスワードを確認してください。');
     }
   };
 
@@ -659,16 +661,16 @@ export function useBackupSettings({
         (message) => toast.warning(`バックアップは復旧しましたが、${message}`)
       );
       toast.success(`バックアップを復旧しました（${result.totalRows}件）。`);
-      
+
       setPendingBackupPayload(null);
       setBackupDiffs(null);
       setBackupDrillReport(null);
       setBackupFile(null);
       setMigrationCsvPreview(null);
       setBackupRestoreSourceEncrypted(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to import backup:', error);
-      toast.error(`バックアップの復旧に失敗しました: ${error.message || error}`);
+      toast.error(`バックアップの復旧に失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsImportingBackup(false);
     }
@@ -689,9 +691,9 @@ export function useBackupSettings({
       }
       await fetchAuditLogs();
       toast.success(`復旧テスト結果を監査ログに記録しました（${backupDrillReport.statusLabel}）。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to record backup drill:', error);
-      toast.error(`復旧テスト結果の記録に失敗しました: ${error.message || error}`);
+      toast.error(`復旧テスト結果の記録に失敗しました: ${extractErrorMessage(error) || error}`);
     }
   };
 
@@ -744,9 +746,9 @@ export function useBackupSettings({
 
       const notice = describeMigrationPreviewResult(migrationLabel, preview);
       toast[notice.level](notice.message);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to analyze migration CSV:', error);
-      toast.error(`CSVの移行プレビューに失敗しました: ${error.message || error}`);
+      toast.error(`CSVの移行プレビューに失敗しました: ${extractErrorMessage(error) || error}`);
     } finally {
       setIsAnalyzingMigrationCsv(false);
     }
