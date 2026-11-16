@@ -5,14 +5,12 @@ import '../print.css';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Printer,
-  FileText,
   FileCheck2,
   Package,
   ArrowLeft,
   CheckCircle,
   Download,
   Loader2,
-  BookOpen,
   SlidersHorizontal,
   AlertTriangle,
   Info,
@@ -23,12 +21,11 @@ import {
   RefreshCw,
   XCircle
 } from 'lucide-react';
-import { COMMON_RECEIPT_REMARKS } from "@/lib/data/receipt_remarks";
 import { isDemoVisit } from "@/lib/demo_data";
-import { buildDispensingUkeRecords, type DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
+import { buildDispensingUkeRecords } from '@/lib/receipt/dispensing_uke';
 import { generateUkeContent } from "@/lib/receipt/uke_generator";
 import { useDatabase } from '@/db/DatabaseProvider';
-import { calculateDispensingFees, getTotalPoints, getUnsetPointFees, getFormulationType, type FeeCode, type FeeCalculationOptions } from '@/lib/calculator';
+import { calculateDispensingFees, getTotalPoints, getUnsetPointFees, type FeeCode, type FeeCalculationOptions } from '@/lib/calculator';
 import {
   judgeAfterHoursCategory,
   resolveAfterHoursCategory,
@@ -106,19 +103,19 @@ import {
   buildMedicationInfoPrintContent
 } from '@/lib/patient_medication_info';
 
+import type { PharmacyDeviceOperation } from '@/lib/pharmacy_device_connector';
 import {
   FEE_TOGGLES,
   CLAIM_ISSUE_LABELS,
   ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS,
   ELECTRONIC_PRESCRIPTION_FILE_SIGNATURE_STATUS_LABELS,
   PHARMACY_DEVICE_HANDOFF_STATUS_LABELS,
-  type PendingReceiptRemarkSave,
-  type PharmacyInfo
+  type PharmacyInfo,
+  type PrintPrescriptionItem
 } from '../types';
 
 import {
   formatUkeValidationIssues,
-  formatClaimValidationIssues,
   calculatePatientAge,
   getPatientIdentityMark,
   getDisplayDrugName,
@@ -198,8 +195,8 @@ export default function PrintPage() {
       }
       const generated = await createDbKeyEscrow(dbPassword, adminPassword);
       setEscrowPayload(generated);
-    } catch (err: any) {
-      setEscrowError(err.message || 'エスクローの発行に失敗しました。');
+    } catch (err: unknown) {
+      setEscrowError((err instanceof Error ? err.message : '') || 'エスクローの発行に失敗しました。');
       throw err;
     } finally {
       setIsGeneratingEscrow(false);
@@ -391,7 +388,7 @@ export default function PrintPage() {
   });
 
   const applyPersistedClaimOptions = (nextOptions: FeeCalculationOptions) => {
-    setVisitData((prev: any) => prev ? { ...prev, claimOptions: nextOptions } : prev);
+    setVisitData((prev) => prev ? { ...prev, claimOptions: nextOptions } : prev);
   };
 
   const persistClaimOptions = async (nextOptions: FeeCalculationOptions) => {
@@ -519,9 +516,9 @@ export default function PrintPage() {
     // 点数未設定で金額が確定しない側は、監査ログに金額を書かない (未確定のまま数字を残さない)
     const amounts = before.copayYen !== null && after.copayYen !== null
       ? {
-          before: { totalPoints: before.totalPoints, copayYen: before.copayYen },
-          after: { totalPoints: after.totalPoints, copayYen: after.copayYen }
-        }
+        before: { totalPoints: before.totalPoints, copayYen: before.copayYen },
+        after: { totalPoints: after.totalPoints, copayYen: after.copayYen }
+      }
       : undefined;
     setConditionBusy(true);
     try {
@@ -616,7 +613,7 @@ export default function PrintPage() {
     const previousOptions = claimOptions;
     const currentDisabled = new Set(claimOptions.disabledFeeCodes || []);
     const rationales = { ...(claimOptions.disabledFeeRationales || {}) };
-    
+
     let rationale = '';
     if (!enabled) {
       rationale = window.prompt(`算定項目「${code}」を除外する理由を入力してください。`, '算定要件未充足のため') || 'その他の理由';
@@ -652,10 +649,10 @@ export default function PrintPage() {
       if (outcome.status === 'rolled_back') {
         throw new Error(outcome.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setClaimOptions(previousOptions);
       console.error('Failed to update fee toggle:', err);
-      alert(`算定切替に失敗しました: ${err.message || err}`);
+      alert(`算定切替に失敗しました: ${err instanceof Error ? err.message : err}`);
     }
   };
 
@@ -992,7 +989,7 @@ export default function PrintPage() {
   };
 
   const applyClaimLifecycleToVisit = (lifecycle: ClaimLifecycleState) => {
-    setVisitData((prev: any) => prev ? { ...prev, claimLifecycle: lifecycle } : prev);
+    setVisitData((prev) => prev ? { ...prev, claimLifecycle: lifecycle } : prev);
   };
 
   const persistClaimLifecycle = async (nextLifecycle: ClaimLifecycleState, detail: string) => {
@@ -1058,13 +1055,13 @@ export default function PrintPage() {
     }
     try {
       if (prescriptionAudit.errorCount > 0) {
-        alert(`薬剤師確認で要修正の項目があります。\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue: any) => issue.severity === 'error'))}`);
+        alert(`薬剤師確認で要修正の項目があります。\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue) => issue.severity === 'error'))}`);
         return;
       }
 
       if (prescriptionAudit.warningCount > 0) {
         const shouldContinue = window.confirm(
-          `薬剤師確認で確認事項があります。このままUKEを出力しますか？\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue: any) => issue.severity === 'warning'))}`
+          `薬剤師確認で確認事項があります。このままUKEを出力しますか？\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue) => issue.severity === 'warning'))}`
         );
         if (!shouldContinue) return;
       }
@@ -1072,14 +1069,14 @@ export default function PrintPage() {
       if (!settingsData) {
         throw new Error('Facility settings are not loaded.');
       }
+      if (!visitData || !patientData) {
+        throw new Error('Visit or patient data is not loaded.');
+      }
       if (!db) {
         throw new Error('データベースの初期化が完了していません。');
       }
 
-      let relatedInterventions: any[] = [];
-      if (db) {
-        relatedInterventions = await db.interventions.find({ selector: { visitId } }).exec();
-      }
+      const relatedInterventions = await db.interventions.find({ selector: { visitId } }).exec();
 
       const generatedAt = new Date();
       const records = buildDispensingUkeRecords({
@@ -1146,7 +1143,7 @@ export default function PrintPage() {
         const visitDoc = await db.visits.findOne(visitId).exec();
         if (visitDoc) {
           await visitDoc.patch({ claimLifecycle: rollbackLifecycle });
-          setVisitData((prev: any) => prev ? { ...prev, claimLifecycle: rollbackLifecycle } : prev);
+          setVisitData((prev) => prev ? { ...prev, claimLifecycle: rollbackLifecycle } : prev);
         }
         throw new Error('UKE出力の監査ログ記録に失敗したため、出力を中止しました。');
       }
@@ -1306,7 +1303,7 @@ export default function PrintPage() {
     alert('返戻修正メモをクリップボードにコピーしました。');
   };
 
-  const handlePharmacyDeviceOperation = async (operation: any) => {
+  const handlePharmacyDeviceOperation = async (operation: PharmacyDeviceOperation) => {
     if (!ensurePermission('print_documents')) return;
     if (isDemoVisit(visitData)) {
       alert('チュートリアルのデモ受付のため、外部調剤機器・POSへは送信できません。');
@@ -1384,7 +1381,7 @@ export default function PrintPage() {
     );
   }
 
-  if (printViewState.isNotFound) {
+  if (printViewState.isNotFound || !visitData || !patientData) {
     return (
       <div className="print-error-screen" role="alert">
         <h2>{PRINT_NOT_FOUND_HEADING}</h2>
@@ -1420,7 +1417,7 @@ export default function PrintPage() {
     </div>
   );
 
-  const isFirstItemInRp = (item: any, index: number) => {
+  const isFirstItemInRp = (item: PrintPrescriptionItem, index: number) => {
     const rpNumber = item.rpNumber || index + 1;
     return prescriptionItems.findIndex((candidate, candidateIndex) => (
       (candidate.rpNumber || candidateIndex + 1) === rpNumber
@@ -1441,13 +1438,13 @@ export default function PrintPage() {
   const aiAssistSuggestions = filterAiAssistItemsByMode(allAiAssistSuggestions, aiAssistMode);
   const aiAssistSummary = summarizeAiSuggestions(aiAssistSuggestions);
 
-  const getApprovedMedicationInfoTemplate = (item: any) => (
+  const getApprovedMedicationInfoTemplate = (item: PrintPrescriptionItem) => (
     (item.dispensedDrugCode && approvedMedicationInfoTemplates[item.dispensedDrugCode])
-      || (item.drugId && approvedMedicationInfoTemplates[item.drugId])
-      || null
+    || (item.drugId && approvedMedicationInfoTemplates[item.drugId])
+    || null
   );
 
-  const getMedicationInfoContent = (item: any) => buildMedicationInfoPrintContent({
+  const getMedicationInfoContent = (item: PrintPrescriptionItem) => buildMedicationInfoPrintContent({
     drugName: getDisplayDrugName(item),
     genericName: item.dispensedGenericName || item.genericName,
     isHighRisk: !!item.isHighRisk,
@@ -1460,7 +1457,7 @@ export default function PrintPage() {
     count + (getMedicationInfoContent(item).source === 'safe_fallback' ? 1 : 0)
   ), 0);
 
-  const groupedForBags = prescriptionItems.reduce<Record<string, any[]>>((groups, item) => {
+  const groupedForBags = prescriptionItems.reduce<Record<string, typeof prescriptionItems>>((groups, item) => {
     const key = item.usage || '用法未設定';
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
@@ -1476,11 +1473,11 @@ export default function PrintPage() {
   const receiptBarcodeResult = receiptAmountsPending
     ? null
     : buildReceiptBarcode({
-        insuranceType: patientData.insuranceInfo?.insuranceType,
-        provider: patientData.insuranceInfo?.provider,
-        hasPublicInsurance: (patientData.publicInsurances || []).length > 0,
-        copayYen: insuranceAmounts.patientCopayYen
-      });
+      insuranceType: patientData.insuranceInfo?.insuranceType,
+      provider: patientData.insuranceInfo?.provider,
+      hasPublicInsurance: (patientData.publicInsurances || []).length > 0,
+      copayYen: insuranceAmounts.patientCopayYen
+    });
   const receiptBarcode = receiptBarcodeResult?.ok
     ? { payload: receiptBarcodeResult.payload, caption: receiptBarcodeResult.caption }
     : null;
@@ -1488,13 +1485,13 @@ export default function PrintPage() {
     ? { kind: 'none', message: '点数が未設定で金額が確定しないため、バーコードは印字しません。' }
     : receiptBarcodeResult.ok
       ? {
-          kind: 'ok',
-          payload: receiptBarcodeResult.payload,
-          categoryText: describeBarcodeCategory(receiptBarcodeResult.classification),
-          amountYen: receiptBarcodeResult.amountYen,
-          assumed: receiptBarcodeResult.classification.assumed,
-          reason: receiptBarcodeResult.classification.reason
-        }
+        kind: 'ok',
+        payload: receiptBarcodeResult.payload,
+        categoryText: describeBarcodeCategory(receiptBarcodeResult.classification),
+        amountYen: receiptBarcodeResult.amountYen,
+        assumed: receiptBarcodeResult.classification.assumed,
+        reason: receiptBarcodeResult.classification.reason
+      }
       : { kind: 'none', message: receiptBarcodeResult.message };
 
   const sumFeePoints = (codes: FeeCode[]) => (
@@ -2039,7 +2036,7 @@ export default function PrintPage() {
               </div>
 
               <div className="ai-assist-list">
-                {aiAssistSuggestions.map((suggestion: any) => (
+                {aiAssistSuggestions.map((suggestion) => (
                   <div
                     key={suggestion.suggestionId}
                     className={`ai-assist-item ${suggestion.severity}`}

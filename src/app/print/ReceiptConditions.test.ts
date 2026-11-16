@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ReceiptPrint } from './components/ReceiptPrint';
-import { ReceiptStatementPrint } from './components/ReceiptStatementPrint';
+import { ReceiptStatementPrint, type ReceiptStatementFeeLike } from './components/ReceiptStatementPrint';
 import { ReceiptConditionPanel, type ReceiptBarcodeStatus, type ReceiptConditionPanelProps } from './components/ReceiptConditionPanel';
 import { findOpeningTag, stripStyleBlocks } from '../../lib/test_support/html_disabled_tags';
 import { buildReceiptBarcode } from '../../lib/receipt_barcode';
@@ -108,12 +108,12 @@ test('the condition panel slot is rendered inside the receipt card, before the p
 
 // ---- 調剤明細書: 点数未設定 ----
 
-function renderStatement(calculatedFees: unknown[]) {
+function renderStatement(calculatedFees: readonly ReceiptStatementFeeLike[]) {
   return stripStyleBlocks(renderToStaticMarkup(
     React.createElement(ReceiptStatementPrint, {
       patientData: { name: '明細 太郎', patientId: 'PAT-STMT-001', insuranceInfo: { provider: '06130012', number: '123456', burdenRatio: 30 } },
       visitData: { institutionName: '千代田メディカルクリニック', departmentName: '内科', doctorName: '佐藤 健太' },
-      calculatedFees: calculatedFees as any[],
+      calculatedFees,
       totalPoints: 83,
       insuranceAmounts,
       pharmacyInfo,
@@ -130,8 +130,8 @@ function renderStatement(calculatedFees: unknown[]) {
 
 test('the statement hides its totals while a fee has no points, and marks that fee 未設定', () => {
   const html = renderStatement([
-    { code: 'base_fee', name: '調剤基本料1', rationale: '基本料', points: 47, receiptFeeCode: '410004110' },
-    { code: 'medication_guidance', name: '服薬管理指導料(お薬手帳なし)', rationale: '点数が未設定です', points: 0, pointsUnset: true }
+    { code: 'base_fee' as const, name: '調剤基本料1', rationale: '基本料', points: 47, receiptFeeCode: '410004110' },
+    { code: 'medication_guidance' as const, name: '服薬管理指導料(お薬手帳なし)', rationale: '点数が未設定です', points: 0, pointsUnset: true }
   ]);
   assert.ok(html.includes('点数未設定'));
   assert.ok(!html.includes('¥250') && !html.includes('¥830') && !html.includes('¥580'));
@@ -141,7 +141,7 @@ test('the statement hides its totals while a fee has no points, and marks that f
 });
 
 test('the statement keeps its totals when every fee has points', () => {
-  const html = renderStatement([{ code: 'base_fee', name: '調剤基本料1', rationale: '基本料', points: 47 }]);
+  const html = renderStatement([{ code: 'base_fee' as const, name: '調剤基本料1', rationale: '基本料', points: 47 }]);
   assert.ok(html.includes('¥250') && html.includes('¥830') && html.includes('¥580'));
   assert.ok(html.includes('83 点'));
   assert.ok(!html.includes('点数未設定'));

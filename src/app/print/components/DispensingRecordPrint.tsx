@@ -1,7 +1,14 @@
 import React from 'react';
 import { FileText } from 'lucide-react';
-import type { VisitElectronicPrescription } from '@/db/types';
-import type { PharmacyInfo } from '../types';
+import type {
+  Intervention,
+  Patient,
+  Visit,
+  VisitElectronicPrescription,
+  VisitElectronicPrescriptionLaboratoryResult,
+  VisitElectronicPrescriptionSupplementaryInformation
+} from '@/db/types';
+import type { PharmacyInfo, PrintPrescriptionItem } from '../types';
 import { ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS } from '../types';
 import {
   getRecordDrugName,
@@ -16,9 +23,9 @@ import {
 } from '@/lib/prescription_intervention_support';
 
 export interface DispensingRecordPrintProps {
-  patientData: any;
-  visitData: any;
-  prescriptionItems: any[];
+  patientData: Partial<Patient> & Pick<Patient, 'name'>;
+  visitData: Partial<Visit & { departmentId?: string }>;
+  prescriptionItems: PrintPrescriptionItem[];
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
   receiptRunId: string;
@@ -34,11 +41,11 @@ export interface DispensingRecordPrintProps {
   electronicPrescriptionDispensingInformationHpkiText: string;
   electronicPrescriptionDispensingInformationHashText: string;
   electronicPrescriptionComments: string[];
-  electronicPrescriptionLaboratoryResults: any[];
-  electronicPrescriptionNarcoticAdministration?: any;
+  electronicPrescriptionLaboratoryResults: VisitElectronicPrescriptionLaboratoryResult[];
+  electronicPrescriptionNarcoticAdministration?: VisitElectronicPrescriptionSupplementaryInformation['narcoticAdministration'];
   renderIdentityMark: (variant?: 'paper' | 'compact' | 'tiny') => React.ReactNode;
-  isFirstItemInRp: (item: any, index: number) => boolean;
-  interventions?: any[];
+  isFirstItemInRp: (item: PrintPrescriptionItem, index: number) => boolean;
+  interventions?: Intervention[];
 }
 
 export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({

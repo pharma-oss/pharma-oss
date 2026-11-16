@@ -1,42 +1,53 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { FacilitySettings, PatientMedicationInfoTemplate } from '@/db/types';
+import type {
+  Alert,
+  FacilitySettings,
+  Intervention,
+  Patient,
+  PatientMedicationInfoTemplate,
+  PharmacyDatabase,
+  Visit
+} from '@/db/types';
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { selectApprovedPatientMedicationInfoTemplate } from '@/lib/patient_medication_info';
 import { readClaimOptionsState } from '@/app/print/claim_actions';
 import { buildPrintPrescriptionItem } from '@/app/print/helpers';
 import type { PrintPrescriptionItem } from '@/app/print/types';
 
+export type PrintPatientData = Patient & { id?: string };
+export type PrintVisitData = Visit & { departmentId?: string };
+
 export interface UsePrintVisitDataReturn {
   isLoading: boolean;
   hasLoadError: boolean;
-  visitData: any;
-  patientData: any;
-  patientAlerts: any[];
+  visitData: PrintVisitData | null;
+  patientData: PrintPatientData | null;
+  patientAlerts: Alert[];
   settingsData: FacilitySettings | null;
   prescriptionItems: PrintPrescriptionItem[];
   approvedMedicationInfoTemplates: Record<string, PatientMedicationInfoTemplate>;
   remarks: Record<string, string>;
   claimOptions: FeeCalculationOptions;
-  interventions: any[];
-  setVisitData: React.Dispatch<React.SetStateAction<any>>;
+  interventions: Intervention[];
+  setVisitData: React.Dispatch<React.SetStateAction<PrintVisitData | null>>;
   setPrescriptionItems: React.Dispatch<React.SetStateAction<PrintPrescriptionItem[]>>;
   setRemarks: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setClaimOptions: React.Dispatch<React.SetStateAction<FeeCalculationOptions>>;
   reloadVisitData: () => Promise<void>;
 }
 
-export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataReturn {
+export function usePrintVisitData(db: PharmacyDatabase | null | undefined, visitId: string): UsePrintVisitDataReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
-  const [visitData, setVisitData] = useState<any>(null);
-  const [patientData, setPatientData] = useState<any>(null);
-  const [patientAlerts, setPatientAlerts] = useState<any[]>([]);
+  const [visitData, setVisitData] = useState<PrintVisitData | null>(null);
+  const [patientData, setPatientData] = useState<PrintPatientData | null>(null);
+  const [patientAlerts, setPatientAlerts] = useState<Alert[]>([]);
   const [settingsData, setSettingsData] = useState<FacilitySettings | null>(null);
   const [prescriptionItems, setPrescriptionItems] = useState<PrintPrescriptionItem[]>([]);
   const [approvedMedicationInfoTemplates, setApprovedMedicationInfoTemplates] = useState<Record<string, PatientMedicationInfoTemplate>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [claimOptions, setClaimOptions] = useState<FeeCalculationOptions>({ drugFeeOnly: false, disabledFeeCodes: [] });
-  const [interventions, setInterventions] = useState<any[]>([]);
+  const [interventions, setInterventions] = useState<Intervention[]>([]);
 
   const loadData = useCallback(async () => {
     if (!db || !visitId) return;
@@ -56,9 +67,9 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
         return;
       }
 
-      const visitJson = visit.toJSON();
+      const visitJson = visit.toJSON() as Visit;
       setVisitData(visitJson);
-      setClaimOptions(readClaimOptionsState(visitJson.claimOptions));
+      setClaimOptions(readClaimOptionsState(visitJson.claimOptions as FeeCalculationOptions | undefined));
 
       const patientPromise = db.patients.findOne(visit.patientId).exec();
       const alertsPromise = db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
@@ -97,10 +108,10 @@ export function usePrintVisitData(db: any, visitId: string): UsePrintVisitDataRe
         interventionsPromise
       ]);
 
-      if (patient) setPatientData(patient.toJSON());
-      setPatientAlerts(alerts.map((alert: any) => alert.toJSON()).filter((alert: any) => alert.status !== 'resolved'));
-      if (settingsDoc) setSettingsData(settingsDoc.toJSON());
-      setInterventions(interventionDocs.map((doc: any) => doc.toJSON()));
+      if (patient) setPatientData(patient.toJSON() as PrintPatientData);
+      setPatientAlerts(alerts.map((alert) => alert.toJSON() as Alert).filter((alert) => alert.status !== 'resolved'));
+      if (settingsDoc) setSettingsData(settingsDoc.toJSON() as FacilitySettings);
+      setInterventions(interventionDocs.map((doc) => doc.toJSON() as Intervention));
 
       const templateCandidatesByDrugCode: Record<string, PatientMedicationInfoTemplate[]> = {};
       for (const templateDoc of medicationInfoTemplateDocs) {

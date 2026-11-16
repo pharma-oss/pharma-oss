@@ -11,7 +11,8 @@ import {
   getFormulationLabel,
   getAmountLabel,
   getAmountText,
-  getBagRpComments
+  getBagRpComments,
+  type AmountTextSourceItem
 } from '../helpers';
 
 export interface MedicineBagPrintPatientLike {
@@ -19,9 +20,22 @@ export interface MedicineBagPrintPatientLike {
   readonly patientId?: string | null;
 }
 
+export type MedicineBagPrintItemLike = AmountTextSourceItem & {
+  itemId?: string;
+  yjCode?: string;
+  drugId?: string;
+  rpComment?: string;
+  isHighRisk?: boolean;
+  isGeneric?: boolean;
+  isIppoka?: boolean;
+  isCrushed?: boolean;
+  electronicUsageSupplementText?: string;
+  usageSupplementText?: string;
+};
+
 export interface MedicineBagPrintProps {
   patientData: MedicineBagPrintPatientLike;
-  groupedForBags: Record<string, any[]>;
+  groupedForBags: Record<string, MedicineBagPrintItemLike[]>;
   pharmacyInfo: PharmacyInfo;
   pharmacyAddressLine: string;
   receiptRunId: string;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText } from 'lucide-react';
 import { formatYen } from '@/lib/billing';
+import type { FeeCode } from '@/lib/calculator';
 import type { PharmacyInfo } from '../types';
 import { getFeeSectionLabel } from '../helpers';
 
@@ -28,10 +29,20 @@ export interface ReceiptStatementRemarkLike {
   code?: string;
 }
 
+export interface ReceiptStatementFeeLike {
+  code?: FeeCode;
+  name: string;
+  rationale?: string;
+  points: number;
+  pointsUnset?: boolean;
+  receiptFeeCode?: string;
+  receiptRemarks?: readonly ReceiptStatementRemarkLike[];
+}
+
 export interface ReceiptStatementPrintProps {
   patientData: ReceiptStatementPatientLike;
   visitData: ReceiptStatementVisitLike;
-  calculatedFees: any[];
+  calculatedFees: readonly ReceiptStatementFeeLike[];
   totalPoints: number;
   insuranceAmounts: {
     burdenRatio: number;

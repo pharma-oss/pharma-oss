@@ -1,33 +1,35 @@
 import { useState, useCallback } from 'react';
-import type { VisitElectronicPrescription } from '@/db/types';
+import type { PharmacyDatabase, VisitElectronicPrescription } from '@/db/types';
+import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
 import {
   requiresElectronicPrescriptionDispensingHpkiSignature,
   validateElectronicPrescriptionLifecycleOperation,
   type ElectronicPrescriptionOperationKind,
   type ElectronicPrescriptionOperationResult
 } from '@/lib/electronic_prescription';
-import { isDemoVisit } from '@/lib/demo_data';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { formatPrescriptionAuditIssues, getElectronicPrescriptionDocumentKinds } from '../app/print/helpers';
 import {
   ELECTRONIC_PRESCRIPTION_OPERATION_LABELS,
   ELECTRONIC_PRESCRIPTION_HPKI_STATUS_LABELS,
-  ELECTRONIC_PRESCRIPTION_FILE_SIGNATURE_STATUS_LABELS
+  ELECTRONIC_PRESCRIPTION_FILE_SIGNATURE_STATUS_LABELS,
+  type PrintPrescriptionItem
 } from '../app/print/types';
+import type { PrintPatientData, PrintVisitData } from './usePrintVisitData';
 import { toLocalDateKey } from '@/lib/local_date';
 
 export interface UsePrintElectronicPrescriptionProps {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   visitId: string;
-  visitData: any;
-  patientData: any;
-  prescriptionItems: any[];
+  visitData: PrintVisitData | null;
+  patientData: PrintPatientData | null;
+  prescriptionItems: PrintPrescriptionItem[];
   totalPoints: number;
-  prescriptionAudit: { errorCount: number; issues: any[] };
+  prescriptionAudit: { errorCount: number; issues: PrescriptionInputAuditIssue[] };
   canChangeBilling: boolean;
   ensurePermission?: (action: PermissionAction) => boolean;
-  setVisitData: React.Dispatch<React.SetStateAction<any>>;
+  setVisitData: React.Dispatch<React.SetStateAction<PrintVisitData | null>>;
 }
 
 export function usePrintElectronicPrescription({
@@ -141,7 +143,7 @@ export function usePrintElectronicPrescription({
     const visitDoc = await db.visits.findOne(visitId).exec();
     if (!visitDoc) throw new Error('対象の受付が見つかりません。');
     await visitDoc.patch({ electronicPrescription: nextElectronicPrescription });
-    setVisitData((prev: any) => prev ? { ...prev, electronicPrescription: nextElectronicPrescription } : prev);
+    setVisitData((prev) => prev ? { ...prev, electronicPrescription: nextElectronicPrescription } : prev);
   };
 
   const buildNextElectronicPrescriptionMetadata = (

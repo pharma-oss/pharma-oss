@@ -1,27 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { VisitPharmacyDeviceHandoff } from '@/db/types';
+import type { PharmacyDatabase, VisitPharmacyDeviceHandoff } from '@/db/types';
 import type {
   PharmacyDeviceOperation,
   PharmacyDeviceOperationResult,
   PharmacyDevicePrescriptionPayload
 } from '@/lib/pharmacy_device_connector';
 import type { ExternalConnectorReadinessCheck, ExternalConnectorReadinessReport } from '@/lib/external_connector_readiness';
+import type { PrescriptionInputAuditIssue } from '@/lib/prescription_input_audit';
 import { isDemoVisit } from '@/lib/demo_data';
-import { logAuditAction } from '@/lib/audit';
+import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { formatPrescriptionAuditIssues } from '@/app/print/helpers';
-import { PHARMACY_DEVICE_HANDOFF_STATUS_LABELS } from '@/app/print/types';
+import { PHARMACY_DEVICE_HANDOFF_STATUS_LABELS, type PrintPrescriptionItem } from '@/app/print/types';
+import type { PrintPatientData, PrintVisitData } from './usePrintVisitData';
 import { toLocalDateKey } from '@/lib/local_date';
 
 export interface UsePrintDeviceIntegrationProps {
-  db: any;
+  db: PharmacyDatabase | null | undefined;
   visitId: string;
-  visitData: any;
-  patientData: any;
-  prescriptionItems: any[];
-  prescriptionAudit: { errorCount: number; issues: any[] };
-  ensurePermission: (action: any) => boolean;
-  setVisitData: React.Dispatch<React.SetStateAction<any>>;
+  visitData: PrintVisitData | null;
+  patientData: PrintPatientData | null;
+  prescriptionItems: PrintPrescriptionItem[];
+  prescriptionAudit: { errorCount: number; issues: PrescriptionInputAuditIssue[] };
+  ensurePermission: (action: PermissionAction) => boolean;
+  setVisitData: React.Dispatch<React.SetStateAction<PrintVisitData | null>>;
 }
 
 export function usePrintDeviceIntegration({
@@ -122,7 +124,7 @@ export function usePrintDeviceIntegration({
     const visitDoc = await db.visits.findOne(visitId).exec();
     if (!visitDoc) throw new Error('対象の受付が見つかりません。');
     await visitDoc.patch({ pharmacyDeviceHandoff: handoff });
-    setVisitData((previous: any) => previous ? { ...previous, pharmacyDeviceHandoff: handoff } : previous);
+    setVisitData((previous) => previous ? { ...previous, pharmacyDeviceHandoff: handoff } : previous);
   }, [db, visitId, setVisitData]);
 
   const handlePharmacyDeviceOperation = useCallback(async (operation: PharmacyDeviceOperation) => {
@@ -140,7 +142,7 @@ export function usePrintDeviceIntegration({
       return;
     }
     if (operation !== 'cancel' && prescriptionAudit.errorCount > 0) {
-      alert(`薬剤師確認で要修正の項目があります。\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue: any) => issue.severity === 'error'))}`);
+      alert(`薬剤師確認で要修正の項目があります。\n\n${formatPrescriptionAuditIssues(prescriptionAudit.issues.filter((issue) => issue.severity === 'error'))}`);
       return;
     }
 
