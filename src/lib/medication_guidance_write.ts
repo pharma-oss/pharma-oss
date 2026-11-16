@@ -43,23 +43,27 @@ interface GuidanceDocumentHandle {
   toJSON: () => { entries: ReadonlyArray<{ type: string; text: string }>; updatedAt: string };
 }
 
-export interface GuidanceCollectionLike {
+export interface GuidanceCollectionLike<
+  TEntry extends { type: string; text: string } = { type: string; text: string }
+> {
   findOne: (query: { selector: { id: string } }) => { exec: () => Promise<GuidanceDocumentHandle | null> };
   insert: (doc: {
     id: string;
     drugCode: string;
     drugName: string;
-    entries: Array<{ type: string; text: string }>;
+    entries: TEntry[];
     updatedAt: string;
   }) => Promise<unknown>;
 }
 
-export async function saveMedicationGuidance(params: {
-  collection: GuidanceCollectionLike;
+export async function saveMedicationGuidance<
+  TEntry extends { type: string; text: string } = { type: string; text: string }
+>(params: {
+  collection: GuidanceCollectionLike<TEntry>;
   // 既存の文書を更新するときの id。なければ（または文書が消えていたら）新しく登録する
   docId: string | null;
   drug: { code: string; name: string };
-  entries: Array<{ type: string; text: string }>;
+  entries: TEntry[];
   now: string;
   newId: string;
   logAudit: (detail: string) => Promise<boolean>;

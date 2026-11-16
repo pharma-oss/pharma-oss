@@ -2,7 +2,12 @@ import { Loader2, Save, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { getGuidanceDuplicateNotice, pickGuidanceDocument, type GuidanceDocumentLike } from '@/lib/medication_guidance';
+import type { PharmacyDatabase, SoapEntry } from '@/db/types';
+import {
+  getGuidanceDuplicateNotice,
+  isGuidanceEntryType,
+  pickGuidanceDocument
+} from '@/lib/medication_guidance';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import {
   checkMedicationGuidanceEditPermission,
@@ -25,7 +30,7 @@ export interface MedicationGuidanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   drug: MedicationGuidanceDrugLike | null | undefined;
-  db?: any;
+  db?: PharmacyDatabase | null;
   initialEntries?: MedicationGuidanceEntry[];
   initialLoadError?: boolean;
 }
@@ -110,7 +115,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           .find({ selector: { drugCode: drug.code } })
           .exec();
         if (!isMounted) return;
-        const documents = (guidances as Array<{ toJSON: () => GuidanceDocumentLike }>).map((doc) => doc.toJSON());
+        const documents = guidances.map((doc) => doc.toJSON());
         const picked = pickGuidanceDocument(documents);
         setDuplicateCount(documents.length);
         if (picked) {
@@ -161,11 +166,15 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
     }
     setIsSaving(true);
     try {
-      await saveMedicationGuidance({
+      const normalizedEntries: SoapEntry[] = normalizeGuidanceEntries(entries).map((entry) => ({
+        type: isGuidanceEntryType(entry.type) ? entry.type : 'S',
+        text: entry.text
+      }));
+      await saveMedicationGuidance<SoapEntry>({
         collection: db.medication_guidances,
         docId,
         drug: { code: drug.code || '', name: drug.name || '' },
-        entries: normalizeGuidanceEntries(entries),
+        entries: normalizedEntries,
         now: new Date().toISOString(),
         newId: `guidance_${uuidv4()}`,
         logAudit: (detail) => logAuditAction(db, 'patient_medication_info_template', detail)
