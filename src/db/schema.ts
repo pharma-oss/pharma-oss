@@ -448,6 +448,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
               status: { type: 'string', enum: ['draft', 'ready', 'sent', 'closed'], maxLength: 50 },
               reportDate: { type: 'string', format: 'date', maxLength: 50 },
               destinationInstitution: { type: 'string', maxLength: 200 },
+              destinationInstitutionCode: { type: 'string', maxLength: 50 },
               destinationDepartment: { type: 'string', maxLength: 100 },
               destinationDoctor: { type: 'string', maxLength: 100 },
               subject: { type: 'string', maxLength: 300 },

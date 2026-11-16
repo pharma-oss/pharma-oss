@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import Ajv from 'ajv';
 import {
   submitTracingReportForm,
   TracingReportModal,
@@ -14,9 +15,24 @@ import {
   type ExecuteSaveTracingReportParams,
   type TracingReportVisitHandle
 } from '@/hooks/useEmrTracingReport';
+import { VISIT_SCHEMA } from '@/db/schema';
 import type { Visit, VisitTracingReport } from '@/db/types';
+import { getClaimEditBlockedMessage } from '@/lib/claim_edit_guard';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
+
+const ajv = new Ajv({ strict: false });
+ajv.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
+ajv.addFormat(
+  'date-time',
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/
+);
+const STRICT_VISIT_TRACING_SCHEMA = (() => {
+  const clone = JSON.parse(JSON.stringify(VISIT_SCHEMA));
+  clone.properties.careCommunication.properties.tracingReports.items.additionalProperties = false;
+  return clone;
+})();
+const validateVisitSchema = ajv.compile(STRICT_VISIT_TRACING_SCHEMA);
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
@@ -107,6 +123,7 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('2. 患者の服薬状況・主訴・経過'), 'Should render patient condition section');
     assert.ok(html.includes('3. 薬剤師アセスメント'), 'Should render assessment section');
     assert.ok(html.includes('4. 処方提案・ご検討事項'), 'Should render proposal section');
+    assert.ok(html.includes('5. 薬局での今後のフォローアップ計画'), 'Should render follow-up plan section');
 
     // Footer actions
     assert.ok(html.includes('A4印刷 / PDF出力'), 'Should render print preview button');
@@ -143,6 +160,7 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
     assert.ok(html.includes('value="【服薬情報提供】残薬調整および服薬状況報告"'), 'Should populate report subject');
     assert.ok(html.includes('カルベジロール錠10mg 1日1回 朝食後'), 'Should populate medication summary');
     assert.ok(html.includes('朝の服用忘れが週に1〜2回あり'), 'Should populate patient condition');
+    assert.ok(html.includes('次回来局時に残薬数および血圧手帳の記録を確認します'), 'Should populate follow-up plan');
   });
 
   it('pins save button as disabled when report subject is empty or whitespace-only', () => {
@@ -232,7 +250,7 @@ const SAMPLE_TRACING_REPORT: VisitTracingReport = {
 
 async function runSaveTracingCase(
   overrides: Partial<ExecuteSaveTracingReportParams> = {},
-  options: { patchError?: Error } = {}
+  options: { patchError?: Error; claimStatus?: 'draft' | 'exported' } = {}
 ) {
   const notifications: Array<{ kind: 'success' | 'warning' | 'error'; message: string }> = [];
   const stateReports: VisitTracingReport[][] = [];
@@ -243,13 +261,18 @@ async function runSaveTracingCase(
     prescriptionDate: '2026-11-16',
     dispensingDate: '2026-11-16',
     issueDate: '2026-11-16T09:00:00.000Z',
-    status: 'processing'
+    status: 'processing',
+    ...(options.claimStatus ? { claimLifecycle: { status: options.claimStatus } } : {})
   };
   const visit: TracingReportVisitHandle = {
     patientId: visitDoc.patientId,
     toJSON: () => visitDoc,
     patch: async ({ careCommunication }) => {
       if (options.patchError) throw options.patchError;
+      const candidateVisit: Visit = { ...visitDoc, careCommunication };
+      if (!validateVisitSchema(candidateVisit)) {
+        throw new Error(`VISIT_SCHEMA validation failed: ${ajv.errorsText(validateVisitSchema.errors)}`);
+      }
       visitDoc.careCommunication = careCommunication;
       patchedPayloads.push(careCommunication);
     }
@@ -303,13 +326,21 @@ describe('TracingReport save outcome and error handling contracts', () => {
     assert.deepEqual(noVisit.notifications, [{ kind: 'error', message: TRACING_REPORT_ACTIVE_VISIT_NOT_FOUND_MESSAGE }]);
     assert.equal(noVisit.stateReports.length, 0);
 
+    const locked = await runSaveTracingCase({}, { claimStatus: 'exported' });
+    assert.equal(locked.ok, false);
+    assert.deepEqual(locked.notifications, [
+      { kind: 'error', message: getClaimEditBlockedMessage({ status: 'exported' }, 'soap') }
+    ]);
+    assert.equal(locked.stateReports.length, 0);
+    assert.equal(locked.patchedPayloads.length, 0);
+
     const patchFail = await runSaveTracingCase({}, { patchError: new Error('IDB_PATCH_FAILED') });
     assert.equal(patchFail.ok, false);
     assert.deepEqual(patchFail.notifications, [{ kind: 'error', message: 'トレーシングレポートの保存に失敗しました' }]);
     assert.equal(patchFail.stateReports.length, 0);
   });
 
-  it('persists tracing report, records sent metadata when sent, warns on audit failure, and returns true', async () => {
+  it('persists tracing report, records sent metadata when sent, warns on audit failure or throw, and returns true', async () => {
     const auditWarn = await runSaveTracingCase({
       report: { ...SAMPLE_TRACING_REPORT, status: 'sent' },
       logAudit: async () => false
@@ -318,6 +349,15 @@ describe('TracingReport save outcome and error handling contracts', () => {
     assert.equal(auditWarn.stateReports[0][0].sentBy, '薬剤師 テスト');
     assert.equal(auditWarn.stateReports[0][0].sentAt, '2026-11-16T10:00:00.000Z');
     assert.deepEqual(auditWarn.notifications, [{ kind: 'warning', message: 'レポートは保存しましたが、監査ログ記録に失敗しました。' }]);
+
+    const auditThrow = await runSaveTracingCase({
+      logAudit: async () => {
+        throw new Error('AUDIT_DB_DOWN');
+      }
+    });
+    assert.equal(auditThrow.ok, true);
+    assert.equal(auditThrow.patchedPayloads.length, 1);
+    assert.deepEqual(auditThrow.notifications, [{ kind: 'warning', message: 'レポートは保存しましたが、監査ログ記録に失敗しました。' }]);
 
     const draftOk = await runSaveTracingCase();
     assert.equal(draftOk.ok, true);

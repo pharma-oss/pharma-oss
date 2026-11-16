@@ -318,6 +318,7 @@ describe('Schema Validation', () => {
             status: 'sent',
             reportDate: '2026-07-01',
             destinationInstitution: '青山内科クリニック',
+            destinationInstitutionCode: '1312345670',
             destinationDepartment: '内科',
             destinationDoctor: '青山 一郎',
             subject: '服薬状況のご報告',

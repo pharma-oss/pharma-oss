@@ -20,7 +20,21 @@ import {
 } from '@/lib/prescription_intervention_support';
 import { userFacingErrorMessage } from '@/lib/user_facing_error';
 
-export type InterventionItem = Intervention & { id?: string; category?: string };
+export type InterventionItem = Intervention & { id?: string; category?: InterventionCategory | string };
+
+export function mergeInterventionCategories(
+  records: Intervention[],
+  events?: Visit['interventionEvents']
+): InterventionItem[] {
+  if (!events || events.length === 0) {
+    return records.map((r) => ({ ...r }));
+  }
+  const categoryByEventId = new Map(events.map((ev) => [ev.eventId, ev.category]));
+  return records.map((record) => {
+    const category = categoryByEventId.get(record.interventionId);
+    return category ? { ...record, category } : { ...record };
+  });
+}
 
 export type EmrInterventionVisitHandle = InterventionVisitHandle & Pick<Visit, 'visitId' | 'claimLifecycle'>;
 
@@ -102,7 +116,7 @@ export async function executeAddEmrIntervention({
       logAudit
     });
 
-    appendIntervention(newRecord);
+    appendIntervention({ ...newRecord, category });
     notifySuccess(input.inquiryStatus === 'pending' ? '疑義照会を照会中として記録しました' : '疑義照会・処方変更を記録しました');
     return true;
   } catch (err) {

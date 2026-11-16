@@ -110,6 +110,7 @@ export function buildAutoTracingReportDraft(input: TracingReportDraftInput): Par
     proposal,
     followUpPlan,
     destinationInstitution: existingReport?.destinationInstitution || '',
+    destinationInstitutionCode: existingReport?.destinationInstitutionCode || '',
     destinationDepartment: existingReport?.destinationDepartment || '',
     destinationDoctor: existingReport?.destinationDoctor || '',
     status: existingReport?.status || 'draft',

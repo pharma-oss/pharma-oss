@@ -2,12 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import Ajv from 'ajv';
+import { INTERVENTION_SCHEMA } from '@/db/schema';
 import type { Intervention } from '@/db/types';
 import {
   executeAddEmrIntervention,
   INTERVENTION_ACTIVE_VISIT_NOT_FOUND_MESSAGE,
   INTERVENTION_DB_NOT_READY_MESSAGE,
-  type EmrInterventionVisitHandle
+  mergeInterventionCategories,
+  type EmrInterventionVisitHandle,
+  type InterventionItem
 } from '@/hooks/useEmrIntervention';
 import { getClaimEditBlockedMessage } from '@/lib/claim_edit_guard';
 import type { InterventionInput, InterventionStoreDb } from '@/lib/prescription_intervention_support';
@@ -16,10 +20,20 @@ import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_
 import { TracingReportModal } from './emr/components/TracingReportModal';
 import {
   EmrInterventionModal,
+  maybeSuggestInterventionCategory,
   submitEmrInterventionForm,
   type EmrInterventionModalProps
 } from './emr/components/EmrInterventionModal';
 import { tracingStatusLabel } from '../lib/emr_helpers';
+
+const ajv = new Ajv({ strict: false });
+ajv.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
+ajv.addFormat(
+  'date-time',
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/
+);
+const STRICT_INTERVENTION_SCHEMA = { ...INTERVENTION_SCHEMA, additionalProperties: false };
+const validateInterventionSchema = ajv.compile(STRICT_INTERVENTION_SCHEMA);
 
 test('tracingStatusLabel handles standard tracing report statuses', () => {
   assert.strictEqual(tracingStatusLabel.draft, '下書き');
@@ -111,6 +125,9 @@ test('EmrInterventionModal is exported as React component and renders interventi
     })
   );
   assert.ok(openHtml.includes('疑義照会・処方変更を記録'));
+  assert.ok(openHtml.includes('role="dialog"'));
+  assert.ok(openHtml.includes('aria-modal="true"'));
+  assert.ok(openHtml.includes('aria-labelledby="intervention-modal-title"'));
   assert.ok(openHtml.includes('value="山田 医師"'));
   assert.ok(openHtml.includes('用量過多の疑義'));
   assert.ok(openHtml.includes('1回2錠'));
@@ -161,6 +178,9 @@ function createInMemoryInterventionTestStore(options: { claimStatus?: 'draft' | 
     interventions: {
       insert: async (record) => {
         if (options.insertThrows) throw options.insertThrows;
+        if (!validateInterventionSchema(record)) {
+          throw new Error(`INTERVENTION_SCHEMA validation failed: ${ajv.errorsText(validateInterventionSchema.errors)}`);
+        }
         insertedRecords.push(record);
         return {
           remove: async () => {
@@ -181,7 +201,7 @@ async function runAddInterventionCase(
   overrides: Partial<Parameters<typeof executeAddEmrIntervention>[0]> = {}
 ) {
   const notifications: Array<{ kind: 'success' | 'error'; message: string }> = [];
-  const appended: Intervention[] = [];
+  const appended: InterventionItem[] = [];
   const store = createInMemoryInterventionTestStore();
   const ok = await executeAddEmrIntervention({
     db: store.db,
@@ -264,13 +284,41 @@ test('executeAddEmrIntervention persists record, appends state, notifies success
   assert.equal(completed.ok, true);
   assert.equal(completed.appended.length, 1);
   assert.equal(completed.appended[0].interventionId, 'int-ok-1');
+  assert.equal(completed.appended[0].category, 'dosage_change');
   assert.equal(completed.store.visit.interventionEvents?.length, 1);
   assert.deepEqual(completed.notifications, [{ kind: 'success', message: '疑義照会・処方変更を記録しました' }]);
+
+  const merged = mergeInterventionCategories(
+    completed.store.insertedRecords,
+    completed.store.visit.interventionEvents
+  );
+  assert.equal(merged[0].category, 'dosage_change');
 
   const pending = await runAddInterventionCase({ input: { ...SAMPLE_INTERVENTION_INPUT, inquiryStatus: 'pending' }, interventionId: 'int-ok-2' });
   assert.equal(pending.ok, true);
   assert.equal(pending.appended.length, 1);
   assert.deepEqual(pending.notifications, [{ kind: 'success', message: '疑義照会を照会中として記録しました' }]);
+});
+
+test('maybeSuggestInterventionCategory suggests category from reason or drug names only when currentCategory is other', () => {
+  const suggested: string[] = [];
+  maybeSuggestInterventionCategory({
+    currentCategory: 'other',
+    reason: '',
+    beforeDrug: 'ロキソニン錠60mg',
+    afterDrug: 'ロキソプロフェンNa錠60mg（後発品変更）',
+    setCategory: (c) => suggested.push(c)
+  });
+  assert.deepEqual(suggested, ['generic_change']);
+
+  maybeSuggestInterventionCategory({
+    currentCategory: 'discontinuation',
+    reason: '後発品変更',
+    beforeDrug: '',
+    afterDrug: '',
+    setCategory: (c) => suggested.push(c)
+  });
+  assert.deepEqual(suggested, ['generic_change']);
 });
 
 test('EmrInterventionModal disables submit button with aria-busy and saving label only while isSaving is true', () => {

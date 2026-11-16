@@ -62,6 +62,23 @@ describe('Tracing Report Helpers & Engine', () => {
     assert.ok(draft.proposal?.includes('血圧手帳の持参指導'));
   });
 
+  test('buildAutoTracingReportDraft preserves destinationInstitutionCode from existingReport', () => {
+    const draft = buildAutoTracingReportDraft({
+      patientName: '高橋 三郎',
+      existingReport: {
+        destinationInstitution: '聖マリア記念病院',
+        destinationInstitutionCode: '1310123456',
+        destinationDepartment: '循環器内科',
+        destinationDoctor: '鈴木 先生'
+      }
+    });
+
+    assert.equal(draft.destinationInstitution, '聖マリア記念病院');
+    assert.equal(draft.destinationInstitutionCode, '1310123456');
+    assert.equal(draft.destinationDepartment, '循環器内科');
+    assert.equal(draft.destinationDoctor, '鈴木 先生');
+  });
+
   test('buildAutoTracingReportDraft EXCLUDES unconfirmed AI draft entries (aiStatus === unconfirmed) from report', () => {
     const draft = buildAutoTracingReportDraft({
       patientName: '佐藤 二郎',

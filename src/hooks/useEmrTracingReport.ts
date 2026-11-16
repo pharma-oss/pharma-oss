@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
+import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { tracingStatusLabel } from '@/lib/emr_helpers';
 import { userFacingErrorMessage } from '@/lib/user_facing_error';
 import type { DeepReadonlyObject, RxDocument } from 'rxdb';
@@ -72,6 +73,11 @@ export async function executeSaveTracingReport({
     }
 
     const currentVisit = visit.toJSON();
+    const claimLifecycle = currentVisit.claimLifecycle as Visit['claimLifecycle'];
+    if (isClaimEditBlocked(claimLifecycle)) {
+      notifyError(getClaimEditBlockedMessage(claimLifecycle, 'soap'));
+      return false;
+    }
     const currentCare = currentVisit.careCommunication || {};
     const timestamp = now ?? new Date().toISOString();
     const isSentOrClosed = report.status === 'sent' || report.status === 'closed';
@@ -103,11 +109,17 @@ export async function executeSaveTracingReport({
     setTracingReports(nextReports);
 
     const instCodeInfo = finalReport.destinationInstitutionCode ? `[${finalReport.destinationInstitutionCode}] ` : '';
-    const auditOk = await logAudit(
-      currentVisit.patientId,
-      currentPatientName,
-      `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${instCodeInfo}${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`
-    );
+    let auditOk = false;
+    try {
+      auditOk = await logAudit(
+        currentVisit.patientId,
+        currentPatientName,
+        `トレーシングレポート記録: ${tracingStatusLabel[finalReport.status] || finalReport.status} / ${finalReport.subject} / 宛先 ${instCodeInfo}${finalReport.destinationInstitution || '未指定'} ${finalReport.destinationDoctor || ''}`
+      );
+    } catch (auditError) {
+      console.error('Failed to record tracing report audit log:', auditError);
+      auditOk = false;
+    }
     if (!auditOk) {
       notifyWarning('レポートは保存しましたが、監査ログ記録に失敗しました。');
     } else {
@@ -134,6 +146,7 @@ export function useEmrTracingReport({
 }: UseEmrTracingReportParams) {
   const [tracingReports, setTracingReports] = useState<VisitTracingReport[]>([]);
   const [isTracingModalOpen, setIsTracingModalOpen] = useState(false);
+  const [editingTracingReport, setEditingTracingReport] = useState<VisitTracingReport | null>(null);
 
   const handleSaveTracingReport = useCallback(async (report: VisitTracingReport): Promise<boolean> => {
     if (!db) {
@@ -159,6 +172,8 @@ export function useEmrTracingReport({
     setTracingReports,
     isTracingModalOpen,
     setIsTracingModalOpen,
+    editingTracingReport,
+    setEditingTracingReport,
     handleSaveTracingReport
   };
 }

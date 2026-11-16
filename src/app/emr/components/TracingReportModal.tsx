@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileText, Sparkles, Printer, X, Save, Building2, UserCheck } from 'lucide-react';
 import type { VisitTracingReport, SoapStructuredAssessment, TracingReportStatus } from '@/db/types';
 import { tracingStatusLabel } from '@/lib/emr_helpers';
+import { toLocalDateKey } from '@/lib/local_date';
 import {
   buildAutoTracingReportDraft,
   generateTracingReportPrintHtml
@@ -118,7 +119,12 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleRequestClose = () => {
+    if (!isSaving) onClose();
+  };
+
   const handleGenerateDraft = () => {
+    if (isSaving) return;
     const draft = buildAutoTracingReportDraft({
       patientName,
       prescriptionItems,
@@ -126,7 +132,10 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       assessment,
       existingReport: report
     });
-    setReport(draft);
+    setReport((prev) => ({
+      ...prev,
+      ...draft
+    }));
   };
 
   const handleSave = async () => {
@@ -137,7 +146,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       const fullReport: VisitTracingReport = {
         reportId: report.reportId || `tr-${Date.now()}`,
         status: (report.status as TracingReportStatus) || 'draft',
-        reportDate: report.reportDate || now.slice(0, 10),
+        reportDate: report.reportDate || toLocalDateKey(new Date(now)),
         destinationInstitution: report.destinationInstitution || '',
         destinationInstitutionCode: report.destinationInstitutionCode || '',
         destinationDepartment: report.destinationDepartment || '',
@@ -149,6 +158,8 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         proposal: report.proposal || '',
         followUpPlan: report.followUpPlan || '',
         sentAt: report.sentAt,
+        sentBy: report.sentBy,
+        responseSummary: report.responseSummary,
         createdAt: report.createdAt || now,
         updatedAt: now
       };
@@ -185,7 +196,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       ref={dialogRef}
       className="modal-overlay tracing-dialog"
       aria-labelledby="tracing-title"
-      onClose={onClose}
+      onClose={handleRequestClose}
     >
       <div className="modal-header tracing-header">
         <div className="tracing-title-box">
@@ -207,7 +218,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
           <button
             type="button"
             className="btn-close btn-modal-close"
-            onClick={onClose}
+            onClick={handleRequestClose}
           >
             <X size={20} />
           </button>
@@ -217,14 +228,14 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       <div className="modal-body tracing-body">
         <div className="tracing-institution-card">
           <MedicalInstitutionAutoComplete
-            valueCode={(report as any).destinationInstitutionCode || ''}
+            valueCode={report.destinationInstitutionCode || ''}
             valueName={report.destinationInstitution || ''}
             onChange={({ code, name }) => {
               setReport((prev) => ({
                 ...prev,
                 destinationInstitution: name,
                 destinationInstitutionCode: code
-              } as any));
+              }));
             }}
           />
         </div>
@@ -322,6 +333,16 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
             onChange={(e) => setReport({ ...report, proposal: e.target.value })}
           />
         </div>
+
+        <div>
+          <label className="tracing-field-label">5. 薬局での今後のフォローアップ計画</label>
+          <textarea
+            className="input-field tracing-input"
+            rows={2}
+            value={report.followUpPlan || ''}
+            onChange={(e) => setReport({ ...report, followUpPlan: e.target.value })}
+          />
+        </div>
       </div>
 
       <div className="modal-footer tracing-footer">
@@ -335,7 +356,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         </button>
 
         <div className="tracing-footer-actions">
-          <button type="button" className="btn-secondary" onClick={onClose}>
+          <button type="button" className="btn-secondary" onClick={handleRequestClose}>
             キャンセル
           </button>
           <button

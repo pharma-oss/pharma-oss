@@ -27,12 +27,14 @@ export interface SoapEditorProps {
   targetVisitId: string | null;
   registerFlush?: (fn: (() => Promise<{ hasContent: boolean; missingStructuredFields: string[]; unconfirmedAiDraftCount: number }>) | null) => void;
   onResolvedVisitChange?: (visitId: string | null) => void;
+  onSoapStateChange?: (state: { problems: SoapProblem[]; structuredAssessment: SoapStructuredAssessment }) => void;
 }
 
 export const SoapEditor: React.FC<SoapEditorProps> = ({
   targetVisitId,
   registerFlush,
-  onResolvedVisitChange
+  onResolvedVisitChange,
+  onSoapStateChange
 }) => {
   const db = useDatabase();
   // null=解決中。false=受付なし(入力しても保存されないため、エディタの代わりに案内を表示する)。
@@ -67,6 +69,10 @@ export const SoapEditor: React.FC<SoapEditorProps> = ({
   const structuredAssessmentRef = useRef(structuredAssessment);
   problemsRef.current = problems;
   structuredAssessmentRef.current = structuredAssessment;
+
+  useEffect(() => {
+    onSoapStateChange?.({ problems, structuredAssessment });
+  }, [problems, structuredAssessment, onSoapStateChange]);
 
   useEffect(() => {
     let cancelled = false;

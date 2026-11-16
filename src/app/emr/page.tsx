@@ -5,7 +5,7 @@ import { Clock, History, Save, MessageSquare, AlertTriangle, Loader2, CheckCircl
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
-import type { Alert, FacilitySettings, PrescriptionItem, SoapRecord as DbSoapRecord, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import type { Alert, FacilitySettings, PrescriptionItem, SoapRecord as DbSoapRecord, SoapStructuredAssessment, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
 import { evaluateUsageWarning } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
 import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
@@ -56,7 +56,7 @@ import DrugHistoryModal from './components/DrugHistoryModal';
 import PatientBanner from './components/PatientBanner';
 import SoapEditor from './components/SoapEditor';
 import EmrInterventionModal from './components/EmrInterventionModal';
-import { useEmrIntervention } from '@/hooks/useEmrIntervention';
+import { mergeInterventionCategories, useEmrIntervention } from '@/hooks/useEmrIntervention';
 import { useEmrTracingReport } from '@/hooks/useEmrTracingReport';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 import {
@@ -394,12 +394,18 @@ export default function EmrPage() {
     setTracingReports,
     isTracingModalOpen,
     setIsTracingModalOpen,
+    editingTracingReport,
+    setEditingTracingReport,
     handleSaveTracingReport
   } = useEmrTracingReport({
     db,
     findActiveVisit,
     currentPatientName
   });
+  const [currentSoapState, setCurrentSoapState] = useState<{
+    problems: DbSoapRecord['problems'];
+    structuredAssessment?: SoapStructuredAssessment;
+  }>({ problems: [] });
 
   useEffect(() => {
     async function fetchInterventions() {
@@ -412,8 +418,13 @@ export default function EmrPage() {
         const visit = await findActiveVisit();
         if (visit) {
           const list = await db.interventions.find({ selector: { visitId: visit.visitId } }).exec();
-          setInterventions(list.map((d: any) => d.toJSON()));
           const visitJson = visit.toJSON() as Visit;
+          setInterventions(
+            mergeInterventionCategories(
+              list.map((d: any) => d.toJSON()),
+              visitJson.interventionEvents
+            )
+          );
           setTracingReports(visitJson.careCommunication?.tracingReports || []);
           setInitialQuestionnaire(visitJson.initialQuestionnaire || null);
           setMynaClinicalImports(visitJson.careCommunication?.mynaClinicalImports || []);
@@ -1605,6 +1616,7 @@ useEffect(() => {
               targetVisitId={targetVisitId}
               registerFlush={(fn) => { soapFlushRef.current = fn; }}
               onResolvedVisitChange={handleSoapVisitResolved}
+              onSoapStateChange={setCurrentSoapState}
             />
           </div>
 
@@ -1851,7 +1863,10 @@ useEffect(() => {
               <h3 className="aside-card-title">トレーシングレポート</h3>
               <button
                 className="btn-primary btn-aside-action"
-                onClick={() => setIsTracingModalOpen(true)}
+                onClick={() => {
+                  setEditingTracingReport(null);
+                  setIsTracingModalOpen(true);
+                }}
               >
                 新規作成
               </button>
@@ -1861,7 +1876,14 @@ useEffect(() => {
                 <span className="text-muted aside-empty-text">記録されているレポートはありません。</span>
               ) : (
                 tracingReports.map((report) => (
-                  <div key={report.reportId} className="tracing-report-item">
+                  <div
+                    key={report.reportId}
+                    className="tracing-report-item"
+                    onClick={() => {
+                      setEditingTracingReport(report);
+                      setIsTracingModalOpen(true);
+                    }}
+                  >
                     <div className="tracing-report-title-row">
                       <strong>{report.subject}</strong>
                       <span className={`status-chip compact ${report.status === 'draft' ? 'warning' : 'confirmed'}`}>
@@ -1990,25 +2012,25 @@ useEffect(() => {
         setIntNote={setIntNote}
         intConsented={intConsented}
         setIntConsented={setIntConsented}
-        onSave={async (input) => {
-          if (!input.reason.trim()) {
-            alert('理由を入力してください。');
-            return false;
-          }
-          const saved = await handleAddIntervention(input);
-          if (saved) {
-            setIsInterventionModalOpen(false);
-            resetInterventionForm();
-          }
-          return saved;
-        }}
+        onSave={handleAddIntervention}
         resetForm={resetInterventionForm}
       />
 
       <TracingReportModal
         isOpen={isTracingModalOpen}
-        onClose={() => setIsTracingModalOpen(false)}
+        onClose={() => {
+          setIsTracingModalOpen(false);
+          setEditingTracingReport(null);
+        }}
         patientName={currentPatientName}
+        prescriptionItems={pickingItems.map((item) => ({
+          drugName: item.drugName,
+          quantity: item.totalQuantity,
+          usage: item.usage
+        }))}
+        soapProblems={currentSoapState.problems}
+        assessment={currentSoapState.structuredAssessment}
+        existingReport={editingTracingReport}
         pharmacyInfo={facilitySettings || {}}
         onSaveReport={handleSaveTracingReport}
       />

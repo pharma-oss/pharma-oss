@@ -13,6 +13,23 @@ export interface EmrInterventionSubmitOutcome {
 }
 
 /**
+ * 区分が未選択('other')のときだけ、理由・変更前後薬品名の入力から区分を自動サジェストする。
+ */
+export function maybeSuggestInterventionCategory(params: {
+  currentCategory: InterventionCategory;
+  reason: string;
+  beforeDrug: string;
+  afterDrug: string;
+  setCategory?: (val: InterventionCategory) => void;
+}): void {
+  if (params.currentCategory !== 'other' || !params.setCategory) return;
+  const suggested = suggestInterventionCategory(params.reason, params.beforeDrug, params.afterDrug);
+  if (suggested !== 'other') {
+    params.setCategory(suggested);
+  }
+}
+
+/**
  * 疑義照会モーダル送信時の入力チェックと保存結果から、警告表示・モーダル閉鎖可否を決める。
  */
 export async function submitEmrInterventionForm(params: {
@@ -112,6 +129,10 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleRequestClose = () => {
+    if (!isSaving) onClose();
+  };
+
   const handleSubmit = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -145,12 +166,17 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
   };
 
   return (
-    <div className="insurance-modal-overlay">
+    <div
+      className="insurance-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="intervention-modal-title"
+    >
       <div className="insurance-modal animate-scale modal-intervention">
         <div className="modal-header">
           <div className="modal-title-row">
             <MessageSquare size={20} />
-            <h3>疑義照会・処方変更を記録</h3>
+            <h3 id="intervention-modal-title">疑義照会・処方変更を記録</h3>
           </div>
           <span className="modal-subtitle">変更理由と医師の回答結果をレセプト(UKE)に自動連携します。</span>
         </div>
@@ -214,10 +240,13 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
               onChange={(e) => {
                 const val = e.target.value;
                 setIntReason(val);
-                if (intCategory === 'other' && setIntCategory) {
-                  const suggested = suggestInterventionCategory(val, intBefore, intAfter);
-                  if (suggested !== 'other') setIntCategory(suggested);
-                }
+                maybeSuggestInterventionCategory({
+                  currentCategory: intCategory,
+                  reason: val,
+                  beforeDrug: intBefore,
+                  afterDrug: intAfter,
+                  setCategory: setIntCategory
+                });
               }}
               className="intervention-textarea"
             />
@@ -229,7 +258,17 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 type="text"
                 placeholder="例: ロキソニン錠60mg"
                 value={intBefore}
-                onChange={(e) => setIntBefore(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setIntBefore(val);
+                  maybeSuggestInterventionCategory({
+                    currentCategory: intCategory,
+                    reason: intReason,
+                    beforeDrug: val,
+                    afterDrug: intAfter,
+                    setCategory: setIntCategory
+                  });
+                }}
                 className="intervention-input"
               />
             </div>
@@ -239,7 +278,17 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
                 type="text"
                 placeholder="例: ロキソプロフェンNa塩錠60mg"
                 value={intAfter}
-                onChange={(e) => setIntAfter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setIntAfter(val);
+                  maybeSuggestInterventionCategory({
+                    currentCategory: intCategory,
+                    reason: intReason,
+                    beforeDrug: intBefore,
+                    afterDrug: val,
+                    setCategory: setIntCategory
+                  });
+                }}
                 className="intervention-input"
               />
             </div>
@@ -285,7 +334,7 @@ export const EmrInterventionModal: React.FC<EmrInterventionModalProps> = ({
           </label>
         </div>
         <div className="intervention-footer">
-          <button type="button" className="btn-secondary" onClick={onClose}>キャンセル</button>
+          <button type="button" className="btn-secondary" onClick={handleRequestClose}>キャンセル</button>
           <button
             type="button"
             className="btn-primary"
