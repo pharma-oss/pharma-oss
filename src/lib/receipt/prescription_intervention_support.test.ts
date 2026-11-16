@@ -190,7 +190,7 @@ test('prescription_intervention_support: validateInterventionReadiness catches p
 });
 
 test('prescription_intervention_support: VISIT_SCHEMA validates interventionEvents array properly', () => {
-  assert.strictEqual(VISIT_SCHEMA.version, 24);
+  assert.strictEqual(VISIT_SCHEMA.version, 25);
   assert.ok(VISIT_SCHEMA.properties.interventionEvents);
   assert.ok(VISIT_SCHEMA.encrypted?.includes('interventionEvents'));
 });

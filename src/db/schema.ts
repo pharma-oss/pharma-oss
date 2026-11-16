@@ -195,7 +195,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 24,
+  version: 25,
   primaryKey: 'visitId',
   type: 'object',
   properties: {

@@ -372,7 +372,10 @@ const create = async () => {
                 // v23 -> v24: receptionAt (受付した実時刻) と、claimOptions の算定条件
                 // (medicationNotebook / afterHoursCategory / tokkanOverride) を追加。
                 // いずれも任意項目で、無い受付はこれまでの算定 (手帳あり・通常) のまま。
-                23: keepDocument
+                23: keepDocument,
+                // v24 -> v25: careCommunication.tracingReports[].destinationInstitutionCode を追加。
+                // 任意項目で、無い記録はこれまでどおり未設定として扱う。
+                24: keepDocument
             })
         },
 

@@ -1,12 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import {
   getDatabase,
   legacyMigrationStrategies,
   PRESCRIPTION_ITEM_ZERO_BASED_STRATEGIES,
   getPrescriptionItemMigrationStrategies
 } from './index';
-import { DRUG_SCHEMA, PRESCRIPTION_ITEM_SCHEMA } from './schema';
+import { DRUG_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from './schema';
 
 describe('Database initialization contracts', () => {
   it('exports getDatabase as a callable factory function', () => {
@@ -74,6 +79,71 @@ describe('Database initialization contracts', () => {
     };
     const migratedDoc = strategies[18](v17Doc);
     assert.deepStrictEqual(migratedDoc, v17Doc, 'v17 document must be preserved without alteration when migrating to v18');
+  });
+
+  it('migrates an existing v24 visits collection to v25 without losing tracingReports', async () => {
+    addRxPlugin(RxDBMigrationSchemaPlugin);
+    const dbName = `visit_v24_to_v25_${Date.now()}`;
+    const storage = wrappedValidateAjvStorage({
+      storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+    });
+    const password = 'test-migration-password-1234';
+
+    // v24 相当のスキーマ（destinationInstitutionCode 追加前）を再現する
+    const v24VisitSchema = structuredClone(VISIT_SCHEMA) as typeof VISIT_SCHEMA & {
+      properties: {
+        careCommunication: {
+          properties: {
+            tracingReports: {
+              items: {
+                properties: Record<string, unknown>;
+              };
+            };
+          };
+        };
+      };
+    };
+    v24VisitSchema.version = 24;
+    delete v24VisitSchema.properties.careCommunication.properties.tracingReports.items.properties.destinationInstitutionCode;
+
+    const db24 = await createRxDatabase({ name: dbName, storage, password, ignoreDuplicate: true });
+    await db24.addCollections({
+      visits: {
+        schema: v24VisitSchema,
+        migrationStrategies: legacyMigrationStrategies(v24VisitSchema, {})
+      }
+    });
+    await db24.visits.insert({
+      visitId: 'v_24_existing',
+      patientId: 'pt_1',
+      issueDate: '2026-11-16T10:00:00Z',
+      status: 'completed',
+      careCommunication: {
+        tracingReports: [{
+          reportId: 'tr_24',
+          status: 'sent',
+          reportDate: '2026-11-16',
+          destinationInstitution: '青山内科クリニック',
+          subject: '服薬状況のご報告',
+          createdAt: '2026-11-16T09:00:00Z',
+          updatedAt: '2026-11-16T10:00:00Z'
+        }]
+      }
+    });
+    await db24.close();
+
+    const db25 = await createRxDatabase({ name: dbName, storage, password, ignoreDuplicate: true });
+    await db25.addCollections({
+      visits: {
+        schema: VISIT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {})
+      }
+    });
+    const migrated = await db25.visits.findOne('v_24_existing').exec();
+    assert.ok(migrated, 'existing v24 visit must remain readable after v25 migration');
+    assert.strictEqual(migrated.careCommunication?.tracingReports?.[0]?.reportId, 'tr_24');
+    assert.strictEqual(migrated.careCommunication?.tracingReports?.[0]?.destinationInstitution, '青山内科クリニック');
+    await db25.remove();
   });
 });
 
