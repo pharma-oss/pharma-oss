@@ -1,7 +1,7 @@
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import { calculateDispensingFees, type CalculationResultItem, type FeeCode } from '@/lib/calculator';
 import { CLAIM_LIFECYCLE_STATUS_LABELS, getClaimLifecycleStatus, type ClaimLifecycleStatus } from '@/lib/claim_lifecycle';
-import { buildDispensingUkeRecords, type DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
+import { buildDispensingUkeRecords, type DispensingUkeInterventionLike, type DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 import {
   buildDispensingUkeOfficialFile,
   DISPENSING_UKE_OFFICIAL_FILE_NAME,
@@ -51,7 +51,7 @@ export interface MonthlyClaimUkeCase {
   settings: FacilitySettings;
   items: DispensingUkeItem[];
   calculatedFees: CalculationResultItem[];
-  interventions?: any[];
+  interventions?: DispensingUkeInterventionLike[];
 }
 
 export interface MonthlyClaimUkeBuildResult {

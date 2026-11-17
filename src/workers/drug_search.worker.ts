@@ -114,8 +114,13 @@ export function searchIndexedDrugs(
   return scoredResults.slice(0, limit).map((r) => r.record);
 }
 
-const isWorkerEnvironment = typeof self !== 'undefined' && typeof (self as any).WorkerGlobalScope !== 'undefined';
-if (isWorkerEnvironment && typeof (self as any).postMessage === 'function') {
+interface DrugSearchWorkerGlobal {
+  WorkerGlobalScope?: unknown;
+  postMessage?: unknown;
+}
+
+const isWorkerEnvironment = typeof self !== 'undefined' && typeof (self as unknown as DrugSearchWorkerGlobal).WorkerGlobalScope !== 'undefined';
+if (isWorkerEnvironment && typeof (self as unknown as DrugSearchWorkerGlobal).postMessage === 'function') {
   self.addEventListener('message', (event: MessageEvent<WorkerIncomingMessage>) => {
     const message = event.data;
     if (!message || !message.type) return;

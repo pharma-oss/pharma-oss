@@ -367,7 +367,7 @@ const PRIMARY_KEYS: Record<BackupCollectionName, string> = {
   audit_logs: 'logId'
 };
 
-function areObjectsEqual(a: any, b: any): boolean {
+function areObjectsEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) {
     return false;
@@ -377,7 +377,7 @@ function areObjectsEqual(a: any, b: any): boolean {
   if (keysA.length !== keysB.length) return false;
   for (const key of keysA) {
     if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-    if (!areObjectsEqual(a[key], b[key])) return false;
+    if (!areObjectsEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
   }
   return true;
 }

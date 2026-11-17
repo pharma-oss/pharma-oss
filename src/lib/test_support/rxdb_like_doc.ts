@@ -16,8 +16,8 @@ export interface RxLikeDocument {
   [field: string]: unknown;
   patch: (values: Record<string, unknown>) => Promise<RxLikeDocument>;
   incrementalPatch: (values: Record<string, unknown>) => Promise<RxLikeDocument>;
-  modify: (mutate: (data: any) => any) => Promise<RxLikeDocument>;
-  incrementalModify: (mutate: (data: any) => any) => Promise<RxLikeDocument>;
+  modify: <T extends Record<string, unknown> = Record<string, unknown>>(mutate: (data: T) => T | Promise<T>) => Promise<RxLikeDocument>;
+  incrementalModify: <T extends Record<string, unknown> = Record<string, unknown>>(mutate: (data: T) => T | Promise<T>) => Promise<RxLikeDocument>;
   getLatest: () => RxLikeDocument;
   remove: () => Promise<void>;
   toJSON: () => Record<string, unknown>;
@@ -72,13 +72,13 @@ export class RxLikeStore {
         store.write(values);
         return store.open();
       },
-      async modify(mutate) {
+      async modify<T extends Record<string, unknown> = Record<string, unknown>>(mutate: (data: T) => T | Promise<T>) {
         if (revision !== store.revision) throw new RxLikeConflictError();
-        store.replace(await mutate({ ...snapshot }));
+        store.replace(await mutate({ ...snapshot } as unknown as T));
         return store.open();
       },
-      async incrementalModify(mutate) {
-        store.replace(await mutate({ ...store.current() }));
+      async incrementalModify<T extends Record<string, unknown> = Record<string, unknown>>(mutate: (data: T) => T | Promise<T>) {
+        store.replace(await mutate({ ...store.current() } as unknown as T));
         return store.open();
       },
       getLatest() {

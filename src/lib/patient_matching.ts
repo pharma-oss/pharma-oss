@@ -8,7 +8,7 @@ export interface PatientMatchCandidate {
     /** 保険者番号 */
     provider?: string;
   };
-  doc?: any;
+  doc?: unknown;
 }
 
 export interface PatientMatchInput {

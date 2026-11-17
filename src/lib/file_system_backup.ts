@@ -19,6 +19,11 @@ export interface DirectorySaveResult {
   errorMessage?: string;
 }
 
+type DirectoryHandleWithPermissions = FileSystemDirectoryHandle & {
+  queryPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
+  requestPermission(descriptor: { mode: 'read' | 'readwrite' }): Promise<PermissionState>;
+};
+
 const IDB_NAME = 'yakureki_fs_backup_db';
 const IDB_STORE = 'handles';
 const HANDLE_KEY = 'external_backup_dir_handle';
@@ -97,9 +102,9 @@ export async function saveBackupToDirectory(
 
     if (handle) {
       // 既存ハンドルのパーミッション確認
-      const permission = await (handle as any).queryPermission({ mode: 'readwrite' });
+      const permission = await (handle as DirectoryHandleWithPermissions).queryPermission({ mode: 'readwrite' });
       if (permission !== 'granted') {
-        const req = await (handle as any).requestPermission({ mode: 'readwrite' });
+        const req = await (handle as DirectoryHandleWithPermissions).requestPermission({ mode: 'readwrite' });
         if (req !== 'granted') {
           handle = null;
         }
@@ -152,8 +157,8 @@ export async function saveBackupToDirectory(
       pathOrName: handle.name,
       sha256Matched: true,
     };
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
+  } catch (err: unknown) {
+    if ((err as { name?: string }).name === 'AbortError') {
       return {
         success: false,
         fileName,
@@ -169,7 +174,7 @@ export async function saveBackupToDirectory(
       fileName,
       pathOrName: '',
       sha256Matched: false,
-      errorMessage: `外部保存書き込みエラー: ${err.message || err}`,
+      errorMessage: `外部保存書き込みエラー: ${(err as { message?: string }).message || err}`,
     };
   }
 }

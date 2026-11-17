@@ -129,13 +129,14 @@ async function main() {
   console.log(`Parsed ${lines.length} lines from master CSV.`);
 
   const localDbPath = path.resolve(process.cwd(), 'src/lib/data/drugs.json');
-  let currentLocalDb: any[] = [];
+  type LocalDrugJsonRecord = { code?: string; [key: string]: unknown };
+  let currentLocalDb: LocalDrugJsonRecord[] = [];
   if (fs.existsSync(localDbPath)) {
     currentLocalDb = JSON.parse(fs.readFileSync(localDbPath, 'utf8'));
   }
   console.log(`Loaded ${currentLocalDb.length} existing local drug records.`);
 
-  const localDrugsMap = new Map<string, any>();
+  const localDrugsMap = new Map<string, LocalDrugJsonRecord>();
   for (const drug of currentLocalDb) {
     if (drug.code) localDrugsMap.set(drug.code, drug);
   }
@@ -190,7 +191,7 @@ async function main() {
     };
 
     if (localDrugsMap.has(code)) {
-      const existing = localDrugsMap.get(code);
+      const existing = localDrugsMap.get(code)!;
       // Merge properties safely
       localDrugsMap.set(code, {
         ...existing,

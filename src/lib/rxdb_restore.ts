@@ -9,9 +9,9 @@ import { ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
 //
 // incrementalPatch() は最新の版に対して書き、衝突したら最新を読み直して再試行する。
 // 取り消しにはこちらを使う。通常の書き込みは、他端末との同時更新を検出できるよう patch() のままにする。
-interface PatchableDocument {
-  patch: (values: any) => Promise<unknown>;
-  incrementalPatch?: (values: any) => Promise<unknown>;
+export interface PatchableDocument {
+  patch(values: Record<string, unknown>): Promise<unknown>;
+  incrementalPatch?(values: Record<string, unknown>): Promise<unknown>;
 }
 
 export async function restoreFields(doc: PatchableDocument, values: Record<string, unknown>): Promise<void> {

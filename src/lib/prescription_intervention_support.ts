@@ -12,7 +12,7 @@
 
 import type { Intervention, Visit } from '@/db/types';
 import { inquiryMethodLabel, inquiryStatusLabel } from '@/lib/emr_helpers';
-import { plainCopy, restoreFields } from './rxdb_restore.ts';
+import { plainCopy, restoreFields, type PatchableDocument } from './rxdb_restore.ts';
 
 export type InterventionCategory =
   | 'generic_change'      // 後発医薬品への変更
@@ -191,7 +191,7 @@ export async function recordInterventionWithAudit(params: {
     await bestEffort('remove record', () => insertedDoc.remove());
     if (eventAppended && typeof visit.patch === 'function') {
       // RxDocument のメソッドなので this を保ったまま visit.patch(...) で呼ぶ
-      await bestEffort('restore events', () => restoreFields(visit as any, { interventionEvents: previousEvents }));
+      await bestEffort('restore events', () => restoreFields(visit as PatchableDocument, { interventionEvents: previousEvents }));
     }
     throw error;
   }
@@ -228,7 +228,7 @@ export async function deleteInterventionWithAudit(params: {
     }
   } catch (error) {
     if (eventsPatched && typeof visit.patch === 'function' && previousEvents) {
-      await bestEffort('restore events', () => restoreFields(visit as any, { interventionEvents: previousEvents }));
+      await bestEffort('restore events', () => restoreFields(visit as PatchableDocument, { interventionEvents: previousEvents }));
     }
     if (removed) {
       await bestEffort('re-insert record', () => db.interventions.insert(snapshot));
@@ -287,13 +287,34 @@ export function suggestInterventionCategory(
   return 'other';
 }
 
+export interface LegacyInterventionLike {
+  interventionId?: string;
+  id?: string;
+  visitId?: string;
+  reason?: string;
+  beforeSnapshot?: string;
+  afterSnapshot?: string;
+  category?: string;
+  inquiryStatus?: string;
+  inquiryMethod?: string;
+  inquiryDoctor?: string;
+  inquiryResult?: string;
+  responseDueDate?: string;
+  patientConsented?: boolean;
+  contactedAt?: string;
+  respondedAt?: string;
+  createdAt?: string;
+  handledBy?: string;
+  note?: string;
+}
+
 /**
  * Visit 内の interventionEvents と、互換用 legacyInterventions を正規化・統合する
  * （コレクションを増やさず visit の入れ子プロパティを最優先とし、未移行データはフォールバック変換）
  */
 export function normalizeVisitInterventionEvents(
   visit: Partial<Visit>,
-  legacyInterventions?: any[]
+  legacyInterventions?: LegacyInterventionLike[]
 ): VisitInterventionEvent[] {
   // 1. visit.interventionEvents が明示的に定義されていればそれを最優先
   if (visit.interventionEvents && Array.isArray(visit.interventionEvents) && visit.interventionEvents.length > 0) {
@@ -314,7 +335,7 @@ export function normalizeVisitInterventionEvents(
     const reason = legacy.reason || '';
     const beforeDrug = legacy.beforeSnapshot || undefined;
     const afterDrug = legacy.afterSnapshot || undefined;
-    const category: InterventionCategory = legacy.category || suggestInterventionCategory(reason, beforeDrug, afterDrug);
+    const category: InterventionCategory = (legacy.category as InterventionCategory | undefined) || suggestInterventionCategory(reason, beforeDrug, afterDrug);
 
     return {
       eventId: legacy.interventionId || legacy.id || `vie_${Math.random().toString(36).slice(2, 9)}`,
@@ -323,7 +344,7 @@ export function normalizeVisitInterventionEvents(
       beforeDrugName: beforeDrug,
       afterDrugName: afterDrug,
       inquiryStatus: legacy.inquiryStatus === 'pending' ? 'pending' : legacy.inquiryStatus === 'cancelled' ? 'cancelled' : 'completed',
-      inquiryMethod: legacy.inquiryMethod || 'phone',
+      inquiryMethod: (legacy.inquiryMethod as VisitInterventionEvent['inquiryMethod'] | undefined) || 'phone',
       inquiryDoctor: legacy.inquiryDoctor || undefined,
       inquiryResult: legacy.inquiryResult || undefined,
       patientConsented: legacy.patientConsented !== false,

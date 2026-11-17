@@ -4,7 +4,7 @@ import type { DrugMasterRecord, MasterDataSeedPayload } from './types';
 let cachedDrugMaster: DrugMasterRecord[] | null = null;
 let cachedSeedPayload: MasterDataSeedPayload | null = null;
 
-export function normalizeDrugMasterRecord(rawDrug: any): DrugMasterRecord {
+export function normalizeDrugMasterRecord(rawDrug: Record<string, unknown>): DrugMasterRecord {
   const name = String(rawDrug.name || '');
   const genericName = rawDrug.genericName ? String(rawDrug.genericName) : undefined;
   const unitText = rawDrug.unitText ? String(rawDrug.unitText) : undefined;
@@ -40,7 +40,7 @@ function inferDrugInfoGenericFlag(name: string, genericName?: string) {
   return ingredientStem.length >= 3 && name.startsWith(ingredientStem);
 }
 
-function normalizeDrugInfoMasterRecord(rawDrugInfo: any): DrugMasterRecord {
+function normalizeDrugInfoMasterRecord(rawDrugInfo: Record<string, unknown>): DrugMasterRecord {
   const id = String(rawDrugInfo.id || '');
   const code = id.replace(/^drug_info_/, '');
   const name = String(rawDrugInfo.drugName || '');
@@ -69,7 +69,7 @@ export async function getDrugMasterRecordsFromJson(): Promise<DrugMasterRecord[]
     import('@/lib/data/drug_infos.json')
   ]);
   const byCode = new Map<string, DrugMasterRecord>();
-  for (const rawDrug of [...(rawDrugData as any[]), ...(rawGeneralDrugData as any[])]) {
+  for (const rawDrug of [...(rawDrugData as Record<string, unknown>[]), ...(rawGeneralDrugData as Record<string, unknown>[])]) {
     const drug = normalizeDrugMasterRecord(rawDrug);
     if (!drug.code || !drug.name) continue;
     byCode.set(drug.code, drug);
@@ -85,7 +85,7 @@ export async function getDrugMasterRecordsFromJson(): Promise<DrugMasterRecord[]
     if (drug.yjCode) knownYjCodes.add(drug.yjCode);
     knownNames.add(drug.name.normalize('NFKC'));
   }
-  for (const rawDrugInfo of rawDrugInfoData as any[]) {
+  for (const rawDrugInfo of rawDrugInfoData as Record<string, unknown>[]) {
     const drug = normalizeDrugInfoMasterRecord(rawDrugInfo);
     if (!drug.code || !drug.name || byCode.has(drug.code)) continue;
     if (knownYjCodes.has(drug.code) || knownNames.has(drug.name.normalize('NFKC'))) continue;

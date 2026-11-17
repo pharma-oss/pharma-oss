@@ -1,6 +1,6 @@
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { CalculationResultItem } from '@/lib/calculator';
-import type { DispensingUkeItem } from './dispensing_uke';
+import type { DispensingUkeInterventionLike, DispensingUkeItem } from './dispensing_uke';
 import {
   buildMonthlyClaimOfficialUkeBundle,
   buildMonthlyClaimUkeResults,
@@ -16,7 +16,7 @@ export interface BuildSingleDispensingUkeOfficialInput {
   settings: FacilitySettings;
   items: DispensingUkeItem[];
   calculatedFees: CalculationResultItem[];
-  interventions?: any[];
+  interventions?: DispensingUkeInterventionLike[];
   generatedAt?: Date;
 }
 

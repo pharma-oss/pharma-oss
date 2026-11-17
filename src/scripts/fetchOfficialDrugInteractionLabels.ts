@@ -263,8 +263,8 @@ async function main() {
       runSummary.fetchError += 1;
       console.log(`  取得エラー: ${entry.error}`);
       console.error(error);
-      if (error instanceof Error && (error as any).cause) {
-        console.error('Error cause:', (error as any).cause);
+      if (error instanceof Error && (error as Error & { cause?: unknown }).cause) {
+        console.error('Error cause:', (error as Error & { cause?: unknown }).cause);
       }
       await sleep(REQUEST_DELAY_MS);
     }

@@ -102,7 +102,7 @@ export function safeStockQuantity(value: unknown): number {
 }
 
 export function consumeFromStockLot(
-  stock: any,
+  stock: { id?: string; quantity?: unknown } | null | undefined,
   requestedAmount: number,
   workingQuantities: Map<string, number>
 ): number {

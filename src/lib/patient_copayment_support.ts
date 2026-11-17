@@ -75,8 +75,8 @@ export function toEditableCopaymentSupport(insuranceInfo?: Patient['insuranceInf
   return {
     highCostLimitCategory: insuranceInfo.highCostLimitCategory || '',
     highCostMultipleOccurrence: Boolean(insuranceInfo.highCostMultipleOccurrence),
-    copaymentCategoryCode: (insuranceInfo.copaymentCategoryCode as any) || '',
-    reductionCode: (reduction?.code as any) || '',
+    copaymentCategoryCode: (insuranceInfo.copaymentCategoryCode as EditableCopaymentSupport['copaymentCategoryCode']) || '',
+    reductionCode: (reduction?.code as EditableCopaymentSupport['reductionCode']) || '',
     reductionRatioPercent: reduction?.ratioPercent !== undefined ? String(reduction.ratioPercent) : '',
     reductionReducedYen: reduction?.reducedYen !== undefined ? String(reduction.reducedYen) : '',
     reductionCertificateNumber: reduction?.certificateNumber || ''

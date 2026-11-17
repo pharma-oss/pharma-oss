@@ -1,6 +1,10 @@
 import { toLocalDateKey } from '@/lib/local_date';
 
-let schedulerPromise: Promise<any> | null = null;
+interface OcrSchedulerLike {
+  addJob(action: 'recognize', file: File): Promise<{ data: { text: string } }>;
+}
+
+let schedulerPromise: Promise<OcrSchedulerLike> | null = null;
 
 async function initScheduler() {
   try {
@@ -34,7 +38,7 @@ export function preloadOcr(options: { logErrors?: boolean } = {}): void {
   });
 }
 
-export async function processPrescription(imageFile: File, schedulerOverride?: any) {
+export async function processPrescription(imageFile: File, schedulerOverride?: OcrSchedulerLike) {
   const scheduler = schedulerOverride || await getScheduler();
   
   try {

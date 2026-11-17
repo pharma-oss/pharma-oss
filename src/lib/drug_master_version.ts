@@ -118,7 +118,7 @@ export function normalizeDrugSnapshot(value: Partial<Drug>): Drug {
     const fieldValue = value[field];
     if (field === 'code' || field === 'name' || field === 'isGeneric') continue;
     if (fieldValue !== undefined) {
-      (snapshot as any)[field] = fieldValue;
+      (snapshot as unknown as Record<string, unknown>)[field] = fieldValue;
     }
   }
 

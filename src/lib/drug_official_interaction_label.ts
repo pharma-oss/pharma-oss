@@ -490,8 +490,8 @@ export async function fetchPmdaDrugLabelHtmlByGeneralListUrl(
     listResponse = await fetchImpl(generalListUrl);
   } catch (error) {
     console.error('Original fetch error:', error);
-    if (error instanceof Error && (error as any).cause) {
-      console.error('Original fetch error cause:', (error as any).cause);
+    if (error instanceof Error && (error as Error & { cause?: unknown }).cause) {
+      console.error('Original fetch error cause:', (error as Error & { cause?: unknown }).cause);
     }
     throw new FetchPmdaGeneralListError(
       'pmda_general_list_fetch_failed',

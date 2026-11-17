@@ -204,19 +204,19 @@ export async function registerPasskey(user: User): Promise<{ credentialId: strin
     }
 
     return { credentialId, publicKey };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('WebAuthn Registration Error:', err);
-    if (err.name === 'NotAllowedError') {
+    if ((err as { name?: string }).name === 'NotAllowedError') {
       throw new Error('パスキーの登録がキャンセルされました。');
     }
-    if (err.name === 'SecurityError') {
+    if ((err as { name?: string }).name === 'SecurityError') {
       if (ALLOW_DEV_FALLBACK_AUTH) {
         console.warn('SecurityError. Falling back to local simulated Passkey in development.');
         return createMockPasskey();
       }
       throw new Error('パスキー登録にはHTTPSまたは安全な実行環境が必要です。');
     }
-    throw new Error(`パスキーの登録に失敗しました: ${err.message || err}`);
+    throw new Error(`パスキーの登録に失敗しました: ${(err as { message?: string }).message || err}`);
   }
 }
 
@@ -263,18 +263,18 @@ export async function authenticatePasskey(user: User): Promise<boolean> {
     }) as PublicKeyCredential;
 
     return !!assertion;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('WebAuthn Authentication Error:', err);
-    if (err.name === 'NotAllowedError') {
+    if ((err as { name?: string }).name === 'NotAllowedError') {
       throw new Error('パスキーによる認証がキャンセルされました。');
     }
-    if (err.name === 'SecurityError') {
+    if ((err as { name?: string }).name === 'SecurityError') {
       if (ALLOW_DEV_FALLBACK_AUTH) {
         return simulateMockPasskeyVerification(user);
       }
       throw new Error('パスキー認証にはHTTPSまたは安全な実行環境が必要です。');
     }
-    throw new Error(`パスキー認証に失敗しました: ${err.message || err}`);
+    throw new Error(`パスキー認証に失敗しました: ${(err as { message?: string }).message || err}`);
   }
 }
 

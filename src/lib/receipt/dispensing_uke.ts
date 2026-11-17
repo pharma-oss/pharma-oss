@@ -9,13 +9,34 @@ export interface DispensingUkeItem extends PrescriptionItem {
   drugPrice?: number;
 }
 
+export interface DispensingUkeInterventionLike {
+  interventionId?: string;
+  id?: string;
+  visitId?: string;
+  reason?: string;
+  beforeSnapshot?: string;
+  afterSnapshot?: string;
+  category?: string;
+  inquiryStatus?: string;
+  inquiryMethod?: string;
+  inquiryDoctor?: string;
+  inquiryResult?: string;
+  responseDueDate?: string;
+  patientConsented?: boolean;
+  contactedAt?: string;
+  respondedAt?: string;
+  createdAt?: string;
+  handledBy?: string;
+  note?: string;
+}
+
 export interface BuildDispensingUkeRecordsInput {
   visit: Visit;
   patient: Patient;
   settings: FacilitySettings;
   items: DispensingUkeItem[];
   calculatedFees: CalculationResultItem[];
-  interventions?: any[];
+  interventions?: DispensingUkeInterventionLike[];
   generatedAt?: Date;
 }
 
