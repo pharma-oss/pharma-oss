@@ -10,7 +10,7 @@ import type { FeeCalculationOptions } from '@/lib/calculator';
 import { buildClaimConditionAuditDetail, type ClaimConditionOptions } from '@/lib/claim_conditions';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import type { ClaimLifecycleState } from '@/lib/claim_lifecycle';
-import type { AuditActionType, PharmacyDatabase } from '@/db/types';
+import type { AuditActionType, PharmacyDatabase, Visit } from '@/db/types';
 import { restoreFields, restoreWith } from '@/lib/rxdb_restore';
 
 // 印刷画面の「監査ログが残らなければ操作を確定させない」契約をまとめた層。
@@ -157,7 +157,7 @@ export async function persistClaimOptions(params: PersistClaimOptionsParams): Pr
   // claimOptions は丸ごと置き換わる。呼び出し側は保存済みの全項目を持った
   // state を渡すこと (readClaimOptionsState)。渡し漏れた項目は消える。
   const options = withoutUndefined(params.options);
-  await visitDoc.patch({ claimOptions: options } as any);
+  await visitDoc.patch({ claimOptions: options as Visit['claimOptions'] });
   onPersisted?.(options);
 }
 
@@ -326,8 +326,11 @@ export interface PrescriptionItemOverrideData {
   drugPriceOverride?: DrugPriceOverride;
 }
 
-export interface DrugPriceOverrideDocLike {
-  modify: (modifier: (data: any) => any) => Promise<unknown>;
+export interface DrugPriceOverrideDocLike<
+  T extends PrescriptionItemOverrideData = PrescriptionItemOverrideData
+> {
+  modify: (modifier: (data: T) => T) => Promise<unknown>;
+  incrementalModify?: (modifier: (data: T) => T) => Promise<unknown>;
 }
 
 export interface PrescriptionItemIdentityLike {
@@ -415,8 +418,8 @@ export async function persistClaimLifecycleWithAudit(
   if (!visitDoc) {
     throw new Error(CLAIM_ACTION_MESSAGES.claimLifecycleVisitNotFound);
   }
-  const previousLifecycle = (visitDoc.toJSON() as any).claimLifecycle as ClaimLifecycleState | undefined;
-  await visitDoc.patch({ claimLifecycle: nextLifecycle } as any);
+  const previousLifecycle = visitDoc.toJSON().claimLifecycle as ClaimLifecycleState | undefined;
+  await visitDoc.patch({ claimLifecycle: nextLifecycle as Visit['claimLifecycle'] });
   applyLifecycle(nextLifecycle);
 
   const auditOk = await logAudit(db, 'claim_lifecycle', detail, patientId, patientName);
@@ -428,14 +431,16 @@ export async function persistClaimLifecycleWithAudit(
   }
 }
 
-export interface ApplyDrugPriceOverrideParams {
+export interface ApplyDrugPriceOverrideParams<
+  T extends PrescriptionItemOverrideData = PrescriptionItemOverrideData
+> {
   db: PharmacyDatabase;
   /** 画面が持っている処方明細 */
   item: PrescriptionItemIdentityLike & {
     drugPriceOverride?: DrugPriceOverride;
   };
   /** 保存先のRxDocument。呼び出し側が DB から引いて渡す */
-  itemDoc: DrugPriceOverrideDocLike | null | undefined;
+  itemDoc: DrugPriceOverrideDocLike<T> | null | undefined;
   /** 算定に使う薬品マスター (調剤薬があればそちら) */
   drug: DrugPriceSource;
   dispensingDate: string;
@@ -472,8 +477,10 @@ export function buildDrugPriceOverrideAuditDetail(
  *
  * 点数が変わる操作なので、調剤日時点と違う版を選んだことが監査ログに必ず残るようにする。
  */
-export async function applyDrugPriceOverrideWithAudit(
-  params: ApplyDrugPriceOverrideParams
+export async function applyDrugPriceOverrideWithAudit<
+  T extends PrescriptionItemOverrideData
+>(
+  params: ApplyDrugPriceOverrideParams<T>
 ): Promise<DrugPriceOverrideOutcome> {
   const {
     db,
