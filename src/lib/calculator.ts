@@ -157,7 +157,7 @@ export interface ItemWithPrice extends PrescriptionItem {
   claimPreparation?: boolean;
   claimManagement?: boolean;
   claimDrugFee?: boolean;
-  doc?: any; // ⚡ Bolt: Cache RxDocument to bypass findOne lookup during updates
+  doc?: { name?: string; patch(values: Record<string, unknown>): Promise<unknown>; modify?(mutate: (data: Record<string, unknown>) => unknown): Promise<unknown> }; // ⚡ Bolt: Cache RxDocument to bypass findOne lookup during updates
 }
 
 const MEDICAL_DX_ADDITION_KEY = 'medical_dx_addition';
