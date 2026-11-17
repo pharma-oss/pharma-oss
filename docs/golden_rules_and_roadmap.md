@@ -192,7 +192,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,119 pass / 0 fail / 199 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,122 pass / 0 fail / 199 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
 | SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 14 / `as any` 3） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
