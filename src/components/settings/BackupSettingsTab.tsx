@@ -261,8 +261,8 @@ export default function BackupSettingsTab({
       const text = formatEscrowKeySheetText(escrow, '青空薬局');
       downloadTextFile(`emergency_key_escrow_${escrow.keyFingerprint}.txt`, text, 'text/plain;charset=utf-8');
       setEscrowAdminPassword('');
-    } catch (err: any) {
-      setEscrowError(err.message || 'エスクローの発行に失敗しました。');
+    } catch (err: unknown) {
+      setEscrowError((err as { message?: string }).message || 'エスクローの発行に失敗しました。');
     } finally {
       setIsGeneratingEscrow(false);
     }
@@ -294,8 +294,8 @@ export default function BackupSettingsTab({
       });
       setEscrowRestoreInput('');
       setEscrowRestorePassword('');
-    } catch (err: any) {
-      setEscrowRestoreMessage({ ok: false, text: err.message || '復元に失敗しました。' });
+    } catch (err: unknown) {
+      setEscrowRestoreMessage({ ok: false, text: (err as { message?: string }).message || '復元に失敗しました。' });
     } finally {
       setIsRestoringEscrow(false);
     }

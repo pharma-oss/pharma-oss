@@ -837,7 +837,7 @@ export default function PrintPage() {
       return;
     }
     const previousItems = prescriptionItems;
-    const nextItems = prescriptionItems.map((item, i) => i === idx ? { ...item, tokkanType: (value === 'none' ? undefined : value) as any } : item);
+    const nextItems = prescriptionItems.map((item, i) => i === idx ? { ...item, tokkanType: (value === 'none' ? undefined : value) as 'none' | '1' | '3_i' | undefined } : item);
     setPrescriptionItems(nextItems);
     try {
       if (!db) return;
@@ -846,7 +846,7 @@ export default function PrintPage() {
       // 書き込み -> 監査ログ。監査ログが残らなければ算定の変更を元に戻す。
       await runWithAuditRollback({
         write: async () => {
-          if (itemDoc) await itemDoc.patch({ tokkanType: (value === 'none' ? undefined : value) as any });
+          if (itemDoc) await itemDoc.patch({ tokkanType: (value === 'none' ? undefined : value) as 'none' | '1' | '3_i' | undefined });
         },
         logAudit: () => logAuditAction(
           db,

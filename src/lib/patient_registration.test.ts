@@ -224,7 +224,7 @@ function createFakeDb(existing: Patient[] = [], options: { failInsert?: boolean;
         if (options.failInsert) throw new Error('insert failed');
         inserted.push(doc);
         rows.push(doc);
-        return { toJSON: () => doc };
+        return { toJSON: () => doc, patch: async () => ({}) };
       },
       findOne: (id: string) => ({
         exec: async () => ({

@@ -41,8 +41,8 @@ export function EmergencyRecoveryKeySheetPrint({
       try {
         await onGenerateEscrow(adminPasswordInput);
         setAdminPasswordInput('');
-      } catch (err: any) {
-        setLocalError(err.message || 'エスクローの発行に失敗しました。');
+      } catch (err: unknown) {
+        setLocalError((err as { message?: string }).message || 'エスクローの発行に失敗しました。');
       }
     }
   };

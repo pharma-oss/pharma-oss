@@ -187,7 +187,7 @@ export default function StaffSettingsTab({
                       id="new-staff-role"
                       className="form-control select-full-white"
                       value={newStaffRole}
-                      onChange={(e) => setNewStaffRole(e.target.value as any)}
+                      onChange={(e) => setNewStaffRole(e.target.value as User['role'])}
                     >
                       <option value="pharmacist">薬剤師</option>
                       <option value="clerk">事務</option>

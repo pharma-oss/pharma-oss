@@ -33,11 +33,16 @@ function looksLikeJahisPayload(text: string) {
   return /JAHIS|(?:^|\n)(?:1|5|51|55|201|301),/.test(text);
 }
 
-async function getReadableQrText(result: any): Promise<string> {
-  const fallbackText = typeof result?.getText === 'function' ? result.getText() : String(result || '');
+interface ZxingDecodeResultLike {
+  getText?: () => string;
+  getResultMetadata?: () => Map<number, unknown> | undefined;
+}
+
+async function getReadableQrText(result: ZxingDecodeResultLike | string | null | undefined): Promise<string> {
+  const fallbackText = typeof (result as ZxingDecodeResultLike | null | undefined)?.getText === 'function' ? (result as ZxingDecodeResultLike).getText!() : String(result || '');
 
   try {
-    const metadata = typeof result?.getResultMetadata === 'function' ? result.getResultMetadata() : undefined;
+    const metadata = typeof (result as ZxingDecodeResultLike | null | undefined)?.getResultMetadata === 'function' ? (result as ZxingDecodeResultLike).getResultMetadata!() : undefined;
     const byteSegments = metadata?.get?.(ZXING_BYTE_SEGMENTS_METADATA_KEY) as ArrayLike<ArrayLike<number>> | undefined;
     if (byteSegments && Number(byteSegments.length) > 0) {
       const bytes: number[] = [];

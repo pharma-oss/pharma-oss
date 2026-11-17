@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
 import './inventory.css';
 import { toast } from 'sonner';
+import type { RxDocument } from 'rxdb';
 import { useDatabase } from '@/db/DatabaseProvider';
-import { Location, DrugStock } from '@/db/types';
+import { Drug, Location, DrugStock } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { calculateRequiredStockAmount, getStockDrugId } from '@/lib/stock';
 import { isGeneralNameDrugRecord } from '@/lib/master-data/drug_master';
@@ -217,7 +218,7 @@ export default function InventoryPage() {
 
     // 【般】一般名処方マスタ(約1,400件・コード末尾ZZZ)は在庫の実体ではないため除外する。
     // 般コードは数字始まりでコード順の先頭に固まるため、除外しないと limit がほぼ般で埋まる。
-    const mapDrugDocs = (data: any[]) => {
+    const mapDrugDocs = (data: RxDocument<Drug>[]) => {
         // ⚡ Bolt: Replace .map() with a manual for loop and pre-allocated array to prevent
         // O(N) closure allocations when processing large datasets.
         const mappedDrugs = [];

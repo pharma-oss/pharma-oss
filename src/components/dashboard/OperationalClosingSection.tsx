@@ -178,9 +178,9 @@ export function OperationalClosingSection({
       }
       toast.success('日次締め承認を監査ログに記録しました');
       onRefresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to approve operational closing:', err);
-      toast.error(`日次締め承認に失敗しました: ${err.message || err}`);
+      toast.error(`日次締め承認に失敗しました: ${(err as { message?: string }).message || err}`);
     } finally {
       setIsRecordingClosing(false);
     }

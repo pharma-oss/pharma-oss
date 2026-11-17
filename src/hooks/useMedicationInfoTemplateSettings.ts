@@ -505,9 +505,9 @@ export function useMedicationInfoTemplateSettings({
         download();
       }
       toast.success(`副作用・使用上の注意案CSVを${templates.length.toLocaleString()}件書き出しました。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export medication info safety draft CSV:', error);
-      toast.error(`副作用・使用上の注意案CSVを書き出せませんでした: ${error.message || error}`);
+      toast.error(`副作用・使用上の注意案CSVを書き出せませんでした: ${(error as { message?: string }).message || error}`);
     } finally {
       setIsExportingMedicationInfoSafetyDraftCsv(false);
     }
@@ -539,9 +539,9 @@ export function useMedicationInfoTemplateSettings({
         download();
       }
       toast.success(`薬情テンプレCSVを${templates.length}件書き出しました。`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('handleExportMedicationInfoCsv failed:', error);
-      toast.error(`薬情テンプレCSVを書き出せませんでした: ${error.message || error}`);
+      toast.error(`薬情テンプレCSVを書き出せませんでした: ${(error as { message?: string }).message || error}`);
     }
   };
 

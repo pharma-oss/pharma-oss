@@ -194,9 +194,9 @@ export async function runDailyClosingBackupAndAudit<TDb = Parameters<typeof buil
 
     toastSuccess(`日次締め・暗号化バックアップ外部保存を記録しました (${result.pathOrName})`);
     setStep(3);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to run daily closing backup:', err);
-    toastError(`日次締めの実行中にエラーが発生しました: ${err.message || err}`);
+    toastError(`日次締めの実行中にエラーが発生しました: ${(err as { message?: string }).message || err}`);
     setStep(1);
   } finally {
     setIsProcessing(false);

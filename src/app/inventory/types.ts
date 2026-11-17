@@ -1,3 +1,4 @@
+import type { RxDocument } from 'rxdb';
 import { Drug } from '@/db/types';
 import { type InventoryOrderRisk } from '@/lib/inventory_order';
 import { toLocalDateKey } from '@/lib/local_date';
@@ -11,7 +12,7 @@ export type DrugWithSearchCache = Drug & {
 // RxDB の薬品文書から、在庫画面が読む項目だけを写した行を作る。
 // 麻薬・向精神薬・毒薬・ハイリスク薬の区分もここで写す。写さないと、日次棚卸(麻薬・向精神薬の一覧)が常に空になり、
 // 発注の重点薬判定も常に偽になる(初期リリースから、この写しにだけ区分が無かった)。
-export function toInventoryDrugRow(d: Drug): DrugWithSearchCache {
+export function toInventoryDrugRow(d: Drug | RxDocument<Drug>): DrugWithSearchCache {
     return {
         code: d.code,
         name: d.name,

@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
 export function usePWA() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isPWA, setIsPWA] = useState(false);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
 
@@ -13,7 +22,7 @@ export function usePWA() {
     const checkPwaMode = () => {
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone ||
+        (window.navigator as NavigatorWithStandalone).standalone ||
         document.referrer.includes('android-app://');
 
       setIsPWA(isStandalone);
@@ -26,14 +35,14 @@ export function usePWA() {
 
     checkPwaMode();
 
-    const handleBeforeInstallPrompt = (e: any) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
 
       // Only show banner if NOT in PWA mode AND not manually dismissed this session
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone;
+        (window.navigator as NavigatorWithStandalone).standalone;
       const dismissed = sessionStorage.getItem('pwa_banner_dismissed') === 'true';
       if (!isStandalone && !dismissed) {
         setShowPwaBanner(true);

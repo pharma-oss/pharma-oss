@@ -192,9 +192,9 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
             setHistoryReloadKey((key) => key + 1);
             resetForm();
             await printRecord(record);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to apply stock transfer:', error);
-            alert(error?.message || '分譲の記録に失敗しました。');
+            alert((error as { message?: string } | null)?.message || '分譲の記録に失敗しました。');
         } finally {
             setIsSubmitting(false);
         }

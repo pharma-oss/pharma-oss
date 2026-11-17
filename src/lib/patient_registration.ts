@@ -187,21 +187,26 @@ export function applyMynaToRegistrationForm(
 }
 
 // RxDB のドキュメント。toJSON() は読み取り専用の型を返すので、ここでは unknown として受け、Patient として読む。
-interface PatientDocumentLike {
+export interface PatientDocumentLike {
   toJSON: () => unknown;
+}
+
+export interface PatientInsertedDocumentLike extends PatientDocumentLike {
+  patch: (values: Record<string, unknown>) => Promise<unknown>;
+  incrementalPatch?: (values: Record<string, unknown>) => Promise<unknown>;
 }
 
 export interface PatientRegistrationDb {
   patients: {
     find: () => { exec: () => Promise<PatientDocumentLike[]> };
-    insert: (doc: Patient) => Promise<PatientDocumentLike>;
+    insert: (doc: Patient) => Promise<PatientInsertedDocumentLike>;
     findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
   };
 }
 
 export type PatientRegistrationOutcome =
   /** doc は、受付で続けて使う登録直後のドキュメント */
-  | { status: 'registered'; patient: Patient; doc: PatientDocumentLike }
+  | { status: 'registered'; patient: Patient; doc: PatientInsertedDocumentLike }
   /** 同じ氏名・生年月日の患者がすでにいる。登録せず、その患者を返す。 */
   | { status: 'duplicate'; patient: Patient };
 

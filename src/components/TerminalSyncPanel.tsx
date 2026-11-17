@@ -191,8 +191,8 @@ export default function TerminalSyncPanel() {
           (message) => toast.warning(message)
         );
       }
-    } catch (e: any) {
-      toast.error(`登録に失敗しました: ${e?.message || '不明なエラー'}`);
+    } catch (e: unknown) {
+      toast.error(`登録に失敗しました: ${(e as { message?: string } | null)?.message || '不明なエラー'}`);
     } finally {
       setBusy(false);
     }
@@ -241,8 +241,8 @@ export default function TerminalSyncPanel() {
         ),
         (message) => toast.warning(message)
       );
-    } catch (e: any) {
-      toast.error(`接続先の切替中にエラーが発生しました: ${e?.message || '通信エラー'}`);
+    } catch (e: unknown) {
+      toast.error(`接続先の切替中にエラーが発生しました: ${(e as { message?: string } | null)?.message || '通信エラー'}`);
     } finally {
       setSwitchingHub(false);
     }

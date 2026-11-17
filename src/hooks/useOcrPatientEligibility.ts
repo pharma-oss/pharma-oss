@@ -23,10 +23,12 @@ import {
 } from '@/lib/myna_read_display';
 import { fetchMynaCardRead } from '@/lib/myna_read_client';
 
+import type { PatientInsertedDocumentLike } from '@/lib/patient_registration';
+
 /** 検索結果に出す患者の上限 */
 const PATIENT_SEARCH_RESULT_LIMIT = 8;
 
-export type PatientCandidate = Patient & { doc?: any };
+export type PatientCandidate = Patient & { doc?: RxDocument<Patient> | PatientInsertedDocumentLike };
 export type PatientMergeReview = {
   sourcePatientId: string;
   plan: PatientMergePlan;
