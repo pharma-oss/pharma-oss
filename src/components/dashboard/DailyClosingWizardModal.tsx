@@ -20,6 +20,18 @@ export interface ClosingCheckSummary {
   canProceed: boolean;
 }
 
+/**
+ * 本日分の受付 ID 群に対応する SOAP 記録だけを取得するためのクエリ（P2-2）。
+ */
+export function buildTodaySoapRecordsQuery(visitIds: readonly string[]) {
+  if (visitIds.length === 0) return null;
+  return {
+    selector: {
+      visitId: { $in: [...visitIds] }
+    }
+  };
+}
+
 export type ClosingCheckDisplayState =
   | { status: 'checking' }
   | { status: 'error'; message: string }
@@ -246,7 +258,8 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
 
         // 2. 本日受付の中で SOAP (薬歴) 未作成/未完了のものを実測
         const visitsWithEmr = new Set<string>();
-        const soapRecords = await db.soap_records.find().exec();
+        const soapQuery = buildTodaySoapRecordsQuery(visits.map((v) => v.visitId));
+        const soapRecords = soapQuery ? await db.soap_records.find(soapQuery).exec() : [];
         for (const s of soapRecords) {
           if (s.visitId) visitsWithEmr.add(s.visitId);
         }

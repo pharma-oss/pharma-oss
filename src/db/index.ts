@@ -378,7 +378,10 @@ const create = async () => {
                 23: keepDocument,
                 // v24 -> v25: careCommunication.tracingReports[].destinationInstitutionCode を追加。
                 // 任意項目で、無い記録はこれまでどおり未設定として扱う。
-                24: keepDocument
+                24: keepDocument,
+                // v25 -> v26: issueDate インデックス追加（提供元履歴の直近取得や本日受付の高速化用、P2-2）。
+                // データ形式の変更は無いため、既存ドキュメントをそのまま持ち上げる。
+                25: keepDocument
             })
         },
 

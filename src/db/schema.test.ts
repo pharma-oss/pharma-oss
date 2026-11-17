@@ -205,7 +205,7 @@ describe('Schema Validation', () => {
       };
       const errors = getErrors(VISIT_SCHEMA, visitWithFollowUp);
       assert.strictEqual(errors, null);
-      assert.deepStrictEqual(VISIT_SCHEMA.indexes, ['patientId', 'status']);
+      assert.deepStrictEqual(VISIT_SCHEMA.indexes, ['patientId', 'status', 'issueDate']);
       assert.ok(VISIT_SCHEMA.encrypted?.includes('followUp'));
     });
 
@@ -226,7 +226,7 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(VISIT_SCHEMA, visitWithSpecialPublicExpense);
       assert.strictEqual(errors, null);
-      assert.strictEqual(VISIT_SCHEMA.version, 25);
+      assert.strictEqual(VISIT_SCHEMA.version, 26);
     });
 
     test('should validate a visit carrying structured intervention events', () => {

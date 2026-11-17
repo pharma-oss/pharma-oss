@@ -195,7 +195,7 @@ const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {
 
 export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
   title: 'visit schema',
-  version: 25,
+  version: 26,
   primaryKey: 'visitId',
   type: 'object',
   properties: {
@@ -209,7 +209,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
     doctorName: { type: 'string', maxLength: 100 },
     prescriptionDate: { type: 'string', format: 'date', maxLength: 50 },
     dispensingDate: { type: 'string', format: 'date', maxLength: 50 },
-    issueDate: { type: 'string', format: 'date-time' },
+    issueDate: { type: 'string', format: 'date-time', maxLength: 50 },
     // 受付した実時刻。時間外・休日・深夜の自動判定に使う (古い受付には無い)。
     receptionAt: { type: 'string', format: 'date-time', maxLength: 50 },
     status: { type: 'string', enum: ['waiting', 'processing', 'completed', 'cancelled'], maxLength: 50 },
@@ -737,7 +737,7 @@ export const VISIT_SCHEMA: RxJsonSchema<Visit> = {
     }
   },
   required: ['visitId', 'patientId', 'issueDate', 'status'],
-  indexes: ['patientId', 'status'],
+  indexes: ['patientId', 'status', 'issueDate'],
   encrypted: ['electronicPrescription', 'pharmacyDeviceHandoff', 'initialQuestionnaire', 'careCommunication', 'claimLifecycle', 'followUp', 'interventionEvents']
 };
 

@@ -1,5 +1,24 @@
 import type { Visit } from '@/db/types';
 
+export const PROVIDER_HISTORY_VISIT_SCAN_LIMIT = 500;
+
+export interface RecentProviderHistoryQuery {
+  sort: [{ issueDate: 'desc' }];
+  limit: number;
+}
+
+/**
+ * 処方受付画面の提供元履歴構築用に、issueDate インデックスを使って直近の受付のみを取得するクエリ（P2-2）。
+ */
+export function buildRecentProviderHistoryQuery(
+  limit = PROVIDER_HISTORY_VISIT_SCAN_LIMIT
+): RecentProviderHistoryQuery {
+  return {
+    sort: [{ issueDate: 'desc' }],
+    limit
+  };
+}
+
 export interface ProviderHistoryOption {
   key: string;
   institutionCode: string;

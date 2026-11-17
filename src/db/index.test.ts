@@ -145,6 +145,51 @@ describe('Database initialization contracts', () => {
     assert.strictEqual(migrated.careCommunication?.tracingReports?.[0]?.destinationInstitution, '青山内科クリニック');
     await db25.remove();
   });
+
+  it('migrates v25 visits to v26 and queries latest visits via issueDate index without full scan', async () => {
+    addRxPlugin(RxDBMigrationSchemaPlugin);
+    const dbName = `visit_v25_to_v26_${Date.now()}`;
+    const storage = wrappedValidateAjvStorage({
+      storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+    });
+    const password = 'test-migration-password-v26';
+
+    const v25VisitSchema = structuredClone(VISIT_SCHEMA);
+    v25VisitSchema.version = 25;
+    v25VisitSchema.indexes = ['patientId', 'status'];
+    delete (v25VisitSchema.properties.issueDate as { maxLength?: number }).maxLength;
+
+    const db25 = await createRxDatabase({ name: dbName, storage, password, ignoreDuplicate: true });
+    await db25.addCollections({
+      visits: {
+        schema: v25VisitSchema,
+        migrationStrategies: legacyMigrationStrategies(v25VisitSchema, {})
+      }
+    });
+    await db25.visits.bulkInsert([
+      { visitId: 'v_old', patientId: 'pt_1', issueDate: '2026-10-01T09:00:00Z', status: 'completed', institutionName: '旧病院' },
+      { visitId: 'v_mid', patientId: 'pt_2', issueDate: '2026-11-01T09:00:00Z', status: 'completed', institutionName: '中病院' },
+      { visitId: 'v_new', patientId: 'pt_3', issueDate: '2026-11-17T09:00:00Z', status: 'completed', institutionName: '新病院' }
+    ]);
+    await db25.close();
+
+    const db26 = await createRxDatabase({ name: dbName, storage, password, ignoreDuplicate: true });
+    await db26.addCollections({
+      visits: {
+        schema: VISIT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {})
+      }
+    });
+    const latest = await db26.visits.find({
+      sort: [{ issueDate: 'desc' }],
+      limit: 2
+    }).exec();
+    assert.deepStrictEqual(
+      latest.map((d: { visitId: string }) => d.visitId),
+      ['v_new', 'v_mid']
+    );
+    await db26.remove();
+  });
 });
 
 

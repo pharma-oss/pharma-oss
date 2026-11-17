@@ -49,7 +49,7 @@ const EXPECTED_SCHEMA_SNAPSHOTS: Record<string, SchemaSnapshot> = {
   PRESCRIPTION_ITEM_SCHEMA: { version: 18, shapeHash: 'b8c670e8d3888710' },
   SOAP_RECORD_SCHEMA: { version: 4, shapeHash: '4ca4bb3dddbb3b8d' },
   USER_SCHEMA: { version: 2, shapeHash: '8cc1ffeb1d1b2a96' },
-  VISIT_SCHEMA: { version: 25, shapeHash: '3910bc72fe372c1f' }
+  VISIT_SCHEMA: { version: 26, shapeHash: '05cf763fa780ffc5' }
 };
 
 describe('Schema version guard (P6-1)', () => {

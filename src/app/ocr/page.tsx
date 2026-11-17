@@ -41,7 +41,7 @@ import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { buildReceptionClaimOptions, judgeAfterHoursCategory } from '@/lib/claim_conditions';
 import { formatOnlineEligibilityFieldMappingReport } from '@/lib/online_eligibility';
-import { buildProviderHistory, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
+import { buildProviderHistory, buildRecentProviderHistoryQuery, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import { buildPreviousDoPrescriptions } from '@/lib/previous_prescription_do';
 import { buildOcrConfidenceReport } from '@/lib/ocr_confidence';
@@ -413,7 +413,7 @@ export default function OcrPage() {
       if (!db) return;
       setHasProviderHistoryFetchError(false);
       try {
-        const visitDocs = await db.visits.find().exec();
+        const visitDocs = await db.visits.find(buildRecentProviderHistoryQuery()).exec();
         const history = buildProviderHistory(visitDocs.map((visitDoc) => visitDoc.toJSON() as Visit));
         if (isMounted) {
           setProviderHistory(history.slice(0, 20));

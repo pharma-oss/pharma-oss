@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Visit } from '../../db/types.ts';
-import { buildProviderHistory, matchProviderHistory, type ProviderHistoryOption } from './provider_history.ts';
+import {
+  PROVIDER_HISTORY_VISIT_SCAN_LIMIT,
+  buildProviderHistory,
+  buildRecentProviderHistoryQuery,
+  matchProviderHistory,
+  type ProviderHistoryOption
+} from './provider_history.ts';
 
 function visit(overrides: Partial<Visit>): Visit {
   return { issueDate: '2026-01-01', ...overrides } as Visit;
@@ -78,4 +84,15 @@ test('matchProviderHistory with blank input suggests the most recent entries, ca
   assert.equal(matchProviderHistory(history, {}).length, 3);
   assert.equal(matchProviderHistory(history, { institutionCode: '  ', institutionName: ' ' }).length, 3);
   assert.deepEqual(matchProviderHistory(history, {}, 2).map((h) => h.key), ['1310123456', '1410999999']);
+});
+
+test('buildRecentProviderHistoryQuery limits scan by descending issueDate', () => {
+  assert.deepEqual(buildRecentProviderHistoryQuery(), {
+    sort: [{ issueDate: 'desc' }],
+    limit: PROVIDER_HISTORY_VISIT_SCAN_LIMIT
+  });
+  assert.deepEqual(buildRecentProviderHistoryQuery(200), {
+    sort: [{ issueDate: 'desc' }],
+    limit: 200
+  });
 });

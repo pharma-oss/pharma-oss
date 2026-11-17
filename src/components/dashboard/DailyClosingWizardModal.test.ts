@@ -16,6 +16,7 @@ import {
   runDailyClosingBackupAndAudit,
   validateDailyClosingSubmission,
   DailyClosingWizardModal,
+  buildTodaySoapRecordsQuery,
   type ClosingCheckSummary,
 } from './DailyClosingWizardModal';
 
@@ -1090,6 +1091,13 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
       probeBefore,
       'useState dispatcher must be completely restored to its original reference after render'
     );
+  });
+
+  it('buildTodaySoapRecordsQuery restricts SOAP fetch to today visitIds and skips empty queries (P2-2)', () => {
+    assert.strictEqual(buildTodaySoapRecordsQuery([]), null);
+    assert.deepStrictEqual(buildTodaySoapRecordsQuery(['v1', 'v2']), {
+      selector: { visitId: { $in: ['v1', 'v2'] } }
+    });
   });
 });
 
