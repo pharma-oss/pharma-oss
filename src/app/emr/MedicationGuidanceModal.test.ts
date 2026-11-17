@@ -4,11 +4,16 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   MedicationGuidanceModal,
+  executeMedicationGuidanceSave,
   normalizeGuidanceEntries,
   getMedicationGuidanceModalViewState,
   MEDICATION_GUIDANCE_LOAD_ERROR_MESSAGE,
   type MedicationGuidanceEntry
 } from './components/MedicationGuidanceModal';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
 describe('normalizeGuidanceEntries pure function contracts', () => {
   it('normalizes guidance entries to uppercase type and trimmed text', () => {
@@ -239,5 +244,106 @@ describe('MedicationGuidanceModal renderToStaticMarkup contracts', () => {
       'Normal rendering must not contain any element with role="alert"'
     );
   });
+
+  it('executeMedicationGuidanceSave keeps modal open on missing context, denied permission, or persist failure', async () => {
+    let successCount = 0;
+    let deniedMessage = '';
+    let errorCount = 0;
+
+    const missingContextResult = await executeMedicationGuidanceSave({
+      hasRequiredContext: false,
+      canEdit: () => ({ ok: true }),
+      persist: async () => { throw new Error('should not run'); },
+      onSuccess: () => { successCount += 1; },
+      onPermissionDenied: (m) => { deniedMessage = m; },
+      onError: () => { errorCount += 1; }
+    });
+    assert.equal(missingContextResult, false);
+    assert.equal(successCount, 0);
+
+    const deniedResult = await executeMedicationGuidanceSave({
+      hasRequiredContext: true,
+      canEdit: () => ({ ok: false, message: '編集権限がありません' }),
+      persist: async () => { throw new Error('should not run'); },
+      onSuccess: () => { successCount += 1; },
+      onPermissionDenied: (m) => { deniedMessage = m; },
+      onError: () => { errorCount += 1; }
+    });
+    assert.equal(deniedResult, false);
+    assert.equal(deniedMessage, '編集権限がありません');
+    assert.equal(successCount, 0);
+
+    const errorResult = await executeMedicationGuidanceSave({
+      hasRequiredContext: true,
+      canEdit: () => ({ ok: true }),
+      persist: async () => { throw new Error('DB_WRITE_FAILED'); },
+      onSuccess: () => { successCount += 1; },
+      onPermissionDenied: (m) => { deniedMessage = m; },
+      onError: () => { errorCount += 1; }
+    });
+    assert.equal(errorResult, false);
+    assert.equal(errorCount, 1);
+    assert.equal(successCount, 0);
+
+    const okResult = await executeMedicationGuidanceSave({
+      hasRequiredContext: true,
+      canEdit: () => ({ ok: true }),
+      persist: async () => {},
+      onSuccess: () => { successCount += 1; },
+      onPermissionDenied: (m) => { deniedMessage = m; },
+      onError: () => { errorCount += 1; }
+    });
+    assert.equal(okResult, true);
+    assert.equal(successCount, 1);
+    assert.equal(errorCount, 1);
+  });
+
+  it('pins close, cancel, and save buttons as disabled while isSaving is true', () => {
+    const savingHtml = renderMarkupWithReactUseStateMock(
+      () =>
+        React.createElement(MedicationGuidanceModal, {
+          isOpen: true,
+          onClose: () => {},
+          drug: { code: 'D001', name: 'アムロジピン錠5mg' }
+        }),
+      {
+        componentName: 'MedicationGuidanceModal',
+        restoreAtCallIndex: 5,
+        minCalls: 6,
+        overrides: {
+          1: { value: true }
+        }
+      }
+    );
+    const closeBtn = findOpeningTag(savingHtml, 'aria-label="閉じる"', 'button');
+    const cancelBtn = findOpeningTag(savingHtml, 'キャンセル', 'button');
+    const saveBtn = findOpeningTag(savingHtml, 'btn-primary', 'button');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(closeBtn), 'Close button must be disabled while saving');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(cancelBtn), 'Cancel button must be disabled while saving');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(saveBtn), 'Save button must be disabled while saving');
+
+    const idleHtml = renderMarkupWithReactUseStateMock(
+      () =>
+        React.createElement(MedicationGuidanceModal, {
+          isOpen: true,
+          onClose: () => {},
+          drug: { code: 'D001', name: 'アムロジピン錠5mg' }
+        }),
+      {
+        componentName: 'MedicationGuidanceModal',
+        restoreAtCallIndex: 5,
+        minCalls: 6
+      }
+    );
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button')),
+      'Close button must be enabled when idle'
+    );
+    assert.ok(
+      !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'キャンセル', 'button')),
+      'Cancel button must be enabled when idle'
+    );
+  });
 });
+
 

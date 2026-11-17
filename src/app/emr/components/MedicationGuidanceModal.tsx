@@ -83,6 +83,34 @@ export function normalizeGuidanceEntries(
   }));
 }
 
+export interface MedicationGuidanceSaveHandlers {
+  hasRequiredContext: boolean;
+  canEdit: () => { ok: boolean; message?: string };
+  persist: () => Promise<void>;
+  onSuccess: () => void;
+  onPermissionDenied: (message: string) => void;
+  onError: (error: unknown) => void;
+}
+
+export async function executeMedicationGuidanceSave(
+  handlers: MedicationGuidanceSaveHandlers
+): Promise<boolean> {
+  if (!handlers.hasRequiredContext) return false;
+  const permission = handlers.canEdit();
+  if (!permission.ok) {
+    handlers.onPermissionDenied(permission.message || '編集権限がありません。');
+    return false;
+  }
+  try {
+    await handlers.persist();
+    handlers.onSuccess();
+    return true;
+  } catch (e) {
+    handlers.onError(e);
+    return false;
+  }
+}
+
 export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = ({
   isOpen,
   onClose,
@@ -156,34 +184,45 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
     setEntries(entries.filter((e) => e.id !== id));
   };
 
+  const handleClose = () => {
+    if (!isSaving) onClose();
+  };
+
   const handleSave = async () => {
-    if (!db || !drug || hasLoadError || isLoading) return;
-    // 画面の入口でも確認しているが、保存の直前にも確認する（操作者がモーダルを開いたまま切り替わった場合など）
-    const permission = checkMedicationGuidanceEditPermission(getCurrentUser());
-    if (!permission.ok) {
-      toast.error(permission.message);
-      return;
-    }
+    if (!db || !drug || hasLoadError || isLoading || isSaving) return;
     setIsSaving(true);
     try {
       const normalizedEntries: SoapEntry[] = normalizeGuidanceEntries(entries).map((entry) => ({
         type: isGuidanceEntryType(entry.type) ? entry.type : 'S',
         text: entry.text
       }));
-      await saveMedicationGuidance<SoapEntry>({
-        collection: db.medication_guidances,
-        docId,
-        drug: { code: drug.code || '', name: drug.name || '' },
-        entries: normalizedEntries,
-        now: new Date().toISOString(),
-        newId: `guidance_${uuidv4()}`,
-        logAudit: (detail) => logAuditAction(db, 'patient_medication_info_template', detail)
+      await executeMedicationGuidanceSave({
+        hasRequiredContext: Boolean(db && drug),
+        // 画面の入口でも確認しているが、保存の直前にも確認する（操作者がモーダルを開いたまま切り替わった場合など）
+        canEdit: () => checkMedicationGuidanceEditPermission(getCurrentUser()),
+        persist: async () => {
+          await saveMedicationGuidance<SoapEntry>({
+            collection: db.medication_guidances,
+            docId,
+            drug: { code: drug.code || '', name: drug.name || '' },
+            entries: normalizedEntries,
+            now: new Date().toISOString(),
+            newId: `guidance_${uuidv4()}`,
+            logAudit: (detail) => logAuditAction(db, 'patient_medication_info_template', detail)
+          });
+        },
+        onSuccess: () => {
+          toast.success('服薬指導補助マニュアルを保存しました');
+          onClose();
+        },
+        onPermissionDenied: (message) => {
+          toast.error(message);
+        },
+        onError: (e) => {
+          console.error('Failed to save guidance:', e);
+          toast.error(getMedicationGuidanceSaveErrorMessage(e));
+        }
       });
-      toast.success('服薬指導補助マニュアルを保存しました');
-      onClose();
-    } catch (e) {
-      console.error('Failed to save guidance:', e);
-      toast.error(getMedicationGuidanceSaveErrorMessage(e));
     } finally {
       setIsSaving(false);
     }
@@ -198,7 +237,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
       <div className="modal-content modal-md">
         <div className="modal-header">
           <h2>服薬指導補助マニュアル: {drug?.name}</h2>
-          <button className="btn-icon" onClick={onClose}>
+          <button className="btn-icon" onClick={handleClose} disabled={isSaving} aria-label="閉じる">
             <span className="close-icon">&times;</span>
           </button>
         </div>
@@ -265,7 +304,7 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>
+          <button className="btn-secondary" onClick={handleClose} disabled={isSaving}>
             キャンセル
           </button>
           <span

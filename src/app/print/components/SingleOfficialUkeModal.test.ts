@@ -6,6 +6,10 @@ import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { CalculationResultItem } from '@/lib/calculator';
 import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 import { SingleOfficialUkeModal } from './SingleOfficialUkeModal';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
+
+const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
 
 const testSettings: FacilitySettings = {
   id: 'default',
@@ -206,4 +210,70 @@ test('SingleOfficialUkeModal blocks download and displays claim error alert when
   assert.match(html, /<button[^>]*data-testid="download-official-cyo-button"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="download-official-cyo-button"/);
   assert.match(html, /title="請求前チェックのエラーを解消してください。"/);
 });
+
+test('SingleOfficialUkeModal disables close, cancel, and download controls while isExporting is true', () => {
+  const data = createModalTestData();
+  const exportingHtml = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(SingleOfficialUkeModal, {
+        isOpen: true,
+        onClose: () => {},
+        visitData: data.visit,
+        patientData: data.patient,
+        settingsData: data.settings,
+        prescriptionItems: data.items,
+        calculatedFees: data.calculatedFees
+      }),
+    {
+      componentName: 'SingleOfficialUkeModal',
+      restoreAtCallIndex: 2,
+      minCalls: 3,
+      overrides: {
+        1: { value: true }
+      }
+    }
+  );
+
+  const headerCloseBtn = findOpeningTag(exportingHtml, 'aria-label="閉じる"', 'button');
+  const footerCloseBtn = findOpeningTag(exportingHtml, '>閉じる</button>', 'button');
+  const downloadBtn = findOpeningTag(exportingHtml, 'data-testid="download-official-cyo-button"', 'button');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(headerCloseBtn), 'Header close button must be disabled while exporting');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(footerCloseBtn), 'Footer close button must be disabled while exporting');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(downloadBtn), 'Download button must be disabled while exporting');
+  assert.ok(exportingHtml.includes('ダウンロード中...'), 'Download button label must indicate exporting state');
+
+  const idleHtml = renderMarkupWithReactUseStateMock(
+    () =>
+      React.createElement(SingleOfficialUkeModal, {
+        isOpen: true,
+        onClose: () => {},
+        visitData: data.visit,
+        patientData: data.patient,
+        settingsData: data.settings,
+        prescriptionItems: data.items,
+        calculatedFees: data.calculatedFees
+      }),
+    {
+      componentName: 'SingleOfficialUkeModal',
+      restoreAtCallIndex: 2,
+      minCalls: 3,
+      overrides: {
+        1: { value: false }
+      }
+    }
+  );
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button')),
+    'Header close button must be enabled when idle'
+  );
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>閉じる</button>', 'button')),
+    'Footer close button must be enabled when idle'
+  );
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'data-testid="download-official-cyo-button"', 'button')),
+    'Download button must be enabled when idle'
+  );
+});
+
 

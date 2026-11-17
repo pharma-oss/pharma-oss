@@ -73,6 +73,10 @@ export function SingleOfficialUkeModal({
   const [exportError, setExportError] = useState<string | null>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
 
+  const handleClose = useCallback(() => {
+    if (!isExporting) onClose();
+  }, [isExporting, onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -91,7 +95,7 @@ export function SingleOfficialUkeModal({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        handleClose();
         return;
       }
 
@@ -131,7 +135,7 @@ export function SingleOfficialUkeModal({
       clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   // 1件公式 UKE の生成試行
   const { officialResult, buildError } = useMemo(() => {
@@ -174,7 +178,7 @@ export function SingleOfficialUkeModal({
 
   // ダウンロード実行
   const handleDownload = useCallback(async () => {
-    if (!officialResult) return;
+    if (!officialResult || isExporting) return;
     setIsExporting(true);
     setExportError(null);
     try {
@@ -200,14 +204,14 @@ export function SingleOfficialUkeModal({
     } finally {
       setIsExporting(false);
     }
-  }, [officialResult, onExportSuccess]);
+  }, [officialResult, isExporting, onExportSuccess]);
 
   if (!isOpen) return null;
 
   return (
     <div
       className="official-uke-modal-overlay"
-      onClick={onClose}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="official-uke-modal-title"
@@ -234,7 +238,8 @@ export function SingleOfficialUkeModal({
           <button
             type="button"
             className="official-uke-close-btn"
-            onClick={onClose}
+            onClick={handleClose}
+            disabled={isExporting}
             aria-label="閉じる"
           >
             <X size={20} aria-hidden="true" />
@@ -378,7 +383,8 @@ export function SingleOfficialUkeModal({
           <button
             type="button"
             className="btn-secondary"
-            onClick={onClose}
+            onClick={handleClose}
+            disabled={isExporting}
           >
             閉じる
           </button>
