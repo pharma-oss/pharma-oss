@@ -22,6 +22,17 @@ export function getPickingLoadErrorBannerMessage(hasLoadError: boolean): string 
   return hasLoadError ? PICKING_LOAD_ERROR_MESSAGE : null;
 }
 
+export async function submitPickingShortageSave(params: {
+  onSave: () => Promise<boolean | void>;
+}): Promise<{ shouldCloseEditor: boolean }> {
+  try {
+    const result = await params.onSave();
+    return { shouldCloseEditor: result !== false };
+  } catch {
+    return { shouldCloseEditor: false };
+  }
+}
+
 export interface PickingSupportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -31,7 +42,7 @@ export interface PickingSupportModalProps {
   prescriptionId: string;
   userId?: string;
   onScanGs1: (scannedCode: string) => Promise<{ success: boolean; message: string }>;
-  onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<void>;
+  onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<boolean | void>;
   onResetPick: (itemId: string) => void;
   onExportInstruction: () => Promise<void>;
   onImportResultFile: (file: File) => Promise<void>;
@@ -61,6 +72,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   const [shortageQtyInput, setShortageQtyInput] = useState<number>(0);
   const [shortageNoteInput, setShortageNoteInput] = useState('');
   const [isImportingSystemResult, setIsImportingSystemResult] = useState(false);
+  const [isSavingShortage, setIsSavingShortage] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -107,6 +119,12 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
     }
   };
 
+  const isBusy = isVerifyingScan || isImportingSystemResult || isSavingShortage;
+
+  const handleRequestClose = () => {
+    if (!isBusy) onClose();
+  };
+
   const openShortageEditor = (item: PickingItem) => {
     setEditingShortageItemId(item.itemId);
     setShortageQtyInput(item.shortageQuantity || 0);
@@ -114,8 +132,18 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   };
 
   const saveShortage = async (itemId: string) => {
-    await onRecordShortage(itemId, shortageQtyInput, shortageNoteInput);
-    setEditingShortageItemId(null);
+    if (isSavingShortage) return;
+    setIsSavingShortage(true);
+    try {
+      const outcome = await submitPickingShortageSave({
+        onSave: () => onRecordShortage(itemId, shortageQtyInput, shortageNoteInput)
+      });
+      if (outcome.shouldCloseEditor) {
+        setEditingShortageItemId(null);
+      }
+    } finally {
+      setIsSavingShortage(false);
+    }
   };
 
   return (
@@ -123,7 +151,10 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
       ref={dialogRef}
       className="picking-modal glass"
       aria-labelledby="picking-title"
-      onClose={onClose}
+      onCancel={(e) => {
+        if (isBusy) e.preventDefault();
+      }}
+      onClose={handleRequestClose}
     >
       <div className="modal-header picking-header">
         <div className="modal-title-row picking-title-row">
@@ -136,7 +167,8 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           <button
             type="button"
             className="btn-close btn-picking-close"
-            onClick={onClose}
+            onClick={handleRequestClose}
+            disabled={isBusy}
             aria-label="閉じる"
           >
             <X size={20} />
@@ -250,13 +282,15 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                         type="button"
                         className="btn-primary btn-shortage-action"
                         onClick={() => void saveShortage(item.itemId)}
+                        disabled={isSavingShortage}
                       >
-                        保存
+                        {isSavingShortage ? '保存中...' : '保存'}
                       </button>
                       <button
                         type="button"
                         className="btn-secondary btn-shortage-action"
-                        onClick={() => setEditingShortageItemId(null)}
+                        onClick={() => { if (!isSavingShortage) setEditingShortageItemId(null); }}
+                        disabled={isSavingShortage}
                       >
                         取消
                       </button>
@@ -316,13 +350,14 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
               disabled={isImportingSystemResult}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
-                if (!file) return;
+                if (!file || isImportingSystemResult) return;
+                const inputEl = e.target;
                 setIsImportingSystemResult(true);
                 try {
                   await onImportResultFile(file);
                 } finally {
                   setIsImportingSystemResult(false);
-                  e.target.value = '';
+                  inputEl.value = '';
                 }
               }}
             />
@@ -334,7 +369,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
             <Printer size={15} />
             <span>レジロール印刷</span>
           </button>
-          <button type="button" className="btn-primary" onClick={onClose}>
+          <button type="button" className="btn-primary" onClick={handleRequestClose} disabled={isBusy}>
             完了
           </button>
         </div>

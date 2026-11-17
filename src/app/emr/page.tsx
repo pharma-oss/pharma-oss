@@ -809,18 +809,18 @@ export default function EmrPage() {
   }, [db, ensureActiveVisitEditable]);
 
   // 棚在庫が足りない時に不足数とメモを処方明細へ記録する(0で解除)
-  const handleRecordPickingShortage = useCallback(async (itemId: string, quantity: number, note: string) => {
-    if (!db) return;
+  const handleRecordPickingShortage = useCallback(async (itemId: string, quantity: number, note: string): Promise<boolean> => {
+    if (!db) return false;
     try {
       const editable = await ensureActiveVisitEditable('picking');
       if (!editable.ok) {
         toast.error(editable.message);
-        return;
+        return false;
       }
       const doc = await db.prescription_items.findOne(itemId).exec();
       if (!doc) {
         toast.error('ピッキング対象の処方明細が見つかりません');
-        return;
+        return false;
       }
       const drugName = doc.dispensedDrug || doc.drugId;
       const trimmedNote = note.trim();
@@ -862,9 +862,11 @@ export default function EmrPage() {
         );
         toast.success('不足記録を解除しました');
       }
+      return true;
     } catch (e) {
       console.error('Failed to record picking shortage:', e);
       toast.error('不足数の保存に失敗しました');
+      return false;
     }
   }, [db, ensureActiveVisitEditable]);
 
@@ -2047,9 +2049,7 @@ useEffect(() => {
           return { success: res.ok, message: res.message };
         }}
         onResetPick={handleResetPickingItem}
-        onRecordShortage={async (itemId, qty, note) => {
-          await handleRecordPickingShortage(itemId, qty, note);
-        }}
+        onRecordShortage={(itemId, qty, note) => handleRecordPickingShortage(itemId, qty, note)}
         onPrintReceipt={handlePrintPickingReceipt}
         onExportInstruction={handleExportPickingInstruction}
         onImportResultFile={handleImportPickingResultFile}

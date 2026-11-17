@@ -7,6 +7,7 @@ import {
   PickingSupportModal,
   getPickingLoadErrorBannerMessage,
   PICKING_LOAD_ERROR_MESSAGE,
+  submitPickingShortageSave,
   type PickingSupportModalProps
 } from './components/PickingSupportModal';
 import type { PickingItem } from '@/lib/emr_helpers';
@@ -59,20 +60,28 @@ function createMockPickingSupportModalProps(
 interface PickingStateOverrides {
   scanInput?: string;
   isVerifyingScan?: boolean;
+  editingShortageItemId?: string | null;
   isImportingSystemResult?: boolean;
+  isSavingShortage?: boolean;
 }
 
 function renderWithStateOverrides(
   props: PickingSupportModalProps,
   overrides: PickingStateOverrides = {}
 ): string {
-  const { scanInput = '', isVerifyingScan = false, isImportingSystemResult = false } = overrides;
+  const {
+    scanInput = '',
+    isVerifyingScan = false,
+    editingShortageItemId = null,
+    isImportingSystemResult = false,
+    isSavingShortage = false
+  } = overrides;
   return renderMarkupWithReactUseStateMock(
     () => React.createElement(PickingSupportModal, props),
     {
       componentName: 'PickingSupportModal',
-      restoreAtCallIndex: 6,
-      expectedCalls: 7,
+      restoreAtCallIndex: 7,
+      expectedCalls: 8,
       overrides: {
         0: {
           assertInitial: (initialState) =>
@@ -92,6 +101,15 @@ function renderWithStateOverrides(
             ),
           value: isVerifyingScan
         },
+        3: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              null,
+              `Expected PickingSupportModal useState call #3 initial value to be null (editingShortageItemId), got ${String(initialState)}`
+            ),
+          value: editingShortageItemId
+        },
         6: {
           assertInitial: (initialState) =>
             assert.equal(
@@ -100,6 +118,15 @@ function renderWithStateOverrides(
               `Expected PickingSupportModal useState call #6 initial value to be false (isImportingSystemResult), got ${String(initialState)}`
             ),
           value: isImportingSystemResult
+        },
+        7: {
+          assertInitial: (initialState) =>
+            assert.equal(
+              initialState,
+              false,
+              `Expected PickingSupportModal useState call #7 initial value to be false (isSavingShortage), got ${String(initialState)}`
+            ),
+          value: isSavingShortage
         }
       }
     }
@@ -272,3 +299,52 @@ test('PickingSupportModal renders load error banner above picking list when hasL
     'Should render load error banner above picking-list'
   );
 });
+
+test('submitPickingShortageSave keeps shortage editor open on false return or error and closes on success', async () => {
+  assert.deepEqual(
+    await submitPickingShortageSave({ onSave: async () => false }),
+    { shouldCloseEditor: false }
+  );
+  assert.deepEqual(
+    await submitPickingShortageSave({
+      onSave: async () => {
+        throw new Error('CLAIM_LOCKED_OR_WRITE_FAILED');
+      }
+    }),
+    { shouldCloseEditor: false }
+  );
+  assert.deepEqual(
+    await submitPickingShortageSave({ onSave: async () => true }),
+    { shouldCloseEditor: true }
+  );
+  assert.deepEqual(
+    await submitPickingShortageSave({ onSave: async () => {} }),
+    { shouldCloseEditor: true }
+  );
+});
+
+test('PickingSupportModal disables close/done while busy and shortage actions while isSavingShortage is true', () => {
+  const props = createMockPickingSupportModalProps();
+  const busyHtml = renderWithStateOverrides(props, {
+    editingShortageItemId: 'item-002',
+    isSavingShortage: true
+  });
+  const headerCloseBtn = findOpeningTag(busyHtml, 'aria-label="閉じる"', 'button');
+  const footerDoneBtn = findOpeningTag(busyHtml, '>完了</button>', 'button');
+  const shortageSaveBtn = findOpeningTag(busyHtml, '>保存中...</button>', 'button');
+  const shortageCancelBtn = findOpeningTag(busyHtml, '>取消</button>', 'button');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(headerCloseBtn), 'Header close button must be disabled while busy');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(footerDoneBtn), 'Footer done button must be disabled while busy');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(shortageSaveBtn), 'Shortage save button must be disabled while saving');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(shortageCancelBtn), 'Shortage cancel button must be disabled while saving');
+
+  const idleHtml = renderWithStateOverrides(props, {
+    editingShortageItemId: 'item-002',
+    isSavingShortage: false
+  });
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button')));
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>完了</button>', 'button')));
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>保存</button>', 'button')));
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>取消</button>', 'button')));
+});
+
