@@ -421,7 +421,7 @@ export default function EmrPage() {
           const visitJson = visit.toJSON() as Visit;
           setInterventions(
             mergeInterventionCategories(
-              list.map((d: any) => d.toJSON()),
+              list.map((d) => d.toJSON()),
               visitJson.interventionEvents
             )
           );
@@ -540,7 +540,7 @@ export default function EmrPage() {
       return;
     }
 
-    let prescriptionSub: any;
+    let prescriptionSub: { unsubscribe: () => void } | undefined;
     let isCancelled = false;
 
     async function setupSubscriptions() {
@@ -559,7 +559,7 @@ export default function EmrPage() {
 
         const presQuery = activeDb.prescription_items.find({ selector: { visitId } });
 
-        let currentItems: any[] = [];
+        let currentItems: Awaited<ReturnType<typeof presQuery.exec>> = [];
 
         const updateJoinedItems = async () => {
           if (isCancelled || !activeDb) return;
@@ -981,7 +981,7 @@ export default function EmrPage() {
           days: item.days,
           location: item.location,
           isPicked: item.isPicked,
-          stockLots: (item.stockLots || []).map((lot: any) => ({
+          stockLots: (item.stockLots || []).map((lot: { lotNumber?: string; expirationDate?: string; quantity: number }) => ({
             lotNumber: lot.lotNumber,
             expirationDate: lot.expirationDate,
             quantity: lot.quantity
@@ -1396,7 +1396,7 @@ useEffect(() => {
         selector: { drugCode: { $in: stockDrugIds } }
       }).exec();
 
-      const stocksByDrugId = new Map<string, any[]>();
+      const stocksByDrugId = new Map<string, typeof allStocks>();
       for (const stock of allStocks) {
         if (!stocksByDrugId.has(stock.drugCode)) {
           stocksByDrugId.set(stock.drugCode, []);
@@ -1448,7 +1448,7 @@ useEffect(() => {
 
       const patchOperations: ReversiblePatch[] = [];
       const workingStockQuantities = new Map<string, number>();
-      const stockById = new Map<string, any>();
+      const stockById = new Map<string, (typeof allStocks)[number]>();
       for (let i = 0; i < allStocks.length; i++) {
         const stock = allStocks[i];
         if (!stock.id) continue;
