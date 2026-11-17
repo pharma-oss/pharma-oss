@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
 import { DbSecurityBanner, DbSecurityBannerView } from './DbSecurityBanner';
 
 describe('DbSecurityBanner component contracts and render tests', () => {
@@ -28,8 +29,46 @@ describe('DbSecurityBanner component contracts and render tests', () => {
     assert.ok(!/\bfontSize\s*:/.test(html), 'Should not contain camelCase property names, which browsers ignore in CSS text');
   });
 
-  it('renders nothing when showBanner is false', () => {
+  it('renders nothing when showBanner is false and no runtime security flags are set', () => {
     const html = renderToStaticMarkup(React.createElement(DbSecurityBannerView, { showBanner: false }));
     assert.equal(html, '', 'Should render empty string when showBanner is false');
+  });
+
+  it('renders storage persistence denied warning even when NEXT_PUBLIC_DB_PASSWORD is configured', () => {
+    const html = stripStyleBlocks(renderToStaticMarkup(
+      React.createElement(DbSecurityBannerView, {
+        showBanner: false,
+        storagePersistenceDenied: true
+      })
+    ));
+    assert.ok(html.includes('role="alert"'));
+    assert.ok(html.includes('ブラウザによる保存領域の永続化が許可されませんでした。'));
+    assert.ok(!html.includes('is-critical'));
+  });
+
+  it('renders critical legacy key warning when legacyKeyInUse is true', () => {
+    const html = stripStyleBlocks(renderToStaticMarkup(
+      React.createElement(DbSecurityBannerView, {
+        showBanner: false,
+        legacyKeyInUse: true
+      })
+    ));
+    assert.ok(html.includes('role="alert"'));
+    assert.ok(html.includes('class="db-security-banner is-critical"'));
+    assert.ok(html.includes('旧固定暗号鍵でデータベースを開いています。'));
+    assert.ok(!html.includes('未設定です'));
+  });
+
+  it('renders all active notices together when multiple conditions apply', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(DbSecurityBannerView, {
+        showBanner: true,
+        storagePersistenceDenied: true,
+        legacyKeyInUse: true
+      })
+    );
+    assert.ok(html.includes('旧固定暗号鍵でデータベースを開いています。'));
+    assert.ok(html.includes('NEXT_PUBLIC_DB_PASSWORD'));
+    assert.ok(html.includes('ブラウザによる保存領域の永続化が許可されませんでした。'));
   });
 });

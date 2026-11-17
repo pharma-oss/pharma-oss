@@ -29,6 +29,9 @@ import {
   recordReferenceDataSeedFailure
 } from './reference_data_seed_notice';
 import {
+  recordLegacyDbKeyInUse
+} from './db_security_notice';
+import {
   resolveDbPasswordWithWindow,
   LOCAL_DB_PASSWORD_KEY,
   generateRandomPassword
@@ -625,6 +628,9 @@ const create = async () => {
     let db;
     try {
         db = await openWithCollections(password);
+        if (password === LEGACY_FIXED_DB_PASSWORD) {
+            recordLegacyDbKeyInUse();
+        }
     } catch (error: any) {
         // 鍵不一致(DB1)は、旧バージョンの固定既定鍵で作成された既存DBの可能性がある。
         // ロックアウト(患者データへアクセス不能)を避けるため、一度だけレガシー鍵で開き直す。
@@ -634,6 +640,7 @@ const create = async () => {
             try {
                 db = await openWithCollections(LEGACY_FIXED_DB_PASSWORD);
                 persistResolvedDbPassword(LEGACY_FIXED_DB_PASSWORD);
+                recordLegacyDbKeyInUse();
                 console.warn(
                     'このデータベースは旧バージョンの既定の暗号化キーで作成されています。' +
                     '公開されている既知の鍵のため、暗号化バックアップを書き出し、' +

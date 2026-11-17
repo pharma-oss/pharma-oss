@@ -7,6 +7,7 @@ import type { OnboardingE2ESeedResult } from '@/lib/onboarding_e2e_seed';
 import type { ReturnCorrectionE2ESeedResult } from '@/lib/return_correction_e2e_seed';
 import { isProduction } from '@/lib/env';
 import { getDatabaseErrorCardViewState } from './db_password';
+import { requestAndTrackStoragePersistence } from './db_security_notice';
 
 export { useDatabase } from './DatabaseContext';
 
@@ -49,17 +50,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         setDb(_db);
 
         // Request persistent storage to prevent automatic data eviction by the browser
-        if (navigator.storage && navigator.storage.persist) {
-          try {
-            const isPersisted = await navigator.storage.persist();
-            if (isPersisted) {
-              console.log('Storage successfully persisted.');
-            } else {
-              console.warn('Storage persistence not granted.');
-            }
-          } catch (error) {
-            console.error('Error requesting storage persistence:', error);
-          }
+        if (typeof navigator !== 'undefined') {
+          await requestAndTrackStoragePersistence(navigator.storage);
         }
       } catch (error) {
         console.error('Database initialization failed:', error);
