@@ -228,6 +228,27 @@ describe('TracingReportModal renderToStaticMarkup contracts', () => {
     assert.ok(savingHtml.includes('<span>保存中...</span>'), 'Save button label should change to "保存中..."');
     assert.ok(!savingHtml.includes('<span>保存</span>'), 'Save button label should not remain "保存"');
   });
+
+  it('pins close, cancel, and auto-draft buttons as disabled while isSaving is true and enabled when idle', () => {
+    const props = createMockTracingReportModalProps({
+      existingReport: {
+        subject: '【服薬情報提供】残薬調整および服薬状況報告'
+      } as unknown as VisitTracingReport
+    });
+
+    const savingHtml = renderWithIsSaving(props, true);
+    const autoDraftSaving = findOpeningTag(savingHtml, '<span>SOAPから自動下書き</span>', 'button');
+    const closeSaving = findOpeningTag(savingHtml, 'aria-label="閉じる"', 'button');
+    const cancelSaving = findOpeningTag(savingHtml, '>キャンセル</button>', 'button');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(autoDraftSaving), 'Auto draft button must be disabled while saving');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(closeSaving), 'Close button must be disabled while saving');
+    assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(cancelSaving), 'Cancel button must be disabled while saving');
+
+    const idleHtml = renderWithIsSaving(props, false);
+    assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '<span>SOAPから自動下書き</span>', 'button')));
+    assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button')));
+    assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>キャンセル</button>', 'button')));
+  });
 });
 
 const SAMPLE_TRACING_REPORT: VisitTracingReport = {

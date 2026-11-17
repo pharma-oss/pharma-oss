@@ -41,9 +41,14 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
 
   if (!isOpen) return null;
 
+  const handleRequestClose = () => {
+    if (!isProcessing) onClose();
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || isProcessing) return;
+    const inputEl = e.target;
 
     setIsProcessing(true);
     setMessage(null);
@@ -71,13 +76,14 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
       setMessage({ text: 'マスタファイルの読み込み中にエラーが発生しました。', isError: true });
     } finally {
       setIsProcessing(false);
-      e.target.value = '';
+      inputEl.value = '';
     }
   };
 
   const handleBureauFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || isProcessing) return;
+    const inputEl = e.target;
 
     setIsProcessing(true);
     setMessage(null);
@@ -132,7 +138,7 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
       setMessage({ text: `厚生局データの読み込み中にエラーが発生しました（${reason}）。`, isError: true });
     } finally {
       setIsProcessing(false);
-      e.target.value = '';
+      inputEl.value = '';
     }
   };
 
@@ -141,7 +147,10 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
       ref={dialogRef}
       className="institution-sync-modal glass sync-dialog"
       aria-labelledby="sync-title"
-      onClose={onClose}
+      onCancel={(e) => {
+        if (isProcessing) e.preventDefault();
+      }}
+      onClose={handleRequestClose}
     >
       <div className="sync-header">
         <div className="sync-title-box">
@@ -152,7 +161,9 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleRequestClose}
+          disabled={isProcessing}
+          aria-label="閉じる"
           className="btn-sync-close"
         >
           <X size={20} />
@@ -228,7 +239,7 @@ export const MedicalInstitutionMasterSyncModal: React.FC<MedicalInstitutionMaste
       </div>
 
       <div className="sync-footer">
-        <button type="button" className="btn-secondary" onClick={onClose}>
+        <button type="button" className="btn-secondary" onClick={handleRequestClose} disabled={isProcessing}>
           閉じる
         </button>
       </div>

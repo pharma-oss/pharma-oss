@@ -196,6 +196,9 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
       ref={dialogRef}
       className="modal-overlay tracing-dialog"
       aria-labelledby="tracing-title"
+      onCancel={(e) => {
+        if (isSaving) e.preventDefault();
+      }}
       onClose={handleRequestClose}
     >
       <div className="modal-header tracing-header">
@@ -210,6 +213,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
             type="button"
             className="btn-secondary btn-auto-draft"
             onClick={handleGenerateDraft}
+            disabled={isSaving}
             title="SOAPおよび薬歴チェック結果から文章を自動補完します"
           >
             <Sparkles size={14} className="icon-sparkles" />
@@ -219,6 +223,8 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
             type="button"
             className="btn-close btn-modal-close"
             onClick={handleRequestClose}
+            disabled={isSaving}
+            aria-label="閉じる"
           >
             <X size={20} />
           </button>
@@ -356,7 +362,7 @@ export const TracingReportModal: React.FC<TracingReportModalProps> = ({
         </button>
 
         <div className="tracing-footer-actions">
-          <button type="button" className="btn-secondary" onClick={handleRequestClose}>
+          <button type="button" className="btn-secondary" onClick={handleRequestClose} disabled={isSaving}>
             キャンセル
           </button>
           <button

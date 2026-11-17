@@ -87,18 +87,26 @@ describe('MedicalInstitutionMasterSyncModal UI states', () => {
     assert.ok(!openHtml.includes('sync-message-box'));
   });
 
-  it('disables both file upload inputs and switches upload headings while isProcessing is true', () => {
+  it('disables both file upload inputs and close controls and switches upload headings while isProcessing is true', () => {
     const processingHtml = renderMasterSyncModal(true, {
       isProcessing: true
     });
 
     const disabledTags = listDisabledOpeningTags(processingHtml);
-    assert.equal(disabledTags.length, 2);
+    assert.equal(disabledTags.length, 4);
 
     const bureauInput = findOpeningTag(processingHtml, 'accept=".zip,.xlsx"', 'input');
     const csvInput = findOpeningTag(processingHtml, 'accept=".csv,.txt,.json"', 'input');
+    const headerCloseBtn = findOpeningTag(processingHtml, 'aria-label="閉じる"', 'button');
+    const footerCloseBtn = findOpeningTag(processingHtml, '>閉じる</button>', 'button');
     assert.match(bureauInput, /\bdisabled\b/i);
     assert.match(csvInput, /\bdisabled\b/i);
+    assert.match(headerCloseBtn, /\bdisabled\b/i);
+    assert.match(footerCloseBtn, /\bdisabled\b/i);
+
+    const idleHtml = renderMasterSyncModal(true, { isProcessing: false });
+    assert.doesNotMatch(findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button'), /\bdisabled\b/i);
+    assert.doesNotMatch(findOpeningTag(idleHtml, '>閉じる</button>', 'button'), /\bdisabled\b/i);
 
     const progressLabels = processingHtml.match(/更新・解析中\.\.\./g) ?? [];
     assert.equal(progressLabels.length, 2);
