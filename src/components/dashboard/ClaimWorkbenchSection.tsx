@@ -43,6 +43,7 @@ import {
   type MonthlyClaimUkeCase
 } from '@/lib/monthly_claim_uke';
 import {
+  collectAcceptanceResultVisitIds,
   formatOnlineClaimAcceptanceIssues,
   formatOnlineClaimAcceptanceSourceFormat,
   parseOnlineClaimAcceptanceResults,
@@ -676,7 +677,10 @@ export function ClaimWorkbenchSection({
           return;
         }
 
-        const visits = await db.visits.find().exec();
+        const targetVisitIds = collectAcceptanceResultVisitIds(parseResult.rows);
+        const visits = targetVisitIds.length > 0
+          ? Array.from((await db.visits.findByIds(targetVisitIds).exec()).values())
+          : [];
         const plainVisits = visits.map((v) => toPlain<Visit>(v));
         const reconcileResult = reconcileOnlineClaimAcceptanceResults({
           rows: parseResult.rows,

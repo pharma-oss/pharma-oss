@@ -1,8 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+import { legacyMigrationStrategies } from '../db/index.ts';
+import { VISIT_SCHEMA } from '../db/schema.ts';
 import type { Visit } from '../db/types.ts';
 import { markClaimExported, type ClaimExportSnapshot } from './claim_lifecycle.ts';
 import {
+  collectAcceptanceResultVisitIds,
   formatOnlineClaimAcceptanceIssues,
   formatOnlineClaimAcceptanceSourceFormat,
   parseOnlineClaimAcceptanceResults,
@@ -271,3 +279,70 @@ test('reconcileOnlineClaimAcceptanceResults falls back to R99 when the reason is
 
   assert.strictEqual(reconciliation.items[0].nextLifecycle?.returnReasonCode, 'R99');
 });
+
+test('collectAcceptanceResultVisitIds trims, skips empty values, and deduplicates visitIds', () => {
+  assert.deepStrictEqual(
+    collectAcceptanceResultVisitIds([
+      { visitId: ' visit_1 ' },
+      { visitId: '' },
+      { visitId: 'visit_2' },
+      { visitId: 'visit_1' },
+      { visitId: null },
+      {}
+    ]),
+    ['visit_1', 'visit_2']
+  );
+  assert.deepStrictEqual(collectAcceptanceResultVisitIds([]), []);
+});
+
+test('RxDB visits.findByIds(collectAcceptanceResultVisitIds(rows)) loads only targeted visits for reconciliation (P2-2)', async () => {
+  addRxPlugin(RxDBMigrationSchemaPlugin);
+  const storage = wrappedValidateAjvStorage({
+    storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+  });
+  const db = await createRxDatabase({
+    name: `acceptance_p2_2_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    storage,
+    password: 'test-acceptance-password-p22',
+    ignoreDuplicate: true
+  });
+  try {
+    const collections = await db.addCollections({
+      visits: {
+        schema: VISIT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {})
+      }
+    });
+    const v1 = makeVisit({ visitId: 'visit_target_1', patientId: 'pt_1' });
+    const v2 = makeVisit({ visitId: 'visit_target_2', patientId: 'pt_2' });
+    const unrelated = makeVisit({ visitId: 'visit_unrelated_999', patientId: 'pt_999' });
+    await collections.visits.bulkInsert([v1, v2, unrelated]);
+
+    const rows = parseOnlineClaimAcceptanceResults([
+      '受付ID,患者ID,患者名,受付結果,点数',
+      'visit_target_1,pt_1,山田 太郎,受付済,147',
+      'visit_target_2,pt_2,佐藤 花子,返戻,147'
+    ].join('\n')).rows;
+
+    const targetIds = collectAcceptanceResultVisitIds(rows);
+    assert.deepStrictEqual(targetIds, ['visit_target_1', 'visit_target_2']);
+
+    const foundMap = await collections.visits.findByIds(targetIds).exec();
+    const fetchedVisits = Array.from(foundMap.values()).map((doc) => doc.toJSON() as Visit);
+    assert.deepStrictEqual(fetchedVisits.map((v) => v.visitId).sort(), ['visit_target_1', 'visit_target_2']);
+
+    const reconciliation = reconcileOnlineClaimAcceptanceResults({
+      rows,
+      visits: fetchedVisits,
+      importedAt: '2026-06-20T09:00:00.000Z',
+      importedBy: '薬剤師 一郎'
+    });
+    assert.strictEqual(reconciliation.acceptedCount, 1);
+    assert.strictEqual(reconciliation.returnedCount, 1);
+    assert.strictEqual(reconciliation.items[0].nextLifecycle?.status, 'accepted');
+    assert.strictEqual(reconciliation.items[1].nextLifecycle?.status, 'returned');
+  } finally {
+    await db.remove();
+  }
+});
+

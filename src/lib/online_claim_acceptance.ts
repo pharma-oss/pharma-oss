@@ -673,6 +673,17 @@ function canApplyAcceptanceResult(status: ReturnType<typeof getClaimLifecycleSta
   return status === 'exported' || status === 'accepted' || status === 'returned' || status === 'rebilling';
 }
 
+export function collectAcceptanceResultVisitIds(
+  rows: ReadonlyArray<{ visitId?: string | null }>
+): string[] {
+  const visitIds = new Set<string>();
+  for (const row of rows) {
+    const id = typeof row.visitId === 'string' ? row.visitId.trim() : '';
+    if (id) visitIds.add(id);
+  }
+  return Array.from(visitIds);
+}
+
 export function reconcileOnlineClaimAcceptanceResults({
   rows,
   visits,
