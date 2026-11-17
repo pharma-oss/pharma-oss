@@ -876,7 +876,7 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     );
   });
 
-  it('renders processing state (isChecking=false, isProcessing=true) with both cancel and submit disabled', () => {
+  it('renders processing state (isChecking=false, isProcessing=true) with header close, cancel, and submit disabled', () => {
     const summary: ClosingCheckSummary = {
       todayVisitsCount: 10,
       uncompletedEmrCount: 0,
@@ -891,8 +891,14 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     const disabledTags = listDisabledOpeningTags(html);
     assert.strictEqual(
       disabledTags.length,
-      2,
-      `When isProcessing is true, exactly 2 buttons must be disabled, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+      3,
+      `When isProcessing is true, exactly 3 buttons must be disabled, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+    );
+
+    const headerCloseBtnTag = findOpeningTag(html, 'aria-label="閉じる"', 'button');
+    assert.ok(
+      headerCloseBtnTag.includes('disabled=""'),
+      `Header close button must be disabled during processing: ${headerCloseBtnTag}`
     );
 
     const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
@@ -905,6 +911,16 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     assert.ok(
       submitBtnTag.includes('disabled=""'),
       `Submit button must be disabled during processing: ${submitBtnTag}`
+    );
+
+    const idleHtml = renderDailyClosingWizardModal(
+      { isOpen: true },
+      { isChecking: false, isProcessing: false, checkSummary: summary }
+    );
+    const idleHeaderCloseBtnTag = findOpeningTag(idleHtml, 'aria-label="閉じる"', 'button');
+    assert.ok(
+      !idleHeaderCloseBtnTag.includes('disabled=""'),
+      `Header close button must be enabled when isProcessing is false: ${idleHeaderCloseBtnTag}`
     );
   });
 
@@ -1018,7 +1034,7 @@ describe('DailyClosingWizardModal UI rendering and button disabled states', () =
     assert.ok(html.includes('権限エラー'), 'Permission error card must be displayed');
     assert.ok(html.includes('バックアップおよび日次締めの実行権限がありません。'), 'Permission error description must be displayed');
 
-    const permCloseBtnTag = findOpeningTag(html, '閉じる', 'button');
+    const permCloseBtnTag = findOpeningTag(html, '>閉じる</button>', 'button');
     assert.ok(permCloseBtnTag.includes('btn-perm-close'), 'Permission close button must be rendered');
     assert.ok(!permCloseBtnTag.includes('disabled=""'), 'Permission close button must be enabled');
 

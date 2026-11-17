@@ -304,6 +304,7 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
   const displayState = getClosingCheckDisplayState(isChecking, hasCheckError, checkSummary);
 
   const handleRunBackupAndClosing = async () => {
+    if (isProcessing) return;
     await runDailyClosingBackupAndAudit({
       operator: getCurrentUser(),
       password,
@@ -323,7 +324,12 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
             <h3 className="closing-title">日次締め・閉局ウィザード</h3>
           </div>
           <button
-            onClick={onClose}
+            type="button"
+            aria-label="閉じる"
+            onClick={() => {
+              if (!isProcessing) onClose();
+            }}
+            disabled={isProcessing}
             className="btn-closing-close"
           >
             <X size={18} />
@@ -505,6 +511,10 @@ export function DailyClosingWizardModal({ isOpen, onClose, onComplete }: DailyCl
           cursor: pointer;
           color: #64748b;
           padding: var(--space-1);
+        }
+        .btn-closing-close:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
         .closing-perm-error {
           padding: var(--space-6) 0;
