@@ -276,14 +276,17 @@ grep -rnE '@ts-(ignore|expect-error|nocheck)' src --include='*.ts' --include='*.
    - **T-89〜T-90**: 印刷コンポーネントの実描画テスト拡充。
    - **T-91〜T-93・`2f035a9`**: 本番挙動の変更（`MedicationGuidanceModal` 未知種別丸め、`print/helpers.ts` プレースホルダ除外、`EmrInterventionModal` / `TracingReportModal` 保存失敗時モーダル維持・請求ロック判定・`destinationInstitutionCode` 追加）。
    - **Q-1 / P6-1（`d3a3aa6`）・Q-2（`artifacts/improvement/20261117-0054-verify-t36-93/findings.md`）・`6d57f2a`**: `2f035a9` で `VISIT_SCHEMA` の版が 24 のままだった欠陥を v25 へ修正し、スキーマ形ハッシュによる版上げ忘れ防止テスト（`schema_version_guard.test.ts`）を追加。T-36〜T-93＋`2f035a9` の 70 コミットを検証し全件受け入れ。あわせて `PatientBanner.tsx` の残存 `disabled` 変異 2 件（575/581 行）を解消し（75/75 検出）、P7（`screen_line_budget.test.ts`）を導入した。
-2. **T-94 以降の待ち行列（`artifacts/proposals/20261116-improvement-plan.md` §4 より）**:
-   1. 保存失敗時にモーダルが閉じて入力が消える型の横展開（SW-C、1 起動 1 モーダル。保存中身・スキーマ・請求ロックに触れる候補は除外）。
-   2. **P5-2**: 保存の永続化拒否／旧鍵のままを `DbSecurityBanner` に表示する（`fix:`）。
-   3. **SW-E の残り**: `: any` 67 件・`as any` 30 件の段階的解消（`ClientLayout.tsx`・`emr/page.tsx`・`PatientBanner.tsx`・`claim_actions.ts` 等。`db/index.ts` と `electronic_prescription_client.ts` は対象外）。
-   4. **SW-I**: 絞り込み無し全件 `find()` 27 件の分類表（P2-1 の実ブラウザ計測後）。
-   5. 小さな掃除: `getRecordNotes` の未使用第 2 引数、`TracingReportModal.tsx` の `as any` 2 件。
-   - 保留: `0.75rem` 以上 `1rem` 未満の生 `font-size` 41 件（§8.2 前後実測必須）、I-1 `PrintPickingFlow.test.ts`（対面で 1 件ずつ）。
-3. **検証者が決めること（Gemini に渡さない）**: F-1 薬剤別指導テンプレート、P3（`next` 更新と CI 監査）。
+   - **Stage 1〜Stage 2 実施分（2026-11-17、`1660844`〜`fa0a376`）**:
+     - **P5-2（`1660844`）**: 永続化拒否および旧固定鍵の警告を `DbSecurityBanner` に表示。
+     - **P3・Q-3（`d5d7e9e`）**: `next` を 16.2.3 → 16.4.6 へ更新し、`.github/workflows/nightly-ops-review.yml` に非ブロッキング `npm audit --omit=dev --audit-level=high` を追加（本番 critical 0 件）、Q-3 規則を確定。
+     - **P2-1 / SW-I / P2-2（`ad28534`）**: 実ブラウザ IndexedDB 計測と全件 `find()` 分類表を作成し、`VISIT_SCHEMA` を v26（`issueDate` 索引）へ更新して `/ocr` 医療機関履歴（500 件上限）および日次締め（当日の `visitId` 絞り込み）を境界付け。
+     - **SW-C（`1b4513d`・`510411f`）**: `FollowUpModal` と `PatientBanner`（患者不在・保存失敗時にモーダル維持、保存中二重送信・閉じ操作防止）を修正し単体＋変異テストを追加。
+     - **SW-E（`352d152`・`ef0e784`・`91d8ea8`・`fa0a376`）**: `claim_actions.ts`・`PatientBanner.tsx`・`emr/page.tsx`・`ClientLayout.tsx` の `any` を解消（`: any` 67 → 49、`as any` 30 → 23、JS 出力同一を確認）。`TracingReportModal.tsx` は `as any` 0 件を確認済み。`getRecordNotes` の第 2 引数は `DispensingRecordPrint.test.ts:329-341`（`firstInRpCalls`）維持のため要仕様確認として据え置き。
+2. **T-94 以降の残キュー（対象外とされたものを除く）**:
+   - **SW-E の残余**（`db/index.ts` と `electronic_prescription_client.ts` は対象外）。
+   - **P2-2 の残検討**（`ClientLayout.tsx:692` 患者検索は暗号化フィールドのため索引・検索トークン設計の要判断、`useDashboardTasks.ts` 等は対象データの要件と併せ個別設計）。
+   - 保留: `0.75rem` 以上 `1rem` 未満の生 `font-size` 41 件（§8.2 前後実測必須）、I-1 `PrintPickingFlow.test.ts`（対面で 1 件ずつ）、`getRecordNotes` 第 2 引数と `DispensingRecordPrint` プロップ整理（要仕様確認）。
+3. **検証者が決めること（Gemini に渡さない）**: F-1 薬剤別指導テンプレート、P2-2 の患者検索インデックス設計、`getRecordNotes` 第 2 引数の扱い。
 
 ### 4.4 着手しない領域
 
