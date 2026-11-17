@@ -101,6 +101,40 @@ export function getPatientBannerEditButtonState(
   return { isDisabled: false, title: PATIENT_BANNER_EDIT_TITLE };
 }
 
+export interface PatientInsuranceSaveHandlers {
+  findPatientDoc: () => Promise<{ patch: (data: Partial<Patient>) => Promise<unknown> } | null>;
+  patientPatch: Partial<Patient>;
+  questionnairePayload?: VisitInitialQuestionnaire;
+  findVisitDoc: () => Promise<{ patch: (data: { initialQuestionnaire: VisitInitialQuestionnaire }) => Promise<unknown> } | null>;
+  onVisitPatched?: () => void;
+  onSuccess: () => void;
+  onMissingPatient: () => void;
+  onError: (error: unknown) => void;
+}
+
+export async function executePatientInsuranceSave(handlers: PatientInsuranceSaveHandlers): Promise<boolean> {
+  try {
+    const patientDoc = await handlers.findPatientDoc();
+    if (!patientDoc) {
+      handlers.onMissingPatient();
+      return false;
+    }
+    await patientDoc.patch(handlers.patientPatch);
+    if (handlers.questionnairePayload) {
+      const visit = await handlers.findVisitDoc();
+      if (visit) {
+        await visit.patch({ initialQuestionnaire: handlers.questionnairePayload });
+        handlers.onVisitPatched?.();
+      }
+    }
+    handlers.onSuccess();
+    return true;
+  } catch (e) {
+    handlers.onError(e);
+    return false;
+  }
+}
+
 export const PatientBanner = React.memo(function PatientBanner({
   patientAlerts,
   targetVisitId,
@@ -247,6 +281,7 @@ export const PatientBanner = React.memo(function PatientBanner({
   const [questionnaireSourceType, setQuestionnaireSourceType] = useState<'camera' | 'image' | 'manual'>('manual');
   const [questionnaireWarnings, setQuestionnaireWarnings] = useState<string[]>([]);
   const [isQuestionnaireProcessing, setIsQuestionnaireProcessing] = useState(false);
+  const [isSavingInsurance, setIsSavingInsurance] = useState(false);
 
   const findBannerVisit = useCallback(async () => {
     if (!db) return null;
@@ -383,78 +418,84 @@ export const PatientBanner = React.memo(function PatientBanner({
   }, [patientData?.patientId]);
 
   const handleSaveInsurance = async () => {
-    if (!db || !patientData) return;
+    if (!db || !patientData || isSavingInsurance) return;
+    setIsSavingInsurance(true);
     try {
-      const patientDoc = await db.patients.findOne(patientData.patientId).exec();
-      if (patientDoc) {
-        const publicInsurances = toPublicInsurances(editPublicInsurances);
-        const copaymentPatch = fromEditableCopaymentSupport(editCopaymentSupport);
+      const publicInsurances = toPublicInsurances(editPublicInsurances);
+      const copaymentPatch = fromEditableCopaymentSupport(editCopaymentSupport);
 
-        const nextInsuranceInfo = {
-          provider: editProvider,
-          number: editNumber,
-          burdenRatio: Number(editBurden),
-          insuranceType: editType,
-          relationship: editRel,
-          validFrom: editValidFrom || undefined,
-          validTo: editValidTo || undefined,
-          eligibilityCheckedAt: editEligibilityCheckedAt || undefined,
-          eligibilityStatus: editEligibilityStatus,
-          ...copaymentPatch
-        };
-        const now = new Date().toISOString();
-        const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
-          ? {
-              sourceType: questionnaireSourceType,
-              capturedAt: questionnaireCapturedAt || now,
-              imageDataUrl: questionnaireImageDataUrl || undefined,
-              imageOriginalName: questionnaireImageName || undefined,
-              imageByteSize: questionnaireImageByteSize || undefined,
-              imageCompressedAt: questionnaireImageDataUrl ? now : undefined,
-              rawText: questionnaireRawText.trim() || undefined,
-              allergies: questionnaireAllergies.trim() || undefined,
-              adverseDrugReactions: questionnaireAdverseDrugReactions.trim() || undefined,
-              medicalHistory: questionnaireMedicalHistory.trim() || undefined,
-              currentSymptoms: questionnaireCurrentSymptoms.trim() || undefined,
-              pregnancyLactation: questionnairePregnancyLactation.trim() || undefined,
-              lifestyle: questionnaireLifestyle.trim() || undefined,
-              notes: questionnaireNotes.trim() || undefined,
-              reviewedAt: now,
-              reviewedBy: getCurrentUser().name
-            }
-          : undefined;
+      const nextInsuranceInfo = {
+        provider: editProvider,
+        number: editNumber,
+        burdenRatio: Number(editBurden),
+        insuranceType: editType,
+        relationship: editRel,
+        validFrom: editValidFrom || undefined,
+        validTo: editValidTo || undefined,
+        eligibilityCheckedAt: editEligibilityCheckedAt || undefined,
+        eligibilityStatus: editEligibilityStatus,
+        ...copaymentPatch
+      };
+      const now = new Date().toISOString();
+      const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
+        ? {
+            sourceType: questionnaireSourceType,
+            capturedAt: questionnaireCapturedAt || now,
+            imageDataUrl: questionnaireImageDataUrl || undefined,
+            imageOriginalName: questionnaireImageName || undefined,
+            imageByteSize: questionnaireImageByteSize || undefined,
+            imageCompressedAt: questionnaireImageDataUrl ? now : undefined,
+            rawText: questionnaireRawText.trim() || undefined,
+            allergies: questionnaireAllergies.trim() || undefined,
+            adverseDrugReactions: questionnaireAdverseDrugReactions.trim() || undefined,
+            medicalHistory: questionnaireMedicalHistory.trim() || undefined,
+            currentSymptoms: questionnaireCurrentSymptoms.trim() || undefined,
+            pregnancyLactation: questionnairePregnancyLactation.trim() || undefined,
+            lifestyle: questionnaireLifestyle.trim() || undefined,
+            notes: questionnaireNotes.trim() || undefined,
+            reviewedAt: now,
+            reviewedBy: getCurrentUser().name
+          }
+        : undefined;
 
-        await patientDoc.patch({
+      await executePatientInsuranceSave({
+        findPatientDoc: () => db.patients.findOne(patientData.patientId).exec(),
+        patientPatch: {
           name: editPatientName.trim() || patientData.name,
           birthDate: editPatientBirthDate || patientData.birthDate,
           insuranceInfo: nextInsuranceInfo,
           publicInsurances
-        });
-        if (questionnairePayload) {
-          const visit = await findBannerVisit();
-          if (visit) {
-            await visit.patch({ initialQuestionnaire: questionnairePayload });
-            document.dispatchEvent(new CustomEvent('visit-care-communication-updated'));
-          }
+        },
+        questionnairePayload,
+        findVisitDoc: findBannerVisit,
+        onVisitPatched: () => {
+          document.dispatchEvent(new CustomEvent('visit-care-communication-updated'));
+        },
+        onSuccess: () => {
+          toast.success(questionnairePayload
+            ? '患者・保険・公費情報と初回質問表を保存しました。'
+            : '患者・保険・公費情報を保存しました。');
+          setIsModalOpen(false);
+
+          // Update local memory state to re-render PatientBanner
+          setPatientData((prev) => ({
+            ...(prev as Patient),
+            name: editPatientName.trim() || (prev?.name as string),
+            birthDate: editPatientBirthDate || (prev?.birthDate as string),
+            insuranceInfo: nextInsuranceInfo,
+            publicInsurances
+          }));
+        },
+        onMissingPatient: () => {
+          toast.error('保存対象の患者データが見つかりません。');
+        },
+        onError: (e) => {
+          console.error(e);
+          toast.error('保存に失敗しました。');
         }
-
-        toast.success(questionnairePayload
-          ? '患者・保険・公費情報と初回質問表を保存しました。'
-          : '患者・保険・公費情報を保存しました。');
-        setIsModalOpen(false);
-
-        // Update local memory state to re-render PatientBanner
-        setPatientData((prev) => ({
-          ...(prev as Patient),
-          name: editPatientName.trim() || (prev?.name as string),
-          birthDate: editPatientBirthDate || (prev?.birthDate as string),
-          insuranceInfo: nextInsuranceInfo,
-          publicInsurances
-        }));
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error('保存に失敗しました。');
+      });
+    } finally {
+      setIsSavingInsurance(false);
     }
   };
 
@@ -1176,9 +1217,19 @@ export const PatientBanner = React.memo(function PatientBanner({
             </div>
 
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setIsModalOpen(false)}>キャンセル</button>
-              <button className="btn-primary" onClick={handleSaveInsurance} disabled={isQuestionnaireProcessing}>
-                {isQuestionnaireProcessing ? 'OCR中...' : '保存して適用'}
+              <button
+                className="btn-secondary"
+                onClick={() => { if (!isSavingInsurance) setIsModalOpen(false); }}
+                disabled={isSavingInsurance}
+              >
+                キャンセル
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleSaveInsurance}
+                disabled={isQuestionnaireProcessing || isSavingInsurance}
+              >
+                {isQuestionnaireProcessing ? 'OCR中...' : isSavingInsurance ? '保存中...' : '保存して適用'}
               </button>
             </div>
           </div>

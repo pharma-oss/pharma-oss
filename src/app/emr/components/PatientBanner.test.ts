@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   PatientBanner,
   buildPatientBannerSummaryDisplay,
+  executePatientInsuranceSave,
   getPatientBannerEditButtonState,
   PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE,
   PATIENT_BANNER_EDIT_TITLE,
@@ -29,6 +30,7 @@ function renderWithPatientBannerOverrides(overrides: {
   isModalOpen?: boolean;
   questionnaireRawText?: string;
   isQuestionnaireProcessing?: boolean;
+  isSavingInsurance?: boolean;
   patientData?: unknown;
   isReading?: boolean;
   isReadingClinical?: boolean;
@@ -44,8 +46,8 @@ function renderWithPatientBannerOverrides(overrides: {
       }),
     {
       componentName: 'PatientBanner',
-      restoreAtCallIndex: 36,
-      minCalls: 37,
+      restoreAtCallIndex: 37,
+      minCalls: 38,
       overrides: {
         ...(overrides.patientData !== undefined ? { 0: { value: overrides.patientData } } : {}),
         ...(overrides.isReading !== undefined ? { 2: { value: overrides.isReading } } : {}),
@@ -53,7 +55,8 @@ function renderWithPatientBannerOverrides(overrides: {
         ...(overrides.mynaReaderState !== undefined ? { 4: { value: overrides.mynaReaderState } } : {}),
         ...(overrides.isModalOpen !== undefined ? { 7: { value: overrides.isModalOpen } } : {}),
         ...(overrides.questionnaireRawText !== undefined ? { 26: { value: overrides.questionnaireRawText } } : {}),
-        ...(overrides.isQuestionnaireProcessing !== undefined ? { 36: { value: overrides.isQuestionnaireProcessing } } : {})
+        ...(overrides.isQuestionnaireProcessing !== undefined ? { 36: { value: overrides.isQuestionnaireProcessing } } : {}),
+        ...(overrides.isSavingInsurance !== undefined ? { 37: { value: overrides.isSavingInsurance } } : {})
       },
       onUseState: ({ callIndex, initialState }) => {
         if (callIndex === 21 && overrides.editCopaymentSupport !== undefined) {
@@ -605,5 +608,99 @@ test('pins reduction certificate number input disabled state based on reductionC
     !DISABLED_ATTRIBUTE_PATTERN.test(enabledInput),
     'Reduction certificate number input must be enabled when reductionCode is specified'
   );
+});
+
+test('executePatientInsuranceSave keeps modal open on missing patient or patch failure and succeeds only after writes complete', async () => {
+  let missingCalled = 0;
+  let errorCalled = 0;
+  let successCalled = 0;
+  let visitPatchedEventCalled = 0;
+
+  const missingResult = await executePatientInsuranceSave({
+    findPatientDoc: async () => null,
+    patientPatch: { name: '山田 太郎' },
+    findVisitDoc: async () => null,
+    onSuccess: () => { successCalled += 1; },
+    onMissingPatient: () => { missingCalled += 1; },
+    onError: () => { errorCalled += 1; }
+  });
+  assert.equal(missingResult, false);
+  assert.equal(missingCalled, 1);
+  assert.equal(successCalled, 0);
+  assert.equal(errorCalled, 0);
+
+  const patchErrorResult = await executePatientInsuranceSave({
+    findPatientDoc: async () => ({
+      patch: async () => {
+        throw new Error('PATIENT_PATCH_FAILED');
+      }
+    }),
+    patientPatch: { name: '山田 太郎' },
+    findVisitDoc: async () => null,
+    onSuccess: () => { successCalled += 1; },
+    onMissingPatient: () => { missingCalled += 1; },
+    onError: () => { errorCalled += 1; }
+  });
+  assert.equal(patchErrorResult, false);
+  assert.equal(errorCalled, 1);
+  assert.equal(successCalled, 0);
+
+  const visitErrorResult = await executePatientInsuranceSave({
+    findPatientDoc: async () => ({ patch: async () => ({}) }),
+    patientPatch: { name: '山田 太郎' },
+    questionnairePayload: { sourceType: 'manual', capturedAt: '2026-11-17T00:00:00.000Z' },
+    findVisitDoc: async () => ({
+      patch: async () => {
+        throw new Error('VISIT_PATCH_FAILED');
+      }
+    }),
+    onVisitPatched: () => { visitPatchedEventCalled += 1; },
+    onSuccess: () => { successCalled += 1; },
+    onMissingPatient: () => { missingCalled += 1; },
+    onError: () => { errorCalled += 1; }
+  });
+  assert.equal(visitErrorResult, false);
+  assert.equal(errorCalled, 2);
+  assert.equal(visitPatchedEventCalled, 0);
+  assert.equal(successCalled, 0);
+
+  const okResult = await executePatientInsuranceSave({
+    findPatientDoc: async () => ({ patch: async () => ({}) }),
+    patientPatch: { name: '山田 太郎' },
+    questionnairePayload: { sourceType: 'manual', capturedAt: '2026-11-17T00:00:00.000Z' },
+    findVisitDoc: async () => ({ patch: async () => ({}) }),
+    onVisitPatched: () => { visitPatchedEventCalled += 1; },
+    onSuccess: () => { successCalled += 1; },
+    onMissingPatient: () => { missingCalled += 1; },
+    onError: () => { errorCalled += 1; }
+  });
+  assert.equal(okResult, true);
+  assert.equal(visitPatchedEventCalled, 1);
+  assert.equal(successCalled, 1);
+  assert.equal(missingCalled, 1);
+  assert.equal(errorCalled, 2);
+});
+
+test('pins save and cancel buttons in PatientBanner modal as disabled while isSavingInsurance is true', () => {
+  const savingHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isSavingInsurance: true,
+    isQuestionnaireProcessing: false
+  });
+  const cancelBtn = findOpeningTag(savingHtml, 'キャンセル', 'button');
+  const saveBtn = findOpeningTag(savingHtml, '保存中...', 'button');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(cancelBtn), 'Cancel button must be disabled while isSavingInsurance is true');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(saveBtn), 'Save button must be disabled while isSavingInsurance is true');
+  assert.ok(savingHtml.includes('保存中...'), 'Save button label must indicate saving state');
+
+  const idleHtml = renderWithPatientBannerOverrides({
+    isModalOpen: true,
+    isSavingInsurance: false,
+    isQuestionnaireProcessing: false
+  });
+  const idleCancelBtn = findOpeningTag(idleHtml, 'キャンセル', 'button');
+  const idleSaveBtn = findOpeningTag(idleHtml, '保存して適用', 'button');
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(idleCancelBtn), 'Cancel button must be enabled when idle');
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(idleSaveBtn), 'Save button must be enabled when idle');
 });
 
