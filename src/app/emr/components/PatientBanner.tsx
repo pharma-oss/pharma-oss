@@ -3,7 +3,7 @@ import { CreditCard, Activity, CheckCircle2, Loader2, Camera, Upload, ClipboardL
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { getCurrentUser } from '@/lib/audit';
-import type { Alert, Visit, InsuranceEligibilityStatus, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import type { Alert, Patient, Visit, InsuranceEligibilityStatus, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
 import { formatPatientAlertLabel, isActivePatientAlert } from '@/lib/patient_alerts';
 import {
   toDateInputValue,
@@ -107,7 +107,7 @@ export const PatientBanner = React.memo(function PatientBanner({
   onOpenPicking
 }: PatientBannerProps) {
   const db = useDatabase();
-  const [patientData, setPatientData] = useState<any>(null);
+  const [patientData, setPatientData] = useState<Patient | null>(null);
   const [hasPatientLoadError, setHasPatientLoadError] = useState(false);
 
   useEffect(() => {
@@ -119,11 +119,11 @@ export const PatientBanner = React.memo(function PatientBanner({
           ? await db.visits.findOne(targetVisitId).exec()
           : (await db.visits.find({ selector: { status: 'processing' } }).exec())
               .slice()
-              .sort((a: any, b: any) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
+              .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
         if (visit) {
           const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
           if (patients.length > 0) {
-            setPatientData(patients[0].toJSON());
+            setPatientData(patients[0].toJSON() as Patient);
           } else {
             setPatientData(null);
           }
@@ -444,10 +444,10 @@ export const PatientBanner = React.memo(function PatientBanner({
         setIsModalOpen(false);
 
         // Update local memory state to re-render PatientBanner
-        setPatientData((prev: any) => ({
-          ...prev,
-          name: editPatientName.trim() || prev?.name,
-          birthDate: editPatientBirthDate || prev?.birthDate,
+        setPatientData((prev) => ({
+          ...(prev as Patient),
+          name: editPatientName.trim() || (prev?.name as string),
+          birthDate: editPatientBirthDate || (prev?.birthDate as string),
           insuranceInfo: nextInsuranceInfo,
           publicInsurances
         }));
@@ -509,7 +509,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       const response = await fetch('/api/myna/read');
       const payload = await response.json().catch(() => null) as MynaCardReaderResult | null;
       if (!response.ok || !payload) {
-        throw new Error((payload as any)?.message || 'マイナ取込に失敗しました。');
+        throw new Error((payload as (MynaCardReaderResult & { message?: string }) | null)?.message || 'マイナ取込に失敗しました。');
       }
 
       const healthCheckups = payload.specificHealthCheckups || [];
@@ -1074,7 +1074,7 @@ export const PatientBanner = React.memo(function PatientBanner({
                     id="m-high-cost-category"
                     data-testid="m-high-cost-category"
                     value={editCopaymentSupport.highCostLimitCategory}
-                    onChange={(e) => handleUpdateCopaymentSupport({ highCostLimitCategory: e.target.value as any })}
+                    onChange={(e) => handleUpdateCopaymentSupport({ highCostLimitCategory: e.target.value as EditableCopaymentSupport['highCostLimitCategory'] })}
                   >
                     <option value="">未設定（通常）</option>
                     <option value="ア">区ア (年収約1,160万円〜)</option>
@@ -1092,7 +1092,7 @@ export const PatientBanner = React.memo(function PatientBanner({
                     id="m-copay-category-code"
                     data-testid="m-copay-category-code"
                     value={editCopaymentSupport.copaymentCategoryCode}
-                    onChange={(e) => handleUpdateCopaymentSupport({ copaymentCategoryCode: e.target.value as any })}
+                    onChange={(e) => handleUpdateCopaymentSupport({ copaymentCategoryCode: e.target.value as EditableCopaymentSupport['copaymentCategoryCode'] })}
                   >
                     <option value="">未設定（該当なし）</option>
                     <option value="1">1: 低所得者II (70歳以上・区分II)</option>
@@ -1122,7 +1122,7 @@ export const PatientBanner = React.memo(function PatientBanner({
                     id="m-reduction-code"
                     data-testid="m-reduction-code"
                     value={editCopaymentSupport.reductionCode}
-                    onChange={(e) => handleUpdateCopaymentSupport({ reductionCode: e.target.value as any })}
+                    onChange={(e) => handleUpdateCopaymentSupport({ reductionCode: e.target.value as EditableCopaymentSupport['reductionCode'] })}
                   >
                     <option value="">未設定（減免なし）</option>
                     <option value="1">1: 減額</option>
