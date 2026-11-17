@@ -84,6 +84,11 @@ jobs:
             echo "Tier1 の成果物が見つからないためスキップ"
           fi
 
+      # ---- 依存脆弱性点検（非ブロッキング） ----
+      - name: Production dependency audit (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
       # ---- 結果の要約 ----
       - name: Summarize review statuses
         if: always()

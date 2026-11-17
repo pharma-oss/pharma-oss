@@ -294,7 +294,8 @@ describe('Dashboard component contracts and routing handlers', () => {
       refresh: () => {},
       back: () => {},
       forward: () => {},
-      prefetch: () => {}
+      prefetch: () => {},
+      bfcacheId: ''
     };
 
     it('pins memo and csv buttons as disabled when inventory risks are empty', () => {
