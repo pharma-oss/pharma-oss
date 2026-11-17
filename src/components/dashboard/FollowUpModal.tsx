@@ -10,6 +10,40 @@ export interface FollowUpModalProps {
   onRecord: (candidate: DashboardFollowUpCandidate, input: RecordFollowUpInput) => Promise<void>;
 }
 
+export interface FollowUpSubmitOutcome {
+  shouldClose: boolean;
+  alertMessage: string | null;
+}
+
+/**
+ * 服薬フォローモーダルの送信入力検証と記録結果から、モーダル閉鎖・警告表示を判定する。
+ */
+export async function submitFollowUpAction(params: {
+  note: string;
+  failureMessage: string;
+  onSubmit: () => Promise<void>;
+}): Promise<FollowUpSubmitOutcome> {
+  if (!params.note.trim()) {
+    return {
+      shouldClose: false,
+      alertMessage: '対応内容を入力してください。'
+    };
+  }
+  try {
+    await params.onSubmit();
+    return {
+      shouldClose: true,
+      alertMessage: null
+    };
+  } catch (error) {
+    console.error('Failed to record follow up:', error);
+    return {
+      shouldClose: false,
+      alertMessage: params.failureMessage
+    };
+  }
+}
+
 export function FollowUpModal({ candidate, onClose, onRecord }: FollowUpModalProps) {
   const [method, setMethod] = useState<RecordFollowUpInput['contactMethod']>('phone');
   const [note, setNote] = useState('');
@@ -17,55 +51,67 @@ export function FollowUpModal({ candidate, onClose, onRecord }: FollowUpModalPro
   const [dueDate, setDueDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const handleRequestClose = () => {
+    if (!isSubmitting) onClose();
+  };
+
   const handleComplete = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!note.trim()) {
-      alert('対応内容を入力してください。');
-      return;
-    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      await onRecord(candidate, {
-        contactMethod: method,
-        outcome: 'completed',
-        completedNote: note,
-        nextAction,
-        dueDate
+      const outcome = await submitFollowUpAction({
+        note,
+        failureMessage: '服薬フォローの記録に失敗しました。',
+        onSubmit: () =>
+          onRecord(candidate, {
+            contactMethod: method,
+            outcome: 'completed',
+            completedNote: note,
+            nextAction,
+            dueDate
+          })
       });
-      onClose();
-    } catch (err) {
-      console.error('Failed to complete follow up:', err);
-      alert('服薬フォローの記録に失敗しました。');
+      if (outcome.alertMessage) {
+        alert(outcome.alertMessage);
+      }
+      if (outcome.shouldClose) {
+        onClose();
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleSaveReminder = async () => {
-    if (!note.trim()) {
-      alert('対応内容を入力してください。');
-      return;
-    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      await onRecord(candidate, {
-        contactMethod: method,
-        outcome: 'rescheduled',
-        completedNote: note,
-        nextAction,
-        dueDate
+      const outcome = await submitFollowUpAction({
+        note,
+        failureMessage: '次回確認の記録に失敗しました。',
+        onSubmit: () =>
+          onRecord(candidate, {
+            contactMethod: method,
+            outcome: 'rescheduled',
+            completedNote: note,
+            nextAction,
+            dueDate
+          })
       });
-      onClose();
-    } catch (err) {
-      console.error('Failed to save follow up reminder:', err);
-      alert('次回確認の記録に失敗しました。');
+      if (outcome.alertMessage) {
+        alert(outcome.alertMessage);
+      }
+      if (outcome.shouldClose) {
+        onClose();
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="followup-modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="followup-modal-backdrop" role="presentation" onMouseDown={handleRequestClose}>
       <form
         className="followup-modal"
         aria-label={`${candidate.name}さんの服薬フォロー対応記録`}
@@ -77,7 +123,13 @@ export function FollowUpModal({ candidate, onClose, onRecord }: FollowUpModalPro
             <h3>服薬フォロー対応記録</h3>
             <p>{candidate.name}さん / {candidate.time}・{candidate.prescriptionCount}薬</p>
           </div>
-          <button type="button" className="followup-modal-close" onClick={onClose} aria-label="閉じる">
+          <button
+            type="button"
+            className="followup-modal-close"
+            onClick={handleRequestClose}
+            disabled={isSubmitting}
+            aria-label="閉じる"
+          >
             ×
           </button>
         </div>

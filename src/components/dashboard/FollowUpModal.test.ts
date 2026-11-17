@@ -10,6 +10,7 @@ import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_
 import type { DashboardFollowUpCandidate } from '@/lib/dashboard_tasks';
 import {
   FollowUpModal,
+  submitFollowUpAction,
   type FollowUpModalProps
 } from './FollowUpModal';
 
@@ -116,9 +117,12 @@ describe('FollowUpModal component contracts', () => {
     const disabledTags = listDisabledOpeningTags(html);
     assert.equal(
       disabledTags.length,
-      3,
-      `When isSubmitting is true, exactly 3 disabled="" action button tags should be present, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
+      4,
+      `When isSubmitting is true, exactly 4 disabled="" action button tags (close + 3 footer actions) should be present, got ${disabledTags.length}:\n${disabledTags.join('\n')}`
     );
+
+    const closeBtnTag = findOpeningTag(html, '×', 'button');
+    assert.ok(closeBtnTag.includes('disabled=""'), `Close button must be disabled when isSubmitting is true: ${closeBtnTag}`);
 
     const cancelBtnTag = findOpeningTag(html, 'キャンセル', 'button');
     assert.ok(cancelBtnTag.includes('disabled=""'), `Cancel button must be disabled when isSubmitting is true: ${cancelBtnTag}`);
@@ -188,6 +192,42 @@ describe('FollowUpModal component contracts', () => {
       `Submit button must be disabled when isSubmitting is true: ${submittingSavingBtn}`
     );
     assert.ok(submittingHtml.includes('animate-spin'), 'Spinner must be present when isSubmitting is true');
+  });
+
+  it('submitFollowUpAction keeps modal open on empty note or failure and closes only on success', async () => {
+    const emptyOutcome = await submitFollowUpAction({
+      note: '   ',
+      failureMessage: '服薬フォローの記録に失敗しました。',
+      onSubmit: async () => {
+        throw new Error('must not be called');
+      }
+    });
+    assert.deepStrictEqual(emptyOutcome, {
+      shouldClose: false,
+      alertMessage: '対応内容を入力してください。'
+    });
+
+    const failedOutcome = await submitFollowUpAction({
+      note: '体調確認済み',
+      failureMessage: '服薬フォローの記録に失敗しました。',
+      onSubmit: async () => {
+        throw new Error('DB_PATCH_FAILED');
+      }
+    });
+    assert.deepStrictEqual(failedOutcome, {
+      shouldClose: false,
+      alertMessage: '服薬フォローの記録に失敗しました。'
+    });
+
+    const okOutcome = await submitFollowUpAction({
+      note: '体調確認済み',
+      failureMessage: '服薬フォローの記録に失敗しました。',
+      onSubmit: async () => {}
+    });
+    assert.deepStrictEqual(okOutcome, {
+      shouldClose: true,
+      alertMessage: null
+    });
   });
 });
 
