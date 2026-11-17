@@ -8,7 +8,7 @@ import { DatabaseProvider } from '@/db/DatabaseProvider';
 import { getCurrentUser, isAuthenticatedUser, setCurrentUser, logAuditAction, UNAUTHENTICATED_USER } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { hasLoginCredential, isInitialAdminUser } from '@/lib/initial_staff';
-import type { Patient, User } from '@/db/types';
+import type { Patient, User, Visit } from '@/db/types';
 import { toast } from 'sonner';
 import {
   resolveReferenceDataSeedWarningOutcome,
@@ -33,8 +33,10 @@ const navItems = [
 
 export const STAFF_LOAD_TIMEOUT_MS = 8000;
 
-const toUser = (doc: any): User => {
-  const data = typeof doc?.toJSON === 'function' ? doc.toJSON() : doc;
+type UserDocLike = { toJSON: () => Readonly<User> } | User;
+
+const toUser = (doc: UserDocLike): User => {
+  const data = typeof (doc as { toJSON?: () => User })?.toJSON === 'function' ? (doc as { toJSON: () => User }).toJSON() : (doc as User);
   return {
     userId: data.userId,
     name: data.name,
@@ -263,7 +265,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   // Load and subscribe to DB users
   useEffect(() => {
-    let sub: any;
+    let sub: { unsubscribe: () => void } | undefined;
     let isMounted = true;
     let hasCompletedStaffLoad = false;
     setHasLoadedUsers(false);
@@ -274,7 +276,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       setStaffLoadTimedOut(true);
     }, STAFF_LOAD_TIMEOUT_MS);
 
-    const applyUsers = (list: any[] | null | undefined) => {
+    const applyUsers = (list: ReadonlyArray<UserDocLike> | null | undefined) => {
       if (!isMounted) return;
       hasCompletedStaffLoad = true;
       window.clearTimeout(staffLoadTimeout);
@@ -441,8 +443,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       } else {
         setLoginError('パスワードが正しくありません。');
       }
-    } catch (err: any) {
-      setLoginError(err.message || 'ログイン中にエラーが発生しました。');
+    } catch (err: unknown) {
+      setLoginError((err as { message?: string }).message || 'ログイン中にエラーが発生しました。');
     } finally {
       setIsVerifying(false);
     }
@@ -461,8 +463,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       } else {
         setLoginError('パスキー認証に失敗しました。');
       }
-    } catch (err: any) {
-      setLoginError(err.message || 'パスキー認証に失敗しました。');
+    } catch (err: unknown) {
+      setLoginError((err as { message?: string }).message || 'パスキー認証に失敗しました。');
     } finally {
       setIsVerifying(false);
     }
@@ -600,9 +602,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       setSetupAdminName('');
       setSetupAdminPassword('');
       toast.success('初期管理者のパスワードを設定しました。');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to set initial administrator password:', err);
-      setSetupError(err.message || '初期管理者パスワードの設定に失敗しました。');
+      setSetupError((err as { message?: string }).message || '初期管理者パスワードの設定に失敗しました。');
     } finally {
       setIsCreatingInitialAdmin(false);
     }
@@ -652,9 +654,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       await completeLogin(updatedUser, { continueOnboarding: true });
       setSetupAdminName('');
       toast.success('初期管理者のパスキーを登録しました。');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to set initial administrator passkey:', err);
-      setSetupError(err.message || '初期管理者パスキーの登録に失敗しました。');
+      setSetupError((err as { message?: string }).message || '初期管理者パスキーの登録に失敗しました。');
     } finally {
       setIsCreatingInitialAdmin(false);
     }
@@ -692,8 +694,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         const docs = await db.patients.find().exec();
         const lower = query.toLowerCase();
         const matches: Patient[] = (docs || [])
-          .map((doc: any) => (typeof doc?.toJSON === 'function' ? doc.toJSON() : doc))
-          .filter((p: any) =>
+          .map((doc) => (typeof doc?.toJSON === 'function' ? doc.toJSON() : doc) as Patient)
+          .filter((p) =>
             (p.name || '').toLowerCase().includes(lower) || (p.kana || '').toLowerCase().includes(lower)
           )
           .slice(0, 8);
@@ -788,13 +790,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       const db = await getDatabase();
       if (!db) return;
       const visitDocs = await db.visits.find({ selector: { patientId: patient.patientId } }).exec();
-      const visits = (visitDocs || []).map((doc: any) => (typeof doc?.toJSON === 'function' ? doc.toJSON() : doc));
+      const visits = (visitDocs || []).map((doc) => (typeof doc?.toJSON === 'function' ? doc.toJSON() : doc) as Visit);
       if (visits.length === 0) {
         toast.info(`「${patient.name}」の受付履歴がまだありません。処方箋OCRから受付してください。`);
         router.push('/ocr');
         return;
       }
-      visits.sort((a: any, b: any) => (b.issueDate || '').localeCompare(a.issueDate || ''));
+      visits.sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
       router.push(`/emr?visitId=${encodeURIComponent(visits[0].visitId)}`);
     } catch (err) {
       console.error('Failed to open patient from search:', err);
