@@ -33,6 +33,7 @@ import {
   type CollectionDiff,
   type BackupRestoreDrillReport,
   type BackupPayload,
+  type EncryptedYakurekiBackup,
   type YakurekiBackup
 } from '@/lib/backup';
 import {
@@ -126,7 +127,7 @@ export function useBackupSettings({
 
   const [importPassword, setImportPassword] = useState('');
   const [showImportPasswordInput, setShowImportPasswordInput] = useState(false);
-  const [pendingEncryptedPayload, setPendingEncryptedPayload] = useState<any>(null);
+  const [pendingEncryptedPayload, setPendingEncryptedPayload] = useState<EncryptedYakurekiBackup | null>(null);
 
   const [pendingBackupPayload, setPendingBackupPayload] = useState<YakurekiBackup | null>(null);
   const [backupRestoreSourceName, setBackupRestoreSourceName] = useState('バックアップファイル');

@@ -12,6 +12,16 @@ import { toLocalDateKey } from '@/lib/local_date';
 import { runWithAuditRollback } from '@/lib/audit_guard';
 import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
 
+export interface ParsedReceivingRow {
+    rawCode: string;
+    quantity: number;
+    lotNumber: string;
+    expirationDate: string;
+    arrivalDate?: string;
+    supplier?: string;
+    matchedDrug?: DrugWithSearchCache | null;
+}
+
 export interface ImportMasterProps {
     db: PharmacyDatabase | null | undefined;
     drugs: DrugWithSearchCache[];
@@ -27,7 +37,7 @@ export function ImportMaster({
     orderedDrugIds,
     onDrugsReceived
 }: ImportMasterProps) {
-    const [parsedData, setParsedData] = useState<any[]>([]);
+    const [parsedData, setParsedData] = useState<ParsedReceivingRow[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [isOcrProcessing, setIsOcrProcessing] = useState(false);
 
