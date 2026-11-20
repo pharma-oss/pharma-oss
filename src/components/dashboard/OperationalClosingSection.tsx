@@ -36,6 +36,7 @@ import type {
   DashboardInventoryRisk
 } from '@/hooks/useDashboardTasks';
 import { toLocalDateKey } from '@/lib/local_date';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 
 export interface OperationalClosingSectionProps {
   db: PharmacyDatabase | null | undefined;
@@ -180,7 +181,7 @@ export function OperationalClosingSection({
       onRefresh();
     } catch (err: unknown) {
       console.error('Failed to approve operational closing:', err);
-      toast.error(`日次締め承認に失敗しました: ${(err as { message?: string }).message || err}`);
+      toast.error(`日次締め承認に失敗しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     } finally {
       setIsRecordingClosing(false);
     }

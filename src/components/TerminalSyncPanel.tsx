@@ -19,6 +19,7 @@ import {
 } from '@/lib/sync/standby_hub_client';
 import { logAuditAction, getCurrentUser } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { useDatabase } from '@/db/DatabaseContext';
 
 // 設定 > 端末同期 タブの本体。役割表示・登録端末一覧・トークン発行/再発行/失効・
@@ -192,7 +193,7 @@ export default function TerminalSyncPanel() {
         );
       }
     } catch (e: unknown) {
-      toast.error(`登録に失敗しました: ${(e as { message?: string } | null)?.message || '不明なエラー'}`);
+      toast.error(`登録に失敗しました: ${extractErrorMessage(e) ?? '不明なエラー'}`);
     } finally {
       setBusy(false);
     }
@@ -242,7 +243,7 @@ export default function TerminalSyncPanel() {
         (message) => toast.warning(message)
       );
     } catch (e: unknown) {
-      toast.error(`接続先の切替中にエラーが発生しました: ${(e as { message?: string } | null)?.message || '通信エラー'}`);
+      toast.error(`接続先の切替中にエラーが発生しました: ${extractErrorMessage(e) ?? '通信エラー'}`);
     } finally {
       setSwitchingHub(false);
     }

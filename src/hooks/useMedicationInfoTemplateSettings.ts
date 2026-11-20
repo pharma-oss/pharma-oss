@@ -44,6 +44,7 @@ import {
 } from '@/lib/drug_info_reference';
 import { downloadTextFile } from '@/lib/blob_download';
 import { exportWithAuditFirst } from '@/lib/audit_guard';
+import { extractErrorMessage, stripRxdbErrorParameters } from '@/lib/user_facing_error';
 
 export interface RollbackMedicationInfoTemplateWritesResult {
   rolledBack: boolean;
@@ -56,11 +57,18 @@ export interface MedicationInfoTemplateCollectionLike {
   findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
 }
 
+function formatMedicationInfoTemplateErrorReason(error: unknown): string {
+  return (
+    extractErrorMessage(error) ??
+    ((typeof error === 'string' ? stripRxdbErrorParameters(error) : '') || '不明なエラー')
+  );
+}
+
 export function buildMedicationInfoTemplateSaveErrorMessage(
   error: unknown,
   rollbackResult?: RollbackMedicationInfoTemplateWritesResult | null
 ): string {
-  const reason = error instanceof Error ? error.message : String(error);
+  const reason = formatMedicationInfoTemplateErrorReason(error);
   const base = `薬情テンプレを保存できませんでした: ${reason}`;
   if (rollbackResult && !rollbackResult.rolledBack && rollbackResult.rollbackNote) {
     return `${base} ${rollbackResult.rollbackNote}`;
@@ -72,7 +80,7 @@ export function buildMedicationInfoTemplateCsvImportErrorMessage(
   error: unknown,
   rollbackResult?: RollbackMedicationInfoTemplateWritesResult | null
 ): string {
-  const reason = error instanceof Error ? error.message : String(error);
+  const reason = formatMedicationInfoTemplateErrorReason(error);
   const base = `薬情テンプレCSVを取り込めませんでした: ${reason}`;
   if (rollbackResult && !rollbackResult.rolledBack && rollbackResult.rollbackNote) {
     return `${base} ${rollbackResult.rollbackNote}`;
@@ -507,7 +515,7 @@ export function useMedicationInfoTemplateSettings({
       toast.success(`副作用・使用上の注意案CSVを${templates.length.toLocaleString()}件書き出しました。`);
     } catch (error: unknown) {
       console.error('Failed to export medication info safety draft CSV:', error);
-      toast.error(`副作用・使用上の注意案CSVを書き出せませんでした: ${(error as { message?: string }).message || error}`);
+      toast.error(`副作用・使用上の注意案CSVを書き出せませんでした: ${extractErrorMessage(error) ?? '不明なエラー'}`);
     } finally {
       setIsExportingMedicationInfoSafetyDraftCsv(false);
     }
@@ -541,7 +549,7 @@ export function useMedicationInfoTemplateSettings({
       toast.success(`薬情テンプレCSVを${templates.length}件書き出しました。`);
     } catch (error: unknown) {
       console.error('handleExportMedicationInfoCsv failed:', error);
-      toast.error(`薬情テンプレCSVを書き出せませんでした: ${(error as { message?: string }).message || error}`);
+      toast.error(`薬情テンプレCSVを書き出せませんでした: ${extractErrorMessage(error) ?? '不明なエラー'}`);
     }
   };
 

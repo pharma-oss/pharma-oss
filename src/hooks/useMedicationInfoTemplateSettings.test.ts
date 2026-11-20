@@ -70,6 +70,28 @@ test('buildMedicationInfoTemplateCsvImportErrorMessage appends rollback failure 
   );
 });
 
+test('medication template error formatters strip RxDB Parameters blocks and long hashes', () => {
+  const fakeHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const rxdbError = new Error(
+    `RxError (VD2): schema error\n--------------------\nParameters:\ndocument: {"patientName":"山田 太郎","hash":"${fakeHash}"}`
+  );
+  const saveMessage = buildMedicationInfoTemplateSaveErrorMessage(rxdbError);
+  assert.strictEqual(saveMessage, '薬情テンプレを保存できませんでした: RxError (VD2): schema error');
+  assert.strictEqual(saveMessage.includes('Parameters:'), false);
+  assert.strictEqual(saveMessage.includes('山田 太郎'), false);
+  assert.strictEqual(saveMessage.includes(fakeHash), false);
+
+  const importMessage = buildMedicationInfoTemplateCsvImportErrorMessage(rxdbError);
+  assert.strictEqual(importMessage, '薬情テンプレCSVを取り込めませんでした: RxError (VD2): schema error');
+  assert.strictEqual(importMessage.includes('Parameters:'), false);
+  assert.strictEqual(importMessage.includes('山田 太郎'), false);
+
+  const stringErrorMessage = buildMedicationInfoTemplateSaveErrorMessage(
+    `Import failed\nParameters:\npasswordHash: "${fakeHash}"`
+  );
+  assert.strictEqual(stringErrorMessage, '薬情テンプレを保存できませんでした: Import failed');
+});
+
 test('rollbackMedicationInfoTemplateWrites returns rolledBack true when bulkUpsert succeeds with no errors', async () => {
   const upsertedDocs: PatientMedicationInfoTemplate[] = [];
   const removedIds: string[] = [];

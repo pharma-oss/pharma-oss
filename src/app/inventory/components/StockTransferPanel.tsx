@@ -19,6 +19,7 @@ import {
 } from '@/lib/stock_transfer';
 import { toast } from 'sonner';
 import { getCurrentUser } from '@/lib/audit';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import type { DrugWithSearchCache, TransferPrefill } from '../types';
 
 export interface StockTransferPanelProps {
@@ -194,7 +195,7 @@ export function StockTransferPanel({ db, drugs, stockLots, prefill }: StockTrans
             await printRecord(record);
         } catch (error: unknown) {
             console.error('Failed to apply stock transfer:', error);
-            alert((error as { message?: string } | null)?.message || '分譲の記録に失敗しました。');
+            alert(extractErrorMessage(error) ?? '分譲の記録に失敗しました。');
         } finally {
             setIsSubmitting(false);
         }

@@ -28,6 +28,7 @@ import {
 import type { DispensingUkeOfficialSpecPdfFetchResult } from '@/lib/receipt/dispensing_uke_official_spec_pdf';
 import { downloadTextFile } from '@/lib/blob_download';
 import { exportWithAuditFirst, recordAuditOrNotify } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import {
   buildClaimPointsDriftCsv,
   buildClaimPointsDriftReview,
@@ -333,7 +334,7 @@ export function useOfficialAuditSettings({
       }
       toast.success('UKE仕様PDFの確認結果CSVを書き出しました。');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'UKE仕様PDFの確認結果CSVを書き出せませんでした。');
+      toast.error(extractErrorMessage(error) ?? 'UKE仕様PDFの確認結果CSVを書き出せませんでした。');
     } finally {
       setIsExportingDispensingUkeSpecReview(false);
     }
@@ -366,7 +367,7 @@ export function useOfficialAuditSettings({
       }
       toast.success('公式提出UKE allFields完了ゲートCSVを書き出しました。');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '公式提出UKE allFields完了ゲートCSVを書き出せませんでした。');
+      toast.error(extractErrorMessage(error) ?? '公式提出UKE allFields完了ゲートCSVを書き出せませんでした。');
     } finally {
       setIsExportingDispensingUkeOfficialAllFieldsGate(false);
     }

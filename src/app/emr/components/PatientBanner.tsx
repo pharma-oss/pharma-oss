@@ -370,7 +370,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       toast.success(`初回質問表をOCR入力しました（保存画像 ${Math.round(compressed.byteSize / 1024)}KB）。`);
     } catch (error) {
       console.error('Failed to process initial questionnaire image:', error);
-      toast.error(error instanceof Error ? error.message : '初回質問表のOCRに失敗しました。');
+      toast.error(extractErrorMessage(error) ?? '初回質問表のOCRに失敗しました。');
     } finally {
       setIsQuestionnaireProcessing(false);
     }
@@ -532,7 +532,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       }
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'マイナ読取に失敗しました。');
+      toast.error(extractErrorMessage(error) ?? 'マイナ読取に失敗しました。');
     } finally {
       setIsReading(false);
     }

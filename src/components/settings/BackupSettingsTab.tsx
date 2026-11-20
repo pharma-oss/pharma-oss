@@ -2,6 +2,7 @@ import React from 'react';
 import { UploadCloud, AlertTriangle, Loader2, Save, FileText, Search, ShieldCheck, Download } from 'lucide-react';
 import { User } from '@/db/types';
 import { getPermissionDeniedMessage } from '@/lib/audit';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import {
   type BackupSchedulePolicy,
   type CollectionDiff,
@@ -262,7 +263,7 @@ export default function BackupSettingsTab({
       downloadTextFile(`emergency_key_escrow_${escrow.keyFingerprint}.txt`, text, 'text/plain;charset=utf-8');
       setEscrowAdminPassword('');
     } catch (err: unknown) {
-      setEscrowError((err as { message?: string }).message || 'エスクローの発行に失敗しました。');
+      setEscrowError(extractErrorMessage(err) ?? 'エスクローの発行に失敗しました。');
     } finally {
       setIsGeneratingEscrow(false);
     }
