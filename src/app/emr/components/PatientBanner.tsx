@@ -37,6 +37,7 @@ import {
 import { evaluateInsuranceEligibility } from '@/lib/insurance_eligibility';
 import { FEATURE_AVAILABILITY, isFeatureImplemented, labelWithAvailability } from '@/lib/feature_availability';
 import { useMynaReaderAvailability } from '@/hooks/useMynaReaderAvailability';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 
 export interface PatientBannerProps {
   patientAlerts: Alert[];
@@ -594,7 +595,7 @@ export const PatientBanner = React.memo(function PatientBanner({
       toast.success(message);
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'マイナ取込に失敗しました。');
+      toast.error(extractErrorMessage(error) ?? 'マイナ取込に失敗しました。');
     } finally {
       setIsReadingClinical(false);
     }

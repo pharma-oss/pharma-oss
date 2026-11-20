@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { markClaimClosed, markClaimExported } from '@/lib/claim_lifecycle';
 import { buildClaimExportSnapshot } from '@/lib/claim_snapshot';
 import { isDemoVisit } from '@/lib/demo_data';
@@ -263,7 +264,7 @@ export function ClaimWorkbenchSection({
       }
     } catch (err: unknown) {
       console.error('Failed to export monthly official readiness CSV:', err);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err) ?? '不明なエラー';
       toast.error(`公式提出準備チェックに失敗しました: ${message}`);
     } finally {
       setIsCheckingOfficialReadiness(false);
@@ -320,7 +321,7 @@ export function ClaimWorkbenchSection({
       }
     } catch (err: unknown) {
       console.error('Failed to export claim rule review CSV:', err);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err) ?? '不明なエラー';
       toast.error(`算定ルール確認に失敗しました: ${message}`);
     } finally {
       setIsCheckingRules(false);
@@ -456,7 +457,7 @@ export function ClaimWorkbenchSection({
     } catch (err: unknown) {
       console.error('Failed to export official UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err) ?? '不明なエラー';
       toast.error(`公式UKEの出力に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsExportingOfficialUke(false);
@@ -578,7 +579,7 @@ export function ClaimWorkbenchSection({
     } catch (err: unknown) {
       console.error('Failed to export UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err) ?? '不明なエラー';
       toast.error(`UKEの出力に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsExportingUke(false);
@@ -644,7 +645,7 @@ export function ClaimWorkbenchSection({
     } catch (err: unknown) {
       console.error('Failed to close accepted claims:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err) ?? '不明なエラー';
       toast.error(`請求完了の更新に失敗しました: ${message}${undoNote}`);
     } finally {
       setIsClosingAccepted(false);
@@ -722,7 +723,7 @@ export function ClaimWorkbenchSection({
         onRefresh();
       } catch (err: unknown) {
         console.error('Failed to import acceptance results:', err);
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err) ?? '不明なエラー';
         toast.error(`審査結果の取込に失敗しました: ${message}`);
       } finally {
         setIsImportingAcceptance(false);

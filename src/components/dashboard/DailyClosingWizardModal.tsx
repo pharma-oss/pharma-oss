@@ -5,6 +5,7 @@ import { CheckCircle2, ShieldCheck, HardDrive, FileCheck, X, AlertTriangle } fro
 import { isFileSystemAccessSupported, saveBackupToDirectory } from '@/lib/file_system_backup';
 import { makeBackupFileName, buildDatabaseBackup, encryptBackupPayload } from '@/lib/backup';
 import { canUserPerform, getCurrentUser, logAuditAction, getPermissionDeniedMessage } from '@/lib/audit';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { toast } from 'sonner';
 
 interface DailyClosingWizardModalProps {
@@ -196,7 +197,7 @@ export async function runDailyClosingBackupAndAudit<TDb = Parameters<typeof buil
     setStep(3);
   } catch (err: unknown) {
     console.error('Failed to run daily closing backup:', err);
-    toastError(`日次締めの実行中にエラーが発生しました: ${(err as { message?: string }).message || err}`);
+    toastError(`日次締めの実行中にエラーが発生しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     setStep(1);
   } finally {
     setIsProcessing(false);

@@ -82,7 +82,7 @@ import {
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
 import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { downloadTextFile } from '@/lib/blob_download';
-import { userFacingErrorMessage } from '@/lib/user_facing_error';
+import { extractErrorMessage, userFacingErrorMessage } from '@/lib/user_facing_error';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import {
@@ -652,7 +652,7 @@ export default function PrintPage() {
     } catch (err: unknown) {
       setClaimOptions(previousOptions);
       console.error('Failed to update fee toggle:', err);
-      alert(`算定切替に失敗しました: ${err instanceof Error ? err.message : err}`);
+      alert(`算定切替に失敗しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     }
   };
 
@@ -752,7 +752,7 @@ export default function PrintPage() {
       }
     } catch (err) {
       console.error('Failed to update item claim flags:', err);
-      alert(`処方薬別算定切替に失敗しました: ${err instanceof Error ? err.message : err}`);
+      alert(`処方薬別算定切替に失敗しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     }
   };
 
@@ -826,7 +826,7 @@ export default function PrintPage() {
       });
     } catch (err) {
       console.error('Failed to change drug price revision:', err);
-      alert(`薬価の版変更に失敗しました: ${err instanceof Error ? err.message : err}`);
+      alert(`薬価の版変更に失敗しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     }
   };
 
@@ -1159,7 +1159,7 @@ export default function PrintPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Failed to download UKE:', err);
-      alert(err instanceof Error ? err.message : 'UKEファイルの生成に失敗しました。');
+      alert(extractErrorMessage(err) ?? 'UKEファイルの生成に失敗しました。');
     }
   };
 

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import type { Location, PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';
 
 export const buildLocationDisplayText = (p1: string, p2: string, p3: string): string => (
@@ -328,7 +329,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                 setBulkEnd('10');
             }
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err || '');
+            const message = extractErrorMessage(err) ?? '不明なエラー';
             console.error('Failed to bulk create locations', err);
             alert(`棚番の一括作成に失敗しました: ${message}`);
         } finally {
@@ -349,7 +350,7 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
                 }
             } catch (err: unknown) {
                 console.error('Failed to delete unused locations', err);
-                const message = err instanceof Error ? err.message : String(err || '');
+                const message = extractErrorMessage(err) ?? '不明なエラー';
                 alert(`未使用棚番の削除に失敗しました: ${message}`);
             }
         }

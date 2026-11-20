@@ -1,3 +1,5 @@
+import { stripRxdbErrorParameters } from '../lib/user_facing_error';
+
 export class DbKeyStorageUnavailableError extends Error {
   readonly code = 'DB_KEY_STORAGE_UNAVAILABLE';
   readonly causeName: string | null;
@@ -111,34 +113,8 @@ export const DB_DEFAULT_ERROR_DESCRIPTION =
 
 
 export function sanitizeDatabaseErrorMessage(message: string): string {
-  const lines = message.split(/\r?\n/);
-  let cutIndex = -1;
-
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (/^-{20,}$/.test(lines[i]) && /^Parameters:/.test(lines[i + 1])) {
-      cutIndex = i;
-      break;
-    }
-  }
-
-  if (cutIndex === -1) {
-    for (let i = 0; i < lines.length; i++) {
-      if (/^Parameters:/.test(lines[i])) {
-        cutIndex = i;
-        break;
-      }
-    }
-  }
-
-  let text = cutIndex !== -1 ? lines.slice(0, cutIndex).join('\n') : message;
-  text = text.replace(/[0-9a-fA-F]{64,}/g, '[省略]');
-  text = text.trim();
-
-  if (text.length === 0) {
-    return '不明なエラー';
-  }
-
-  return text;
+  const text = stripRxdbErrorParameters(message);
+  return text.length === 0 ? '不明なエラー' : text;
 }
 
 export function getDatabaseErrorCardViewState(error: unknown): DatabaseErrorCardViewState {

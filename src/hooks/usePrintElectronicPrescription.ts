@@ -9,6 +9,7 @@ import {
 } from '@/lib/electronic_prescription';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { formatPrescriptionAuditIssues, getElectronicPrescriptionDocumentKinds } from '../app/print/helpers';
 import {
   ELECTRONIC_PRESCRIPTION_OPERATION_LABELS,
@@ -337,7 +338,7 @@ export function usePrintElectronicPrescription({
       alert(`${operationLabel}が完了しました。`);
     } catch (err) {
       console.error('Failed to submit electronic prescription operation:', err);
-      alert(`${operationLabel}に失敗しました: ${err instanceof Error ? err.message : err}`);
+      alert(`${operationLabel}に失敗しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     } finally {
       setElectronicPrescriptionOperationInFlight(null);
     }

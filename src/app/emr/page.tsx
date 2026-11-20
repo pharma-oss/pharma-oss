@@ -13,6 +13,7 @@ import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarni
 import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { extractErrorMessage } from '@/lib/user_facing_error';
 import { downloadTextFile } from '@/lib/blob_download';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import {
@@ -1530,7 +1531,7 @@ useEffect(() => {
       toast.success('薬歴を完了し、在庫を引き落としました。');
     } catch (err) {
       console.error(err);
-      toast.error(`エラーが発生しました: ${err instanceof Error ? err.message : err}`);
+      toast.error(`エラーが発生しました: ${extractErrorMessage(err) ?? '不明なエラー'}`);
     } finally {
       setIsCompleting(false);
     }
