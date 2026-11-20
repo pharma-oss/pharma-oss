@@ -7,6 +7,7 @@ import {
   buildPatientBannerSummaryDisplay,
   executePatientInsuranceSave,
   getPatientBannerEditButtonState,
+  loadPatientBannerRecord,
   PATIENT_BANNER_EDIT_LOAD_ERROR_TITLE,
   PATIENT_BANNER_EDIT_TITLE,
   PATIENT_BANNER_EDIT_UNSELECTED_TITLE,
@@ -702,5 +703,44 @@ test('pins save and cancel buttons in PatientBanner modal as disabled while isSa
   const idleSaveBtn = findOpeningTag(idleHtml, '保存して適用', 'button');
   assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(idleCancelBtn), 'Cancel button must be enabled when idle');
   assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(idleSaveBtn), 'Save button must be enabled when idle');
+});
+
+test('loadPatientBannerRecord resolves targetVisitId or latest processing visit and returns null when missing', async () => {
+  const visits = [
+    { visitId: 'v-old', patientId: 'p-old', status: 'processing', issueDate: '2026-11-18' },
+    { visitId: 'v-new', patientId: 'p-new', status: 'processing', issueDate: '2026-11-20' }
+  ];
+  const patientsById = new Map<string, { patientId: string; name: string }>([
+    ['p-old', { patientId: 'p-old', name: '旧 患者' }],
+    ['p-new', { patientId: 'p-new', name: '新 患者' }]
+  ]);
+
+  const db = {
+    visits: {
+      findOne: (id: string) => ({
+        exec: async () => visits.find((v) => v.visitId === id) ?? null
+      }),
+      find: () => ({
+        exec: async () => visits
+      })
+    },
+    patients: {
+      find: ({ selector }: { selector: { patientId: string } }) => ({
+        exec: async () => {
+          const p = patientsById.get(selector.patientId);
+          return p ? [{ toJSON: () => p as never }] : [];
+        }
+      })
+    }
+  };
+
+  const specific = await loadPatientBannerRecord(db, 'v-old');
+  assert.equal(specific?.name, '旧 患者');
+
+  const latest = await loadPatientBannerRecord(db, null);
+  assert.equal(latest?.name, '新 患者');
+
+  const missingVisit = await loadPatientBannerRecord(db, 'v-missing');
+  assert.equal(missingVisit, null);
 });
 

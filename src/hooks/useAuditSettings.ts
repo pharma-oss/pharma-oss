@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { AuditLog, PharmacyDatabase, User, FacilitySettings, type AiAssistMode } from '@/db/types';
 import { logAuditAction } from '@/lib/audit';
@@ -60,6 +60,53 @@ import type { OfficialAuditSummary, OfficialAuditItem } from '@/lib/official_aud
 import type { PermissionAction } from '@/lib/audit';
 import { extractErrorMessage } from '@/lib/user_facing_error';
 
+export interface AuditLogsCollectionLike {
+  find: (query: { sort: Array<{ timestamp: 'desc' }> }) => {
+    exec: () => Promise<Array<{ toJSON: () => AuditLog }>>;
+  };
+}
+
+export interface SequencedAuditLogFetchParams {
+  auditLogsCollection: AuditLogsCollectionLike | null | undefined;
+  canLoad: boolean;
+  nextSeq: () => number;
+  isCurrent: (seq: number) => boolean;
+  verifyIntegrity?: (rows: AuditLog[]) => Promise<AuditIntegrityReport>;
+  onLogsLoaded: (rows: AuditLog[]) => void;
+  onCheckingChange: (checking: boolean) => void;
+  onIntegrityVerified: (report: AuditIntegrityReport) => void;
+  onError: (error: unknown) => void;
+}
+
+export async function executeSequencedAuditLogFetch(
+  params: SequencedAuditLogFetchParams
+): Promise<'skipped' | 'stale' | 'completed' | 'error'> {
+  if (!params.auditLogsCollection || !params.canLoad) {
+    return 'skipped';
+  }
+  const seq = params.nextSeq();
+  const verify = params.verifyIntegrity ?? verifyAuditLogIntegrity;
+  try {
+    const logs = await params.auditLogsCollection.find({ sort: [{ timestamp: 'desc' }] }).exec();
+    if (!params.isCurrent(seq)) return 'stale';
+    const rows = logs.map((d) => d.toJSON());
+    params.onLogsLoaded(rows);
+    params.onCheckingChange(true);
+    const report = await verify(rows);
+    if (!params.isCurrent(seq)) return 'stale';
+    params.onIntegrityVerified(report);
+    return 'completed';
+  } catch (e) {
+    if (!params.isCurrent(seq)) return 'stale';
+    params.onError(e);
+    return 'error';
+  } finally {
+    if (params.isCurrent(seq)) {
+      params.onCheckingChange(false);
+    }
+  }
+}
+
 export interface UseAuditSettingsOptions {
   db: PharmacyDatabase | null;
   currentUser: User;
@@ -112,21 +159,33 @@ export function useAuditSettings(options: UseAuditSettingsOptions) {
   const [filterUser, setFilterUser] = useState('');
   const [filterAction, setFilterAction] = useState('all');
 
+  const auditFetchSeqRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const fetchAuditLogs = useCallback(async () => {
-    if (!db || !canLoadAuditLogs({ canViewAuditLogs, canManageBackups })) return;
-    try {
-      const logs = await db.audit_logs.find({ sort: [{ timestamp: 'desc' }] }).exec();
-      const rows = logs.map(d => d.toJSON());
-      setAuditLogs(rows);
-      setIsCheckingAuditIntegrity(true);
-      const report = await verifyAuditLogIntegrity(rows);
-      setAuditIntegrity(report);
-    } catch (e) {
-      console.error('Failed to fetch audit logs:', e);
-      toast.error('監査ログの読み込みに失敗しました。');
-    } finally {
-      setIsCheckingAuditIntegrity(false);
-    }
+    await executeSequencedAuditLogFetch({
+      auditLogsCollection: db?.audit_logs,
+      canLoad: canLoadAuditLogs({ canViewAuditLogs, canManageBackups }),
+      nextSeq: () => {
+        auditFetchSeqRef.current += 1;
+        return auditFetchSeqRef.current;
+      },
+      isCurrent: (seq) => isMountedRef.current && auditFetchSeqRef.current === seq,
+      onLogsLoaded: setAuditLogs,
+      onCheckingChange: setIsCheckingAuditIntegrity,
+      onIntegrityVerified: setAuditIntegrity,
+      onError: (e) => {
+        console.error('Failed to fetch audit logs:', e);
+        toast.error('監査ログの読み込みに失敗しました。');
+      }
+    });
   }, [db, canViewAuditLogs, canManageBackups]);
 
   useEffect(() => {

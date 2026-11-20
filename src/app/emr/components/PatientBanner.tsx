@@ -136,6 +136,34 @@ export async function executePatientInsuranceSave(handlers: PatientInsuranceSave
   }
 }
 
+export interface PatientBannerDbLike {
+  visits: {
+    findOne: (id: string) => { exec: () => Promise<{ patientId: string } | null> };
+    find: (query: { selector: { status: Visit['status'] } }) => {
+      exec: () => Promise<Array<{ patientId: string; issueDate?: string }>>;
+    };
+  };
+  patients: {
+    find: (query: { selector: { patientId: string } }) => {
+      exec: () => Promise<Array<{ toJSON: () => unknown }>>;
+    };
+  };
+}
+
+export async function loadPatientBannerRecord(
+  db: PatientBannerDbLike,
+  targetVisitId: string | null
+): Promise<Patient | null> {
+  const visit = targetVisitId
+    ? await db.visits.findOne(targetVisitId).exec()
+    : (await db.visits.find({ selector: { status: 'processing' } }).exec())
+        .slice()
+        .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
+  if (!visit) return null;
+  const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
+  return patients.length > 0 ? (patients[0].toJSON() as Patient) : null;
+}
+
 export const PatientBanner = React.memo(function PatientBanner({
   patientAlerts,
   targetVisitId,
@@ -146,27 +174,17 @@ export const PatientBanner = React.memo(function PatientBanner({
   const [hasPatientLoadError, setHasPatientLoadError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchPatientData() {
       if (!db) return;
       setHasPatientLoadError(false);
       try {
-        const visit = targetVisitId
-          ? await db.visits.findOne(targetVisitId).exec()
-          : (await db.visits.find({ selector: { status: 'processing' } }).exec())
-              .slice()
-              .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
-        if (visit) {
-          const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-          if (patients.length > 0) {
-            setPatientData(patients[0].toJSON() as Patient);
-          } else {
-            setPatientData(null);
-          }
-        } else {
-          setPatientData(null);
-        }
+        const nextPatient = await loadPatientBannerRecord(db, targetVisitId);
+        if (cancelled) return;
+        setPatientData(nextPatient);
         setHasPatientLoadError(false);
       } catch (e) {
+        if (cancelled) return;
         console.error(e);
         setPatientData(null);
         setHasPatientLoadError(true);
@@ -174,6 +192,9 @@ export const PatientBanner = React.memo(function PatientBanner({
       }
     }
     fetchPatientData();
+    return () => {
+      cancelled = true;
+    };
   }, [db, targetVisitId]);
 
   const calcAge = useMemo(() => {

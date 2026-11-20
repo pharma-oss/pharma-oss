@@ -237,12 +237,22 @@ export default function BackupSettingsTab({
   const [escrowRestoreMessage, setEscrowRestoreMessage] = React.useState<{ ok: boolean; text: string } | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     const localKey = getLocalStoredDbPassword() || process.env.NEXT_PUBLIC_DB_PASSWORD || '';
     if (localKey) {
-      computeKeyFingerprint(localKey).then(setCurrentKeyFingerprint).catch(() => setCurrentKeyFingerprint('未設定'));
+      computeKeyFingerprint(localKey)
+        .then((fingerprint) => {
+          if (!cancelled) setCurrentKeyFingerprint(fingerprint);
+        })
+        .catch(() => {
+          if (!cancelled) setCurrentKeyFingerprint('未設定');
+        });
     } else {
       setCurrentKeyFingerprint('未設定 (セッション一時鍵)');
     }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleIssueEscrowSheet = async () => {
