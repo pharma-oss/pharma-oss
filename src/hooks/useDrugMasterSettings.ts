@@ -56,6 +56,8 @@ import {
 } from '@/lib/drug_master_provenance';
 import type { DrugMasterOfficialPageFetchResult } from '@/lib/drug_master_official_page';
 import {
+  buildDuplicateDrugUsageQueries,
+  collectDuplicateDrugCandidateCodes,
   findDuplicateDrugGroups,
   buildDrugUsageStats,
   buildDrugDuplicateScanAuditDetail,
@@ -676,11 +678,7 @@ export function useDrugMasterSettings({
     setDrugDuplicateMessage('');
     setDrugMergeReview(null);
     try {
-      const [drugDocs, stockDocs, itemDocs] = await Promise.all([
-        db.drugs.find().exec(),
-        db.drug_stocks.find().exec(),
-        db.prescription_items.find().exec()
-      ]);
+      const drugDocs = await db.drugs.find().exec();
       const drugs = drugDocs.map((doc) => ({
         code: doc.get('code') as string,
         name: doc.get('name') as string,
@@ -692,6 +690,15 @@ export function useDrugMasterSettings({
         stockQuantity: doc.get('stockQuantity') as number | undefined,
         location: doc.get('location') as string | undefined
       } as Drug));
+      // 重複候補が 0 件なら在庫・暗号化処方明細を読まず、小規模候補時は索引/セレクタで絞り込む（P2-2）
+      const candidateCodes = collectDuplicateDrugCandidateCodes(drugs);
+      const usageQueries = buildDuplicateDrugUsageQueries(candidateCodes);
+      const [stockDocs, itemDocs] = usageQueries
+        ? await Promise.all([
+            db.drug_stocks.find(usageQueries.stocksQuery).exec(),
+            db.prescription_items.find(usageQueries.prescriptionItemsQuery).exec()
+          ])
+        : [[], []];
       const usage = buildDrugUsageStats({
         stocks: stockDocs.map((doc) => ({ drugCode: doc.get('drugCode') as string })),
         prescriptionItems: itemDocs.map((doc) => ({

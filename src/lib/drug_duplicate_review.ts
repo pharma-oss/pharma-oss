@@ -6,6 +6,8 @@ import type { Drug } from '../db/types.ts';
 import { isDemoDrugCode } from './demo_data.ts';
 import { normalizePatientName } from './patient_matching.ts';
 
+export const DUPLICATE_DRUG_SCOPED_QUERY_LIMIT = 200;
+
 export type DrugDuplicateMatchType = 'yj_code' | 'name';
 
 export interface DrugDuplicateUsage {
@@ -116,20 +118,99 @@ export function buildDrugUsageStats(input: {
   return usage;
 }
 
-export function findDuplicateDrugGroups(
-  drugs: Drug[],
-  usage: Map<string, DrugDuplicateUsage> = new Map()
-): DrugDuplicateScanReport {
+function collectCandidateDuplicateDrugMaps(drugs: readonly Drug[]): {
+  targets: Drug[];
+  byYj: Map<string, Drug[]>;
+  byName: Map<string, Drug[]>;
+} {
   const targets = drugs.filter((drug) => !isDemoDrugCode(drug.code) && !isGeneralNameRow(drug));
 
   const byYj = new Map<string, Drug[]>();
   const byName = new Map<string, Drug[]>();
   for (const drug of targets) {
     const yjCode = String(drug.yjCode || '').trim();
-    if (yjCode) byYj.set(yjCode, [...(byYj.get(yjCode) || []), drug]);
+    if (yjCode) {
+      const list = byYj.get(yjCode);
+      if (list) list.push(drug);
+      else byYj.set(yjCode, [drug]);
+    }
     const nameKey = normalizePatientName(drug.name || '');
-    if (nameKey) byName.set(nameKey, [...(byName.get(nameKey) || []), drug]);
+    if (nameKey) {
+      const list = byName.get(nameKey);
+      if (list) list.push(drug);
+      else byName.set(nameKey, [drug]);
+    }
   }
+
+  return { targets, byYj, byName };
+}
+
+// 重複候補グループに属する薬品コードだけを抽出し、候補 0 件時や小規模候補時の全件走査を避ける（P2-2）。
+export function collectDuplicateDrugCandidateCodes(drugs: readonly Drug[]): string[] {
+  const { byYj, byName } = collectCandidateDuplicateDrugMaps(drugs);
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  const collectGroup = (groupDrugs: readonly Drug[]) => {
+    if (groupDrugs.length < 2) return;
+    for (const drug of groupDrugs) {
+      const code = String(drug.code || '').trim();
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      codes.push(code);
+    }
+  };
+  for (const groupDrugs of byYj.values()) collectGroup(groupDrugs);
+  for (const groupDrugs of byName.values()) collectGroup(groupDrugs);
+  return codes;
+}
+
+export interface DuplicateDrugUsageQueries {
+  stocksQuery: { selector?: { drugCode: { $in: string[] } } };
+  prescriptionItemsQuery: {
+    selector?: {
+      $or: [
+        { drugId: { $in: string[] } },
+        { dispensedDrugCode: { $in: string[] } }
+      ];
+    };
+  };
+}
+
+// 候補件数に応じて在庫ロット・処方明細の取得クエリを決める（0件はスキップ、小規模は絞込、大規模は巨大 $in を避け全件、P2-2）。
+export function buildDuplicateDrugUsageQueries(
+  candidateDrugCodes: readonly string[],
+  scopedLimit: number = DUPLICATE_DRUG_SCOPED_QUERY_LIMIT
+): DuplicateDrugUsageQueries | null {
+  const codes = Array.from(new Set(candidateDrugCodes.map((code) => String(code || '').trim()).filter(Boolean)));
+  if (codes.length === 0) return null;
+  if (codes.length > scopedLimit) {
+    return {
+      stocksQuery: {},
+      prescriptionItemsQuery: {}
+    };
+  }
+  return {
+    stocksQuery: {
+      selector: {
+        drugCode: { $in: codes }
+      }
+    },
+    prescriptionItemsQuery: {
+      selector: {
+        $or: [
+          { drugId: { $in: codes } },
+          { dispensedDrugCode: { $in: codes } }
+        ]
+      }
+    }
+  };
+}
+
+export function findDuplicateDrugGroups(
+  drugs: Drug[],
+  usage: Map<string, DrugDuplicateUsage> = new Map()
+): DrugDuplicateScanReport {
+  const { targets, byYj, byName } = collectCandidateDuplicateDrugMaps(drugs);
 
   const groups: DrugDuplicateGroup[] = [];
   let inactiveGroupCount = 0;
