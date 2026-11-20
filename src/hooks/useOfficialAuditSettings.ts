@@ -113,6 +113,73 @@ export function groupPrescriptionItemDocsByVisitId<T extends { visitId: string }
   return grouped;
 }
 
+// 出力済みスナップショットを持つ受付だけを抽出し、未出力受付での関連テーブル取得を避ける（P2-2）。
+export function extractVisitsWithExportSnapshot<
+  TVisit extends {
+    visitId: string;
+    patientId?: string;
+    claimLifecycle?: {
+      status?: string;
+      exportSnapshot?: { totalPoints?: number };
+    };
+  }
+>(
+  visitDocs: ReadonlyArray<{ toJSON: () => TVisit }>
+): Array<{ visit: TVisit; exportedPoints: number }> {
+  const exported: Array<{ visit: TVisit; exportedPoints: number }> = [];
+  for (const visitDoc of visitDocs) {
+    const visit = visitDoc.toJSON();
+    const totalPoints = visit.claimLifecycle?.exportSnapshot?.totalPoints;
+    if (typeof totalPoints !== 'number' || !Number.isFinite(totalPoints)) continue;
+    exported.push({ visit, exportedPoints: totalPoints });
+  }
+  return exported;
+}
+
+// 請求点数の変動点検で一括取得する受付ID・患者IDを一意に抽出する（P2-2）。
+export function collectClaimDriftLookupIds(
+  visits: ReadonlyArray<{ visitId?: string | null; patientId?: string | null }>
+): { visitIds: string[]; patientIds: string[] } {
+  const visitIdSet = new Set<string>();
+  const patientIdSet = new Set<string>();
+  const visitIds: string[] = [];
+  const patientIds: string[] = [];
+  for (const visit of visits) {
+    const visitId = String(visit.visitId || '').trim();
+    if (visitId && !visitIdSet.has(visitId)) {
+      visitIdSet.add(visitId);
+      visitIds.push(visitId);
+    }
+    const patientId = String(visit.patientId || '').trim();
+    if (patientId && !patientIdSet.has(patientId)) {
+      patientIdSet.add(patientId);
+      patientIds.push(patientId);
+    }
+  }
+  return { visitIds, patientIds };
+}
+
+// 処方明細群から薬価引き当てに必要な薬品コード（処方・調剤）を一意に抽出する（P2-2）。
+export function collectPrescriptionItemDrugCodes(
+  itemDocs: ReadonlyArray<{ drugId?: string | null; dispensedDrugCode?: string | null }>
+): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const doc of itemDocs) {
+    const drugId = String(doc.drugId || '').trim();
+    if (drugId && !seen.has(drugId)) {
+      seen.add(drugId);
+      codes.push(drugId);
+    }
+    const dispensedCode = String(doc.dispensedDrugCode || '').trim();
+    if (dispensedCode && !seen.has(dispensedCode)) {
+      seen.add(dispensedCode);
+      codes.push(dispensedCode);
+    }
+  }
+  return codes;
+}
+
 // 処方明細に調剤日時点の薬価を当てる（点数の変動点検と剤形の食い違い点検で共通）。
 export function buildPricedClaimItems<TItem extends ClaimItemPricingItem>(
   itemDocs: Array<{ drugId: string; dispensedDrugCode?: string; toJSON: () => TItem }>,
@@ -370,48 +437,54 @@ export function useOfficialAuditSettings({
       ]);
       const settings = settingsDoc ? settingsDoc.toJSON() : null;
 
+      const exportedVisits = extractVisitsWithExportSnapshot(visits);
       const inputs: ClaimPointsDriftInput[] = [];
-      for (const visitDoc of visits) {
-        const visit = visitDoc.toJSON() as Visit;
-        const snapshot = visit.claimLifecycle?.exportSnapshot;
-        if (!snapshot || !Number.isFinite(snapshot.totalPoints)) continue;
-
-        const [patientDoc, itemDocs] = await Promise.all([
-          db.patients.findOne(visit.patientId).exec(),
-          db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
+      if (exportedVisits.length > 0) {
+        // 出力済み受付の患者・処方明細・薬品マスタを一括取得し、受付ごとの 3×N クエリと重複復号を解消する（P2-2）
+        const { visitIds, patientIds } = collectClaimDriftLookupIds(exportedVisits.map((entry) => entry.visit));
+        const [patientsMap, allItemDocs] = await Promise.all([
+          patientIds.length > 0 ? db.patients.findByIds(patientIds).exec() : Promise.resolve(null),
+          visitIds.length > 0
+            ? db.prescription_items.find({ selector: { visitId: { $in: visitIds } } }).exec()
+            : Promise.resolve([])
         ]);
-        const patient = patientDoc ? (patientDoc.toJSON() as Patient) : null;
+        const itemsByVisitId = groupPrescriptionItemDocsByVisitId(allItemDocs);
+        const drugCodes = collectPrescriptionItemDrugCodes(allItemDocs);
+        const drugsMap = drugCodes.length > 0
+          ? await db.drugs.findByIds(drugCodes).exec()
+          : new Map<string, Partial<Drug>>();
 
-        // 薬価は調剤日時点で引く。印刷画面と同じ関数を通さないと薬剤料が算定されず、
-        // ずれていない請求まで「点数が減った」と出てしまう。
-        const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
-        const drugCodes = new Set<string>();
-        for (const doc of itemDocs) {
-          if (doc.drugId) drugCodes.add(String(doc.drugId));
-          if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
+        for (const entry of exportedVisits) {
+          const visit = entry.visit as Visit;
+          const patientDoc = patientsMap?.get(visit.patientId);
+          const itemDocs = itemsByVisitId.get(visit.visitId) ?? [];
+          const patient = patientDoc ? (patientDoc.toJSON() as Patient) : null;
+
+          // 薬価は調剤日時点で引く。印刷画面と同じ関数を通さないと薬剤料が算定されず、
+          // ずれていない請求まで「点数が減った」と出てしまう。
+          const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
+          const items = buildPricedClaimItems(itemDocs, drugsMap, dispensingDateForPrice);
+
+          // 施設設定か患者が引けない受付は計算し直せない。落とさずに「再計算できず」で出す。
+          let currentPoints: number | undefined;
+          if (settings && patient) {
+            const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';
+            currentPoints = getTotalPoints(
+              calculateDispensingFees(settings, items, patient, visitDate, readClaimOptionsState(visit.claimOptions))
+            );
+          }
+
+          inputs.push({
+            visitId: visit.visitId,
+            patientName: patient?.name,
+            dispensingDate: visit.dispensingDate || visit.issueDate,
+            claimStatus: visit.claimLifecycle?.status,
+            exportedAt: visit.claimLifecycle?.exportedAt,
+            exportedFileName: visit.claimLifecycle?.exportedFileName,
+            exportedPoints: entry.exportedPoints,
+            currentPoints
+          });
         }
-        const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
-        const items = buildPricedClaimItems(itemDocs, drugsMap, dispensingDateForPrice);
-
-        // 施設設定か患者が引けない受付は計算し直せない。落とさずに「再計算できず」で出す。
-        let currentPoints: number | undefined;
-        if (settings && patient) {
-          const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';
-          currentPoints = getTotalPoints(
-            calculateDispensingFees(settings, items, patient, visitDate, readClaimOptionsState(visit.claimOptions))
-          );
-        }
-
-        inputs.push({
-          visitId: visit.visitId,
-          patientName: patient?.name,
-          dispensingDate: visit.dispensingDate || visit.issueDate,
-          claimStatus: visit.claimLifecycle?.status,
-          exportedAt: visit.claimLifecycle?.exportedAt,
-          exportedFileName: visit.claimLifecycle?.exportedFileName,
-          exportedPoints: snapshot.totalPoints,
-          currentPoints
-        });
       }
 
       const review = buildClaimPointsDriftReview(inputs);
@@ -474,9 +547,14 @@ export function useOfficialAuditSettings({
         const targetPatientIds = Array.from(new Set(
           targetVisits.map((visitDoc) => String(visitDoc.patientId || '').trim()).filter(Boolean)
         ));
-        const patientsMap = targetPatientIds.length > 0
-          ? await db.patients.findByIds(targetPatientIds).exec()
-          : null;
+        const targetItemDocs = targetVisits.flatMap((visitDoc) => itemsByVisitId.get(visitDoc.visitId) ?? []);
+        const targetDrugCodes = collectPrescriptionItemDrugCodes(targetItemDocs);
+        const [patientsMap, drugsMap] = await Promise.all([
+          targetPatientIds.length > 0 ? db.patients.findByIds(targetPatientIds).exec() : Promise.resolve(null),
+          targetDrugCodes.length > 0
+            ? db.drugs.findByIds(targetDrugCodes).exec()
+            : Promise.resolve(new Map<string, Partial<Drug>>())
+        ]);
         for (const visitDoc of targetVisits) {
           const visit = visitDoc.toJSON() as Visit;
           const patientDoc = patientsMap?.get(visit.patientId);
@@ -485,12 +563,6 @@ export function useOfficialAuditSettings({
           if (!patient) continue;
 
           const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
-          const drugCodes = new Set<string>();
-          for (const doc of itemDocs) {
-            if (doc.drugId) drugCodes.add(String(doc.drugId));
-            if (doc.dispensedDrugCode) drugCodes.add(String(doc.dispensedDrugCode));
-          }
-          const drugsMap = await db.drugs.findByIds(Array.from(drugCodes)).exec();
           const items = buildPricedClaimItems(itemDocs, drugsMap, dispensingDateForPrice);
 
           const visitDate = visit.dispensingDate || visit.prescriptionDate || visit.issueDate || '';

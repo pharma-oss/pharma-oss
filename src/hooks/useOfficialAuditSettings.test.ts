@@ -5,12 +5,15 @@ import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
-import { VISIT_SCHEMA } from '@/db/schema';
+import { DRUG_SCHEMA, PATIENT_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from '@/db/schema';
 import { legacyMigrationStrategies } from '@/db/index';
-import type { Drug, PrescriptionItem, Visit } from '@/db/types';
+import type { Drug, Patient, PrescriptionItem, Visit } from '@/db/types';
 import {
   buildPricedClaimItems,
+  collectClaimDriftLookupIds,
   collectDosageConflictVisitIds,
+  collectPrescriptionItemDrugCodes,
+  extractVisitsWithExportSnapshot,
   groupPrescriptionItemDocsByVisitId,
   toClaimItemPricingDrug,
   toDosageCategoryConflictInput
@@ -215,6 +218,153 @@ test('RxDB visits.findByIds(collectDosageConflictVisitIds(cases)) loads only con
 
     assert.deepEqual(fetchedVisits.map((v) => v.visitId), ['visit_conflict_1', 'visit_conflict_3']);
     assert.deepEqual(fetchedVisits.map((v) => v.patientId), ['pt_1', 'pt_3']);
+  } finally {
+    await db.close();
+  }
+});
+
+// --- P2-2: batched claim drift & dosage conflict lookups --------------------
+
+test('extractVisitsWithExportSnapshot keeps only visits with finite exportSnapshot.totalPoints', () => {
+  const docs = [
+    { toJSON: () => ({ visitId: 'v_draft', claimLifecycle: { status: 'draft' } }) },
+    { toJSON: () => ({ visitId: 'v_no_pts', claimLifecycle: { status: 'exported', exportSnapshot: { totalPoints: Number.NaN } } }) },
+    { toJSON: () => ({ visitId: 'v_zero', claimLifecycle: { status: 'exported', exportSnapshot: { totalPoints: 0 } } }) },
+    { toJSON: () => ({ visitId: 'v_ok', claimLifecycle: { status: 'accepted', exportSnapshot: { totalPoints: 125 } } }) }
+  ];
+  const exported = extractVisitsWithExportSnapshot(docs);
+  assert.deepEqual(
+    exported.map((entry) => ({ visitId: entry.visit.visitId, exportedPoints: entry.exportedPoints })),
+    [
+      { visitId: 'v_zero', exportedPoints: 0 },
+      { visitId: 'v_ok', exportedPoints: 125 }
+    ]
+  );
+});
+
+test('collectClaimDriftLookupIds and collectPrescriptionItemDrugCodes deduplicate and trim IDs in order', () => {
+  assert.deepEqual(
+    collectClaimDriftLookupIds([
+      { visitId: ' v1 ', patientId: ' p1 ' },
+      { visitId: 'v2', patientId: 'p1' },
+      { visitId: 'v1', patientId: '' },
+      { visitId: '', patientId: 'p2' }
+    ]),
+    { visitIds: ['v1', 'v2'], patientIds: ['p1', 'p2'] }
+  );
+  assert.deepEqual(
+    collectPrescriptionItemDrugCodes([
+      { drugId: ' D1 ', dispensedDrugCode: 'D2' },
+      { drugId: 'D2', dispensedDrugCode: 'D3' },
+      { drugId: '', dispensedDrugCode: null },
+      { drugId: 'D1', dispensedDrugCode: ' D3 ' }
+    ]),
+    ['D1', 'D2', 'D3']
+  );
+});
+
+test('RxDB batched claim drift lookups fetch only exported visits patients/items/drugs and match per-visit pricing (P2-2)', async () => {
+  addRxPlugin(RxDBMigrationSchemaPlugin);
+  const storage = wrappedValidateAjvStorage({
+    storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+  });
+  const db = await createRxDatabase({
+    name: `claim_drift_p2_2_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    storage,
+    password: 'test-claim-drift-p22',
+    ignoreDuplicate: true
+  });
+  try {
+    const collections = await db.addCollections({
+      visits: { schema: VISIT_SCHEMA, migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {}) },
+      patients: { schema: PATIENT_SCHEMA, migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {}) },
+      prescription_items: { schema: PRESCRIPTION_ITEM_SCHEMA, migrationStrategies: legacyMigrationStrategies(PRESCRIPTION_ITEM_SCHEMA, {}) },
+      drugs: { schema: DRUG_SCHEMA, migrationStrategies: legacyMigrationStrategies(DRUG_SCHEMA, {}) }
+    });
+
+    const patients: Patient[] = [
+      { patientId: 'pt_1', name: '山田 太郎', kana: 'ヤマダ タロウ', birthDate: '1965-04-01' },
+      { patientId: 'pt_unexported', name: '未出力 花子', kana: 'ミシュツリョク ハナコ', birthDate: '1980-08-15' }
+    ];
+    await collections.patients.bulkInsert(patients);
+
+    const drugs: Drug[] = [
+      { code: 'D_PRESC', name: '処方薬A', isGeneric: false, price: 30, yjCode: '2171022F1020' },
+      { code: 'D_DISP', name: '調剤後発薬B', isGeneric: true, price: 15, yjCode: '2171022F1038' },
+      { code: 'D_UNUSED', name: '未出力受付の薬C', isGeneric: false, price: 99, yjCode: '9999999F1000' }
+    ];
+    await collections.drugs.bulkInsert(drugs);
+
+    const makeSnapshot = (visitId: string, patientId: string, patientName: string, totalPoints: number) => ({
+      createdAt: '2026-06-20T10:00:00.000Z',
+      visitId,
+      patientId,
+      patientName,
+      patientBirthDate: '1965-04-01',
+      issueDate: '2026-06-15T09:00:00.000Z',
+      totalPoints,
+      prescriptionItems: []
+    });
+
+    const visits: Visit[] = [
+      {
+        visitId: 'v_exp_1',
+        patientId: 'pt_1',
+        issueDate: '2026-06-15T09:00:00.000Z',
+        dispensingDate: '2026-06-15',
+        status: 'completed',
+        claimLifecycle: { status: 'exported', exportSnapshot: makeSnapshot('v_exp_1', 'pt_1', '山田 太郎', 100) }
+      },
+      {
+        visitId: 'v_exp_2',
+        patientId: 'pt_1',
+        issueDate: '2026-06-18T09:00:00.000Z',
+        dispensingDate: '2026-06-18',
+        status: 'completed',
+        claimLifecycle: { status: 'accepted', exportSnapshot: makeSnapshot('v_exp_2', 'pt_1', '山田 太郎', 200) }
+      },
+      {
+        visitId: 'v_draft_3',
+        patientId: 'pt_unexported',
+        issueDate: '2026-06-19T09:00:00.000Z',
+        dispensingDate: '2026-06-19',
+        status: 'completed',
+        claimLifecycle: { status: 'draft' }
+      }
+    ];
+    await collections.visits.bulkInsert(visits);
+
+    const items: PrescriptionItem[] = [
+      { itemId: 'item_1', visitId: 'v_exp_1', drugId: 'D_PRESC', amount: 1, days: 14, usage: '1日1回朝食後' },
+      { itemId: 'item_2', visitId: 'v_exp_2', drugId: 'D_PRESC', dispensedDrugCode: 'D_DISP', amount: 1, days: 14, usage: '1日1回朝食後' },
+      { itemId: 'item_3', visitId: 'v_draft_3', drugId: 'D_UNUSED', amount: 1, days: 7, usage: '1日1回' }
+    ];
+    await collections.prescription_items.bulkInsert(items);
+
+    const visitDocs = await collections.visits.find().exec();
+    const exportedVisits = extractVisitsWithExportSnapshot(visitDocs);
+    const { visitIds, patientIds } = collectClaimDriftLookupIds(exportedVisits.map((entry) => entry.visit));
+    assert.deepEqual(visitIds.sort(), ['v_exp_1', 'v_exp_2']);
+    assert.deepEqual(patientIds, ['pt_1']);
+
+    const [patientsMap, batchedItemDocs] = await Promise.all([
+      collections.patients.findByIds(patientIds).exec(),
+      collections.prescription_items.find({ selector: { visitId: { $in: visitIds } } }).exec()
+    ]);
+    assert.deepEqual(Array.from(patientsMap.keys()), ['pt_1']);
+    assert.deepEqual(batchedItemDocs.map((d) => d.itemId).sort(), ['item_1', 'item_2']);
+
+    const itemsByVisitId = groupPrescriptionItemDocsByVisitId(batchedItemDocs);
+    const drugCodes = collectPrescriptionItemDrugCodes(batchedItemDocs);
+    assert.deepEqual(drugCodes.sort(), ['D_DISP', 'D_PRESC']);
+
+    const drugsMap = await collections.drugs.findByIds(drugCodes).exec();
+    assert.deepEqual(Array.from(drugsMap.keys()).sort(), ['D_DISP', 'D_PRESC']);
+
+    const v1Items = buildPricedClaimItems(itemsByVisitId.get('v_exp_1') ?? [], drugsMap, '2026-06-15');
+    const v2Items = buildPricedClaimItems(itemsByVisitId.get('v_exp_2') ?? [], drugsMap, '2026-06-18');
+    assert.equal(v1Items[0].price, 30);
+    assert.equal(v2Items[0].price, 15);
   } finally {
     await db.close();
   }
