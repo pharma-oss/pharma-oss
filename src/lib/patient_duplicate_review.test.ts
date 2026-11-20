@@ -1,9 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { VISIT_SCHEMA } from '../db/schema.ts';
+import { legacyMigrationStrategies } from '../db/index.ts';
+import type { Visit } from '../db/types.ts';
 import { DEMO_PATIENT_ID } from './demo_data.ts';
 import {
+  buildDuplicatePatientVisitsQuery,
   buildPatientDuplicateScanAuditDetail,
   buildPatientVisitStats,
+  collectDuplicatePatientCandidateIds,
   findDuplicatePatientGroups
 } from './patient_duplicate_review.ts';
 
@@ -99,4 +109,74 @@ test('監査ログ要約は件数だけで患者名を含めない', () => {
   const detail = buildPatientDuplicateScanAuditDetail(report);
   assert.match(detail, /患者重複点検: 対象2名 \/ 重複候補1グループ・2名/);
   assert.doesNotMatch(detail, /山田/);
+});
+
+test('collectDuplicatePatientCandidateIds と buildDuplicatePatientVisitsQuery は重複候補患者のみに絞る (P2-2)', () => {
+  const uniqueOnly = [
+    patient({ patientId: 'pt_1', name: '山田 太郎', kana: 'ヤマダ タロウ', birthDate: '1958-05-12' }),
+    patient({ patientId: 'pt_2', name: '佐藤 花子', kana: 'サトウ ハナコ', birthDate: '1970-01-01' })
+  ];
+  assert.deepStrictEqual(collectDuplicatePatientCandidateIds(uniqueOnly), []);
+  assert.strictEqual(buildDuplicatePatientVisitsQuery([]), null);
+
+  const mixed = [
+    patient({ patientId: 'pt_a', name: '山田　太郎', kana: 'ヤマダ タロウ', birthDate: '1958-05-12' }),
+    patient({ patientId: 'pt_b', name: '山田 太郎', kana: 'ヤマダ タロウ', birthDate: '1958-05-12' }),
+    patient({ patientId: 'pt_c', name: '佐藤 花子', kana: 'サトウ ハナコ', birthDate: '1970-01-01' })
+  ];
+  const candidateIds = collectDuplicatePatientCandidateIds(mixed);
+  assert.deepStrictEqual(candidateIds, ['pt_a', 'pt_b']);
+  assert.deepStrictEqual(buildDuplicatePatientVisitsQuery(candidateIds), {
+    selector: {
+      patientId: { $in: ['pt_a', 'pt_b'] }
+    }
+  });
+});
+
+test('RxDB visits.find(buildDuplicatePatientVisitsQuery(...)) は暗号化 visits から重複候補患者の受付だけを取得し全件時と同一の点検結果を返す (P2-2)', async () => {
+  addRxPlugin(RxDBMigrationSchemaPlugin);
+  const storage = wrappedValidateAjvStorage({
+    storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+  });
+  const db = await createRxDatabase({
+    name: `patient_dup_p2_2_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    storage,
+    password: 'test-patient-dup-p22',
+    ignoreDuplicate: true
+  });
+  try {
+    const collections = await db.addCollections({
+      visits: {
+        schema: VISIT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {})
+      }
+    });
+    const allVisits: Visit[] = [
+      { visitId: 'v_1', patientId: 'pt_a', issueDate: '2026-05-01T09:00:00.000Z', status: 'completed' },
+      { visitId: 'v_2', patientId: 'pt_b', issueDate: '2026-06-01T09:00:00.000Z', status: 'completed' },
+      { visitId: 'v_3', patientId: 'pt_b', issueDate: '2026-07-01T09:00:00.000Z', status: 'completed' },
+      { visitId: 'v_4', patientId: 'pt_unrelated', issueDate: '2026-07-10T09:00:00.000Z', status: 'completed' }
+    ];
+    await collections.visits.bulkInsert(allVisits);
+
+    const patients = [
+      patient({ patientId: 'pt_a', name: '山田　太郎' }),
+      patient({ patientId: 'pt_b', name: '山田 太郎' }),
+      patient({ patientId: 'pt_unrelated', name: '鈴木 一郎', kana: 'スズキ イチロウ' })
+    ];
+
+    const query = buildDuplicatePatientVisitsQuery(collectDuplicatePatientCandidateIds(patients));
+    assert.ok(query);
+    const scopedDocs = await collections.visits.find(query).exec();
+    assert.deepStrictEqual(scopedDocs.map((d) => d.visitId).sort(), ['v_1', 'v_2', 'v_3']);
+
+    const scopedReport = findDuplicatePatientGroups(
+      patients,
+      scopedDocs.map((doc) => ({ patientId: doc.get('patientId') as string, issueDate: doc.get('issueDate') as string }))
+    );
+    const fullReport = findDuplicatePatientGroups(patients, allVisits);
+    assert.deepStrictEqual(scopedReport, fullReport);
+  } finally {
+    await db.close();
+  }
 });

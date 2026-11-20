@@ -41,6 +41,8 @@ import {
   writeBackupSchedulePolicy
 } from '@/lib/backup_schedule_storage';
 import {
+  buildDuplicatePatientVisitsQuery,
+  collectDuplicatePatientCandidateIds,
   findDuplicatePatientGroups,
   buildPatientDuplicateScanAuditDetail,
   type PatientDuplicateGroup,
@@ -232,11 +234,12 @@ export function useBackupSettings({
     setPatientDuplicateMessage('');
     setDuplicateMergeReview(null);
     try {
-      const [patientDocs, visitDocs] = await Promise.all([
-        db.patients.find().exec(),
-        db.visits.find().exec()
-      ]);
+      const patientDocs = await db.patients.find().exec();
       const patients = patientDocs.map((doc) => doc.toJSON() as Patient);
+      // 重複候補が 0 件のときは visits を読まず、候補があるときも patientId 索引で絞り込む（P2-2）
+      const candidatePatientIds = collectDuplicatePatientCandidateIds(patients);
+      const visitsQuery = buildDuplicatePatientVisitsQuery(candidatePatientIds);
+      const visitDocs = visitsQuery ? await db.visits.find(visitsQuery).exec() : [];
       const visits = visitDocs.map((doc) => ({
         patientId: doc.get('patientId') as string,
         issueDate: doc.get('issueDate') as string

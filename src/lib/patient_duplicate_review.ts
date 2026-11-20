@@ -89,11 +89,10 @@ export function buildPatientVisitStats(
   return stats;
 }
 
-export function findDuplicatePatientGroups(
-  patients: Patient[],
-  visits: Array<Pick<Visit, 'patientId' | 'issueDate'>> = []
-): PatientDuplicateScanReport {
-  const visitStats = buildPatientVisitStats(visits);
+function collectCandidateDuplicateGroups(patients: readonly Patient[]): {
+  targets: Patient[];
+  rawGroups: Array<{ matchType: PatientDuplicateMatchType; groupPatients: Patient[] }>;
+} {
   // チュートリアルのデモ患者は「デモデータを片づける」で消す前提のため対象外
   const targets = patients.filter((patient) => !isDemoPatientId(patient.patientId));
 
@@ -114,10 +113,10 @@ export function findDuplicatePatientGroups(
     }
   }
 
-  const groups: PatientDuplicateGroup[] = [];
+  const rawGroups: Array<{ matchType: PatientDuplicateMatchType; groupPatients: Patient[] }> = [];
   const groupedMemberSets: Set<string>[] = [];
 
-  const addGroup = (matchType: PatientDuplicateMatchType, groupPatients: Patient[]) => {
+  const registerGroup = (matchType: PatientDuplicateMatchType, groupPatients: Patient[]) => {
     const memberIds = new Set(groupPatients.map((patient) => patient.patientId));
     // 氏名一致グループに完全に含まれるカナ一致グループは重複表示しない
     const alreadyCovered = groupedMemberSets.some((existing) => (
@@ -125,9 +124,58 @@ export function findDuplicatePatientGroups(
     ));
     if (alreadyCovered) return;
     groupedMemberSets.push(memberIds);
+    rawGroups.push({ matchType, groupPatients });
+  };
 
+  for (const groupPatients of byNameKey.values()) {
+    if (groupPatients.length >= 2) registerGroup('name_birthdate', groupPatients);
+  }
+  for (const groupPatients of byKanaKey.values()) {
+    if (groupPatients.length >= 2) registerGroup('kana_birthdate', groupPatients);
+  }
+
+  return { targets, rawGroups };
+}
+
+// 重複候補グループに属する患者IDだけを抽出し、無関係な患者の暗号化 visits 復号を避ける（P2-2）。
+export function collectDuplicatePatientCandidateIds(patients: readonly Patient[]): string[] {
+  const { rawGroups } = collectCandidateDuplicateGroups(patients);
+  const seen = new Set<string>();
+  const candidateIds: string[] = [];
+  for (const { groupPatients } of rawGroups) {
+    for (const patient of groupPatients) {
+      const id = String(patient.patientId || '').trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      candidateIds.push(id);
+    }
+  }
+  return candidateIds;
+}
+
+// 患者重複点検で必要な受付だけを patientId 索引付きで取得するクエリを組み立てる（P2-2）。
+export function buildDuplicatePatientVisitsQuery(
+  candidatePatientIds: readonly string[]
+): { selector: { patientId: { $in: string[] } } } | null {
+  const ids = Array.from(new Set(candidatePatientIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (ids.length === 0) return null;
+  return {
+    selector: {
+      patientId: { $in: ids }
+    }
+  };
+}
+
+export function findDuplicatePatientGroups(
+  patients: Patient[],
+  visits: Array<Pick<Visit, 'patientId' | 'issueDate'>> = []
+): PatientDuplicateScanReport {
+  const visitStats = buildPatientVisitStats(visits);
+  const { targets, rawGroups } = collectCandidateDuplicateGroups(patients);
+
+  const groups: PatientDuplicateGroup[] = rawGroups.map(({ matchType, groupPatients }) => {
     const members = sortMembers(groupPatients.map((patient) => buildMember(patient, visitStats)));
-    groups.push({
+    return {
       groupId: `dup_${matchType}_${members.map((member) => member.patientId).join('_')}`,
       matchType,
       matchLabel: MATCH_LABELS[matchType],
@@ -135,15 +183,8 @@ export function findDuplicatePatientGroups(
       birthDate: members[0].birthDate,
       members,
       suggestedTargetPatientId: members[0].patientId
-    });
-  };
-
-  for (const groupPatients of byNameKey.values()) {
-    if (groupPatients.length >= 2) addGroup('name_birthdate', groupPatients);
-  }
-  for (const groupPatients of byKanaKey.values()) {
-    if (groupPatients.length >= 2) addGroup('kana_birthdate', groupPatients);
-  }
+    };
+  });
 
   groups.sort((left, right) => (
     right.members.length - left.members.length ||
