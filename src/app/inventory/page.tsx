@@ -28,6 +28,7 @@ import {
   buildInventoryReceivingChecklistCsv,
   buildInventoryReceivingChecklistMemo,
   formatDateForFileName,
+  persistOrderWorkbenchDrugIds,
   type InventoryOrderRisk
 } from '@/lib/inventory_order';
 import {
@@ -210,7 +211,16 @@ export default function InventoryPage() {
 
   useEffect(() => {
     if (!hasLoadedOrderState || typeof window === 'undefined') return;
-    window.localStorage.setItem(orderWorkbenchStorageKey, JSON.stringify(Array.from(orderedDrugIds)));
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch (error) {
+      console.warn('Failed to access localStorage for inventory order workbench state:', error);
+    }
+    const result = persistOrderWorkbenchDrugIds(storage, orderWorkbenchStorageKey, orderedDrugIds);
+    if (!result.ok) {
+      toast.error('発注ワークベンチの状態の保存に失敗しました。ブラウザの保存容量を確認してください。');
+    }
   }, [hasLoadedOrderState, orderWorkbenchStorageKey, orderedDrugIds]);
 
   useEffect(() => {

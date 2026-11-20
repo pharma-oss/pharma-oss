@@ -242,3 +242,20 @@ export function getOrderWorkbenchRestoreErrorBannerMessage(hasRestoreError: bool
   if (!hasRestoreError) return null;
   return '発注ワークベンチの状態の復元に失敗したため、発注済み状態を正常に反映できていない可能性があります。再読み込みして確認してください。';
 }
+
+export function persistOrderWorkbenchDrugIds(
+  storage: { setItem(key: string, value: string): void } | null | undefined,
+  storageKey: string,
+  orderedDrugIds: InventoryOrderedDrugSelection
+): { ok: true } | { ok: false; error: unknown } {
+  if (!storage) {
+    return { ok: false, error: new Error('Storage unavailable') };
+  }
+  try {
+    storage.setItem(storageKey, JSON.stringify(Array.from(orderedDrugIds)));
+    return { ok: true };
+  } catch (error) {
+    console.warn('Failed to persist inventory order workbench state:', error);
+    return { ok: false, error };
+  }
+}

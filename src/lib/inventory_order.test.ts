@@ -12,6 +12,7 @@ import {
   getInventoryOrderActionLabel,
   getInventoryOrderPriority,
   getOrderWorkbenchRestoreErrorBannerMessage,
+  persistOrderWorkbenchDrugIds,
   type InventoryOrderRisk
 } from './inventory_order.ts';
 
@@ -171,4 +172,36 @@ test('getOrderWorkbenchRestoreErrorBannerMessage returns error message when hasR
     getOrderWorkbenchRestoreErrorBannerMessage(true),
     '発注ワークベンチの状態の復元に失敗したため、発注済み状態を正常に反映できていない可能性があります。再読み込みして確認してください。'
   );
+});
+
+test('persistOrderWorkbenchDrugIds saves JSON array and catches quota or security errors without throwing', () => {
+  const stored = new Map<string, string>();
+  const okResult = persistOrderWorkbenchDrugIds(
+    { setItem: (key, value) => { stored.set(key, value); } },
+    'yakureki_inventory_order_workbench_20261120',
+    new Set(['D-001', 'D-002'])
+  );
+  assert.deepStrictEqual(okResult, { ok: true });
+  assert.strictEqual(
+    stored.get('yakureki_inventory_order_workbench_20261120'),
+    '["D-001","D-002"]'
+  );
+
+  const nullStorageResult = persistOrderWorkbenchDrugIds(null, 'key', new Set(['D-001']));
+  assert.strictEqual(nullStorageResult.ok, false);
+
+  const quotaError = new DOMException('Quota exceeded', 'QuotaExceededError');
+  const failResult = persistOrderWorkbenchDrugIds(
+    {
+      setItem: () => {
+        throw quotaError;
+      }
+    },
+    'yakureki_inventory_order_workbench_20261120',
+    new Set(['D-001'])
+  );
+  assert.strictEqual(failResult.ok, false);
+  if (!failResult.ok) {
+    assert.strictEqual(failResult.error, quotaError);
+  }
 });
