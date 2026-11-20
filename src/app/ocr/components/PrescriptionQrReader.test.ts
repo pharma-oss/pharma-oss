@@ -4,7 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { findOpeningTag, listDisabledOpeningTags, stripStyleBlocks } from '@/lib/test_support/html_disabled_tags';
 import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
-import PrescriptionQrReader from './PrescriptionQrReader';
+import PrescriptionQrReader, { resolveCameraQrScanResult } from './PrescriptionQrReader';
 
 const noop = () => { };
 
@@ -228,5 +228,44 @@ test('PrescriptionQrReader pins disabled prop interaction with manualText and se
     /\sdisabled=""/,
     'segmentsありでもdisabled=true時は反映ボタンが無効化されること'
   );
+});
+
+test('resolveCameraQrScanResult releases lock and reports error when QR decoding rejects', async () => {
+  const decoded: string[] = [];
+  let stopCount = 0;
+  let stoppedCount = 0;
+  const errors: unknown[] = [];
+  let finallyCount = 0;
+
+  const ok = await resolveCameraQrScanResult({
+    decodeText: async () => 'JAHIS10\n1,テスト',
+    onDecoded: (text) => decoded.push(text),
+    stopControls: () => { stopCount += 1; },
+    onStopped: () => { stoppedCount += 1; },
+    onError: (err) => errors.push(err),
+    onFinally: () => { finallyCount += 1; }
+  });
+  assert.strictEqual(ok, true);
+  assert.deepStrictEqual(decoded, ['JAHIS10\n1,テスト']);
+  assert.strictEqual(stopCount, 1);
+  assert.strictEqual(stoppedCount, 1);
+  assert.strictEqual(errors.length, 0);
+  assert.strictEqual(finallyCount, 1);
+
+  const boom = new Error('Malformed byte segment');
+  const failed = await resolveCameraQrScanResult({
+    decodeText: async () => { throw boom; },
+    onDecoded: (text) => decoded.push(text),
+    stopControls: () => { stopCount += 1; },
+    onStopped: () => { stoppedCount += 1; },
+    onError: (err) => errors.push(err),
+    onFinally: () => { finallyCount += 1; }
+  });
+  assert.strictEqual(failed, false);
+  assert.strictEqual(decoded.length, 1);
+  assert.strictEqual(stopCount, 1);
+  assert.strictEqual(stoppedCount, 1);
+  assert.deepStrictEqual(errors, [boom]);
+  assert.strictEqual(finallyCount, 2);
 });
 

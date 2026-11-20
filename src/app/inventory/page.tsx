@@ -124,50 +124,61 @@ export default function InventoryPage() {
 
   useEffect(() => {
     if (!db) return;
+    let cancelled = false;
+    let calcSeq = 0;
 
     const calculatePending = async () => {
-        const processingVisits = await db.visits.find({
-            selector: {
-                status: { $in: ['waiting', 'processing'] }
+        const seq = ++calcSeq;
+        try {
+            const processingVisits = await db.visits.find({
+                selector: {
+                    status: { $in: ['waiting', 'processing'] }
+                }
+            }).exec();
+            if (cancelled || seq !== calcSeq) return;
+
+            const visitIds = processingVisits
+                .filter((visit) => !isClaimEditBlocked(visit.claimLifecycle))
+                .map(v => v.visitId);
+            if (visitIds.length === 0) {
+                setPendingStockMap(new Map());
+                setPendingVisitCountMap(new Map());
+                return;
             }
-        }).exec();
 
-        const visitIds = processingVisits
-            .filter((visit) => !isClaimEditBlocked(visit.claimLifecycle))
-            .map(v => v.visitId);
-        if (visitIds.length === 0) {
-            setPendingStockMap(new Map());
-            setPendingVisitCountMap(new Map());
-            return;
-        }
+            const items = await db.prescription_items.find({
+                selector: {
+                    visitId: { $in: visitIds }
+                }
+            }).exec();
+            if (cancelled || seq !== calcSeq) return;
 
-        const items = await db.prescription_items.find({
-            selector: {
-                visitId: { $in: visitIds }
+            const newMap = new Map<string, number>();
+            const visitIdsByDrugCode = new Map<string, Set<string>>();
+            for (const item of items) {
+                const amount = calculateRequiredStockAmount(item);
+                if (amount <= 0) continue;
+                const stockDrugId = getStockDrugId(item);
+                newMap.set(stockDrugId, (newMap.get(stockDrugId) || 0) + amount);
+                const visitIdsForDrug = visitIdsByDrugCode.get(stockDrugId) || new Set<string>();
+                visitIdsForDrug.add(item.visitId);
+                visitIdsByDrugCode.set(stockDrugId, visitIdsForDrug);
             }
-        }).exec();
 
-        const newMap = new Map<string, number>();
-        const visitIdsByDrugCode = new Map<string, Set<string>>();
-        for (const item of items) {
-            const amount = calculateRequiredStockAmount(item);
-            if (amount <= 0) continue;
-            const stockDrugId = getStockDrugId(item);
-            newMap.set(stockDrugId, (newMap.get(stockDrugId) || 0) + amount);
-            const visitIdsForDrug = visitIdsByDrugCode.get(stockDrugId) || new Set<string>();
-            visitIdsForDrug.add(item.visitId);
-            visitIdsByDrugCode.set(stockDrugId, visitIdsForDrug);
+            const countMap = new Map<string, number>();
+            for (const [drugCode, visitSet] of visitIdsByDrugCode.entries()) {
+                countMap.set(drugCode, visitSet.size);
+            }
+            setPendingStockMap(newMap);
+            setPendingVisitCountMap(countMap);
+        } catch (error) {
+            if (cancelled || seq !== calcSeq) return;
+            console.error('Failed to calculate pending inventory stock:', error);
+            toast.error('引当待ち在庫の集計に失敗しました。');
         }
-
-        const countMap = new Map<string, number>();
-        for (const [drugCode, visitSet] of visitIdsByDrugCode.entries()) {
-            countMap.set(drugCode, visitSet.size);
-        }
-        setPendingStockMap(newMap);
-        setPendingVisitCountMap(countMap);
     };
 
-    calculatePending();
+    void calculatePending();
 
     // Subscribe to changes in visits/items to recalculate
     // ⚡ Bolt: Debounce the recalculation to prevent redundant database queries and state updates
@@ -176,7 +187,7 @@ export default function InventoryPage() {
     const debouncedCalculatePending = () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-            calculatePending();
+            void calculatePending();
             debounceTimer = null;
         }, 300); // 300ms debounce window
     };
@@ -185,6 +196,7 @@ export default function InventoryPage() {
     const subItems = db.prescription_items.$.subscribe(debouncedCalculatePending);
 
     return () => {
+        cancelled = true;
         if (debounceTimer) clearTimeout(debounceTimer);
         subVisit.unsubscribe();
         subItems.unsubscribe();

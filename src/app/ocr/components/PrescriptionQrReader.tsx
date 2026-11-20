@@ -33,6 +33,30 @@ function looksLikeJahisPayload(text: string) {
   return /JAHIS|(?:^|\n)(?:1|5|51|55|201|301),/.test(text);
 }
 
+export interface ResolveCameraQrScanParams {
+  decodeText: () => Promise<string>;
+  onDecoded: (text: string) => void;
+  stopControls: () => void;
+  onStopped: () => void;
+  onError: (error: unknown) => void;
+  onFinally: () => void;
+}
+
+export async function resolveCameraQrScanResult(params: ResolveCameraQrScanParams): Promise<boolean> {
+  try {
+    const text = await params.decodeText();
+    params.onDecoded(text);
+    params.stopControls();
+    params.onStopped();
+    return true;
+  } catch (error) {
+    params.onError(error);
+    return false;
+  } finally {
+    params.onFinally();
+  }
+}
+
 interface ZxingDecodeResultLike {
   getText?: () => string;
   getResultMetadata?: () => Map<number, unknown> | undefined;
@@ -138,15 +162,23 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
       }, videoRef.current || undefined, (result, error, controlsInCallback) => {
         if (!result || isResolvingCameraScanRef.current) return;
         isResolvingCameraScanRef.current = true;
-        void (async () => {
-          const text = await getReadableQrText(result);
-          appendSegment(text, 'camera');
-          controlsInCallback.stop();
-          controlsRef.current = null;
-          setIsCameraActive(false);
-          setIsStartingCamera(false);
-          isResolvingCameraScanRef.current = false;
-        })();
+        void resolveCameraQrScanResult({
+          decodeText: () => getReadableQrText(result),
+          onDecoded: (text) => appendSegment(text, 'camera'),
+          stopControls: () => controlsInCallback.stop(),
+          onStopped: () => {
+            controlsRef.current = null;
+            setIsCameraActive(false);
+            setIsStartingCamera(false);
+          },
+          onError: (scanError) => {
+            console.error('Failed to decode camera QR scan result:', scanError);
+            setMessage('カメラからのQR読取解析に失敗しました。もう一度読み取ってください。');
+          },
+          onFinally: () => {
+            isResolvingCameraScanRef.current = false;
+          }
+        });
       });
 
       controlsRef.current = controls;
