@@ -69,6 +69,47 @@ export interface DeadStockReportInput {
   now?: Date;
 }
 
+// 在庫数が正の薬品コードだけを一意かつ安定した順序で抽出する（P2-2）。
+export function collectStockedDrugCodes(
+  drugs: ReadonlyArray<Pick<DeadStockDrugLike, 'code' | 'stockQuantity'>>
+): string[] {
+  const seen = new Set<string>();
+  for (const drug of drugs) {
+    if ((drug.stockQuantity || 0) <= 0) continue;
+    const code = String(drug.code || '').trim();
+    if (code) seen.add(code);
+  }
+  return Array.from(seen).sort();
+}
+
+// 在庫あり薬品の最終出庫日算出に必要な処方明細だけを抽出する（調剤薬コード優先、P2-2）。
+export function filterDeadStockItemsForDrugs<T extends DeadStockItemLike>(
+  items: readonly T[],
+  stockedDrugCodes: ReadonlyArray<string>
+): T[] {
+  const codeSet = new Set(stockedDrugCodes.map((code) => String(code || '').trim()).filter(Boolean));
+  if (codeSet.size === 0) return [];
+  return items.filter((item) => {
+    const stockDrugId = String(item.dispensedDrugCode || item.drugId || '').trim();
+    return Boolean(stockDrugId && codeSet.has(stockDrugId));
+  });
+}
+
+// 対象処方明細から暗号化 visits の findByIds に渡す受付IDを一意に抽出する（P2-2）。
+export function collectDeadStockVisitIds(
+  items: ReadonlyArray<Pick<DeadStockItemLike, 'visitId'>>
+): string[] {
+  const seen = new Set<string>();
+  const visitIds: string[] = [];
+  for (const item of items) {
+    const visitId = String(item.visitId || '').trim();
+    if (!visitId || seen.has(visitId)) continue;
+    seen.add(visitId);
+    visitIds.push(visitId);
+  }
+  return visitIds;
+}
+
 export function buildDeadStockReport({
   drugs,
   stockLots,

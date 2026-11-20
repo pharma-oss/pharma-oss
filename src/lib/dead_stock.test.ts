@@ -1,11 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from '../db/schema.ts';
+import { legacyMigrationStrategies } from '../db/index.ts';
+import type { PrescriptionItem, Visit } from '../db/types.ts';
 import {
   DEAD_STOCK_EMPTY_MESSAGE,
   DEAD_STOCK_LOADING_MESSAGE,
   DEAD_STOCK_LOAD_ERROR_MESSAGE,
   buildDeadStockCsv,
   buildDeadStockReport,
+  collectDeadStockVisitIds,
+  collectStockedDrugCodes,
+  filterDeadStockItemsForDrugs,
   getDeadStockPanelBodyState
 } from './dead_stock.ts';
 
@@ -123,5 +134,97 @@ test('getDeadStockPanelBodyState prioritizes error over loading/empty/ready and 
     getDeadStockPanelBodyState({ hasMovementSources: true, hasLoadError: false, entryCount: 1 }),
     { status: 'ready', message: null }
   );
+});
+
+test('collectStockedDrugCodes, filterDeadStockItemsForDrugs, and collectDeadStockVisitIds narrow lookups to positive-stock drugs (P2-2)', () => {
+  const stocked = collectStockedDrugCodes([
+    { code: 'D-002', stockQuantity: 5 },
+    { code: 'D-004', stockQuantity: 0 },
+    { code: 'D-005', stockQuantity: -1 },
+    { code: 'D-001', stockQuantity: 10 },
+    { code: ' D-002 ', stockQuantity: 2 }
+  ]);
+  assert.deepStrictEqual(stocked, ['D-001', 'D-002']);
+
+  const items = [
+    { visitId: 'v1', drugId: 'D-001' },
+    { visitId: 'v2', drugId: 'GEN-ZZZ', dispensedDrugCode: 'D-002' },
+    { visitId: 'v3', drugId: 'D-001', dispensedDrugCode: 'D-004' },
+    { visitId: 'v4', drugId: 'D-004' }
+  ];
+  const relevant = filterDeadStockItemsForDrugs(items, stocked);
+  assert.deepStrictEqual(relevant, [
+    { visitId: 'v1', drugId: 'D-001' },
+    { visitId: 'v2', drugId: 'GEN-ZZZ', dispensedDrugCode: 'D-002' }
+  ]);
+  assert.deepStrictEqual(collectDeadStockVisitIds([...relevant, { visitId: ' v1 ' }, { visitId: '' }]), ['v1', 'v2']);
+  assert.deepStrictEqual(filterDeadStockItemsForDrugs(items, []), []);
+});
+
+test('RxDB visits.findByIds(collectDeadStockVisitIds(...)) fetches only visits referenced by stocked drugs and matches full-scan report (P2-2)', async () => {
+  addRxPlugin(RxDBMigrationSchemaPlugin);
+  const storage = wrappedValidateAjvStorage({
+    storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+  });
+  const db = await createRxDatabase({
+    name: `dead_stock_p2_2_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    storage,
+    password: 'test-dead-stock-p22',
+    ignoreDuplicate: true
+  });
+  try {
+    const collections = await db.addCollections({
+      visits: { schema: VISIT_SCHEMA, migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {}) },
+      prescription_items: { schema: PRESCRIPTION_ITEM_SCHEMA, migrationStrategies: legacyMigrationStrategies(PRESCRIPTION_ITEM_SCHEMA, {}) }
+    });
+
+    const allVisits: Visit[] = [
+      { visitId: 'v1', patientId: 'pt_1', issueDate: '2026-07-01T10:00:00.000Z', status: 'completed' },
+      { visitId: 'v0', patientId: 'pt_2', issueDate: '2026-02-01T10:00:00.000Z', status: 'completed' },
+      { visitId: 'v_zero_stock', patientId: 'pt_3', issueDate: '2026-07-05T10:00:00.000Z', status: 'completed' },
+      { visitId: 'v_empty', patientId: 'pt_4', issueDate: '2026-07-05T11:00:00.000Z', status: 'waiting' }
+    ];
+    await collections.visits.bulkInsert(allVisits);
+
+    const allItems: PrescriptionItem[] = [
+      { itemId: 'i1', visitId: 'v1', drugId: 'D-001', amount: 1, days: 14, usage: '1日1回朝食後' },
+      { itemId: 'i2', visitId: 'v0', drugId: 'GEN-ZZZ', dispensedDrugCode: 'D-002', amount: 1, days: 7, usage: '1日2回塗布' },
+      { itemId: 'i3', visitId: 'v_zero_stock', drugId: 'D-004', amount: 1, days: 14, usage: '1日1回' }
+    ];
+    await collections.prescription_items.bulkInsert(allItems);
+
+    const stockedCodes = collectStockedDrugCodes(baseInput.drugs);
+    const itemDocs = await collections.prescription_items.find().exec();
+    const mappedItems = itemDocs.map((doc) => ({
+      visitId: doc.visitId,
+      drugId: doc.drugId,
+      dispensedDrugCode: doc.dispensedDrugCode
+    }));
+    const relevantItems = filterDeadStockItemsForDrugs(mappedItems, stockedCodes);
+    const visitIds = collectDeadStockVisitIds(relevantItems);
+    assert.deepStrictEqual(visitIds.sort(), ['v0', 'v1']);
+
+    const visitsMap = await collections.visits.findByIds(visitIds).exec();
+    const scopedVisits = visitIds
+      .map((id) => visitsMap.get(id))
+      .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc))
+      .map((doc) => ({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status }));
+
+    assert.deepStrictEqual(scopedVisits.map((v) => v.visitId).sort(), ['v0', 'v1']);
+
+    const scopedReport = buildDeadStockReport({
+      ...baseInput,
+      prescriptionItems: relevantItems,
+      visits: scopedVisits
+    });
+    const fullReport = buildDeadStockReport({
+      ...baseInput,
+      prescriptionItems: mappedItems,
+      visits: allVisits.map((v) => ({ visitId: v.visitId, issueDate: v.issueDate, status: v.status }))
+    });
+    assert.deepStrictEqual(scopedReport, fullReport);
+  } finally {
+    await db.close();
+  }
 });
 

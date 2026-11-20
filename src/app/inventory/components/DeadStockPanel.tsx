@@ -7,6 +7,9 @@ import { DrugStock, type PharmacyDatabase } from '@/db/types';
 import {
     buildDeadStockCsv,
     buildDeadStockReport,
+    collectDeadStockVisitIds,
+    collectStockedDrugCodes,
+    filterDeadStockItemsForDrugs,
     getDeadStockPanelBodyState,
     type DeadStockEntry,
     type DeadStockItemLike,
@@ -27,26 +30,48 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
     const [movementSources, setMovementSources] = useState<{ items: DeadStockItemLike[]; visits: DeadStockVisitLike[] } | null>(null);
     const [hasLoadError, setHasLoadError] = useState(false);
 
+    const stockedDrugCodesKey = useMemo(() => collectStockedDrugCodes(drugs).join('\0'), [drugs]);
+
     useEffect(() => {
         let isMounted = true;
+        const stockedDrugCodes = stockedDrugCodesKey ? stockedDrugCodesKey.split('\0') : [];
         const loadMovementSources = async () => {
             if (!db) {
                 setMovementSources(null);
                 setHasLoadError(false);
                 return;
             }
+            if (stockedDrugCodes.length === 0) {
+                setMovementSources({ items: [], visits: [] });
+                setHasLoadError(false);
+                return;
+            }
             setMovementSources(null);
             setHasLoadError(false);
             try {
-                const [itemDocs, visitDocs] = await Promise.all([
-                    db.prescription_items.find().exec(),
-                    db.visits.find().exec()
-                ]);
+                // 在庫あり薬品の出庫明細に紐づく受付IDだけを findByIds で取得し、無関係な暗号化 visits の復号を避ける（P2-2）
+                const itemDocs = await db.prescription_items.find().exec();
                 if (!isMounted) return;
-                setMovementSources({
-                    items: itemDocs.map((doc) => ({ visitId: doc.visitId, drugId: doc.drugId, dispensedDrugCode: doc.dispensedDrugCode })),
-                    visits: visitDocs.map((doc) => ({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status }))
-                });
+                const allItems: DeadStockItemLike[] = itemDocs.map((doc) => ({
+                    visitId: doc.visitId,
+                    drugId: doc.drugId,
+                    dispensedDrugCode: doc.dispensedDrugCode
+                }));
+                const relevantItems = filterDeadStockItemsForDrugs(allItems, stockedDrugCodes);
+                const visitIds = collectDeadStockVisitIds(relevantItems);
+                const visitsMap = visitIds.length > 0
+                    ? await db.visits.findByIds(visitIds).exec()
+                    : null;
+                if (!isMounted) return;
+                const visits: DeadStockVisitLike[] = [];
+                if (visitsMap) {
+                    for (const visitId of visitIds) {
+                        const doc = visitsMap.get(visitId);
+                        if (!doc) continue;
+                        visits.push({ visitId: doc.visitId, issueDate: doc.issueDate, status: doc.status });
+                    }
+                }
+                setMovementSources({ items: relevantItems, visits });
                 setHasLoadError(false);
             } catch (error) {
                 console.error('Failed to load movement sources for dead stock:', error);
@@ -59,7 +84,7 @@ export function DeadStockPanel({ db, drugs, stockLots, onOpenTransfer }: DeadSto
         };
         loadMovementSources();
         return () => { isMounted = false; };
-    }, [db]);
+    }, [db, stockedDrugCodesKey]);
 
     const entries: DeadStockEntry[] = useMemo(() => {
         if (!movementSources || hasLoadError) return [];
