@@ -2,6 +2,7 @@ import type { DrugStock } from '../db/types.ts';
 import {
   applyReversiblePatches,
   undoAppliedPatchesNote,
+  type PatchableDocument,
   type ReversiblePatch
 } from './rxdb_restore.ts';
 import { AuditLogFailedError, ROLLBACK_ALSO_FAILED_NOTE } from './audit_guard.ts';
@@ -16,7 +17,7 @@ interface ImportDb {
     bulkInsert: (docs: DrugStock[]) => Promise<{ success: Array<{ remove: () => Promise<unknown> }>; error: unknown[] }>;
   };
   drugs: {
-    findByIds: (ids: string[]) => { exec: () => Promise<Map<string, any>> };
+    findByIds: (ids: string[]) => { exec: () => Promise<Map<string, PatchableDocument & { stockQuantity?: number }>> };
   };
 }
 

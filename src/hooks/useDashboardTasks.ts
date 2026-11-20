@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import type { Visit } from '@/db/types';
+import type { DrugStock, Visit } from '@/db/types';
 import { useDatabase } from '@/db/DatabaseProvider';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import { isActivePatientAlert } from '@/lib/patient_alerts';
 import { buildOperationalKpis, type OperationalKpiSoapRecord, type OperationalKpis } from '@/lib/operational_kpi';
 import { hasTutorialDemoData } from '@/lib/demo_data';
 import {
+  type DashboardDrugLike,
   type DashboardTask,
   type DashboardCounts,
   type DashboardInventoryRisk,
@@ -162,7 +163,7 @@ export function useDashboardTasks() {
 
         const processingVisitIds = new Set<string>(processingVisits.map((v) => v.visitId));
         const activeVisitIdSet = new Set<string>(activeVisits.map((v) => v.visitId));
-        const activeVisitById = new Map<string, any>(activeVisits.map((v) => [v.visitId, v]));
+        const activeVisitById = new Map<string, (typeof activeVisits)[number]>(activeVisits.map((v) => [v.visitId, v]));
         const activeVisitIds = activeVisits.map((v) => v.visitId);
         const completedVisitIds = completedVisits.map((v) => v.visitId);
         const monthlyClaimVisitIds = monthlyClaimVisits.map((v) => v.visitId);
@@ -200,7 +201,7 @@ export function useDashboardTasks() {
 
         // 院内全医薬品および全在庫ロットを取得（同一YJコード代替薬候補の網羅的探索および発注点・期限切迫評価を可能にする）
         const allDrugDocs = await db.drugs.find().exec();
-        const drugMap = new Map<string, any>();
+        const drugMap = new Map<string, DashboardDrugLike>();
         for (let i = 0; i < allDrugDocs.length; i++) {
           const doc = allDrugDocs[i];
           const data = typeof doc.toJSON === 'function' ? doc.toJSON() : doc;
@@ -211,7 +212,7 @@ export function useDashboardTasks() {
         }
 
         const allStockDocs = await db.drug_stocks.find().exec();
-        const stocksByDrugId = new Map<string, any[]>();
+        const stocksByDrugId = new Map<string, Array<Partial<DrugStock>>>();
         for (let i = 0; i < allStockDocs.length; i++) {
           const stock = allStockDocs[i];
           const data = typeof stock.toJSON === 'function' ? stock.toJSON() : stock;
@@ -241,7 +242,7 @@ export function useDashboardTasks() {
         const patientAlerts = patientIds.length > 0
           ? await db.alerts.find({ selector: { patientId: { $in: patientIds } } }).exec()
           : [];
-        const alertsByPatientId = new Map<string, any[]>();
+        const alertsByPatientId = new Map<string, Array<(typeof patientAlerts)[number]>>();
         for (let i = 0; i < patientAlerts.length; i++) {
           const alert = patientAlerts[i];
           if (!isActivePatientAlert(alert)) continue;

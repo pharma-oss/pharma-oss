@@ -864,7 +864,7 @@ export function useDrugMasterSettings({
       database.prescription_items.find({ selector: { drugId: drugCode } }).exec(),
       database.prescription_items.find({ selector: { dispensedDrugCode: drugCode } }).exec()
     ]);
-    const itemsById = new Map<string, any>();
+    const itemsById = new Map<string, (typeof prescribedDocs)[number]>();
     for (const doc of [...prescribedDocs, ...dispensedDocs]) {
       itemsById.set(doc.get('itemId') as string, doc);
     }

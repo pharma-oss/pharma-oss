@@ -1,4 +1,5 @@
 import type { Alert, Drug, DrugStock, FacilitySettings, Patient, PrescriptionItem, Visit } from '@/db/types';
+import type { DrugPriceRevision } from './drug_price_history';
 import { calculateDispensingFees, getTotalPoints, type ItemWithPrice } from './calculator';
 import { validateDispensingClaim, type ClaimValidationItem, type ClaimValidationIssue } from './claim_validation';
 import { buildClaimRiskSummary } from './claim_risk';
@@ -21,6 +22,10 @@ import { evaluateInsuranceEligibility } from './insurance_eligibility';
 import { calculateReorderAmounts } from './inventory_reorder_support';
 import { toLocalDateKey } from './local_date';
 import { isSelfPayPatient } from './self_pay_claim';
+
+export type DashboardDrugLike = Omit<Partial<Drug>, 'priceHistory'> & {
+  priceHistory?: ReadonlyArray<DrugPriceRevision>;
+};
 
 export interface DashboardTask {
   visitId: string;
@@ -341,7 +346,7 @@ export interface CalculateInventoryRisksParams {
     shortageAmount: number;
     pickingShortageAmount?: number;
   }>;
-  drugMap: Map<string, Partial<Drug>>;
+  drugMap: Map<string, DashboardDrugLike>;
   stocksByDrugId: Map<string, Array<Partial<DrugStock>>>;
   requiredVisitIdsByStockDrugId: Map<string, Set<string>>;
   activeVisitById: Map<string, Pick<Visit, 'patientId'>>;
@@ -519,7 +524,7 @@ export interface CalculateClaimRisksParams {
   claimReadyVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'> & { claimOptions?: Visit['claimOptions'] }>;
   patientMap: Map<string, DashboardPatientLike | Patient>;
   itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string; amount: number; days: number }>>;
-  drugMap: Map<string, Partial<Drug>>;
+  drugMap: Map<string, DashboardDrugLike>;
   settingsData?: Partial<FacilitySettings> | Record<string, unknown> | null;
   alertsByPatientId: Map<string, DashboardAlertLike[]>;
 }
@@ -867,7 +872,7 @@ export interface CalculateFollowUpCandidatesParams {
   }>;
   itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { drugId: string; dispensedDrugCode?: string; days?: number }>>;
   alertsByPatientId: Map<string, DashboardAlertLike[]>;
-  drugMap: Map<string, Partial<Drug>>;
+  drugMap: Map<string, DashboardDrugLike>;
   interventionVisitIds: Set<string>;
   patientMap: Map<string, { name?: string }>;
   basisDate?: Date;
@@ -1014,7 +1019,7 @@ export interface CalculateProcessingTasksParams {
   processingVisits: Array<Pick<Visit, 'visitId' | 'patientId' | 'issueDate'>>;
   patientMap: Map<string, { name?: string; birthDate?: string }>;
   itemsByVisitId: Map<string, Array<Partial<PrescriptionItem> & { itemId: string; drugId: string }>>;
-  drugMap: Map<string, Partial<Drug>>;
+  drugMap: Map<string, DashboardDrugLike>;
   shortageDrugIds: Set<string>;
   alertsByPatientId: Map<string, DashboardAlertLike[]>;
   basisDate?: Date;
@@ -1404,7 +1409,7 @@ export function getEffectiveAvailableStock(
 export function calculateDashboardStockShortages(params: {
   requiredByStockDrugId: Map<string, number>;
   pickingShortageByStockDrugId: Map<string, number>;
-  drugMap: Map<string, Partial<Drug>>;
+  drugMap: Map<string, DashboardDrugLike>;
   stocksByDrugId: Map<string, Array<Partial<DrugStock>>>;
   now?: Date;
 }) {

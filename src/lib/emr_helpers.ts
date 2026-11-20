@@ -130,3 +130,38 @@ export interface PickingItem {
   pickedExpirationDate?: string;
 }
 
+export interface EmrPickingStockLot {
+  id: string;
+  janCode?: string;
+  lotNumber?: string;
+  expirationDate?: string;
+  arrivalDate?: string;
+  quantity: number;
+}
+
+export interface EmrPickingItem extends PickingItem {
+  visitId: string;
+  rpNumber?: number;
+  drugId: string;
+  stockDrugId: string;
+  prescribedDrugName: string;
+  yjCode?: string;
+  janCodes: string[];
+  amount: number;
+  usage: string;
+  days: number;
+  pickedAt?: string;
+  pickedGs1Code?: string;
+  pickedStockId?: string;
+  stockLots: EmrPickingStockLot[];
+}
+
+export interface EmrPrescribedDrugItem {
+  code?: string;
+  name?: string;
+  documentUrl?: string;
+  genericName?: string;
+  isGeneric?: boolean;
+  isHighRisk?: boolean;
+}
+

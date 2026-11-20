@@ -40,13 +40,8 @@ import {
   findContraindicatedConditionWarnings
 } from '@/lib/drug_contraindicated_condition_check';
 import {
-  consumeFromStockLot,
-  inquiryStatusLabel,
-  applyReversiblePatches,
-  rollbackAppliedPatches,
-  safeStockQuantity,
-  tracingStatusLabel,
-  type ReversiblePatch
+  consumeFromStockLot, inquiryStatusLabel, applyReversiblePatches, rollbackAppliedPatches,
+  safeStockQuantity, tracingStatusLabel, type EmrPickingItem, type EmrPrescribedDrugItem, type ReversiblePatch
 } from '@/lib/emr_helpers';
 import {
   INTERVENTION_CATEGORY_LABELS,
@@ -64,11 +59,8 @@ import {
   SoapHistoryPanel
 } from './components/SoapComponents';
 import {
-  CareChecklistCard,
-  WarningInsightCard,
-  SoapAiDraftInsightCard,
-  VitalInsightCard,
-  DocLinkInsightCard
+  CareChecklistCard, WarningInsightCard, type WarningInsightItem,
+  SoapAiDraftInsightCard, VitalInsightCard, DocLinkInsightCard
 } from './components/EmrInsightCards';
 import { PickingSupportModal } from './components/PickingSupportModal';
 import { TracingReportModal } from './components/TracingReportModal';
@@ -103,13 +95,13 @@ export default function EmrPage() {
   } | null>(null);
 
   // States for warnings
-  const [warnings, setWarnings] = useState<any[]>([]);
+  const [warnings, setWarnings] = useState<WarningInsightItem[]>([]);
   const [isWarningsLoading, setIsWarningsLoading] = useState(false);
-  const [prescribedDrugs, setPrescribedDrugs] = useState<any[]>([]);
+  const [prescribedDrugs, setPrescribedDrugs] = useState<EmrPrescribedDrugItem[]>([]);
   const [patientAlerts, setPatientAlerts] = useState<Alert[]>([]);
 
   // States for Picking Support Mode
-  const [pickingItems, setPickingItems] = useState<any[]>([]);
+  const [pickingItems, setPickingItems] = useState<EmrPickingItem[]>([]);
   const [hasPickingLoadError, setHasPickingLoadError] = useState(false);
   const [isPickingModalOpen, setIsPickingModalOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -1140,7 +1132,7 @@ useEffect(() => {
         const visitJson = visit.toJSON() as Visit;
         const items = await db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec();
 
-        const newWarnings = [];
+        const newWarnings: WarningInsightItem[] = [];
 
         let patientAge: number | undefined;
         let activePatientAlertsArr: Alert[] = [];

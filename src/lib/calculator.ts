@@ -1112,7 +1112,7 @@ export function calculateDispensingFees(
   // 8.5 計量混合調剤加算 / 自家製剤加算 (Measurement Mixing Addition / In-house Preparation Addition)
   // Group internal/tonpuku medicines by RP (usage) and external by RP to determine if we should add mixing points.
   if (enrichedItems.length > 0 && isFeeEnabled('mixing', options)) {
-    const rpGroups: Record<string, any[]> = {};
+    const rpGroups: Record<string, Array<{ isCrushed?: boolean; yjCode?: string; days?: number }>> = {};
     for (let i = 0; i < enrichedItems.length; i++) {
       const item = enrichedItems[i];
       if (!item.claimPreparation) continue;
