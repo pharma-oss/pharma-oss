@@ -125,6 +125,7 @@ export function useDashboardTasks() {
   }, [recordFollowUpCandidate]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadTasks() {
       if (!db) {
         setCounts(EMPTY_COUNTS);
@@ -140,12 +141,15 @@ export function useDashboardTasks() {
 
       try {
         setIsLoading(true);
-        setHasDemoData(await hasTutorialDemoData(db));
+        const demoDataPresent = await hasTutorialDemoData(db);
+        if (cancelled) return;
+        setHasDemoData(demoDataPresent);
         const allVisits = await db.visits.find({
           selector: {
             status: { $in: ['waiting', 'processing', 'completed'] }
           }
         }).exec();
+        if (cancelled) return;
         const today = new Date();
 
         const {
@@ -183,6 +187,7 @@ export function useDashboardTasks() {
             ? db.prescription_items.find({ selector: { visitId: { $in: uniqueVisitIdsForItems } } }).exec()
             : Promise.resolve([])
         ]);
+        if (cancelled) return;
 
         const interventionVisitIds = new Set<string>(interventionDocs.map((d) => d.visitId));
         const prescriptionItems = prescriptionDocs.map((d) => typeof d.toJSON === 'function' ? d.toJSON() : d);
@@ -252,6 +257,7 @@ export function useDashboardTasks() {
         }
 
         const settingsDoc = await db.facility_settings.findOne('default').exec();
+        if (cancelled) return;
         const settingsData = settingsDoc && typeof settingsDoc.toJSON === 'function'
           ? settingsDoc.toJSON()
           : settingsDoc;
@@ -328,6 +334,7 @@ export function useDashboardTasks() {
           basisDate: today
         });
 
+        if (cancelled) return;
         setTasks(taskData);
         setCounts(nextCounts);
         setKpis(nextKpis);
@@ -337,15 +344,21 @@ export function useDashboardTasks() {
         setFollowUpCandidates(followUpCandidates);
         setError(null);
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load tasks securely:', err);
         setError(err instanceof Error ? err : new Error('Unknown error occurred'));
         setKpis(EMPTY_OPERATIONAL_KPIS);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     loadTasks();
+    return () => {
+      cancelled = true;
+    };
   }, [db, refreshSeq]);
 
   return {

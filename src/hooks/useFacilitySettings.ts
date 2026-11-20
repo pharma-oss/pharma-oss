@@ -36,6 +36,64 @@ interface UseFacilitySettingsProps {
   refreshAuditEvidence?: () => Promise<void>;
 }
 
+export const DEFAULT_FACILITY_SETTINGS: FacilitySettings = {
+  id: 'default',
+  pharmacyName: 'Next-Gen 薬局',
+  pharmacyKana: '',
+  pharmacyCode: '',
+  pharmacyPostalCode: '123-4567',
+  pharmacyAddress: '東京都渋谷区桜丘町26-1',
+  pharmacyPhone: '03-1234-5678',
+  pharmacyFax: '',
+  registrationNumber: '',
+  ownerName: '',
+  managerName: '',
+  defaultPharmacistName: '山田',
+  baseFeeCategory: '1',
+  regionalSupportAddition: 'none',
+  medicalDxAddition: false,
+  postGenericAddition: 'none',
+  genericDispensingReduction: false,
+  aiAssistMode: 'limited',
+  officialFeeCodeOverrides: {}
+};
+
+export function normalizeLoadedFacilitySettings(
+  saved: Partial<FacilitySettings> | null | undefined
+): FacilitySettings {
+  if (!saved) {
+    return {
+      ...DEFAULT_FACILITY_SETTINGS,
+      officialFeeCodeOverrides: {}
+    };
+  }
+  return {
+    id: 'default',
+    pharmacyName: saved.pharmacyName || DEFAULT_FACILITY_SETTINGS.pharmacyName,
+    pharmacyKana: saved.pharmacyKana || '',
+    pharmacyCode: saved.pharmacyCode || '',
+    pharmacyPostalCode: saved.pharmacyPostalCode || DEFAULT_FACILITY_SETTINGS.pharmacyPostalCode,
+    pharmacyAddress: saved.pharmacyAddress || DEFAULT_FACILITY_SETTINGS.pharmacyAddress,
+    pharmacyPhone: saved.pharmacyPhone || DEFAULT_FACILITY_SETTINGS.pharmacyPhone,
+    pharmacyFax: saved.pharmacyFax || '',
+    registrationNumber: saved.registrationNumber || '',
+    ownerName: saved.ownerName || '',
+    managerName: saved.managerName || '',
+    defaultPharmacistName: saved.defaultPharmacistName || DEFAULT_FACILITY_SETTINGS.defaultPharmacistName,
+    baseFeeCategory: saved.baseFeeCategory || DEFAULT_FACILITY_SETTINGS.baseFeeCategory,
+    regionalSupportAddition: saved.regionalSupportAddition || DEFAULT_FACILITY_SETTINGS.regionalSupportAddition,
+    medicalDxAddition: !!saved.medicalDxAddition,
+    postGenericAddition: saved.postGenericAddition || DEFAULT_FACILITY_SETTINGS.postGenericAddition,
+    genericDispensingReduction: !!saved.genericDispensingReduction,
+    aiAssistMode: normalizeAiAssistMode(saved.aiAssistMode),
+    officialFeeCodeOverrides: saved.officialFeeCodeOverrides
+      ? { ...saved.officialFeeCodeOverrides }
+      : {},
+    // 項目ごとに組み直しているので、足し忘れると読み込みと次の保存で消える
+    businessHours: saved.businessHours
+  };
+}
+
 export function useFacilitySettings({
   db,
   currentUser,
@@ -43,27 +101,10 @@ export function useFacilitySettings({
   ensurePermission,
   refreshAuditEvidence
 }: UseFacilitySettingsProps) {
-  const [settings, setSettings] = useState<FacilitySettings>({
-    id: 'default',
-    pharmacyName: 'Next-Gen 薬局',
-    pharmacyKana: '',
-    pharmacyCode: '',
-    pharmacyPostalCode: '123-4567',
-    pharmacyAddress: '東京都渋谷区桜丘町26-1',
-    pharmacyPhone: '03-1234-5678',
-    pharmacyFax: '',
-    registrationNumber: '',
-    ownerName: '',
-    managerName: '',
-    defaultPharmacistName: '山田',
-    baseFeeCategory: '1',
-    regionalSupportAddition: 'none',
-    medicalDxAddition: false,
-    postGenericAddition: 'none',
-    genericDispensingReduction: false,
-    aiAssistMode: 'limited',
+  const [settings, setSettings] = useState<FacilitySettings>(() => ({
+    ...DEFAULT_FACILITY_SETTINGS,
     officialFeeCodeOverrides: {}
-  });
+  }));
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isImportingOfficialFeeCodeCsv, setIsImportingOfficialFeeCodeCsv] = useState(false);
   const [isReviewingOfficialFeeCodeMasterCsv, setIsReviewingOfficialFeeCodeMasterCsv] = useState(false);
@@ -71,42 +112,25 @@ export function useFacilitySettings({
   const [officialFeeCodeMasterFileName, setOfficialFeeCodeMasterFileName] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     async function loadSettings() {
       if (!db) return;
       try {
         const doc = await db.facility_settings.findOne('default').exec();
+        if (cancelled) return;
         if (doc) {
-          const saved = doc.toJSON();
-          setSettings({
-            id: 'default',
-            pharmacyName: saved.pharmacyName || 'Next-Gen 薬局',
-            pharmacyKana: saved.pharmacyKana || '',
-            pharmacyCode: saved.pharmacyCode || '',
-            pharmacyPostalCode: saved.pharmacyPostalCode || '123-4567',
-            pharmacyAddress: saved.pharmacyAddress || '東京都渋谷区桜丘町26-1',
-            pharmacyPhone: saved.pharmacyPhone || '03-1234-5678',
-            pharmacyFax: saved.pharmacyFax || '',
-            registrationNumber: saved.registrationNumber || '',
-            ownerName: saved.ownerName || '',
-            managerName: saved.managerName || '',
-            defaultPharmacistName: saved.defaultPharmacistName || '山田',
-            baseFeeCategory: saved.baseFeeCategory || '1',
-            regionalSupportAddition: saved.regionalSupportAddition || 'none',
-            medicalDxAddition: !!saved.medicalDxAddition,
-            postGenericAddition: saved.postGenericAddition || 'none',
-            genericDispensingReduction: !!saved.genericDispensingReduction,
-            aiAssistMode: normalizeAiAssistMode(saved.aiAssistMode),
-            officialFeeCodeOverrides: saved.officialFeeCodeOverrides || {},
-            // 項目ごとに組み直しているので、足し忘れると読み込みと次の保存で消える
-            businessHours: saved.businessHours
-          });
+          setSettings(normalizeLoadedFacilitySettings(doc.toJSON()));
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Failed to load facility settings securely:', error);
         toast.error('施設基準設定の読み込みに失敗しました。');
       }
     }
     loadSettings();
+    return () => {
+      cancelled = true;
+    };
   }, [db]);
 
   const handleSettingsChange = <K extends keyof FacilitySettings>(field: K, value: FacilitySettings[K]) => {

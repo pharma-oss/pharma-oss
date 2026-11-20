@@ -1114,24 +1114,23 @@ export default function EmrPage() {
       toast.error('ピッキング結果の取込に失敗しました');
     }
   }, [db, ensureActiveVisitEditable, findActiveVisit, pickingItems]);
-
-
-
-useEffect(() => {
+  useEffect(() => {
+    let cancelled = false;
     async function fetchWarnings() {
       if (!db) return;
       setIsWarningsLoading(true);
       try {
         const visit = await findActiveVisit();
+        if (cancelled) return;
         if (!visit) {
           setWarnings([]);
           setPrescribedDrugs([]);
           setPatientAlerts([]);
-          setIsWarningsLoading(false);
           return;
         }
         const visitJson = visit.toJSON() as Visit;
         const items = await db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec();
+        if (cancelled) return;
 
         const newWarnings: WarningInsightItem[] = [];
 
@@ -1146,9 +1145,11 @@ useEffect(() => {
             }
 
             const alerts = await db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
+            if (cancelled) return;
             activePatientAlertsArr = alerts.map((alert) => alert.toJSON()).filter(isActivePatientAlert);
             setPatientAlerts(activePatientAlertsArr);
         } catch (e) {
+            if (cancelled) return;
             console.error("Failed to fetch patient data for warnings", e);
             hasPatientDataFetchError = true;
         }
@@ -1168,6 +1169,7 @@ useEffect(() => {
         }
         const drugIds = Array.from(drugIdSet);
         const drugsMap = await db.drugs.findByIds(drugIds).exec();
+        if (cancelled) return;
 
         // Fetch all drug names in current prescription for cross-checking
         for (const item of items) {
@@ -1226,6 +1228,7 @@ useEffect(() => {
         const drugInfoMap = await findDrugInfosByDrugNames(
           Array.from(uniqueDrugs.values()).map((drug) => drug.name)
         );
+        if (cancelled) return;
 
         const interactionResult = findDrugInteractionWarnings(
           Array.from(uniqueDrugs.values()).map((drug) => ({
@@ -1315,19 +1318,19 @@ useEffect(() => {
            newWarnings.push(createPatientDataFetchErrorWarning());
         }
 
+        if (cancelled) return;
         setWarnings(newWarnings);
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to fetch warnings', err);
         setWarnings([createWarningsCalculationErrorWarning()]);
       } finally {
-        setIsWarningsLoading(false);
+        if (!cancelled) setIsWarningsLoading(false);
       }
     }
     fetchWarnings();
+    return () => { cancelled = true; };
   }, [db, findActiveVisit]);
-
-
-
   const handleCompleteVisit = async (options?: { skipConfirmation?: boolean }) => {
     if (!db) return;
 
