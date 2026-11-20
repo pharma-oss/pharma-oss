@@ -6,7 +6,7 @@ import type { Drug } from '@/db/types';
 import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
-import { InventoryRow, type InventoryRowProps } from './components/InventoryRow';
+import { InventoryRow, saveDrugLocationChange, type InventoryRowProps } from './components/InventoryRow';
 import { toInventoryDrugRow } from './types';
 
 function drug(overrides: Partial<Drug> & Pick<Drug, 'code' | 'name'>): Drug {
@@ -254,5 +254,48 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
 
     const adjustBtn = findOpeningTag(html, '0へ補正', 'button');
     assert.doesNotMatch(adjustBtn, /\sdisabled=""(?=[\s/>]|$)/, 'Adjustment button must stay enabled when only reorder point is saving');
+  });
+
+  it('saveDrugLocationChange handles location creation/patch success and returns Japanese alerts on insert or patch failure', async () => {
+    const inserted: unknown[] = [];
+    const patched: Array<Record<string, unknown>> = [];
+    const newLoc = { id: 'loc-new', part1: 'A', part2: '09', part3: '', displayText: 'A-09' };
+
+    const okOutcome = await saveDrugLocationChange({
+      drugDoc: { patch: async (v) => { patched.push(v); } },
+      locationString: 'A-09',
+      newLocationDoc: newLoc,
+      locationsCollection: { insert: async (doc) => { inserted.push(doc); } }
+    });
+    assert.deepEqual(okOutcome, { ok: true, alertMessage: null });
+    assert.equal(inserted.length, 1);
+    assert.deepEqual(patched, [{ location: 'A-09' }]);
+
+    // 新規棚番登録が失敗した場合は薬品への patch を行わず通知を返す
+    let patchCalledOnInsertFail = false;
+    const insertFail = await saveDrugLocationChange({
+      drugDoc: { patch: async () => { patchCalledOnInsertFail = true; } },
+      locationString: 'A-09',
+      newLocationDoc: newLoc,
+      locationsCollection: { insert: async () => { throw new Error('insert failed'); } }
+    });
+    assert.equal(insertFail.ok, false);
+    assert.equal(patchCalledOnInsertFail, false);
+    assert.match(insertFail.alertMessage || '', /新しい棚番地の登録に失敗しました/);
+
+    // 薬品 patch 失敗時は保存失敗・クリア失敗それぞれに応じた通知を返す
+    const patchFail = await saveDrugLocationChange({
+      drugDoc: { patch: async () => { throw new Error('CONFLICT'); } },
+      locationString: 'B-01-02'
+    });
+    assert.equal(patchFail.ok, false);
+    assert.match(patchFail.alertMessage || '', /薬品の棚番地の保存に失敗しました/);
+
+    const clearFail = await saveDrugLocationChange({
+      drugDoc: { patch: async () => { throw new Error('CONFLICT'); } },
+      locationString: ''
+    });
+    assert.equal(clearFail.ok, false);
+    assert.match(clearFail.alertMessage || '', /棚番地のクリアに失敗しました/);
   });
 });

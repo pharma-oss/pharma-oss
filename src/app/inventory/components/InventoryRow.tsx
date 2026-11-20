@@ -8,6 +8,52 @@ import { AuditLogFailedError, runWithAuditRollback } from '@/lib/audit_guard';
 import { type DrugWithSearchCache, toHalfWidth } from '../types';
 import { restoreFields } from '@/lib/rxdb_restore';
 
+export interface DrugLocationSaveOutcome {
+    ok: boolean;
+    alertMessage: string | null;
+}
+
+export async function saveDrugLocationChange(params: {
+    drugDoc: { patch: (values: Record<string, unknown>) => Promise<unknown> } | null | undefined;
+    locationString: string;
+    newLocationDoc?: Location;
+    locationsCollection?: { insert: (doc: Location) => Promise<unknown> } | null;
+}): Promise<DrugLocationSaveOutcome> {
+    const { drugDoc, locationString, newLocationDoc, locationsCollection } = params;
+    if (newLocationDoc) {
+        if (!locationsCollection) {
+            return {
+                ok: false,
+                alertMessage: 'データベースの準備が完了していないため、新しい棚番地を登録できませんでした。'
+            };
+        }
+        try {
+            await locationsCollection.insert(newLocationDoc);
+        } catch (error) {
+            console.error('Failed to insert new location master entry:', error);
+            return {
+                ok: false,
+                alertMessage: '新しい棚番地の登録に失敗しました。棚番地は変更されていません。もう一度お試しください。'
+            };
+        }
+    }
+    if (!drugDoc) {
+        return { ok: true, alertMessage: null };
+    }
+    try {
+        await drugDoc.patch({ location: locationString });
+        return { ok: true, alertMessage: null };
+    } catch (error) {
+        console.error('Failed to update drug location:', error);
+        return {
+            ok: false,
+            alertMessage: locationString
+                ? '薬品の棚番地の保存に失敗しました。画面の表示を元に戻します。もう一度お試しください。'
+                : '棚番地のクリアに失敗しました。画面の表示を元に戻します。もう一度お試しください。'
+        };
+    }
+}
+
 export interface InventoryRowProps {
     drug: DrugWithSearchCache;
     pendingStock: number;
@@ -122,6 +168,13 @@ const LocationEditor = React.memo(function LocationEditor({ drug, db, locations 
         setPart3(parts[2] || '');
     }, [drug.location]);
 
+    const resetInputsFromDrugLocation = () => {
+        const parts = drug.location ? drug.location.split('-') : ['', '', ''];
+        setPart1(parts[0] || '');
+        setPart2(parts[1] || '');
+        setPart3(parts[2] || '');
+    };
+
     const handleSave = async () => {
         if (!db) return;
 
@@ -134,8 +187,13 @@ const LocationEditor = React.memo(function LocationEditor({ drug, db, locations 
         setPart3(p3);
 
         if (!p1 && !p2 && !p3) {
-            if (drug.doc) {
-                await drug.doc.patch({ location: '' });
+            const outcome = await saveDrugLocationChange({
+                drugDoc: drug.doc,
+                locationString: ''
+            });
+            if (!outcome.ok) {
+                resetInputsFromDrugLocation();
+                if (outcome.alertMessage) alert(outcome.alertMessage);
             }
             return;
         }
@@ -151,22 +209,30 @@ const LocationEditor = React.memo(function LocationEditor({ drug, db, locations 
             }
         }
 
+        let newLocationDoc: Location | undefined;
         if (!exists) {
             if (window.confirm(`棚番地「${locationString}」はマスターに存在しません。新しく作成しますか？`)) {
-                await db.locations.insert({
+                newLocationDoc = {
                     id: generateUUID(),
                     part1: p1,
                     part2: p2,
                     part3: p3,
                     displayText: locationString
-                });
+                };
             } else {
                 return;
             }
         }
 
-        if (drug.doc) {
-            await drug.doc.patch({ location: locationString });
+        const outcome = await saveDrugLocationChange({
+            drugDoc: drug.doc,
+            locationString,
+            newLocationDoc,
+            locationsCollection: db.locations
+        });
+        if (!outcome.ok) {
+            resetInputsFromDrugLocation();
+            if (outcome.alertMessage) alert(outcome.alertMessage);
         }
     };
 

@@ -194,6 +194,60 @@ export async function executeBulkLocationInsert(
     };
 }
 
+export interface SingleLocationMutationOutcome {
+    ok: boolean;
+    alertMessage: string | null;
+}
+
+export async function executeSingleLocationAdd(
+    locationsCollection: { insert: (doc: Location) => Promise<unknown> } | null | undefined,
+    doc: Location
+): Promise<SingleLocationMutationOutcome> {
+    if (!locationsCollection) {
+        return {
+            ok: false,
+            alertMessage: 'データベースの準備が完了していないため、棚番地を追加できませんでした。'
+        };
+    }
+    try {
+        await locationsCollection.insert(doc);
+        return { ok: true, alertMessage: null };
+    } catch (error) {
+        console.error('Failed to add location:', error);
+        return {
+            ok: false,
+            alertMessage: '棚番地の追加に失敗しました。入力内容とデータベースの状態を確認して、もう一度お試しください。'
+        };
+    }
+}
+
+export async function executeSingleLocationDelete(
+    locationsCollection: {
+        findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
+    } | null | undefined,
+    id: string
+): Promise<SingleLocationMutationOutcome> {
+    if (!locationsCollection) {
+        return {
+            ok: false,
+            alertMessage: 'データベースの準備が完了していないため、棚番地を削除できませんでした。'
+        };
+    }
+    try {
+        const doc = await locationsCollection.findOne(id).exec();
+        if (doc) {
+            await doc.remove();
+        }
+        return { ok: true, alertMessage: null };
+    } catch (error) {
+        console.error('Failed to delete location:', error);
+        return {
+            ok: false,
+            alertMessage: '棚番地の削除に失敗しました。ページを再読み込みして状態を確認してください。'
+        };
+    }
+}
+
 export interface LocationMasterProps {
     db: PharmacyDatabase | null | undefined;
     locations: Location[];
@@ -315,13 +369,17 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
             return;
         }
 
-        await db.locations.insert({
+        const outcome = await executeSingleLocationAdd(db.locations, {
             id: generateUUID(),
             part1: p1,
             part2: p2,
             part3: p3,
             displayText: locationString
         });
+        if (!outcome.ok) {
+            if (outcome.alertMessage) alert(outcome.alertMessage);
+            return;
+        }
 
         setPart1('');
         setPart2('');
@@ -331,9 +389,9 @@ export function LocationMaster({ db, locations, drugs }: LocationMasterProps) {
     const handleDelete = async (id: string) => {
         if (!db) return;
         if (window.confirm('この棚番地を削除しますか？')) {
-            const doc = await db.locations.findOne(id).exec();
-            if (doc) {
-                await doc.remove();
+            const outcome = await executeSingleLocationDelete(db.locations, id);
+            if (!outcome.ok && outcome.alertMessage) {
+                alert(outcome.alertMessage);
             }
         }
     };

@@ -14,6 +14,8 @@ import {
   resolveBulkLocationCreateOutcome,
   executeBulkLocationDelete,
   resolveBulkLocationDeleteOutcome,
+  executeSingleLocationAdd,
+  executeSingleLocationDelete,
   LocationMaster
 } from './LocationMaster';
 
@@ -364,5 +366,58 @@ test('resolveBulkLocationDeleteOutcome formats outcome message correctly', () =>
   assert.strictEqual(fullFailOutcome.errorCount, 3);
   assert.match(fullFailOutcome.alertMessage || '', /未使用棚番の削除に失敗しました/);
   assert.match(fullFailOutcome.alertMessage || '', /3件すべて削除できず残っています/);
+});
+
+test('executeSingleLocationAdd inserts into RxDB on success and returns Japanese alert on write failure', async () => {
+  const db = await createTestLocationsDb();
+  try {
+    const doc = { id: 'single-loc-1', part1: 'C', part2: '01', part3: '', displayText: 'C-01' };
+    const okOutcome = await executeSingleLocationAdd(db.locations, doc);
+    assert.deepStrictEqual(okOutcome, { ok: true, alertMessage: null });
+    assert.strictEqual(await db.locations.count().exec(), 1);
+
+    // 同一 ID の重複挿入エラーを捕捉して利用者向け通知へ変換する
+    const dupOutcome = await executeSingleLocationAdd(db.locations, doc);
+    assert.strictEqual(dupOutcome.ok, false);
+    assert.match(dupOutcome.alertMessage || '', /棚番地の追加に失敗しました/);
+
+    const nullDbOutcome = await executeSingleLocationAdd(null, doc);
+    assert.strictEqual(nullDbOutcome.ok, false);
+    assert.match(nullDbOutcome.alertMessage || '', /データベースの準備が完了していない/);
+  } finally {
+    await db.close();
+  }
+});
+
+test('executeSingleLocationDelete removes from RxDB on success and returns Japanese alert on remove failure', async () => {
+  const db = await createTestLocationsDb();
+  try {
+    const doc = { id: 'single-del-1', part1: 'D', part2: '02', part3: '', displayText: 'D-02' };
+    await db.locations.insert(doc);
+
+    const okOutcome = await executeSingleLocationDelete(db.locations, 'single-del-1');
+    assert.deepStrictEqual(okOutcome, { ok: true, alertMessage: null });
+    assert.strictEqual(await db.locations.count().exec(), 0);
+
+    // 既に存在しない ID はエラーにせず成功扱い
+    const missingOutcome = await executeSingleLocationDelete(db.locations, 'nonexistent-id');
+    assert.deepStrictEqual(missingOutcome, { ok: true, alertMessage: null });
+
+    // remove() が失敗した場合は未処理例外にせず利用者向け通知を返す
+    const failingCollection = {
+      findOne: () => ({
+        exec: async () => ({
+          remove: async () => {
+            throw new Error('Disk I/O failed');
+          }
+        })
+      })
+    };
+    const failOutcome = await executeSingleLocationDelete(failingCollection, 'single-del-1');
+    assert.strictEqual(failOutcome.ok, false);
+    assert.match(failOutcome.alertMessage || '', /棚番地の削除に失敗しました/);
+  } finally {
+    await db.close();
+  }
 });
 
