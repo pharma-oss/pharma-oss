@@ -192,7 +192,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,146 pass / 0 fail / 201 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,155 pass / 0 fail / 203 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
 | SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 14 / `as any` 3） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
@@ -206,7 +206,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | 項目 | 実測 |
 |---|---|
 | `src/` の TS/TSX（テスト除く） | 370 ファイル |
-| テストファイル | 349 ファイル |
+| テストファイル | 351 ファイル |
 | 主要 6 画面の行数 | 9,373 行（ocr 2,194 / emr 2,568 / print 2,434 / inventory 833 / settings 844 / dashboard〔`src/app/app/page.tsx`〕500。※ 上位 3 画面は P7 行数予算テストで固定） |
 | `scripts/` | 76 ファイル（第 1 階層）、npm scripts 46 本 |
 | ソースを `readFileSync` するテスト | 5 ファイル（`PrintPickingFlow` 202 assert / `DrugInfoItemCard` 58 / `PrintLayoutRegression` 43 / `DrugInfoClaimTools` 16 / `TerminalSyncPanel` 3）。※ `PrintPickingFlow` は `DispensingRecordPrint.tsx` の個別 readFileSync を撤廃し実描画化（26 assert）したが、先頭に 7 箇所の readFileSync と 202 assert のソース由来検査が依然残存（「0件」は誤り） |
