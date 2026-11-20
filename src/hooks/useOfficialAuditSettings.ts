@@ -80,6 +80,39 @@ export function toDosageCategoryConflictInput(
   };
 }
 
+// 剤形判定の食い違い点検で what-if 再計算が必要になる受付IDだけを一意に抽出する（P2-2）。
+export function collectDosageConflictVisitIds(
+  cases: ReadonlyArray<{ visitId?: string | null }>
+): string[] {
+  const seen = new Set<string>();
+  const visitIds: string[] = [];
+  for (const item of cases) {
+    const visitId = String(item.visitId || '').trim();
+    if (!visitId || seen.has(visitId)) continue;
+    seen.add(visitId);
+    visitIds.push(visitId);
+  }
+  return visitIds;
+}
+
+// 取得済みの全処方明細を受付IDごとにまとめ、食い違い受付の再計算で N+1 クエリを避ける（P2-2）。
+export function groupPrescriptionItemDocsByVisitId<T extends { visitId: string }>(
+  docs: readonly T[]
+): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const doc of docs) {
+    const visitId = String(doc.visitId || '').trim();
+    if (!visitId) continue;
+    const list = grouped.get(visitId);
+    if (list) {
+      list.push(doc);
+    } else {
+      grouped.set(visitId, [doc]);
+    }
+  }
+  return grouped;
+}
+
 // 処方明細に調剤日時点の薬価を当てる（点数の変動点検と剤形の食い違い点検で共通）。
 export function buildPricedClaimItems<TItem extends ClaimItemPricingItem>(
   itemDocs: Array<{ drugId: string; dispensedDrugCode?: string; toJSON: () => TItem }>,
@@ -419,8 +452,7 @@ export function useOfficialAuditSettings({
     }
     setIsReviewingDosageCategoryConflict(true);
     try {
-      const [visits, settingsDoc, allItemDocs] = await Promise.all([
-        db.visits.find().exec(),
+      const [settingsDoc, allItemDocs] = await Promise.all([
         db.facility_settings.findOne('default').exec(),
         db.prescription_items.find().exec()
       ]);
@@ -428,19 +460,27 @@ export function useOfficialAuditSettings({
 
       const inputs: DosageCategoryConflictInput[] = allItemDocs.map((doc) => toDosageCategoryConflictInput(doc.toJSON()));
 
-      // 一旦食い違いを特定し、食い違いを含む受付IDのみ点数計算の対象とする
+      // 一旦食い違いを特定し、食い違いを含む受付IDのみ対象取得・点数計算する（暗号化 visits の全件復号を回避）
       const provisionalReview = buildDosageCategoryConflictReview(inputs);
-      const conflictVisitIds = new Set(provisionalReview.cases.map((c) => c.visitId));
+      const conflictVisitIds = collectDosageConflictVisitIds(provisionalReview.cases);
 
       const pointsList: DosageCategoryConflictPoints[] = [];
-      if (settings && conflictVisitIds.size > 0) {
-        const targetVisits = visits.filter((v) => conflictVisitIds.has(v.visitId));
+      if (settings && conflictVisitIds.length > 0) {
+        const visitsMap = await db.visits.findByIds(conflictVisitIds).exec();
+        const targetVisits = conflictVisitIds
+          .map((visitId) => visitsMap.get(visitId))
+          .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc));
+        const itemsByVisitId = groupPrescriptionItemDocsByVisitId(allItemDocs);
+        const targetPatientIds = Array.from(new Set(
+          targetVisits.map((visitDoc) => String(visitDoc.patientId || '').trim()).filter(Boolean)
+        ));
+        const patientsMap = targetPatientIds.length > 0
+          ? await db.patients.findByIds(targetPatientIds).exec()
+          : null;
         for (const visitDoc of targetVisits) {
           const visit = visitDoc.toJSON() as Visit;
-          const [patientDoc, itemDocs] = await Promise.all([
-            db.patients.findOne(visit.patientId).exec(),
-            db.prescription_items.find({ selector: { visitId: visit.visitId } }).exec()
-          ]);
+          const patientDoc = patientsMap?.get(visit.patientId);
+          const itemDocs = itemsByVisitId.get(visit.visitId) ?? [];
           const patient = patientDoc ? (patientDoc.toJSON() as Patient) : null;
           if (!patient) continue;
 

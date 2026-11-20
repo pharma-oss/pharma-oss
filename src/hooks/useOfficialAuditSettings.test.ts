@@ -1,8 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Drug, PrescriptionItem } from '@/db/types';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { VISIT_SCHEMA } from '@/db/schema';
+import { legacyMigrationStrategies } from '@/db/index';
+import type { Drug, PrescriptionItem, Visit } from '@/db/types';
 import {
   buildPricedClaimItems,
+  collectDosageConflictVisitIds,
+  groupPrescriptionItemDocsByVisitId,
   toClaimItemPricingDrug,
   toDosageCategoryConflictInput
 } from './useOfficialAuditSettings.ts';
@@ -129,4 +138,84 @@ test('buildPricedClaimItems decides the high-risk flag from the item first, then
   assert.equal(buildPricedClaimItems([itemDoc(itemJson())], drugs, '2026-06-01')[0].isHighRisk, true);
   assert.equal(buildPricedClaimItems([itemDoc(itemJson({ isHighRisk: false }))], drugs, '2026-06-01')[0].isHighRisk, false);
   assert.equal(buildPricedClaimItems([itemDoc(itemJson())], new Map<string, Partial<Drug>>(), '2026-06-01')[0].isHighRisk, false);
+});
+
+// --- P2-2: collectDosageConflictVisitIds & groupPrescriptionItemDocsByVisitId ---
+
+test('collectDosageConflictVisitIds trims, skips empty values, and deduplicates visitIds in order', () => {
+  assert.deepEqual(
+    collectDosageConflictVisitIds([
+      { visitId: ' visit_1 ' },
+      { visitId: '' },
+      { visitId: null },
+      { visitId: 'visit_2' },
+      { visitId: 'visit_1' },
+      {}
+    ]),
+    ['visit_1', 'visit_2']
+  );
+  assert.deepEqual(collectDosageConflictVisitIds([]), []);
+});
+
+test('groupPrescriptionItemDocsByVisitId groups items by trimmed visitId and skips empty visitIds', () => {
+  const docs = [
+    { itemId: 'i1', visitId: 'v1' },
+    { itemId: 'i2', visitId: 'v2' },
+    { itemId: 'i3', visitId: ' v1 ' },
+    { itemId: 'i4', visitId: '   ' }
+  ];
+  const grouped = groupPrescriptionItemDocsByVisitId(docs);
+  assert.deepEqual(Array.from(grouped.keys()), ['v1', 'v2']);
+  assert.deepEqual(grouped.get('v1')?.map((d) => d.itemId), ['i1', 'i3']);
+  assert.deepEqual(grouped.get('v2')?.map((d) => d.itemId), ['i2']);
+});
+
+test('RxDB visits.findByIds(collectDosageConflictVisitIds(cases)) loads only conflicting encrypted visits (P2-2)', async () => {
+  addRxPlugin(RxDBMigrationSchemaPlugin);
+  const storage = wrappedValidateAjvStorage({
+    storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+  });
+  const db = await createRxDatabase({
+    name: `dosage_conflict_p2_2_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    storage,
+    password: 'test-dosage-conflict-p22',
+    ignoreDuplicate: true
+  });
+  try {
+    const collections = await db.addCollections({
+      visits: {
+        schema: VISIT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(VISIT_SCHEMA, {})
+      }
+    });
+    const makeVisit = (visitId: string, patientId: string): Visit => ({
+      visitId,
+      patientId,
+      issueDate: '2026-06-15T09:00:00.000Z',
+      prescriptionDate: '2026-06-15',
+      dispensingDate: '2026-06-15',
+      status: 'completed'
+    });
+    await collections.visits.bulkInsert([
+      makeVisit('visit_conflict_1', 'pt_1'),
+      makeVisit('visit_clean_2', 'pt_2'),
+      makeVisit('visit_conflict_3', 'pt_3')
+    ]);
+
+    const targetIds = collectDosageConflictVisitIds([
+      { visitId: 'visit_conflict_1' },
+      { visitId: 'visit_conflict_1' },
+      { visitId: 'visit_conflict_3' }
+    ]);
+    const foundMap = await collections.visits.findByIds(targetIds).exec();
+    const fetchedVisits = targetIds
+      .map((visitId) => foundMap.get(visitId))
+      .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc))
+      .map((doc) => doc.toJSON() as Visit);
+
+    assert.deepEqual(fetchedVisits.map((v) => v.visitId), ['visit_conflict_1', 'visit_conflict_3']);
+    assert.deepEqual(fetchedVisits.map((v) => v.patientId), ['pt_1', 'pt_3']);
+  } finally {
+    await db.close();
+  }
 });
