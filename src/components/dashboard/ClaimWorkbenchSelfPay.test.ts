@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ClaimWorkbenchRow } from './DashboardRows';
+import { PrintHeaderActions } from '@/app/print/components/PrintHeaderActions';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import type { DashboardClaimWorkItem } from '@/hooks/useDashboardTasks';
 
 // 保険種別が「自費」の患者を請求から外す配線を、画面の側で固定する。
@@ -58,12 +60,27 @@ test('the dashboard risk section shows how many self-pay patients it leaves out'
 
 test('the print page stops both UKE exports for a self-pay patient and says so in the claim screens', () => {
   assert.match(printPageSource, /const isSelfPayClaimExcluded = isSelfPayPatient\(patientData\);/);
-  // 旧形式UKE: ボタンもハンドラも止める
-  assert.match(printPageSource, /disabled=\{!canExportUke \|\| hasClaimErrors \|\| isSelfPayClaimExcluded\}/);
+  assert.match(printPageSource, /<PrintHeaderActions[\s\S]*?isSelfPayClaimExcluded=\{isSelfPayClaimExcluded\}/);
+  // 旧形式UKE・公式UKE ともに自費患者では PrintHeaderActions の両ボタンが disabled になること
+  const selfPayHeaderHtml = renderToStaticMarkup(
+    React.createElement(PrintHeaderActions, {
+      canExportUke: true,
+      canPrintDocuments: true,
+      hasClaimErrors: false,
+      isSelfPayClaimExcluded: true,
+      onOpenPicking: () => {},
+      onOpenOfficialUke: () => {},
+      onDownloadLegacyUke: () => {},
+      onPrint: () => {}
+    })
+  );
+  const legacyBtnTag = findOpeningTag(selfPayHeaderHtml, 'data-testid="print-uke-export-button"', 'button');
+  const officialBtnTag = findOpeningTag(selfPayHeaderHtml, 'data-testid="print-official-uke-button"', 'button');
+  assert.ok(legacyBtnTag.includes('disabled=""'), '自費患者では旧形式UKEボタンが無効化されること');
+  assert.ok(officialBtnTag.includes('disabled=""'), '自費患者では公式UKEボタンが無効化されること');
   const handler = section(printPageSource, 'const handleDownloadUke = async', 'const handleRegisterReturn = async');
   assert.match(handler, /if \(isSelfPayClaimExcluded\) \{\s*alert\(SELF_PAY_UKE_BLOCKED_MESSAGE\);\s*return;\s*\}/);
-  // 公式UKE: ボタンとモーダルのチェックを止める
-  assert.match(printPageSource, /disabled=\{!canExportUke \|\| isSelfPayClaimExcluded\}/);
+  // 公式UKEモーダルのチェックも止める
   assert.match(printPageSource, /hasClaimErrors=\{hasClaimErrors \|\| isSelfPayClaimExcluded\}/);
   // 請求の画面に、対象外であることを出す
   assert.match(printPageSource, /data-testid="print-self-pay-claim-note"/);

@@ -1083,6 +1083,39 @@ button {
   opacity: 0.48;
 }
 
+.section-metrics .legacy-uke-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.section-metrics .legacy-uke-summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle, #f8fafc);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.section-metrics .legacy-uke-details[open] .legacy-uke-summary {
+  border-color: var(--primary-soft);
+  color: var(--text-main);
+}
+
+.section-metrics .legacy-uke-disclosure-body {
+  display: inline-flex;
+  align-items: center;
+}
+
 .text-link {
   display: inline-flex;
   align-items: center;

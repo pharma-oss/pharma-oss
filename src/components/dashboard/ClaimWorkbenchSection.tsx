@@ -771,17 +771,6 @@ export function ClaimWorkbenchSection({
         <div className="section-metrics">
           <button
             type="button"
-            className="section-action-button"
-            data-testid="monthly-claim-uke-button"
-            title="月次一括UKE出力（点検用・旧形式: RECEIPT_{month}.uke）"
-            onClick={handleDownloadClaimWorkbenchUke}
-            disabled={!hasExportableClaimWorkItems || isExportingUke || isExportingOfficialUke || isCheckingOfficialReadiness || isCheckingRules}
-          >
-            {isExportingUke ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
-            <span>{isExportingUke ? '作成中' : '一括UKE'}</span>
-          </button>
-          <button
-            type="button"
             className="section-action-button primary"
             data-testid="monthly-claim-official-uke-button"
             title="公式提出用UKE出力（正本: RECEIPTY.CYO / 支払基金・国保連仕様 / 突合点検付き）"
@@ -791,6 +780,25 @@ export function ClaimWorkbenchSection({
             {isExportingOfficialUke ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <ShieldCheck size={14} aria-hidden="true" />}
             <span>{isExportingOfficialUke ? '作成中' : '公式UKE'}</span>
           </button>
+          <details
+            className="legacy-uke-details"
+            data-testid="monthly-claim-legacy-uke-disclosure"
+          >
+            <summary className="legacy-uke-summary">旧形式UKE</summary>
+            <div className="legacy-uke-disclosure-body">
+              <button
+                type="button"
+                className="section-action-button"
+                data-testid="monthly-claim-uke-button"
+                title="月次一括UKE出力（点検用・旧形式: RECEIPT_{month}.uke）"
+                onClick={handleDownloadClaimWorkbenchUke}
+                disabled={!hasExportableClaimWorkItems || isExportingUke || isExportingOfficialUke || isCheckingOfficialReadiness || isCheckingRules}
+              >
+                {isExportingUke ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
+                <span>{isExportingUke ? '作成中' : '一括UKE'}</span>
+              </button>
+            </div>
+          </details>
           <button
             type="button"
             className="section-action-button"

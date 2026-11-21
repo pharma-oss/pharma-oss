@@ -153,6 +153,7 @@ import { OintmentLabelSheetPrint } from '../components/OintmentLabelSheetPrint';
 import { EmergencyRecoveryKeySheetPrint } from '../components/EmergencyRecoveryKeySheetPrint';
 import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffPanel';
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
+import { PrintHeaderActions } from '../components/PrintHeaderActions';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
 import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
@@ -1621,53 +1622,16 @@ export default function PrintPage() {
             <p className="text-muted">{patientData.name} 様の調剤録、薬袋、お薬手帳シール、各種ラベルを印刷します。</p>
           </div>
         </div>
-        <div className="print-header-actions flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleOpenPicking}
-            title="薬歴入力画面でピッキング支援を開きます"
-          >
-            <Package size={16} aria-hidden="true" />
-            <span>ピッキングへ</span>
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleDownloadUke}
-            disabled={!canExportUke || hasClaimErrors || isSelfPayClaimExcluded}
-            data-testid="print-uke-export-button"
-            title={isSelfPayClaimExcluded
-              ? SELF_PAY_UKE_BLOCKED_MESSAGE
-              : hasClaimErrors ? '請求前チェックのエラーを解消してください。' : '点検用UKE出力（旧形式・独自フォーマット: RECEIPT_{id}.uke）'}
-          >
-            <Download size={16} aria-hidden="true" />
-            <span>UKE出力</span>
-          </button>
-          <button
-            type="button"
-            className="btn-secondary official-uke-btn"
-            onClick={() => setIsOfficialUkeModalOpen(true)}
-            disabled={!canExportUke || isSelfPayClaimExcluded}
-            data-testid="print-official-uke-button"
-            title={isSelfPayClaimExcluded
-              ? SELF_PAY_UKE_BLOCKED_MESSAGE
-              : '公式提出用UKE（正本: RECEIPTY.CYO / 支払基金・国保連電算仕様 / GO集計 / EOF 0x1A）の点検とダウンロード'}
-          >
-            <FileCheck2 size={16} aria-hidden="true" />
-            <span>公式UKE</span>
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handlePrint}
-            disabled={!canPrintDocuments}
-            data-testid="print-execute-button"
-          >
-            <Printer size={16} aria-hidden="true" />
-            <span>印刷実行</span>
-          </button>
-        </div>
+        <PrintHeaderActions
+          canExportUke={canExportUke}
+          canPrintDocuments={canPrintDocuments}
+          hasClaimErrors={hasClaimErrors}
+          isSelfPayClaimExcluded={isSelfPayClaimExcluded}
+          onOpenPicking={handleOpenPicking}
+          onOpenOfficialUke={() => setIsOfficialUkeModalOpen(true)}
+          onDownloadLegacyUke={handleDownloadUke}
+          onPrint={handlePrint}
+        />
       </div>
 
       <div className="print-workspace">

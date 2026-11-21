@@ -1,22 +1,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { PrintHeaderActions } from './components/PrintHeaderActions';
 
-const pageSource = readFileSync(new URL('./[visitId]/page.tsx', import.meta.url), 'utf8');
 const printCssSource = readFileSync(new URL('./print.css', import.meta.url), 'utf8');
 const dispensingRecordSource = readFileSync(new URL('./components/DispensingRecordPrint.tsx', import.meta.url), 'utf8');
 
-test('verifies that print page.tsx defines print-header-actions for responsive layout', () => {
+test('verifies that PrintHeaderActions renders print-header-actions for responsive layout', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PrintHeaderActions, {
+      canExportUke: true,
+      canPrintDocuments: true,
+      hasClaimErrors: false,
+      isSelfPayClaimExcluded: false,
+      onOpenPicking: () => {},
+      onOpenOfficialUke: () => {},
+      onDownloadLegacyUke: () => {},
+      onPrint: () => {}
+    })
+  );
   assert.ok(
-    pageSource.includes('className="print-header-actions flex items-center gap-2"'),
+    html.includes('class="print-header-actions flex items-center gap-2"'),
     'print header must include print-header-actions class for responsive grid layout'
   );
   assert.ok(
-    pageSource.includes('btn-primary'),
+    html.includes('btn-primary'),
     'print header must include a primary print execute button'
   );
   assert.ok(
-    pageSource.includes('btn-secondary'),
+    html.includes('btn-secondary'),
     'print header must include secondary buttons (picking and uke export)'
   );
 });
