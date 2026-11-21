@@ -2,13 +2,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { RxDocument } from 'rxdb';
 import { toast } from 'sonner';
 import type { Patient, Alert, PharmacyDatabase } from '@/db/types';
-import type { EligibilityStatus } from '@/app/ocr/helpers';
+import {
+  buildReceptionPatientSearchQueryForSource,
+  type EligibilityStatus
+} from '@/app/ocr/helpers';
 import {
   normalizeOnlineEligibilityResponse,
   type NormalizedOnlineEligibilityResult
 } from '@/lib/online_eligibility';
 import { findMatchingPatient, normalizeInsuranceNumber } from '@/lib/patient_matching';
-import { buildPatientSearchQuery, searchPatients, type PatientSearchMatch } from '@/lib/patient_search';
+import { searchPatients, type PatientSearchMatch } from '@/lib/patient_search';
 import { parseFlexibleDateInput } from '@/lib/date_input';
 import type {
   PatientMergePlan,
@@ -27,6 +30,31 @@ import type { PatientInsertedDocumentLike } from '@/lib/patient_registration';
 
 /** 検索結果に出す患者の上限 */
 const PATIENT_SEARCH_RESULT_LIMIT = 8;
+
+export interface SelectedPatientFormState {
+  selectedPatientId: string;
+  patientName: string;
+  patientBirthDate: string;
+  insuranceNumber: string;
+  burdenRatio: string;
+}
+
+/**
+ * 選択した患者と直近のマイナ読取結果から、受付フォームへ反映する患者・保険項目を算出する純粋関数。
+ */
+export function buildSelectedPatientFormState(
+  patient: Pick<Patient, 'patientId' | 'name' | 'birthDate' | 'insuranceInfo'> & { kana?: string },
+  mynaReadResult?: MynaCardReaderResult | null
+): SelectedPatientFormState {
+  const insuranceFields = resolveReceptionInsuranceFields(patient, mynaReadResult);
+  return {
+    selectedPatientId: patient.patientId,
+    patientName: patient.name,
+    patientBirthDate: patient.birthDate,
+    insuranceNumber: insuranceFields.insuranceNumber,
+    burdenRatio: insuranceFields.burdenRatio
+  };
+}
 
 export type PatientCandidate = Patient & { doc?: RxDocument<Patient> | PatientInsertedDocumentLike };
 export type PatientMergeReview = {
@@ -166,12 +194,12 @@ export function useOcrPatientEligibility({
   // (前に選んだ患者の保険者番号が残ったまま、別の患者に保存されることがないように)。
   // 直近のマイナ読取がこの患者本人のものなら、より新しいカードの保険者番号・負担割合を使う。
   const selectPatient = useCallback((patient: PatientCandidate) => {
-    const insuranceFields = resolveReceptionInsuranceFields(patient, mynaReadResult);
-    setSelectedPatientId(patient.patientId);
-    setPatientName(patient.name);
-    setPatientBirthDate(patient.birthDate);
-    setInsuranceNumber(insuranceFields.insuranceNumber);
-    setBurdenRatio(insuranceFields.burdenRatio);
+    const nextState = buildSelectedPatientFormState(patient, mynaReadResult);
+    setSelectedPatientId(nextState.selectedPatientId);
+    setPatientName(nextState.patientName);
+    setPatientBirthDate(nextState.patientBirthDate);
+    setInsuranceNumber(nextState.insuranceNumber);
+    setBurdenRatio(nextState.burdenRatio);
     setEligibilityStatus('unchecked');
     setEligibilityResult(null);
   }, [mynaReadResult, setBurdenRatio, setInsuranceNumber, setPatientBirthDate, setPatientName]);
@@ -222,7 +250,7 @@ export function useOcrPatientEligibility({
       setSelectedPatientId(null);
       setPatientName(data.name || '');
       setPatientBirthDate(birthDate);
-      setPatientSearchQuery(buildPatientSearchQuery({ name: data.name, birthDate }));
+      setPatientSearchQuery(buildReceptionPatientSearchQueryForSource('myna', { name: data.name, birthDate }));
       // 受付欄の「保険者番号」には保険者番号(数字)を入れる。記号・番号は入れない
       setInsuranceNumber(pickReceptionInsuranceNumber(data.insuranceInfo));
       if (data.insuranceInfo?.burdenRatio) {

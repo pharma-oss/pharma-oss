@@ -1,95 +1,280 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { Patient } from '@/db/types';
+import { EMPTY_PATIENT_REGISTRATION_FORM } from '@/lib/patient_registration';
+import { getMynaReaderButtonView } from '@/lib/myna_read_display';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import { buildSelectedPatientFormState } from '@/hooks/useOcrPatientEligibility';
+import {
+  RECEPTION_SELECTED_PATIENT_NOT_FOUND_TOAST,
+  buildPatientRegistrationInitialState,
+  buildReceptionPatientSearchQueryForSource,
+  buildReceptionPatientUpdatePayload,
+  buildReceptionReadinessSteps,
+  createEmptyPrescription,
+  resolveReceptionTargetPatient,
+  validateReceptionSaveInputs
+} from './helpers';
+import {
+  PatientNotFoundPrompt,
+  ReceptionPatientSearchBar
+} from './components/ReceptionPatientSearchBar';
 
 // 処方箋受付は、登録済みの患者を検索して選び、初めての方は先に患者登録をしてから受け付ける。
-// 受付ページ全体は単体描画できないため、その配線を画面ソースで確かめる
-// (検索・登録の判定そのものは patient_search / patient_registration のテストが担う)。
+// 純粋ヘルパーの実実行と受付UI部品の renderToStaticMarkup で契約を固定する。
 describe('reception page selects an existing patient and registers new ones first', () => {
-  const content = fs.readFileSync(path.join(process.cwd(), 'src', 'app', 'ocr', 'page.tsx'), 'utf-8');
-  const saveStart = content.indexOf('const handleSave = async () => {');
-  const saveBody = content.slice(saveStart, content.indexOf('const isEditorOpen', saveStart));
-
-  it('the save handler stops before any write when no patient is selected, and says to register first', () => {
-    assert.ok(saveStart > 0, 'handleSave must exist');
-    const guard = saveBody.indexOf('if (!selectedPatientId) {');
-    const firstWrite = saveBody.indexOf('registerPrescriptionAtomically(');
-    assert.ok(guard > 0, 'the selection guard must exist');
-    assert.ok(guard < firstWrite, 'the guard must run before the prescription is written');
-    const guardBody = saveBody.slice(guard, saveBody.indexOf('return;', guard));
-    assert.ok(guardBody.includes('alert('), 'the guard must tell the user');
-    assert.ok(guardBody.includes('新規患者を登録'), 'the message must point to the registration button');
+  const validPrescription = createEmptyPrescription('rp_1', {
+    id: 'item_1',
+    drugCode: '620000001',
+    drugName: 'アムロジピン錠5mg',
+    amount: '1',
+    usage: '1日1回朝食後',
+    days: '14'
   });
 
-  it('never creates a patient silently at save time', () => {
-    assert.equal(content.includes('簡易新規患者登録'), false, 'the old simple-registration audit wording must be gone');
-    assert.equal(content.includes('`pt_${generateUUID()}`'), false, 'the reception must not mint patient IDs itself');
-    assert.equal(content.includes('findMatchingPatient'), false, 'the reception must not fall back to name matching at save');
-    assert.ok(saveBody.includes('db.patients.findOne(selectedPatientId)'), 'the selected patient is re-read right before saving');
-    assert.ok(saveBody.includes("toast.error('選択した患者が見つかりません。患者を選び直してください。')"));
-  });
-
-  it('keeps the selected patient\'s name and birth date from the master, whatever the prescription read says', () => {
-    assert.ok(saveBody.includes('name: existingPatient.name,'));
-    assert.ok(saveBody.includes('birthDate: existingPatient.birthDate,'));
-    assert.equal(/name:\s*patientName,/.test(saveBody), false, 'the master must not be renamed from the reception field');
-  });
-
-  it('writes the insurer number to the field it belongs to, not always to number', () => {
-    assert.ok(saveBody.includes('buildReceptionInsuranceNumberPatch(existingPatient.insuranceInfo, insuranceNumber)'));
-    assert.equal(saveBody.includes('number: currentInsuranceNumber'), false);
-  });
-
-  it('replaces the free-text patient name and birth date fields with a patient search', () => {
-    assert.equal(content.includes('id="patientName"'), false);
-    assert.equal(content.includes('id="patientBirthDate"'), false);
-    const search = content.slice(content.indexOf('id="patientSearch"') - 100, content.indexOf('id="patientSearch"') + 700);
-    assert.ok(search.includes('value={patientSearchQuery}'));
-    assert.ok(search.includes('setPatientSearchQuery(e.target.value)'));
-    assert.ok(search.includes('data-testid="patient-search-input"'));
-    // 手入力受付を始めたとき、続けて検索できるよう検索欄へ進める
-    assert.ok(content.includes("document.getElementById('patientSearch')"));
-  });
-
-  it('fills the search from every source that learns the patient (QR, OCR text, electronic prescription, Myna card)', () => {
-    const fromPrescription = content.match(/setPatientSearchQuery\(buildPatientSearchQuery\(/g) || [];
-    assert.ok(fromPrescription.length >= 3, `QR, OCR and electronic prescription must feed the search (found ${fromPrescription.length})`);
-    const hook = fs.readFileSync(path.join(process.cwd(), 'src', 'hooks', 'useOcrPatientEligibility.ts'), 'utf-8');
-    assert.ok(hook.includes('setPatientSearchQuery(buildPatientSearchQuery({ name: data.name, birthDate }))'), 'the Myna read must search by the card\'s name and birth date');
-  });
-
-  it('selecting a patient (by click, auto-match or registration) reloads the insurer number and burden from that patient', () => {
-    const hook = fs.readFileSync(path.join(process.cwd(), 'src', 'hooks', 'useOcrPatientEligibility.ts'), 'utf-8');
-    const select = hook.slice(hook.indexOf('const selectPatient = useCallback'), hook.indexOf('// 処方箋・QR・マイナ読取で氏名と生年月日'));
-    assert.ok(select.includes('resolveReceptionInsuranceFields(patient, mynaReadResult)'));
-    assert.ok(select.includes('setInsuranceNumber(insuranceFields.insuranceNumber)'));
-    assert.ok(select.includes('setBurdenRatio(insuranceFields.burdenRatio)'));
-    // 候補のクリックは、その患者を選ぶ関数をそのまま呼ぶ
-    assert.ok(content.includes('onClick={() => selectPatient(patient)}'));
-    // 登録済みの患者だと分かって選ぶ操作も、同じ関数を通る
-    const existing = content.slice(content.indexOf('const handleSelectExistingFromRegistration'), content.indexOf('const openPatientMergeReview'));
-    assert.ok(existing.includes('selectPatient(patient)'));
-  });
-
-  it('opens the registration dialog from the search row and from the not-found note, and selects the registered patient', () => {
-    assert.ok(content.includes('data-testid="patient-register-open-button"'));
-    assert.ok(content.includes('data-testid="patient-register-from-empty-button"'));
-    const modal = content.slice(content.indexOf('<PatientRegistrationModal'), content.indexOf('/>', content.indexOf('<PatientRegistrationModal')));
-    for (const prop of ['db={db}', 'initialForm={patientRegistrationInitial.form}', 'mynaReaderState={mynaReaderState}', 'onRegistered={handlePatientRegistered}', 'onSelectExisting={handleSelectExistingFromRegistration}']) {
-      assert.ok(modal.includes(prop), `the dialog must receive ${prop}`);
+  it('stops before any write when no patient is selected, and tells the user to register first', () => {
+    const outcome = validateReceptionSaveInputs({
+      selectedPatientId: null,
+      insuranceNumber: '06139999',
+      institutionName: '東京内科クリニック',
+      departmentName: '内科',
+      doctorName: '山田 医師',
+      prescriptionDate: '2026-11-21',
+      dispensingDate: '2026-11-21',
+      prescriptions: [validPrescription]
+    });
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) {
+      assert.equal(outcome.kind, 'alert');
+      assert.ok(outcome.message.includes('新規患者を登録'), 'the message must point to the registration button');
     }
-    const registered = content.slice(content.indexOf('const handlePatientRegistered'), content.indexOf('const handleSelectExistingFromRegistration'));
-    assert.ok(registered.includes('selectPatient('), 'a registered patient is selected so reception continues');
+
+    const okOutcome = validateReceptionSaveInputs({
+      selectedPatientId: 'pt_1',
+      insuranceNumber: '06139999',
+      institutionName: '東京内科クリニック',
+      departmentName: '内科',
+      doctorName: '山田 医師',
+      prescriptionDate: '2026-11-21',
+      dispensingDate: '2026-11-21',
+      prescriptions: [validPrescription]
+    });
+    assert.deepEqual(okOutcome, { ok: true });
   });
 
-  it('starts the registration form empty while a patient is selected, so a different new person is not pre-filled with them', () => {
-    const initial = content.slice(content.indexOf('const patientRegistrationInitial'), content.indexOf('const openPatientRegistration'));
-    assert.ok(initial.includes('if (selectedPatientId) return { form: EMPTY_PATIENT_REGISTRATION_FORM, fromMyna: false };'));
-    assert.ok(initial.includes('checkMynaReadMatchesPatient('), 'a Myna read of someone else must not be carried into the form');
+  it('re-reads the selected patient right before saving and refuses silent creation when missing', async () => {
+    const existing: Patient = {
+      patientId: 'pt_existing',
+      name: '山田 太郎',
+      kana: 'ヤマダ タロウ',
+      birthDate: '1985-03-15',
+      insuranceInfo: { provider: '06139999', number: '記号12 番号345', burdenRatio: 30 }
+    };
+
+    const missing = await resolveReceptionTargetPatient(
+      async () => null,
+      'pt_deleted_by_merge'
+    );
+    assert.deepEqual(missing, {
+      ok: false,
+      toastMessage: RECEPTION_SELECTED_PATIENT_NOT_FOUND_TOAST
+    });
+
+    const found = await resolveReceptionTargetPatient(
+      async (id) => (id === 'pt_existing' ? { toJSON: () => existing } : null),
+      'pt_existing'
+    );
+    assert.equal(found.ok, true);
+    if (found.ok) {
+      assert.equal(found.existingPatient.patientId, 'pt_existing');
+      assert.equal(found.existingPatient.name, '山田 太郎');
+    }
+  });
+
+  it('keeps the selected patient master name and birthDate and writes insurer number to the right field', () => {
+    const existingMaster: Patient = {
+      patientId: 'pt_master',
+      name: '正本 太郎',
+      kana: 'セイホン タロウ',
+      birthDate: '1980-04-01',
+      insuranceInfo: { provider: '06139999', number: '記号12 番号345', burdenRatio: 30 }
+    };
+
+    const update = buildReceptionPatientUpdatePayload({
+      existingPatient: existingMaster,
+      insuranceNumber: '06138888',
+      burdenRatio: '20',
+      eligibilityStatus: 'unchecked',
+      eligibilityResult: null
+    });
+    assert.equal(update.name, '正本 太郎');
+    assert.equal(update.birthDate, '1980-04-01');
+    // 保険者番号は provider に入り、記号・番号 (number) は上書きされないこと
+    assert.equal(update.insuranceInfo.provider, '06138888');
+    assert.equal(update.insuranceInfo.number, '記号12 番号345');
+    assert.equal(update.insuranceInfo.burdenRatio, 20);
+
+    // 旧形式(numberに保険者番号が入っていた患者)は number を維持して更新する
+    const legacyMaster: Patient = {
+      patientId: 'pt_legacy',
+      name: '旧形式 花子',
+      kana: 'キュウケイシキ ハナコ',
+      birthDate: '1970-01-01',
+      insuranceInfo: { number: '138012', burdenRatio: 30 }
+    };
+    const legacyUpdate = buildReceptionPatientUpdatePayload({
+      existingPatient: legacyMaster,
+      insuranceNumber: '138099',
+      burdenRatio: '30',
+      eligibilityStatus: 'unchecked',
+      eligibilityResult: null
+    });
+    assert.equal(legacyUpdate.insuranceInfo.number, '138099');
+    assert.equal(legacyUpdate.insuranceInfo.provider, undefined);
+  });
+
+  it('renders a patient search input and registration triggers instead of free-text patient name/birthDate inputs', () => {
+    const searchHtml = renderToStaticMarkup(
+      React.createElement(ReceptionPatientSearchBar, {
+        patientSearchQuery: '山田 19850315',
+        onPatientSearchQueryChange: () => {},
+        hasImage: false,
+        isReadingMyna: false,
+        mynaReadButton: getMynaReaderButtonView({ status: 'ready', available: false }, 'マイナ読取'),
+        mynaMessage: '',
+        hasDb: true,
+        onMynaRead: () => {},
+        onOpenPatientRegistration: () => {}
+      })
+    );
+    assert.equal(searchHtml.includes('id="patientName"'), false);
+    assert.equal(searchHtml.includes('id="patientBirthDate"'), false);
+    const searchInputTag = findOpeningTag(searchHtml, 'data-testid="patient-search-input"', 'input');
+    assert.ok(searchInputTag.includes('id="patientSearch"'));
+    assert.ok(searchInputTag.includes('value="山田 19850315"'));
+    assert.ok(searchHtml.includes('data-testid="patient-register-open-button"'));
+
+    const emptyPromptHtml = renderToStaticMarkup(
+      React.createElement(PatientNotFoundPrompt, {
+        prompt: '該当する患者が見つかりません。',
+        hasDb: true,
+        onOpenPatientRegistration: () => {}
+      })
+    );
+    assert.ok(emptyPromptHtml.includes('data-testid="patient-not-found-note"'));
+    assert.ok(emptyPromptHtml.includes('data-testid="patient-register-from-empty-button"'));
+  });
+
+  it('fills the search query consistently across QR, OCR, electronic prescription, and Myna sources', () => {
+    const sources = ['qr', 'ocr', 'electronic_prescription', 'myna'] as const;
+    for (const source of sources) {
+      assert.equal(
+        buildReceptionPatientSearchQueryForSource(source, { name: '山田 太郎', birthDate: '1985-03-15' }),
+        '山田 太郎 1985-03-15'
+      );
+    }
+  });
+
+  it('reloads insurer number and burden ratio from the selected patient and matching Myna read', () => {
+    const patient: Patient = {
+      patientId: 'pt_sel',
+      name: '佐藤 花子',
+      kana: 'サトウ ハナコ',
+      birthDate: '1990-07-07',
+      insuranceInfo: { provider: '06139999', burdenRatio: 20 }
+    };
+    const withoutMyna = buildSelectedPatientFormState(patient, null);
+    assert.deepEqual(withoutMyna, {
+      selectedPatientId: 'pt_sel',
+      patientName: '佐藤 花子',
+      patientBirthDate: '1990-07-07',
+      insuranceNumber: '06139999',
+      burdenRatio: '20'
+    });
+
+    const withMatchingMyna = buildSelectedPatientFormState(patient, {
+      name: '佐藤 花子',
+      kana: 'サトウ ハナコ',
+      birthDate: '1990-07-07',
+      insuranceInfo: { provider: '06137777', burdenRatio: 10 },
+      readerSource: 'folder',
+      readerCheckedAt: '2026-11-21T09:00:00.000Z',
+      readerMessage: '読取完了'
+    });
+    assert.equal(withMatchingMyna.insuranceNumber, '06137777');
+    assert.equal(withMatchingMyna.burdenRatio, '10');
+  });
+
+  it('starts the registration form empty while a patient is selected and never carries another person Myna read', () => {
+    const whenSelected = buildPatientRegistrationInitialState({
+      selectedPatientId: 'pt_existing',
+      patientSearchQuery: '山田 太郎 19850315',
+      patientName: '山田 太郎',
+      patientBirthDate: '1985-03-15',
+      mynaReadResult: {
+        name: '山田 太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1985-03-15',
+        gender: 'male',
+        insuranceInfo: { provider: '06139999', burdenRatio: 30 },
+        readerSource: 'folder',
+        readerCheckedAt: '2026-11-21T09:00:00.000Z',
+        readerMessage: '読取完了'
+      }
+    });
+    assert.deepEqual(whenSelected, { form: EMPTY_PATIENT_REGISTRATION_FORM, fromMyna: false });
+
+    // 別人のマイナ読取結果は初期値に持ち込まない
+    const differentPersonMyna = buildPatientRegistrationInitialState({
+      selectedPatientId: null,
+      patientSearchQuery: '鈴木 次郎 19780402',
+      patientName: '鈴木 次郎',
+      patientBirthDate: '1978-04-02',
+      mynaReadResult: {
+        name: '山田 太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1985-03-15',
+        gender: 'male',
+        insuranceInfo: { provider: '06139999', burdenRatio: 10 },
+        readerSource: 'folder',
+        readerCheckedAt: '2026-11-21T09:00:00.000Z',
+        readerMessage: '読取完了'
+      }
+    });
+    assert.equal(differentPersonMyna.fromMyna, false);
+    assert.equal(differentPersonMyna.form.name, '鈴木 次郎');
+    assert.equal(differentPersonMyna.form.insurerNumber, '');
   });
 
   it('marks the patient step done only when a patient is selected', () => {
-    assert.ok(content.includes("{ key: 'patient', label: '患者', ready: !!selectedPatientId, text: selectedPatientId ? '選択済' : '未選択' }"));
+    const unselectedSteps = buildReceptionReadinessSteps({
+      selectedPatientId: null,
+      institutionName: '東京内科',
+      departmentName: '内科',
+      doctorName: '山田',
+      missingPrescriptionTotal: 0
+    });
+    assert.deepEqual(unselectedSteps[0], {
+      key: 'patient',
+      label: '患者',
+      ready: false,
+      text: '未選択'
+    });
+
+    const selectedSteps = buildReceptionReadinessSteps({
+      selectedPatientId: 'pt_1',
+      institutionName: '東京内科',
+      departmentName: '内科',
+      doctorName: '山田',
+      missingPrescriptionTotal: 0
+    });
+    assert.deepEqual(selectedSteps[0], {
+      key: 'patient',
+      label: '患者',
+      ready: true,
+      text: '選択済'
+    });
   });
 });

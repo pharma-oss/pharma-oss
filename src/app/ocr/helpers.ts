@@ -29,6 +29,15 @@ import type { DrugItem as JahisDrugItem } from '@/lib/ocr/processor';
 import type { PatientMergeOperation } from '@/lib/patient_merge';
 import { getPublicInsuranceCategoryName } from '@/lib/patient_public_insurance';
 import type { PreviousDoSnapshot } from '@/lib/previous_prescription_do';
+import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
+import { buildReceptionInsuranceNumberPatch, checkMynaReadMatchesPatient } from '@/lib/myna_read_display';
+import type { NormalizedOnlineEligibilityResult } from '@/lib/online_eligibility';
+import {
+  applyMynaToRegistrationForm,
+  EMPTY_PATIENT_REGISTRATION_FORM,
+  type PatientRegistrationForm
+} from '@/lib/patient_registration';
+import { buildPatientSearchQuery, extractPatientHintsFromQuery } from '@/lib/patient_search';
 import type { Prescription, PrescriptionFieldValue, PrescriptionGroup } from './types';
 
 export type EligibilityStatus = 'unchecked' | 'checking' | 'confirmed' | 'warning' | 'unavailable';
@@ -1059,5 +1068,211 @@ export function buildReceptionPrescriptionItemsPayload(
     };
   }
   return prescriptionItems;
+}
+
+const RECEPTION_INSURANCE_NUMBER_REGEX = /^\d+$/;
+
+export const RECEPTION_MISSING_PATIENT_ALERT_MESSAGE =
+  '患者を選択してください。初めての方は「新規患者を登録」から、先に患者登録をしてください。';
+
+export const RECEPTION_SELECTED_PATIENT_NOT_FOUND_TOAST =
+  '選択した患者が見つかりません。患者を選び直してください。';
+
+export type ReceptionSaveValidationOutcome =
+  | { ok: true }
+  | { ok: false; kind: 'alert' | 'toast'; message: string };
+
+/**
+ * 処方受付保存前の入力検証。患者未選択時は書き込み前に必ず停止し、新規患者登録を案内する。
+ */
+export function validateReceptionSaveInputs(params: {
+  selectedPatientId: string | null;
+  insuranceNumber: string;
+  institutionName: string;
+  departmentName: string;
+  doctorName: string;
+  prescriptionDate: string;
+  dispensingDate: string;
+  prescriptions: ReadonlyArray<Prescription>;
+}): ReceptionSaveValidationOutcome {
+  if (!params.selectedPatientId) {
+    return { ok: false, kind: 'alert', message: RECEPTION_MISSING_PATIENT_ALERT_MESSAGE };
+  }
+  if (params.insuranceNumber.trim() && !RECEPTION_INSURANCE_NUMBER_REGEX.test(params.insuranceNumber.trim())) {
+    return { ok: false, kind: 'alert', message: '保険者番号は半角数字で入力してください。' };
+  }
+  if (!params.institutionName.trim()) {
+    return { ok: false, kind: 'alert', message: '医療機関名を入力してください。' };
+  }
+  if (!params.departmentName.trim()) {
+    return { ok: false, kind: 'alert', message: '診療科を入力してください。' };
+  }
+  if (!params.doctorName.trim()) {
+    return { ok: false, kind: 'alert', message: '医師名を入力してください。' };
+  }
+  if (!params.prescriptionDate || !params.dispensingDate) {
+    return { ok: false, kind: 'alert', message: '処方日と調剤日を選択してください。' };
+  }
+  if (params.prescriptions.length === 0) {
+    return { ok: false, kind: 'alert', message: '処方内容が入力されていません。' };
+  }
+  const prescriptionValidationError = validateReceptionPrescriptionItems(params.prescriptions);
+  if (prescriptionValidationError) {
+    return { ok: false, kind: 'toast', message: prescriptionValidationError };
+  }
+  return { ok: true };
+}
+
+/**
+ * 保存直前に選択済み患者を患者マスターから再読込する。存在しなければ暗黙登録せずエラーを返す。
+ */
+export async function resolveReceptionTargetPatient<TDoc extends { toJSON: () => unknown }>(
+  findPatientDoc: (id: string) => Promise<TDoc | null>,
+  selectedPatientId: string
+): Promise<
+  | { ok: true; existingPatient: Patient & { doc: TDoc } }
+  | { ok: false; toastMessage: string }
+> {
+  const selectedPatientDoc = await findPatientDoc(selectedPatientId);
+  if (!selectedPatientDoc) {
+    return { ok: false, toastMessage: RECEPTION_SELECTED_PATIENT_NOT_FOUND_TOAST };
+  }
+  return {
+    ok: true,
+    existingPatient: { ...(selectedPatientDoc.toJSON() as Patient), doc: selectedPatientDoc }
+  };
+}
+
+/**
+ * 処方受付保存時の患者マスター更新ペイロードを構築する純粋関数。
+ * 氏名・生年月日は常にマスター側の登録値を保持し、受付入力で上書きしない。
+ * 保険者番号は buildReceptionInsuranceNumberPatch で正しいフィールドへ書き込む。
+ */
+export function buildReceptionPatientUpdatePayload(params: {
+  existingPatient: Pick<Patient, 'name' | 'birthDate' | 'insuranceInfo' | 'publicInsurances'>;
+  insuranceNumber: string;
+  burdenRatio: string;
+  eligibilityStatus: EligibilityStatus;
+  eligibilityResult: NormalizedOnlineEligibilityResult | null;
+  checkedAtIso?: string;
+}): {
+  name: string;
+  birthDate: string;
+  insuranceInfo: NonNullable<Patient['insuranceInfo']>;
+  publicInsurances?: Patient['publicInsurances'];
+} {
+  const savedEligibilityStatus = toPatientEligibilityStatus(params.eligibilityStatus);
+  const eligibilityPatch = params.eligibilityResult?.insuranceInfoPatch || {};
+  const insurancePayload = {
+    ...(params.existingPatient.insuranceInfo || {}),
+    ...buildReceptionInsuranceNumberPatch(params.existingPatient.insuranceInfo, params.insuranceNumber),
+    ...eligibilityPatch,
+    burdenRatio: eligibilityPatch.burdenRatio ?? parseInt(params.burdenRatio, 10),
+    ...((savedEligibilityStatus && !eligibilityPatch.eligibilityStatus)
+      ? {
+        eligibilityStatus: savedEligibilityStatus,
+        eligibilityCheckedAt: params.checkedAtIso ?? new Date().toISOString()
+      }
+      : {})
+  };
+  const eligibilityPublicInsurances = params.eligibilityResult?.publicInsurances?.filter((publicInsurance) => (
+    publicInsurance.provider && publicInsurance.recipient
+  ));
+  const existingPublicInsurances = params.existingPatient.publicInsurances?.map((publicInsurance) => ({ ...publicInsurance }));
+  const publicInsurancesPayload = eligibilityPublicInsurances && eligibilityPublicInsurances.length > 0
+    ? eligibilityPublicInsurances
+    : existingPublicInsurances;
+
+  return {
+    name: params.existingPatient.name,
+    birthDate: params.existingPatient.birthDate,
+    insuranceInfo: insurancePayload,
+    ...(publicInsurancesPayload ? { publicInsurances: publicInsurancesPayload } : {})
+  };
+}
+
+/**
+ * 新規患者登録ダイアログの初期値を構築する純粋関数。
+ * 患者選択中は別の新規患者を登録するため空から開始し、他人のマイナ読取内容を持ち込まない。
+ */
+export function buildPatientRegistrationInitialState(params: {
+  selectedPatientId: string | null;
+  patientSearchQuery: string;
+  patientName: string;
+  patientBirthDate: string;
+  mynaReadResult: MynaCardReaderResult | null;
+}): { form: PatientRegistrationForm; fromMyna: boolean } {
+  if (params.selectedPatientId) {
+    return { form: EMPTY_PATIENT_REGISTRATION_FORM, fromMyna: false };
+  }
+  const queryHints = extractPatientHintsFromQuery(params.patientSearchQuery);
+  const base: PatientRegistrationForm = {
+    ...EMPTY_PATIENT_REGISTRATION_FORM,
+    name: params.patientName.trim() || queryHints.name,
+    birthDate: params.patientBirthDate.trim() || queryHints.birthDate
+  };
+  const useMyna = !!params.mynaReadResult
+    && params.mynaReadResult.readerSource !== 'mock'
+    && checkMynaReadMatchesPatient(params.mynaReadResult, {
+      name: params.patientName,
+      birthDate: params.patientBirthDate
+    }).matches;
+  if (useMyna && params.mynaReadResult) {
+    return { form: applyMynaToRegistrationForm(base, params.mynaReadResult), fromMyna: true };
+  }
+  return { form: base, fromMyna: false };
+}
+
+export interface ReceptionReadinessStep {
+  key: 'patient' | 'provider' | 'prescription';
+  label: string;
+  ready: boolean;
+  text: string;
+}
+
+/**
+ * 処方受付画面の3段階進捗バー（患者・処方元・処方）の状態を算出する純粋関数。
+ */
+export function buildReceptionReadinessSteps(params: {
+  selectedPatientId: string | null;
+  institutionName: string;
+  departmentName: string;
+  doctorName: string;
+  missingPrescriptionTotal: number;
+}): ReceptionReadinessStep[] {
+  const providerReady = !!(params.institutionName.trim() && params.departmentName.trim() && params.doctorName.trim());
+  const prescriptionReady = params.missingPrescriptionTotal === 0;
+  return [
+    {
+      key: 'patient',
+      label: '患者',
+      ready: !!params.selectedPatientId,
+      text: params.selectedPatientId ? '選択済' : '未選択'
+    },
+    {
+      key: 'provider',
+      label: '処方元',
+      ready: providerReady,
+      text: providerReady ? '入力済' : '未入力'
+    },
+    {
+      key: 'prescription',
+      label: '処方',
+      ready: prescriptionReady,
+      text: prescriptionReady ? '入力済' : `未入力 ${params.missingPrescriptionTotal}`
+    }
+  ];
+}
+
+export type ReceptionPatientQuerySource = 'qr' | 'ocr' | 'electronic_prescription' | 'myna';
+
+/**
+ * QR・OCR・電子処方箋・マイナ読取の各経路から取得した患者情報をもとに検索欄クエリを組み立てる。
+ */
+export function buildReceptionPatientSearchQueryForSource(
+  _source: ReceptionPatientQuerySource,
+  patient: { name?: string; birthDate?: string }
+): string {
+  return buildPatientSearchQuery({ name: patient.name, birthDate: patient.birthDate });
 }
 

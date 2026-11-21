@@ -4,26 +4,21 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import './ocr.css';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Upload, FileSearch, CheckCircle, Trash2, Loader2, CreditCard, Search, UserPlus, Hospital, Printer, AlertTriangle, ShieldCheck, History, QrCode, ChevronDown } from 'lucide-react';
+import { Upload, FileSearch, CheckCircle, Trash2, Loader2, Search, Hospital, Printer, AlertTriangle, ShieldCheck, History, QrCode, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMynaReaderAvailability } from '@/hooks/useMynaReaderAvailability';
-import { buildReceptionInsuranceNumberPatch, checkMynaReadMatchesPatient, getMynaReaderButtonView, pickReceptionInsuranceNumber } from '@/lib/myna_read_display';
+import { getMynaReaderButtonView, pickReceptionInsuranceNumber } from '@/lib/myna_read_display';
 import { useDatabase } from '@/db/DatabaseProvider';
 import type { Patient, Visit } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import {
   FEATURE_AVAILABILITY,
-  UNIMPLEMENTED_BADGE_LABEL,
-  isFeatureImplemented,
-  labelWithAvailability
+  isFeatureImplemented
 } from '@/lib/feature_availability';
-import { normalizeInsuranceNumber } from '@/lib/patient_matching';
-import { buildPatientSearchQuery, extractPatientHintsFromQuery } from '@/lib/patient_search';
-import {
-  applyMynaToRegistrationForm,
-  EMPTY_PATIENT_REGISTRATION_FORM,
-  type PatientRegistrationForm,
-  type PatientRegistrationOutcome
+import { buildPatientSearchQuery } from '@/lib/patient_search';
+import type {
+  PatientRegistrationForm,
+  PatientRegistrationOutcome
 } from '@/lib/patient_registration';
 import { describePatientMasterChanges } from '@/lib/patient_master_update';
 import {
@@ -40,7 +35,6 @@ import { recordAuditOrNotify } from '@/lib/audit_guard';
 import { PrescriptionRegistrationError, registerPrescriptionAtomically } from '@/lib/prescription_registration';
 import { isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { buildReceptionClaimOptions, judgeAfterHoursCategory } from '@/lib/claim_conditions';
-import { formatOnlineEligibilityFieldMappingReport } from '@/lib/online_eligibility';
 import { buildProviderHistory, buildRecentProviderHistoryQuery, matchProviderHistory, type ProviderHistoryOption } from '@/lib/master-data/provider_history';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
 import { buildPreviousDoPrescriptions } from '@/lib/previous_prescription_do';
@@ -54,11 +48,20 @@ import DrugSearchModal from './components/DrugSearchModal';
 import PrescriptionQrReader from './components/PrescriptionQrReader';
 import { PatientRegistrationModal } from './components/PatientRegistrationModal';
 import { SelectedPatientCard } from './components/SelectedPatientCard';
+import {
+  ElectronicPrescriptionUnimplementedPanel,
+  ReceptionElectronicEntryCard,
+  formatIntakeToolsToggleLabel
+} from './components/ReceptionElectronicEntryCard';
+import {
+  PatientNotFoundPrompt,
+  ReceptionEligibilityToolRow,
+  ReceptionPatientSearchBar
+} from './components/ReceptionPatientSearchBar';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 import type { Prescription, PrescriptionFieldValue } from './types';
 import { groupPrescriptionsByRp } from './types';
 import {
-  toPatientEligibilityStatus,
   filterReceptionEligibilityAlerts,
   buildCandidatePublicInsuranceSummary,
   getPatientCandidatePanelViewState,
@@ -91,7 +94,12 @@ import {
   togglePrescriptionIppokaAt,
   togglePrescriptionCrushedAt,
   togglePrescriptionReceiptRemarkAt,
-  validateReceptionPrescriptionItems,
+  validateReceptionSaveInputs,
+  resolveReceptionTargetPatient,
+  buildReceptionPatientUpdatePayload,
+  buildPatientRegistrationInitialState,
+  buildReceptionReadinessSteps,
+  buildReceptionPatientSearchQueryForSource,
   buildReceptionPrescriptionItemsPayload
 } from './helpers';
 import { OcrRawTextArea, OcrConfidencePanel } from './components/OcrConfidencePanel';
@@ -102,9 +110,6 @@ import { useOcrElectronicPrescription } from '@/hooks/useOcrElectronicPrescripti
 import { useOcrPatientEligibility, type PatientCandidate } from '@/hooks/useOcrPatientEligibility';
 import { useOcrPreviousPrescriptions } from '@/hooks/useOcrPreviousPrescriptions';
 import { useOcrDrugSearchModal } from '@/hooks/useOcrDrugSearchModal';
-
-// ⚡ Bolt: Hoist regex to module scope to avoid re-compilation on every function call
-const INSURANCE_NUMBER_REGEX = /^\d+$/;
 
 export default function OcrPage() {
   const router = useRouter();
@@ -490,7 +495,7 @@ export default function OcrPage() {
       if (!isAppending && (prescription.patient.name || nextPatientBirthDate)) {
         // 処方箋に書かれた患者を、検索欄にも入れて探す。違う患者が選ばれたままにしない(同じ受付への追加は同一患者)。
         setSelectedPatientId(null);
-        setPatientSearchQuery(buildPatientSearchQuery({ name: prescription.patient.name, birthDate: nextPatientBirthDate }));
+        setPatientSearchQuery(buildReceptionPatientSearchQueryForSource('electronic_prescription', { name: prescription.patient.name, birthDate: nextPatientBirthDate }));
       }
       if (prescription.patient.burdenRatio) {
         setBurdenRatio(String(prescription.patient.burdenRatio));
@@ -599,7 +604,7 @@ export default function OcrPage() {
     if (nextBirthDate) setPatientBirthDate(nextBirthDate);
     if (hasPatient) {
       setSelectedPatientId(null);
-      setPatientSearchQuery(buildPatientSearchQuery({ name: parsed.patient.name, birthDate: nextBirthDate }));
+      setPatientSearchQuery(buildReceptionPatientSearchQueryForSource('qr', { name: parsed.patient.name, birthDate: nextBirthDate }));
       setEligibilityStatus('unchecked');
       setEligibilityResult(null);
     }
@@ -638,21 +643,16 @@ export default function OcrPage() {
 
   // 新規患者の登録画面を開く。分かっている氏名・生年月日(処方箋・QR・マイナ読取)と、読み取ったマイナの内容を初期値にする。
   // 患者を選んでいるときは、その人ではなく別の新しい人を登録するので、空から始める。
-  const patientRegistrationInitial = useMemo<{ form: PatientRegistrationForm; fromMyna: boolean }>(() => {
-    if (selectedPatientId) return { form: EMPTY_PATIENT_REGISTRATION_FORM, fromMyna: false };
-    const queryHints = extractPatientHintsFromQuery(patientSearchQuery);
-    const base: PatientRegistrationForm = {
-      ...EMPTY_PATIENT_REGISTRATION_FORM,
-      name: patientName.trim() || queryHints.name,
-      birthDate: patientBirthDate.trim() || queryHints.birthDate
-    };
-    // 直近のマイナ読取が、いま受付欄にある人のものなら、カナ・性別・記号番号まで引き継ぐ(別の人の読取は使わない)
-    const useMyna = !!mynaReadResult
-      && mynaReadResult.readerSource !== 'mock'
-      && checkMynaReadMatchesPatient(mynaReadResult, { name: patientName, birthDate: patientBirthDate }).matches;
-    if (useMyna && mynaReadResult) return { form: applyMynaToRegistrationForm(base, mynaReadResult), fromMyna: true };
-    return { form: base, fromMyna: false };
-  }, [mynaReadResult, patientBirthDate, patientName, patientSearchQuery, selectedPatientId]);
+  const patientRegistrationInitial = useMemo<{ form: PatientRegistrationForm; fromMyna: boolean }>(
+    () => buildPatientRegistrationInitialState({
+      selectedPatientId,
+      patientSearchQuery,
+      patientName,
+      patientBirthDate,
+      mynaReadResult
+    }),
+    [mynaReadResult, patientBirthDate, patientName, patientSearchQuery, selectedPatientId]
+  );
 
   const openPatientRegistration = useCallback(() => {
     setPatientRegistrationKey((current) => (current ?? 0) + 1);
@@ -800,7 +800,7 @@ export default function OcrPage() {
     if (nextBirthDate) setPatientBirthDate(nextBirthDate);
     if (parsed.patient.name || nextBirthDate) {
       setSelectedPatientId(null);
-      setPatientSearchQuery(buildPatientSearchQuery({ name: parsed.patient.name, birthDate: nextBirthDate }));
+      setPatientSearchQuery(buildReceptionPatientSearchQueryForSource('ocr', { name: parsed.patient.name, birthDate: nextBirthDate }));
       setEligibilityStatus('unchecked');
       setEligibilityResult(null);
     }
@@ -978,47 +978,26 @@ export default function OcrPage() {
 
     // Input Validation
     // 受付は、登録済みの患者を選んで行う。初めての方は、先に患者登録をする。
-    if (!selectedPatientId) {
-      alert('患者を選択してください。初めての方は「新規患者を登録」から、先に患者登録をしてください。');
+    const validation = validateReceptionSaveInputs({
+      selectedPatientId,
+      insuranceNumber,
+      institutionName,
+      departmentName,
+      doctorName,
+      prescriptionDate,
+      dispensingDate,
+      prescriptions
+    });
+    if (!validation.ok) {
+      if (validation.kind === 'toast') {
+        toast.error(validation.message);
+      } else {
+        alert(validation.message);
+      }
       return;
     }
 
-    if (insuranceNumber.trim() && !INSURANCE_NUMBER_REGEX.test(insuranceNumber.trim())) {
-      alert('保険者番号は半角数字で入力してください。');
-      return;
-    }
-
-    if (!institutionName.trim()) {
-      alert('医療機関名を入力してください。');
-      return;
-    }
-
-    if (!departmentName.trim()) {
-      alert('診療科を入力してください。');
-      return;
-    }
-
-    if (!doctorName.trim()) {
-      alert('医師名を入力してください。');
-      return;
-    }
-
-    if (!prescriptionDate || !dispensingDate) {
-      alert('処方日と調剤日を選択してください。');
-      return;
-    }
-
-    if (prescriptions.length === 0) {
-      alert('処方内容が入力されていません。');
-      return;
-    }
-
-    const prescriptionValidationError = validateReceptionPrescriptionItems(prescriptions);
-    if (prescriptionValidationError) {
-      toast.error(prescriptionValidationError);
-      return;
-    }
-
+    const confirmedPatientId = selectedPatientId as string;
     setIsSaving(true);
 
     // Generate unique IDs
@@ -1026,9 +1005,12 @@ export default function OcrPage() {
 
     try {
       // 選んだ患者を、保存の直前に読み直す(別の端末での更新や、統合で消えた場合に気づくため)
-      const selectedPatientDoc = await db.patients.findOne(selectedPatientId).exec();
-      if (!selectedPatientDoc) {
-        toast.error('選択した患者が見つかりません。患者を選び直してください。');
+      const resolvedPatient = await resolveReceptionTargetPatient(
+        (id) => db.patients.findOne(id).exec(),
+        confirmedPatientId
+      );
+      if (!resolvedPatient.ok) {
+        toast.error(resolvedPatient.toastMessage);
         setIsSaving(false);
         return;
       }
@@ -1044,37 +1026,17 @@ export default function OcrPage() {
       } catch (settingsError) {
         console.error('Failed to read business hours for the reception judgement:', settingsError);
       }
-      const existingPatient = { ...selectedPatientDoc.toJSON(), doc: selectedPatientDoc };
+      const existingPatient = resolvedPatient.existingPatient;
       const patientId = existingPatient.patientId;
       // 患者の氏名・生年月日は登録内容のまま。受付で書き換えない(処方箋の読み取り違いで、選んだ患者の名前が変わらないように)
       const savedPatientName = existingPatient.name;
-      const savedEligibilityStatus = toPatientEligibilityStatus(eligibilityStatus);
-      const eligibilityPatch = eligibilityResult?.insuranceInfoPatch || {};
-      const insurancePayload = {
-        ...(existingPatient.insuranceInfo || {}),
-        ...buildReceptionInsuranceNumberPatch(existingPatient.insuranceInfo, insuranceNumber),
-        ...eligibilityPatch,
-        burdenRatio: eligibilityPatch.burdenRatio ?? parseInt(burdenRatio, 10),
-        ...((savedEligibilityStatus && !eligibilityPatch.eligibilityStatus)
-          ? {
-            eligibilityStatus: savedEligibilityStatus,
-            eligibilityCheckedAt: new Date().toISOString()
-          }
-          : {})
-      };
-      const eligibilityPublicInsurances = eligibilityResult?.publicInsurances?.filter((publicInsurance) => (
-        publicInsurance.provider && publicInsurance.recipient
-      ));
-      const existingPublicInsurances = existingPatient.publicInsurances?.map((publicInsurance) => ({ ...publicInsurance }));
-      const publicInsurancesPayload = eligibilityPublicInsurances && eligibilityPublicInsurances.length > 0
-        ? eligibilityPublicInsurances
-        : existingPublicInsurances;
-      const patientUpdatePayload = {
-        name: existingPatient.name,
-        birthDate: existingPatient.birthDate,
-        insuranceInfo: insurancePayload,
-        ...(publicInsurancesPayload ? { publicInsurances: publicInsurancesPayload } : {})
-      };
+      const patientUpdatePayload = buildReceptionPatientUpdatePayload({
+        existingPatient,
+        insuranceNumber,
+        burdenRatio,
+        eligibilityStatus,
+        eligibilityResult
+      });
       const patientMasterChanges = describePatientMasterChanges(existingPatient, patientUpdatePayload);
       let lockedClaimCountForPatient = 0;
       if (patientMasterChanges.length > 0) {
@@ -1214,32 +1176,15 @@ export default function OcrPage() {
               <span className="manual-entry-subtitle">患者情報と処方内容を直接入力します。</span>
             </button>
 
-            <button
-              type="button"
-              className="manual-entry-card glass"
-              data-testid="electronic-prescription-entry"
-              disabled={!electronicPrescriptionImplemented}
-              aria-disabled={!electronicPrescriptionImplemented}
-              onClick={() => {
-                if (!electronicPrescriptionImplemented) return;
+            <ReceptionElectronicEntryCard
+              implemented={electronicPrescriptionImplemented}
+              unavailableReason={electronicPrescriptionUnavailableReason}
+              onOpen={() => {
                 setIsManualEntry(true);
                 setIsIntakeToolsOpen(true);
                 setElectronicPrescriptionMessage('引換番号または処方箋IDを入力して取得してください。');
               }}
-            >
-              <FileSearch size={42} aria-hidden="true" />
-              <span className="manual-entry-title">
-                電子処方箋で受付
-                {!electronicPrescriptionImplemented && (
-                  <span className="unimplemented-badge" data-testid="electronic-prescription-entry-badge">{UNIMPLEMENTED_BADGE_LABEL}</span>
-                )}
-              </span>
-              <span className="manual-entry-subtitle">
-                {electronicPrescriptionImplemented
-                  ? 'yakurekiの接続モジュールから取得して確認します。'
-                  : electronicPrescriptionUnavailableReason}
-              </span>
-            </button>
+            />
 
             <PrescriptionQrReader
               onApplyQrData={handleApplyPrescriptionQrData}
@@ -1289,11 +1234,13 @@ export default function OcrPage() {
             </div>
 
             <div className="input-readiness-strip" aria-label="受付入力状況">
-              {[
-                { key: 'patient', label: '患者', ready: !!selectedPatientId, text: selectedPatientId ? '選択済' : '未選択' },
-                { key: 'provider', label: '処方元', ready: !!(institutionName.trim() && departmentName.trim() && doctorName.trim()), text: institutionName.trim() && departmentName.trim() && doctorName.trim() ? '入力済' : '未入力' },
-                { key: 'prescription', label: '処方', ready: prescriptionMetrics.missingTotal === 0, text: prescriptionMetrics.missingTotal === 0 ? '入力済' : `未入力 ${prescriptionMetrics.missingTotal}` }
-              ].map((item) => (
+              {buildReceptionReadinessSteps({
+                selectedPatientId,
+                institutionName,
+                departmentName,
+                doctorName,
+                missingPrescriptionTotal: prescriptionMetrics.missingTotal
+              }).map((item) => (
                 <button
                   key={item.key}
                   type="button"
@@ -1324,7 +1271,7 @@ export default function OcrPage() {
                 >
                   <QrCode size={18} aria-hidden="true" />
                   <span className="intake-tools-title">
-                    {electronicPrescriptionImplemented ? 'QR・電子処方箋から取り込む' : '処方箋QRから取り込む'}
+                    {formatIntakeToolsToggleLabel(electronicPrescriptionImplemented)}
                   </span>
                   {appliedElectronicPrescription && (
                     <span className="status-chip compact confirmed">反映済み {appliedElectronicPrescriptionIds.length}件</span>
@@ -1339,32 +1286,9 @@ export default function OcrPage() {
                   />
 
                   {!electronicPrescriptionImplemented ? (
-                    <section
-                      className="electronic-prescription-panel is-unimplemented"
-                      data-testid="electronic-prescription-panel"
-                      aria-label="電子処方箋受付（未実装）"
-                    >
-                      <div className="electronic-prescription-header">
-                        <div>
-                          <span className="section-kicker">電子処方箋</span>
-                          <strong>電子処方箋での受付</strong>
-                        </div>
-                        <span className="status-chip warning" data-testid="electronic-prescription-unimplemented-badge">
-                          {UNIMPLEMENTED_BADGE_LABEL}
-                        </span>
-                      </div>
-                      <p className="electronic-prescription-note">{electronicPrescriptionUnavailableReason}</p>
-                      <button
-                        type="button"
-                        className="btn-secondary flex-center gap-2"
-                        disabled
-                        aria-disabled="true"
-                        data-testid="electronic-prescription-fetch"
-                      >
-                        <Search size={16} aria-hidden="true" />
-                        {labelWithAvailability('electronicPrescription', '取得して確認')}
-                      </button>
-                    </section>
+                    <ElectronicPrescriptionUnimplementedPanel
+                      unavailableReason={electronicPrescriptionUnavailableReason}
+                    />
                   ) : (
                     <section
                       className="electronic-prescription-panel"
@@ -1588,59 +1512,17 @@ export default function OcrPage() {
               </section>
 
               <div className="form-section-title section-first" id="reception-section-patient">患者・保険</div>
-              <div className="form-group patient-search-group">
-                <label htmlFor="patientSearch">
-                  患者を検索
-                  <span className="text-danger ml-1 text-sm" aria-hidden="true">*</span>
-                </label>
-                <div className="patient-search-row">
-                  <div className="patient-search-input">
-                    <Search size={16} aria-hidden="true" />
-                    <input
-                      id="patientSearch"
-                      type="text"
-                      autoComplete="off"
-                      maxLength={100}
-                      value={patientSearchQuery}
-                      onChange={(e) => setPatientSearchQuery(e.target.value)}
-                      placeholder={image ? '読み取り中...' : '氏名・フリガナ・生年月日8桁（例: 山田 19850315）'}
-                      aria-describedby="patientSearchHint"
-                      data-testid="patient-search-input"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-secondary flex-center gap-2"
-                    onClick={handleMynaRead}
-                    disabled={isReadingMyna || mynaReadButton.disabled}
-                    aria-disabled={isReadingMyna || mynaReadButton.disabled}
-                    title={mynaReadButton.title}
-                    data-testid="myna-read-button"
-                  >
-                    {isReadingMyna ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                    {isReadingMyna ? '読取中...' : mynaReadButton.label}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary flex-center gap-2"
-                    onClick={openPatientRegistration}
-                    disabled={!db}
-                    aria-disabled={!db}
-                    data-testid="patient-register-open-button"
-                  >
-                    <UserPlus size={16} aria-hidden="true" />
-                    新規患者を登録
-                  </button>
-                </div>
-                <span id="patientSearchHint" className="field-hint">
-                  登録済みの患者から選びます。氏名・フリガナ・生年月日（半角8桁 例: 19850315）で探せます。空白で区切ると絞り込めます。初めての方は先に「新規患者を登録」してください。
-                </span>
-                {mynaMessage && (
-                  <span className="status-chip confirmed">
-                    {mynaMessage}
-                  </span>
-                )}
-              </div>
+              <ReceptionPatientSearchBar
+                patientSearchQuery={patientSearchQuery}
+                onPatientSearchQueryChange={setPatientSearchQuery}
+                hasImage={!!image}
+                isReadingMyna={isReadingMyna}
+                mynaReadButton={mynaReadButton}
+                mynaMessage={mynaMessage}
+                hasDb={!!db}
+                onMynaRead={handleMynaRead}
+                onOpenPatientRegistration={openPatientRegistration}
+              />
               {!selectedPatient && (patientName.trim() || patientBirthDate) && (
                 <p className="field-hint prescription-patient-hint" data-testid="prescription-patient-hint">
                   読み取った患者: {[patientName.trim(), patientBirthDate && `（${patientBirthDate}）`].filter(Boolean).join(' ')}
@@ -1719,21 +1601,11 @@ export default function OcrPage() {
                       </div>
                     )}
                     {patientRegistrationPrompt && (
-                      <div className="temporary-registration-note" data-testid="patient-not-found-note">
-                        <UserPlus size={16} aria-hidden="true" />
-                        <span>{patientRegistrationPrompt}</span>
-                        <button
-                          type="button"
-                          className="btn-primary flex-center gap-2"
-                          onClick={openPatientRegistration}
-                          disabled={!db}
-                          aria-disabled={!db}
-                          data-testid="patient-register-from-empty-button"
-                        >
-                          <UserPlus size={16} aria-hidden="true" />
-                          新規患者を登録
-                        </button>
-                      </div>
+                      <PatientNotFoundPrompt
+                        prompt={patientRegistrationPrompt}
+                        hasDb={!!db}
+                        onOpenPatientRegistration={openPatientRegistration}
+                      />
                     )}
                     {selectedPatient && (
                       <SelectedPatientCard
@@ -1860,39 +1732,16 @@ export default function OcrPage() {
                 </div>
               </div>
 
-              <div className="reception-tool-row">
-                <button
-                  type="button"
-                  className="btn-secondary flex-center gap-2"
-                  onClick={handleEligibilityCheck}
-                  disabled={!onlineEligibilityImplemented || !normalizeInsuranceNumber(insuranceNumber) || eligibilityStatus === 'checking'}
-                  aria-disabled={!onlineEligibilityImplemented || !normalizeInsuranceNumber(insuranceNumber) || eligibilityStatus === 'checking'}
-                  title={onlineEligibilityImplemented ? undefined : FEATURE_AVAILABILITY.onlineEligibility.unavailableReason}
-                  data-testid="online-eligibility-button"
-                >
-                  {eligibilityStatus === 'checking' ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                  {labelWithAvailability('onlineEligibility', 'オンライン資格確認')}
-                </button>
-                {(mynaReadButton.disabled || !onlineEligibilityImplemented) && (
-                  <p className="field-hint reception-tool-note" data-testid="reception-tool-unimplemented-note">
-                    {[
-                      mynaReaderState.status === 'ready' && !mynaReaderState.available
-                        ? `マイナ読取は使えません(${mynaReaderState.reason || '接続先が未設定です'})`
-                        : '',
-                      !onlineEligibilityImplemented ? 'オンライン資格確認は未実装です' : ''
-                    ].filter(Boolean).join('。')}
-                    {mynaReaderState.status === 'checking' && onlineEligibilityImplemented ? '' : '。保険者番号・負担割合は手入力してください。'}
-                  </p>
-                )}
-                {eligibilityMessage && (
-                  <span
-                    className={`status-chip ${eligibilityStatus}`}
-                    title={eligibilityResult ? formatOnlineEligibilityFieldMappingReport(eligibilityResult.fieldMapping) : undefined}
-                  >
-                    {eligibilityMessage}
-                  </span>
-                )}
-              </div>
+              <ReceptionEligibilityToolRow
+                onlineEligibilityImplemented={onlineEligibilityImplemented}
+                insuranceNumber={insuranceNumber}
+                eligibilityStatus={eligibilityStatus}
+                eligibilityMessage={eligibilityMessage}
+                eligibilityResult={eligibilityResult}
+                mynaReaderState={mynaReaderState}
+                mynaReadButton={mynaReadButton}
+                onEligibilityCheck={handleEligibilityCheck}
+              />
 
               <div className="form-section-title" id="reception-section-provider">処方箋情報</div>
               <div className="provider-grid">
