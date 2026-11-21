@@ -24,7 +24,12 @@ export interface PrescriptionGroupEditorProps {
   onToggleIppoka: (id: string, checked: boolean, index: number) => void;
   onToggleCrushed: (id: string, checked: boolean, index: number) => void;
   onToggleReceiptRemark: (id: string, checked: boolean, index: number) => void;
-  onRpFieldChange: (rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string) => void;
+  onRpFieldChange: (
+    rpId: string,
+    field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment',
+    value: string,
+    meta?: { electronicUsageCode?: string }
+  ) => void;
   onRpDosageCategoryChange: (rpId: string, category: DosageCategory | null) => void;
   onAddDrugToRp: (rpId: string) => void;
   onAddRpAfter: (rpId: string) => void;
@@ -61,7 +66,9 @@ export const PrescriptionGroupEditor = React.memo(({
   }), [dosageCategory, recentUsageLabels]);
 
   const applyUsageOption = (option: ElectronicUsageOption) => {
-    onRpFieldChange(group.rpId, 'usage', option.label);
+    onRpFieldChange(group.rpId, 'usage', option.label, {
+      electronicUsageCode: option.prescriptionCode || ''
+    });
     setRecentUsageLabels(pushUsageRecent(dosageCategory, option.label));
   };
 
@@ -200,7 +207,7 @@ export const PrescriptionGroupEditor = React.memo(({
               <button
                 type="button"
                 className="btn-clear-usage"
-                onClick={() => onRpFieldChange(group.rpId, 'usage', '')}
+                onClick={() => onRpFieldChange(group.rpId, 'usage', '', { electronicUsageCode: '' })}
                 title="用法をクリア"
                 aria-label={`Rp ${groupIndex + 1} 用法をクリア`}
               >

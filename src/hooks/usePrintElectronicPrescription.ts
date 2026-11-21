@@ -33,6 +33,56 @@ export interface UsePrintElectronicPrescriptionProps {
   setVisitData: React.Dispatch<React.SetStateAction<PrintVisitData | null>>;
 }
 
+export function buildElectronicPrescriptionDispensingResultPayload(params: {
+  visitData: Pick<PrintVisitData, 'prescriptionDate' | 'issueDate' | 'dispensingDate' | 'electronicPrescription'> | null;
+  prescriptionItems: PrintPrescriptionItem[];
+  totalPoints: number;
+  fallbackDispensingDate?: string;
+}) {
+  const { visitData, prescriptionItems, totalPoints, fallbackDispensingDate } = params;
+  return {
+    type: 'yakureki-electronic-prescription-dispensing-result' as const,
+    schemaVersion: 1 as const,
+    prescriptionDate: visitData?.prescriptionDate || visitData?.issueDate,
+    dispensingDate: visitData?.dispensingDate || fallbackDispensingDate || toLocalDateKey(),
+    totalPoints,
+    signatureRequirement: {
+      hpkiSignatureRequired: visitData?.electronicPrescription
+        ? requiresElectronicPrescriptionDispensingHpkiSignature(
+            getElectronicPrescriptionDocumentKinds(visitData.electronicPrescription)
+          )
+        : true,
+      expectedSignerRole: 'pharmacist' as const
+    },
+    items: prescriptionItems.map((item, index) => ({
+      itemId: item.itemId,
+      rpNumber: item.rpNumber || index + 1,
+      prescribedDrugCode: item.drugId,
+      dispensedDrugCode: item.dispensedDrugCode || item.drugId,
+      yjCode: item.dispensedYjCode || item.yjCode || item.prescribedYjCode,
+      prescribedDrugCodeStatus: item.prescribedDrugCodeStatus,
+      prescribedDrugCodeAbolishedAt: item.prescribedDrugCodeAbolishedAt || undefined,
+      sourceDrugName: item.electronicSourceDrugName || undefined,
+      masterDrugName: item.electronicMasterDrugName || undefined,
+      drugNameVerificationStatus: item.electronicDrugNameVerificationStatus || undefined,
+      drugNameVerificationCheckedAt: item.electronicDrugNameVerificationCheckedAt || undefined,
+      amount: String(item.amount || ''),
+      unitCode: item.unitCode || undefined,
+      unitText: item.unitText || undefined,
+      unitConversion: item.electronicUnitConversion || undefined,
+      usageCode: item.electronicUsageCode || undefined,
+      usage: item.usage || '',
+      usageFallbackText: item.electronicUsageFallbackText || undefined,
+      usageSupplementText: item.electronicUsageSupplementText || undefined,
+      days: String(item.days || ''),
+      changeReason: item.changeReason || undefined,
+      isIppoka: !!item.isIppoka,
+      isCrushed: !!item.isCrushed,
+      isDiagnosticTest: !!item.isDiagnosticTest
+    }))
+  };
+}
+
 export function usePrintElectronicPrescription({
   db,
   visitId,
@@ -95,47 +145,12 @@ export function usePrintElectronicPrescription({
         ? 'completed'
         : 'in_progress';
 
-  const buildElectronicPrescriptionDispensingPayload = () => ({
-    type: 'yakureki-electronic-prescription-dispensing-result' as const,
-    schemaVersion: 1 as const,
-    prescriptionDate: visitData?.prescriptionDate || visitData?.issueDate,
-    dispensingDate: visitData?.dispensingDate || toLocalDateKey(),
-    totalPoints,
-    signatureRequirement: {
-      hpkiSignatureRequired: visitData?.electronicPrescription
-        ? requiresElectronicPrescriptionDispensingHpkiSignature(
-            getElectronicPrescriptionDocumentKinds(visitData.electronicPrescription)
-          )
-        : true,
-      expectedSignerRole: 'pharmacist' as const
-    },
-    items: prescriptionItems.map((item, index) => ({
-      itemId: item.itemId,
-      rpNumber: item.rpNumber || index + 1,
-      prescribedDrugCode: item.drugId,
-      dispensedDrugCode: item.dispensedDrugCode || item.drugId,
-      yjCode: item.dispensedYjCode || item.yjCode || item.prescribedYjCode,
-      prescribedDrugCodeStatus: item.prescribedDrugCodeStatus,
-      prescribedDrugCodeAbolishedAt: item.prescribedDrugCodeAbolishedAt || undefined,
-      sourceDrugName: item.electronicSourceDrugName || undefined,
-      masterDrugName: item.electronicMasterDrugName || undefined,
-      drugNameVerificationStatus: item.electronicDrugNameVerificationStatus || undefined,
-      drugNameVerificationCheckedAt: item.electronicDrugNameVerificationCheckedAt || undefined,
-      amount: String(item.amount || ''),
-      unitCode: item.unitCode || undefined,
-      unitText: item.unitText || undefined,
-      unitConversion: item.electronicUnitConversion || undefined,
-      usageCode: item.electronicUsageCode || undefined,
-      usage: item.usage || '',
-      usageFallbackText: item.electronicUsageFallbackText || undefined,
-      usageSupplementText: item.electronicUsageSupplementText || undefined,
-      days: String(item.days || ''),
-      changeReason: item.changeReason || undefined,
-      isIppoka: !!item.isIppoka,
-      isCrushed: !!item.isCrushed,
-      isDiagnosticTest: !!item.isDiagnosticTest
-    }))
-  });
+  const buildElectronicPrescriptionDispensingPayload = () =>
+    buildElectronicPrescriptionDispensingResultPayload({
+      visitData,
+      prescriptionItems,
+      totalPoints
+    });
 
   const patchElectronicPrescriptionMetadata = async (
     nextElectronicPrescription: VisitElectronicPrescription

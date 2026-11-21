@@ -17,6 +17,7 @@ import {
   type DrugMasterRecord
 } from '@/lib/master-data/drug_master';
 import { formatDrugDisplayName } from '@/lib/master-data/drug_display';
+import { findElectronicUsageOptionByLabel } from '@/lib/master-data/usage_master';
 import { inferDosageCategory, type DosageCategory } from '@/lib/dosage_category';
 import type {
   ElectronicPrescriptionDuplicateCheckStatus,
@@ -815,6 +816,17 @@ export function buildAppliedElectronicPrescriptionState(params: {
   };
 }
 
+function resolveManualElectronicUsageCode(
+  usageValue: string,
+  meta?: { electronicUsageCode?: string }
+): string {
+  if (meta && meta.electronicUsageCode !== undefined) {
+    return meta.electronicUsageCode.trim();
+  }
+  const matched = findElectronicUsageOptionByLabel(usageValue);
+  return matched?.prescriptionCode || '';
+}
+
 export function updatePrescriptionFieldAt(
   prev: Prescription[],
   id: string,
@@ -827,8 +839,13 @@ export function updatePrescriptionFieldAt(
   const next = [...prev];
   if (field === 'usage' || field === 'days' || field === 'rpComment') {
     const targetRpId = next[targetIndex].rpId;
+    const electronicUsageCodePatch = field === 'usage' && typeof value === 'string'
+      ? { electronicUsageCode: resolveManualElectronicUsageCode(value) }
+      : {};
     return next.map((prescription) => (
-      prescription.rpId === targetRpId ? { ...prescription, [field]: value } : prescription
+      prescription.rpId === targetRpId
+        ? { ...prescription, [field]: value, ...electronicUsageCodePatch }
+        : prescription
     ));
   }
   next[targetIndex] = { ...next[targetIndex], [field]: value };
@@ -839,10 +856,16 @@ export function updateRpGroupField(
   prev: Prescription[],
   rpId: string,
   field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment',
-  value: string
+  value: string,
+  meta?: { electronicUsageCode?: string }
 ): Prescription[] {
+  const electronicUsageCodePatch = field === 'usage'
+    ? { electronicUsageCode: resolveManualElectronicUsageCode(value, meta) }
+    : {};
   return prev.map((prescription) => (
-    prescription.rpId === rpId ? { ...prescription, [field]: value } : prescription
+    prescription.rpId === rpId
+      ? { ...prescription, [field]: value, ...electronicUsageCodePatch }
+      : prescription
   ));
 }
 

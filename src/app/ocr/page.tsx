@@ -900,8 +900,8 @@ export default function OcrPage() {
     setPrescriptions((prev) => updatePrescriptionFieldAt(prev, id, field, value, index));
   }, []);
 
-  const handleRpFieldChange = useCallback((rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string) => {
-    setPrescriptions((prev) => updateRpGroupField(prev, rpId, field, value));
+  const handleRpFieldChange = useCallback((rpId: string, field: 'usage' | 'usageSupplementText' | 'days' | 'rpComment', value: string, meta?: { electronicUsageCode?: string }) => {
+    setPrescriptions((prev) => updateRpGroupField(prev, rpId, field, value, meta));
   }, []);
 
   const handleRpDosageCategoryChange = useCallback((rpId: string, category: DosageCategory | null) => {
