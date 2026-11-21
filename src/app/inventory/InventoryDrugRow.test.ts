@@ -6,7 +6,12 @@ import type { Drug } from '@/db/types';
 import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
 import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
-import { InventoryRow, saveDrugLocationChange, type InventoryRowProps } from './components/InventoryRow';
+import {
+  assertPatchableInventoryDrugDoc,
+  InventoryRow,
+  saveDrugLocationChange,
+  type InventoryRowProps
+} from './components/InventoryRow';
 import { toInventoryDrugRow } from './types';
 
 function drug(overrides: Partial<Drug> & Pick<Drug, 'code' | 'name'>): Drug {
@@ -297,5 +302,15 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     });
     assert.equal(clearFail.ok, false);
     assert.match(clearFail.alertMessage || '', /薬品の棚番地の保存に失敗しました/);
+
+    // patch() を持たない読み取り専用オブジェクトが渡されても例外を握って失敗通知を返す
+    assert.throws(() => assertPatchableInventoryDrugDoc({ reorderPoint: 10 }), TypeError);
+    assert.throws(() => assertPatchableInventoryDrugDoc(null), TypeError);
+    const nonPatchableOutcome = await saveDrugLocationChange({
+      drugDoc: { reorderPoint: 10 },
+      locationString: 'C-02-01'
+    });
+    assert.equal(nonPatchableOutcome.ok, false);
+    assert.match(nonPatchableOutcome.alertMessage || '', /薬品の棚番地の保存に失敗しました/);
   });
 });

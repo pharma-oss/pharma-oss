@@ -3,7 +3,16 @@
 // 受付〜ピッキング(GS1照合・不足記録)〜薬歴〜印刷までを実データで練習できるようにする。
 // デモは「デモ」接頭辞・固定IDで実データと区別し、何度呼んでも安全(冪等)にする。
 
-import { logAuditAction } from '@/lib/audit';
+import type {
+  Alert,
+  Drug,
+  DrugStock,
+  Patient,
+  PrescriptionItem,
+  SoapRecord,
+  Visit
+} from '@/db/types';
+import { logAuditAction, type AuditLogDatabaseLike } from '@/lib/audit';
 
 export const DEMO_PATIENT_ID = 'pt_demo_tutorial';
 export const DEMO_INSTITUTION_NAME = 'デモ内科クリニック';
@@ -155,9 +164,29 @@ interface DemoPastRoundSpec {
 }
 
 export interface DemoPastRoundDatabaseLike {
-  visits: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
-  prescription_items: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
-  soap_records: { upsert: (doc: Record<string, unknown>) => Promise<unknown> };
+  visits: { upsert: (doc: Visit) => Promise<unknown> };
+  prescription_items: { upsert: (doc: PrescriptionItem) => Promise<unknown> };
+  soap_records: { upsert: (doc: SoapRecord) => Promise<unknown> };
+}
+
+export interface DemoVisitLookupDocLike {
+  visitId: string;
+}
+
+export interface SeedTutorialDemoDatabaseLike extends DemoPastRoundDatabaseLike, AuditLogDatabaseLike {
+  visits: DemoPastRoundDatabaseLike['visits'] & {
+    find: (query?: { selector?: { patientId?: string; status?: Visit['status'] } }) => {
+      exec: () => Promise<DemoVisitLookupDocLike[]>;
+    };
+    insert: (doc: Visit) => Promise<unknown>;
+  };
+  drugs: { upsert: (doc: Drug) => Promise<unknown> };
+  drug_stocks: { upsert: (doc: DrugStock) => Promise<unknown> };
+  patients: { upsert: (doc: Patient) => Promise<unknown> };
+  alerts: { upsert: (doc: Alert) => Promise<unknown> };
+  prescription_items: DemoPastRoundDatabaseLike['prescription_items'] & {
+    bulkInsert: (docs: PrescriptionItem[]) => Promise<{ error?: readonly unknown[] }>;
+  };
 }
 
 // 過去の完了来局(受付・処方明細・薬歴)を1回分投入する共通処理。
@@ -219,7 +248,9 @@ export interface SeedTutorialDemoDataResult {
   alreadySeeded: boolean;
 }
 
-export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDataResult> {
+export async function seedTutorialDemoData(
+  db: SeedTutorialDemoDatabaseLike | null | undefined
+): Promise<SeedTutorialDemoDataResult> {
   if (!db) throw new Error('データベースが未接続です。');
 
   // 練習中(処理中)のデモ受付があればそれを再利用する
@@ -484,7 +515,7 @@ export async function seedTutorialDemoData(db: any): Promise<SeedTutorialDemoDat
       tokkanType: 'none'
     }
   ]);
-  if (itemsResult?.error?.length > 0) {
+  if ((itemsResult?.error?.length ?? 0) > 0) {
     console.error('Failed to seed demo prescription items:', itemsResult.error);
     throw new Error('デモ処方明細の投入に失敗しました。');
   }
@@ -539,15 +570,45 @@ export interface CleanupTutorialDemoDataResult {
 
 export interface DemoDocLike {
   get?: (key: string) => unknown;
-  [key: string]: unknown;
+  visitId?: unknown;
 }
 
-const getDocValue = (doc: DemoDocLike | null | undefined, key: string): unknown => (
-  typeof doc?.get === 'function' ? doc.get(key) : doc?.[key]
-);
+const getDocStringValue = (doc: DemoDocLike | null | undefined, key: 'visitId'): string | undefined => {
+  const value = typeof doc?.get === 'function' ? doc.get(key) : doc?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+};
 
 export interface RemovableDoc {
   remove: () => Promise<unknown>;
+}
+
+export interface CleanupDemoVisitDocLike extends DemoDocLike, RemovableDoc {}
+
+export interface CleanupTutorialDemoDatabaseLike extends AuditLogDatabaseLike {
+  visits: {
+    find: (query?: { selector?: { patientId?: string } }) => { exec: () => Promise<CleanupDemoVisitDocLike[]> };
+  };
+  prescription_items: {
+    find: (query?: { selector?: { visitId?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  soap_records: {
+    find: (query?: { selector?: { visitId?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  interventions: {
+    find: (query?: { selector?: { visitId?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  alerts: {
+    find: (query?: { selector?: { patientId?: string } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  drugs: {
+    find: (query?: { selector?: { code?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  drug_stocks: {
+    find: (query?: { selector?: { drugCode?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
+  patients: {
+    find: (query?: { selector?: { patientId?: { $in: string[] } } }) => { exec: () => Promise<RemovableDoc[]> };
+  };
 }
 
 async function removeDocs(docs: readonly RemovableDoc[]): Promise<number> {
@@ -561,11 +622,15 @@ async function removeDocs(docs: readonly RemovableDoc[]): Promise<number> {
 
 // 練習が終わったデモ患者・受付・薬歴・在庫一式を削除する。
 // 実データはデモ固定ID・「DEMO-」接頭辞に一致しないため影響しない。何度呼んでも安全。
-export async function cleanupTutorialDemoData(db: any): Promise<CleanupTutorialDemoDataResult> {
+export async function cleanupTutorialDemoData(
+  db: CleanupTutorialDemoDatabaseLike | null | undefined
+): Promise<CleanupTutorialDemoDataResult> {
   if (!db) throw new Error('データベースが未接続です。');
 
   const demoVisits = await db.visits.find({ selector: { patientId: DEMO_PATIENT_ID } }).exec();
-  const demoVisitIds = demoVisits.map((doc: DemoDocLike) => getDocValue(doc, 'visitId')).filter(Boolean);
+  const demoVisitIds = demoVisits
+    .map((doc) => getDocStringValue(doc, 'visitId'))
+    .filter((visitId): visitId is string => Boolean(visitId));
 
   const [itemDocs, soapDocs, interventionDocs] = await Promise.all([
     demoVisitIds.length > 0

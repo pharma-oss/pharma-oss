@@ -2,11 +2,18 @@ import type { RxDocument } from 'rxdb';
 import { Drug } from '@/db/types';
 import { type InventoryOrderRisk } from '@/lib/inventory_order';
 import { toLocalDateKey } from '@/lib/local_date';
+import type { PatchableDocument } from '@/lib/rxdb_restore';
+
+export interface InventoryDrugDocumentLike extends Partial<PatchableDocument> {
+    reorderPoint?: number;
+    leadTimeDays?: number;
+    targetStock?: number;
+}
 
 export type DrugWithSearchCache = Drug & {
     searchNameLower: string;
     searchYjCodeLower: string;
-    doc?: any;
+    doc?: InventoryDrugDocumentLike;
 };
 
 // RxDB の薬品文書から、在庫画面が読む項目だけを写した行を作る。

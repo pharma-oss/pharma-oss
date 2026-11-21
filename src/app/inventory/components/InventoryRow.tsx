@@ -5,8 +5,17 @@ import { Location, type PharmacyDatabase } from '@/db/types';
 import { generateUUID } from '@/lib/crypto';
 import { logAuditAction } from '@/lib/audit';
 import { AuditLogFailedError, runWithAuditRollback } from '@/lib/audit_guard';
-import { type DrugWithSearchCache, toHalfWidth } from '../types';
-import { restoreFields } from '@/lib/rxdb_restore';
+import { type DrugWithSearchCache, type InventoryDrugDocumentLike, toHalfWidth } from '../types';
+import { type PatchableDocument, restoreFields } from '@/lib/rxdb_restore';
+
+export function assertPatchableInventoryDrugDoc(
+    doc: InventoryDrugDocumentLike | null | undefined
+): PatchableDocument {
+    if (!doc || typeof doc.patch !== 'function') {
+        throw new TypeError('Inventory drug document does not support patch()');
+    }
+    return doc as PatchableDocument;
+}
 
 export interface DrugLocationSaveOutcome {
     ok: boolean;
@@ -14,7 +23,7 @@ export interface DrugLocationSaveOutcome {
 }
 
 export async function saveDrugLocationChange(params: {
-    drugDoc: { patch: (values: Record<string, unknown>) => Promise<unknown> } | null | undefined;
+    drugDoc: InventoryDrugDocumentLike | null | undefined;
     locationString: string;
     newLocationDoc?: Location;
     locationsCollection?: { insert: (doc: Location) => Promise<unknown> } | null;
@@ -41,7 +50,7 @@ export async function saveDrugLocationChange(params: {
         return { ok: true, alertMessage: null };
     }
     try {
-        await drugDoc.patch({ location: locationString });
+        await assertPatchableInventoryDrugDoc(drugDoc).patch({ location: locationString });
         return { ok: true, alertMessage: null };
     } catch (error) {
         console.error('Failed to update drug location:', error);
@@ -79,11 +88,12 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
 
         setIsAdjusting(true);
         try {
+            const patchableDoc = assertPatchableInventoryDrugDoc(drug.doc);
             const previousStockQuantity = totalStock;
             const newStockQuantity = 0;
             const difference = newStockQuantity - previousStockQuantity;
 
-            await drug.doc.patch({ stockQuantity: newStockQuantity });
+            await patchableDoc.patch({ stockQuantity: newStockQuantity });
             const auditOk = await logAuditAction(
                 db,
                 'stock_update',
@@ -92,7 +102,7 @@ export const InventoryRow = React.memo(function InventoryRow({ drug, pendingStoc
 
             if (!auditOk) {
                 try {
-                    await restoreFields(drug.doc, { stockQuantity: previousStockQuantity });
+                    await restoreFields(patchableDoc, { stockQuantity: previousStockQuantity });
                     alert(`${drug.name} の監査ログを記録できなかったため、在庫補正を取り消しました。`);
                 } catch (rollbackError) {
                     console.error('Failed to rollback negative stock adjustment:', rollbackError);
@@ -294,15 +304,16 @@ const ReorderPointEditor = React.memo(function ReorderPointEditor({ drug, db }: 
         const doc = drug.doc;
         const previousReorderPoint = doc.reorderPoint;
         try {
+            const patchableDoc = assertPatchableInventoryDrugDoc(doc);
             // 書き込み -> 監査ログ。監査ログが残らなければ発注点を元に戻す。
             await runWithAuditRollback({
-                write: () => doc.patch({ reorderPoint: numeric }),
+                write: () => patchableDoc.patch({ reorderPoint: numeric }),
                 logAudit: () => logAuditAction(
                     db,
                     'stock_update',
                     `発注点更新: ${drug.name} の発注点を ${numeric !== undefined ? numeric : '未設定'} に設定しました。`
                 ),
-                rollback: () => restoreFields(doc, { reorderPoint: previousReorderPoint }),
+                rollback: () => restoreFields(patchableDoc, { reorderPoint: previousReorderPoint }),
                 failureMessage: `${drug.name} の監査ログを記録できなかったため、発注点の変更を取り消しました。`
             });
         } catch (error) {

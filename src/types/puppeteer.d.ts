@@ -6,7 +6,7 @@ declare module 'puppeteer' {
 
   export interface Page {
     goto(url: string, options?: Record<string, unknown>): Promise<unknown>;
-    evaluate<T = any>(pageFunction: string | ((...args: any[]) => T | Promise<T>), ...args: any[]): Promise<T>;
+    evaluate<T = unknown>(pageFunction: string | ((...args: unknown[]) => T | Promise<T>), ...args: unknown[]): Promise<T>;
     type(selector: string, text: string, options?: Record<string, unknown>): Promise<void>;
     waitForNavigation(options?: Record<string, unknown>): Promise<unknown>;
     click(selector: string, options?: Record<string, unknown>): Promise<void>;

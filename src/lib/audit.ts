@@ -1,8 +1,23 @@
-import type { AuditActionType, AuditLog, PharmacyDatabase, User } from '../db/types.ts';
+import type { AuditActionType, AuditLog, User } from '../db/types.ts';
 import { buildAuditLogSignature } from './audit_integrity.ts';
 import { generateUUID } from './crypto.ts';
 import { isRemovedDemoStaffUserId } from './initial_staff.ts';
 import { resolveClientSyncIdentity } from './sync/client_role.ts';
+
+export type AuditLogDocLike = AuditLog | { toJSON: () => unknown };
+
+export interface AuditLogQueryOptions {
+  sort?: Array<{ timestamp: 'desc' | 'asc' }>;
+  skip?: number;
+  limit?: number;
+}
+
+export interface AuditLogDatabaseLike {
+  audit_logs: {
+    find: (query?: AuditLogQueryOptions) => { exec: () => Promise<AuditLogDocLike[]> };
+    insert: (doc: AuditLog) => Promise<unknown>;
+  };
+}
 
 const USER_STORAGE_KEY = 'pharmacy_os_current_user';
 export const ROLE_PERMISSION_POLICY_STORAGE_KEY = 'pharmacy_os_role_permission_policy_v1';
@@ -293,9 +308,9 @@ export function setCurrentUser(user: User): void {
   }
 }
 
-function toAuditLog(value: AuditLog | { toJSON: () => AuditLog }): AuditLog {
-  return typeof (value as { toJSON?: () => AuditLog }).toJSON === 'function'
-    ? (value as { toJSON: () => AuditLog }).toJSON()
+function toAuditLog(value: AuditLogDocLike): AuditLog {
+  return typeof (value as { toJSON?: () => unknown }).toJSON === 'function'
+    ? (value as { toJSON: () => unknown }).toJSON() as AuditLog
     : value as AuditLog;
 }
 
@@ -305,7 +320,7 @@ const PREVIOUS_LOG_PAGE_SIZE = 50;
 // ハッシュチェーンの直前行(この端末の、署名つきの最新ログ)を探す。
 // 全件を毎回読むと、ログが何万件にもなった店舗で記録のたびに1秒以上かかる(10万件で約1.2秒、先頭50件なら約27ms)。
 // 先頭のページに無ければ次のページへ進むので、見つかる行は全件を読んだときと同じ。
-async function findPreviousSignedLog(db: PharmacyDatabase, terminalId: string | undefined): Promise<AuditLog | undefined> {
+async function findPreviousSignedLog(db: AuditLogDatabaseLike, terminalId: string | undefined): Promise<AuditLog | undefined> {
   for (let skip = 0; ; skip += PREVIOUS_LOG_PAGE_SIZE) {
     const page = await db.audit_logs.find({
       sort: [{ timestamp: 'desc' }],
@@ -321,7 +336,7 @@ async function findPreviousSignedLog(db: PharmacyDatabase, terminalId: string | 
 }
 
 export async function logAuditAction(
-  db: PharmacyDatabase,
+  db: AuditLogDatabaseLike,
   actionType: AuditActionType,
   details: string,
   patientId?: string,
