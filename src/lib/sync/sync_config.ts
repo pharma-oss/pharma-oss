@@ -1,5 +1,6 @@
 import { AES_GCM_KEY_BYTES, parseHexKey } from './sync_crypto.ts';
 import { getAppEnv } from '../env.ts';
+import { isLoopbackHost, isPrivateLanHost } from '../network_host_policy.ts';
 
 // メイン端末(hub)/サテライト端末(satellite)/従来どおりの単独動作(standalone)を
 // 環境変数から解釈する。satellite の endpoint 検証は
@@ -70,34 +71,6 @@ export function getPharmacySyncEnv(env?: PharmacySyncEnv): PharmacySyncEnv {
 export function parseRole(value: string | undefined): PharmacySyncRole | null {
   const role = String(value || 'standalone').trim().toLowerCase();
   return role === 'hub' || role === 'satellite' || role === 'standalone' ? role : null;
-}
-
-// `new URL()` は IPv4 を 10進ドット表記へ正規化して返す(例: http://0x7f.1 → 127.0.0.1)。
-// 前方一致で判定すると `127.0.0.1.example.com` や `10.example.com` のような「名前」を
-// ループバック/LANと取り違え、患者データを平文HTTPのまま外部へ送れてしまう。必ず4つの数値として読む。
-function parseIPv4(host: string): [number, number, number, number] | null {
-  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!match) return null;
-  const octets = match.slice(1).map(Number);
-  if (octets.some((octet) => octet > 255)) return null;
-  return octets as [number, number, number, number];
-}
-
-function isLoopbackHost(host: string): boolean {
-  // URL.hostname の IPv6 は角括弧つきで返る
-  if (host === 'localhost' || host === '::1' || host === '[::1]') return true;
-  return parseIPv4(host)?.[0] === 127;
-}
-
-function isPrivateLanHost(host: string): boolean {
-  // mDNS 名(例: main-hub.local)は同一リンク内でしか解決されない
-  if (host.endsWith('.local')) return true;
-  const octets = parseIPv4(host);
-  if (!octets) return false;
-  const [first, second] = octets;
-  return first === 10
-    || (first === 192 && second === 168)
-    || (first === 172 && second >= 16 && second <= 31);
 }
 
 export function isAllowedHubEndpoint(endpoint: string, transportEncryption: PharmacySyncTransportEncryption): boolean {

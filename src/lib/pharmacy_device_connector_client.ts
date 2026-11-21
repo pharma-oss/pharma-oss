@@ -9,6 +9,7 @@ import {
   validatePharmacyDeviceOperationInput
 } from './pharmacy_device_connector';
 import { getAppEnv } from '@/lib/env';
+import { isLoopbackHost, isPrivateLanHost } from './network_host_policy';
 
 export interface PharmacyDeviceConnectorEnv {
   PHARMACY_DEVICE_CONNECTOR_MODE?: string;
@@ -51,20 +52,14 @@ function isEnabled(value: string | undefined): boolean {
   return ['1', 'true', 'yes'].includes(String(value || '').trim().toLowerCase());
 }
 
-function isAllowedFacilityEndpoint(endpoint: string): boolean {
+export function isAllowedFacilityEndpoint(endpoint: string): boolean {
   try {
     const url = new URL(endpoint);
     if (!['http:', 'https:'].includes(url.protocol)) return false;
     const host = url.hostname.toLowerCase();
-    if (host === 'localhost' || host === '::1' || host.startsWith('127.')) return true;
+    if (isLoopbackHost(host)) return true;
     if (url.protocol !== 'https:') return false;
-    if (host.endsWith('.local') || host.startsWith('10.') || host.startsWith('192.168.')) return true;
-    const parts = host.split('.').map(Number);
-    return parts.length === 4
-      && parts.every(Number.isInteger)
-      && parts[0] === 172
-      && parts[1] >= 16
-      && parts[1] <= 31;
+    return isPrivateLanHost(host);
   } catch {
     return false;
   }

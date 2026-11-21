@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isLoopbackHost } from './network_host_policy';
 
 import {
   buildElectronicPrescriptionIntegrityHash,
@@ -158,8 +159,7 @@ function validateConnectorEndpoint(endpoint: string):
       warnings: ['認証情報はURLではなく ELECTRONIC_PRESCRIPTION_BEARER_TOKEN に設定してください。']
     };
   }
-  const hostname = url.hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
-  const loopback = hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.');
+  const loopback = isLoopbackHost(url.hostname);
   if (url.protocol === 'http:' && !loopback) {
     return {
       ok: false,

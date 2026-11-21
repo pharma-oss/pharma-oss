@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { classifyEndpointHost } from './network_host_policy';
 
 import {
   CURRENT_NSIPS_INTERFACE_VERSION,
@@ -250,15 +251,7 @@ function normalizeTimeout(value: unknown): { timeoutMs: number; timeoutValid: bo
 }
 
 function getPrivateNetworkKind(hostname: string): ExternalEndpointHostKind {
-  const host = hostname.toLowerCase();
-  if (host === 'localhost' || host === '::1' || host.startsWith('127.')) return 'localhost';
-  if (host.endsWith('.local')) return 'private_network';
-  if (host.startsWith('10.') || host.startsWith('192.168.')) return 'private_network';
-  const parts = host.split('.').map((part) => Number(part));
-  if (parts.length === 4 && parts.every((part) => Number.isInteger(part))) {
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return 'private_network';
-  }
-  return 'external';
+  return classifyEndpointHost(hostname);
 }
 
 function summarizeEndpoint(endpoint?: string): Pick<ExternalConnectorSanitizedConfig, 'endpointConfigured' | 'endpointProtocol' | 'endpointHostKind'> {
