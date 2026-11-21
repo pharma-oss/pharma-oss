@@ -44,6 +44,7 @@ import {
   OFFICIAL_DOSAGE_FORM_CODE_MAP,
   resolveGroupDosageCategory
 } from './dosage_category.ts';
+import { resolveReceiptUsageCodeForItem } from '@/lib/master-data/usage_master';
 
 export interface MonthlyClaimUkeCase {
   visit: Visit;
@@ -193,6 +194,8 @@ export interface MonthlyClaimUkeOfficialReadinessReport {
   readyFeeCount: number;
   checkedDrugItemCount: number;
   readyDrugItemCount: number;
+  checkedUsageGroupCount: number;
+  missingUsageCodeCount: number;
   issueCount: number;
   errorCount: number;
   warningCount: number;
@@ -208,6 +211,8 @@ export interface MonthlyClaimUkeOfficialReadinessSummary {
   readyFeeCount: number;
   checkedDrugItemCount: number;
   readyDrugItemCount: number;
+  checkedUsageGroupCount: number;
+  missingUsageCodeCount: number;
   issueCount: number;
   errorCount: number;
   warningCount: number;
@@ -978,6 +983,19 @@ function deriveOfficialDosageFormCode(items: DispensingUkeItem[]): string {
   return OFFICIAL_DOSAGE_FORM_CODE_MAP[category] ?? '1';
 }
 
+/**
+ * トラック A-4: 処方グループ（SH レコード）の調剤レセプト用法コード（別表12・3桁）を解決する。
+ * 公式マスタ（electronicUsageCode 16桁または用法名称の完全一致）に一致した場合のみ返し、
+ * 未一致の自由記載・旧形式に対してコードを推定・捏造しない。
+ */
+export function deriveOfficialUsageCode(items: DispensingUkeItem[]): string | undefined {
+  for (const item of items) {
+    const code = resolveReceiptUsageCodeForItem(item);
+    if (code) return code;
+  }
+  return undefined;
+}
+
 function getOfficialDispensingQuantity(items: DispensingUkeItem[]): number {
   return Math.max(1, ...items.map((item) => Number(item.days || item.amount || 1)).filter(Number.isFinite));
 }
@@ -1424,6 +1442,7 @@ function buildMonthlyClaimOfficialBodyRecords(claim: MonthlyClaimUkeCase): UkeRe
         return {
           basic: {
             dosageFormCode: deriveOfficialDosageFormCode(group.items),
+            usageCode: deriveOfficialUsageCode(group.items),
             unitDrugPoints: drugFeePointsByGroup[index] ?? 0
           },
           dispensingGroups: [{
@@ -1807,6 +1826,10 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
     readyDrugItemCount += 1;
   }
 
+  const usageGroups = groupOfficialDrugItems(claim);
+  const checkedUsageGroupCount = usageGroups.length;
+  const missingUsageCodeCount = usageGroups.filter((group) => !deriveOfficialUsageCode(group.items)).length;
+
   const errorCount = issues.filter((issue) => issue.severity === 'error').length;
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length;
 
@@ -1819,6 +1842,8 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
     readyFeeCount,
     checkedDrugItemCount: checkedDrugItems.length,
     readyDrugItemCount,
+    checkedUsageGroupCount,
+    missingUsageCodeCount,
     issueCount: issues.length,
     errorCount,
     warningCount,
@@ -2886,6 +2911,8 @@ export function buildMonthlyClaimUkeOfficialReadinessSummary(
   const readyFeeCount = reports.reduce((sum, report) => sum + report.readyFeeCount, 0);
   const checkedDrugItemCount = reports.reduce((sum, report) => sum + report.checkedDrugItemCount, 0);
   const readyDrugItemCount = reports.reduce((sum, report) => sum + report.readyDrugItemCount, 0);
+  const checkedUsageGroupCount = reports.reduce((sum, report) => sum + report.checkedUsageGroupCount, 0);
+  const missingUsageCodeCount = reports.reduce((sum, report) => sum + report.missingUsageCodeCount, 0);
   const errorCount = reports.reduce((sum, report) => sum + report.errorCount, 0);
   const warningCount = reports.reduce((sum, report) => sum + report.warningCount, 0);
 
@@ -2898,6 +2925,8 @@ export function buildMonthlyClaimUkeOfficialReadinessSummary(
     readyFeeCount,
     checkedDrugItemCount,
     readyDrugItemCount,
+    checkedUsageGroupCount,
+    missingUsageCodeCount,
     issueCount: errorCount + warningCount,
     errorCount,
     warningCount
@@ -3083,11 +3112,14 @@ export function formatMonthlyClaimUkePreflightReport(
   const officialReadinessText = report.officialReadinessSummary.ok
     ? ` / 公式提出準備OK`
     : ` / 公式提出準備 要対応 ${report.officialReadinessSummary.errorCount}`;
+  const missingUsageCodeText = report.officialReadinessSummary.missingUsageCodeCount > 0
+    ? ` / 用法コード未設定 ${report.officialReadinessSummary.missingUsageCodeCount}件`
+    : '';
   const officialSampleText = report.officialSampleScopeReport.generatedValidationOnlyRecordTypes.length > 0
     ? ` / 公式サンプルだけで見る種別混入 ${report.officialSampleScopeReport.generatedValidationOnlyRecordTypes.length}`
     : ` / 公式サンプルだけで見る種別 ${report.officialSampleScopeReport.suppressedRecordTypes.length}種別確認`;
 
-  return `一括UKE事前チェック: ${status} / 受付 ${report.totalClaims} / UKEエラー ${report.errorResults.length} / 受付前エラー ${report.batchErrorIssues.length}${warningText}${allFieldText}${allFieldSourceText}${officialReadinessText}${officialSampleText}`;
+  return `一括UKE事前チェック: ${status} / 受付 ${report.totalClaims} / UKEエラー ${report.errorResults.length} / 受付前エラー ${report.batchErrorIssues.length}${warningText}${allFieldText}${allFieldSourceText}${officialReadinessText}${missingUsageCodeText}${officialSampleText}`;
 }
 
 function getRecords(result: MonthlyClaimUkeBuildResult, type: string): UkeRecord[] {
