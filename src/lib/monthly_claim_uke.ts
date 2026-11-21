@@ -31,6 +31,7 @@ import {
 import {
   buildOfficialCopaymentRecords,
   buildOfficialDispensingDateRecords,
+  buildOfficialInterventionComments,
   buildOfficialSplitDispensingRecords,
   buildOfficialSupplementalRecords
 } from '@/lib/receipt/dispensing_uke_official_supplemental';
@@ -1242,7 +1243,7 @@ function buildMonthlyClaimOfficialUkeReconciliationReport(
     const dispensingRecordCount = bodyRecords.filter((record) => record.type === 'CZ').length;
     const drugRecordCount = bodyRecords.filter((record) => record.type === 'IY').length;
     const materialRecordCount = bodyRecords.filter((record) => record.type === 'TO').length;
-    const commentRecordCount = bodyRecords.filter((record) => record.type === 'TK').length;
+    const commentRecordCount = bodyRecords.filter((record) => record.type === 'CO' || record.type === 'TK').length;
     const managementRecordCount = bodyRecords.filter((record) => record.type === 'KI').length;
     const copaymentRecordCount = bodyRecords.filter((record) => record.type === 'MF').length;
     const splitRecordCount = bodyRecords.filter((record) => record.type === 'ST').length;
@@ -1436,6 +1437,11 @@ function buildMonthlyClaimOfficialBodyRecords(claim: MonthlyClaimUkeCase): UkeRe
     'drug_preparation'
   );
 
+  const interventionComments = buildOfficialInterventionComments({
+    visit: claim.visit,
+    legacyInterventions: claim.interventions
+  });
+
   const prescriptions = preparationFee && drugItemGroups.length > 0
     ? drugItemGroups.map((group, index) => {
         const receptionCount = index + 1;
@@ -1472,7 +1478,8 @@ function buildMonthlyClaimOfficialBodyRecords(claim: MonthlyClaimUkeCase): UkeRe
               burdenCategory: '1',
               receiptDrugCode: requireDigits(item.dispensedDrugCode || item.drugId, `${item.drugName || item.dispensedDrug || item.drugId} のレセ電医薬品コード`, [9]),
               amount: item.amount
-            }))
+            })),
+            comments: index === 0 && interventionComments.length > 0 ? interventionComments : undefined
           }]
         };
       })
@@ -1491,6 +1498,7 @@ function buildMonthlyClaimOfficialBodyRecords(claim: MonthlyClaimUkeCase): UkeRe
 
   const bodyRecords = buildDispensingUkeOfficialClaimBody({
     prescriptions,
+    summaryComments: prescriptions.length === 0 && interventionComments.length > 0 ? interventionComments : undefined,
     managementFeeRecords
   });
   return [

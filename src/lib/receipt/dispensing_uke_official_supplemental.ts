@@ -1,5 +1,17 @@
+import encoding from 'encoding-japanese';
 import type { Visit } from '@/db/types';
+import {
+  formatReceiptInterventionSummary,
+  normalizeVisitInterventionEvents,
+  type LegacyInterventionLike
+} from '@/lib/prescription_intervention_support';
+import type { DispensingUkeOfficialCommentInput } from './dispensing_uke_official_body';
 import type { UkeRecord } from './uke_generator';
+
+/** 支払基金 調剤レセプト電算処理システム 標準フリーコメントコード（CO / TK 共通） */
+export const OFFICIAL_FREE_TEXT_COMMENT_CODE = '810000001';
+/** 公式 CO / TK レコードの文字データ上限（Shift-JIS 76バイト = 全角38文字） */
+export const OFFICIAL_COMMENT_MAX_SJIS_BYTES = 76;
 
 /**
  * 日付文字列から YYYYMMDD の西暦8桁数字文字列を取り出す
@@ -163,4 +175,88 @@ export function buildOfficialSplitDispensingRecords(
       ]
     };
   });
+}
+
+function toOfficialShiftJisChar(char: string): { text: string; byteLength: number } {
+  const unicode = encoding.stringToCode(char);
+  const sjis = encoding.convert(unicode, { to: 'SJIS', from: 'UNICODE' });
+  const roundTrip = encoding.codeToString(encoding.convert(sjis, { to: 'UNICODE', from: 'SJIS' }));
+  if (roundTrip === char && sjis.length > 0) {
+    return { text: char, byteLength: sjis.length };
+  }
+  return { text: '・', byteLength: 2 };
+}
+
+/**
+ * 自由記載コメントを公式 UKE（CO / TK）の制約（カンマ・引用符・改行不可、Shift-JIS 表現可能、76バイト以内）
+ * を満たすチャンク配列へ安全に整形・分割する純粋関数。
+ */
+export function sanitizeAndChunkOfficialCommentText(
+  rawText: string,
+  maxSjisBytes = OFFICIAL_COMMENT_MAX_SJIS_BYTES
+): string[] {
+  const normalized = (rawText || '')
+    .replace(/,/g, '、')
+    .replace(/"/g, '”')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+
+  const chunks: string[] = [];
+  let current = '';
+  let currentBytes = 0;
+
+  for (const char of Array.from(normalized)) {
+    const safe = toOfficialShiftJisChar(char);
+    if (currentBytes + safe.byteLength > maxSjisBytes && current.length > 0) {
+      const trimmed = current.trim();
+      if (trimmed) chunks.push(trimmed);
+      current = safe.text.trimStart();
+      currentBytes = current ? safe.byteLength : 0;
+    } else {
+      current += safe.text;
+      currentBytes += safe.byteLength;
+    }
+  }
+
+  const tail = current.trim();
+  if (tail) chunks.push(tail);
+  return chunks;
+}
+
+export interface BuildOfficialInterventionCommentsInput {
+  visit: Partial<Visit>;
+  legacyInterventions?: LegacyInterventionLike[];
+}
+
+/**
+ * トラック F-2: 構造化疑義照会・処方変更イベント（visit.interventionEvents / 互換レガシー配列）から
+ * 公式 UKE の CO / TK コメント入力配列（810000001・Shift-JIS 76バイト分割・重複排除）を生成する純粋関数。
+ */
+export function buildOfficialInterventionComments(
+  input: BuildOfficialInterventionCommentsInput
+): DispensingUkeOfficialCommentInput[] {
+  const events = normalizeVisitInterventionEvents(input.visit, input.legacyInterventions);
+  if (events.length === 0) return [];
+
+  const comments: DispensingUkeOfficialCommentInput[] = [];
+  const seen = new Set<string>();
+
+  for (const event of events) {
+    if (event.inquiryStatus === 'cancelled') continue;
+    const summary = formatReceiptInterventionSummary(event);
+    const chunks = sanitizeAndChunkOfficialCommentText(summary, OFFICIAL_COMMENT_MAX_SJIS_BYTES);
+    for (const chunk of chunks) {
+      const dedupeKey = `${OFFICIAL_FREE_TEXT_COMMENT_CODE}\0${chunk}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      comments.push({
+        code: OFFICIAL_FREE_TEXT_COMMENT_CODE,
+        text: chunk
+      });
+    }
+  }
+
+  return comments;
 }
