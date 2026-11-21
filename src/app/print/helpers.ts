@@ -7,6 +7,12 @@ import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_valid
 import type { PrescriptionInputAuditIssue, PrescriptionInputAuditItem } from '@/lib/prescription_input_audit';
 import type { ClaimValidationIssue } from '@/lib/claim_validation';
 import { resolveClaimItemPricing, type ClaimItemPricingDrug } from '@/lib/claim_item_pricing';
+import {
+  buildReceiptBarcode,
+  describeBarcodeCategory,
+  type ReceiptBarcodeResult
+} from '@/lib/receipt_barcode';
+import type { ReceiptBarcodeStatus } from './components/ReceiptConditionPanel';
 import { PATIENT_IDENTITY_MARKS, type PatientIdentityMark, type PrintItemMasterFacts, type PrintPrescriptionItem } from './types';
 
 export interface PrintDrugMasterDoc {
@@ -497,5 +503,95 @@ export function getPrintVisitDataViewState(params: {
     isNotFound: false,
     isReady: true
   };
+}
+
+/**
+ * 印刷画面の「ピッキングへ」導線が遷移する薬歴画面 URL を構築する純粋関数。
+ */
+export function buildPrintPickingSupportUrl(visitId: string): string {
+  return `/emr?visitId=${encodeURIComponent(visitId)}&openPicking=1`;
+}
+
+/**
+ * 印刷画面の「疑義照会を記録」導線が遷移する薬歴画面 URL を構築する純粋関数。
+ * 最優先の処方監査指摘（error > warning > 先頭）を初期理由としてクエリへ渡す。
+ */
+export function buildPrintInterventionUrl(
+  visitId: string,
+  issues: ReadonlyArray<Pick<PrescriptionInputAuditIssue, 'severity' | 'title' | 'message'>>
+): string {
+  const firstIssue = issues.find((issue) => issue.severity === 'error')
+    || issues.find((issue) => issue.severity === 'warning')
+    || issues[0];
+  const reason = firstIssue ? `${firstIssue.title}: ${firstIssue.message}` : '';
+  const query = new URLSearchParams({
+    visitId,
+    openIntervention: '1'
+  });
+  if (reason) query.set('reason', reason);
+  return `/emr?${query.toString()}`;
+}
+
+export interface PrintReceiptBarcodeState {
+  result: ReceiptBarcodeResult | null;
+  barcode: { payload: string; caption: string } | null;
+  status: ReceiptBarcodeStatus;
+}
+
+/**
+ * 領収証照合バーコードと画面表示用ステータスを算出する純粋関数。
+ * 点数未設定のあいだは生成せず、非表示理由をそのまま画面へ返す。
+ */
+export function buildPrintReceiptBarcodeState(params: {
+  receiptAmountsPending: boolean;
+  insuranceType?: string;
+  provider?: string;
+  hasPublicInsurance: boolean;
+  copayYen: number;
+}): PrintReceiptBarcodeState {
+  const result = params.receiptAmountsPending
+    ? null
+    : buildReceiptBarcode({
+      insuranceType: params.insuranceType,
+      provider: params.provider,
+      hasPublicInsurance: params.hasPublicInsurance,
+      copayYen: params.copayYen
+    });
+
+  const barcode = result?.ok
+    ? { payload: result.payload, caption: result.caption }
+    : null;
+
+  const status: ReceiptBarcodeStatus = result === null
+    ? { kind: 'none', message: '点数が未設定で金額が確定しないため、バーコードは印字しません。' }
+    : result.ok
+      ? {
+        kind: 'ok',
+        payload: result.payload,
+        categoryText: describeBarcodeCategory(result.classification),
+        amountYen: result.amountYen,
+        assumed: result.classification.assumed,
+        reason: result.classification.reason
+      }
+      : { kind: 'none', message: result.message };
+
+  return { result, barcode, status };
+}
+
+/**
+ * 印刷実行のあいだだけ body に一時クラス（例: print-receipt-only）を付与し、
+ * 印刷が例外で中断しても必ず finally で解除する純粋ヘルパー。
+ */
+export function runPrintWithBodyClass(
+  className: string,
+  classList: { add: (token: string) => void; remove: (token: string) => void },
+  printFn: () => void
+): void {
+  classList.add(className);
+  try {
+    printFn();
+  } finally {
+    classList.remove(className);
+  }
 }
 

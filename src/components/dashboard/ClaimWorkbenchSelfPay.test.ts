@@ -5,6 +5,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ClaimWorkbenchRow } from './DashboardRows';
 import { PrintHeaderActions } from '@/app/print/components/PrintHeaderActions';
+import { ClaimCheckPanel } from '@/app/print/components/ClaimCheckPanel';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 import type { DashboardClaimWorkItem } from '@/hooks/useDashboardTasks';
 
@@ -86,7 +87,18 @@ test('the print page stops both UKE exports for a self-pay patient and says so i
   assert.match(printPageSource, /data-testid="print-self-pay-claim-note"/);
   assert.match(printPageSource, /SELF_PAY_CLAIM_EXCLUSION_NOTE/);
   assert.match(printPageSource, /isSelfPayClaimExcluded \? '対象外（自費）'/);
-  assert.match(printPageSource, /isSelfPayClaimExcluded \? '対象外' :/);
+  const selfPayClaimCheckHtml = renderToStaticMarkup(
+    React.createElement(ClaimCheckPanel, {
+      claimCheckStatus: 'ok',
+      isSelfPayClaimExcluded: true,
+      hasClaimErrors: false,
+      errorCount: 0,
+      warningCount: 0,
+      infoCount: 0,
+      issues: []
+    })
+  );
+  assert.ok(selfPayClaimCheckHtml.includes('対象外'), '自費患者の請求前チェックパネルに対象外バッジが表示されること');
 });
 
 test('the print page leaves the receipt amount calculation alone for a self-pay patient', () => {

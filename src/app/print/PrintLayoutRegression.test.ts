@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
+import { runPrintWithBodyClass } from './helpers';
 
 const pageSource = readFileSync(new URL('./[visitId]/page.tsx', import.meta.url), 'utf8');
 const printCssSource = readFileSync(new URL('./print.css', import.meta.url), 'utf8');
@@ -117,7 +118,24 @@ test('receipt-only printing hides every other document through print.css and alw
     /body\.print-receipt-only\s+\.print-workspace\s*>\s*:not\(\.receipt-preview-card\)\s*{[^}]*display:\s*none\s*!important/
   );
   assert.ok(componentsSources.includes('receipt-preview-card'), 'the receipt card carries the class the rule keeps');
-  assert.ok(pageSource.includes("document.body.classList.add('print-receipt-only')"));
-  // 印刷が例外で止まっても、他の帳票を隠したままにしない
-  assert.match(pageSource, /classList\.add\('print-receipt-only'\);\s*try\s*{\s*window\.print\(\);\s*}\s*finally\s*{\s*document\.body\.classList\.remove\('print-receipt-only'\);/);
+  assert.ok(pageSource.includes("runPrintWithBodyClass('print-receipt-only'"), 'print page uses runPrintWithBodyClass for receipt-only printing');
+  // 印刷が例外で止まっても、他の帳票を隠したままにしないことを実動検証する
+  const classes = new Set<string>();
+  const fakeClassList = {
+    add: (token: string) => { classes.add(token); },
+    remove: (token: string) => { classes.delete(token); }
+  };
+  let classPresentDuringPrint = false;
+  runPrintWithBodyClass('print-receipt-only', fakeClassList, () => {
+    classPresentDuringPrint = classes.has('print-receipt-only');
+  });
+  assert.strictEqual(classPresentDuringPrint, true);
+  assert.strictEqual(classes.has('print-receipt-only'), false);
+
+  assert.throws(() => {
+    runPrintWithBodyClass('print-receipt-only', fakeClassList, () => {
+      throw new Error('browser print error');
+    });
+  }, /browser print error/);
+  assert.strictEqual(classes.has('print-receipt-only'), false, 'print-receipt-only class must be cleared in finally even on throw');
 });

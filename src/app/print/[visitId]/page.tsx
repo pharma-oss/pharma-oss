@@ -123,6 +123,10 @@ import {
   isOintmentItem,
   formatPrescriptionAuditIssues,
   buildPrintAuditItems,
+  buildPrintInterventionUrl,
+  buildPrintPickingSupportUrl,
+  buildPrintReceiptBarcodeState,
+  runPrintWithBodyClass,
   getPrintVisitDataViewState,
   PRINT_LOAD_ERROR_HEADING,
   PRINT_LOAD_ERROR_DESCRIPTION,
@@ -154,6 +158,9 @@ import { EmergencyRecoveryKeySheetPrint } from '../components/EmergencyRecoveryK
 import { PharmacyDeviceHandoffPanel } from '../components/PharmacyDeviceHandoffPanel';
 import { ElectronicPrescriptionPrintPanel } from '../components/ElectronicPrescriptionPrintPanel';
 import { PrintHeaderActions } from '../components/PrintHeaderActions';
+import { ClaimLifecyclePanel } from '../components/ClaimLifecyclePanel';
+import { PharmacistCheckPanel } from '../components/PharmacistCheckPanel';
+import { ClaimCheckPanel } from '../components/ClaimCheckPanel';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
 import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
@@ -1315,20 +1322,11 @@ export default function PrintPage() {
 
 
   const handleOpenPicking = () => {
-    router.push(`/emr?visitId=${encodeURIComponent(visitId)}&openPicking=1`);
+    router.push(buildPrintPickingSupportUrl(visitId));
   };
 
   const handleOpenIntervention = () => {
-    const firstIssue = prescriptionAudit.issues.find((issue) => issue.severity === 'error')
-      || prescriptionAudit.issues.find((issue) => issue.severity === 'warning')
-      || prescriptionAudit.issues[0];
-    const reason = firstIssue ? `${firstIssue.title}: ${firstIssue.message}` : '';
-    const query = new URLSearchParams({
-      visitId,
-      openIntervention: '1'
-    });
-    if (reason) query.set('reason', reason);
-    router.push(`/emr?${query.toString()}`);
+    router.push(buildPrintInterventionUrl(visitId, prescriptionAudit.issues));
   };
 
   const handleReturnCorrectionAction = (suggestion: ClaimReturnCorrectionSuggestion) => {
@@ -1471,29 +1469,17 @@ export default function PrintPage() {
   // 領収証の金額と同じ値を符号化した照合バーコード (保険区分1桁+領収金額7桁+チェックデジット)。
   // 点数未設定で金額が確定しないとき、金額が7桁に収まらないときは作らず、理由を画面に出す。
   const receiptAmountsPending = unsetPointFees.length > 0;
-  const receiptBarcodeResult = receiptAmountsPending
-    ? null
-    : buildReceiptBarcode({
-      insuranceType: patientData.insuranceInfo?.insuranceType,
-      provider: patientData.insuranceInfo?.provider,
-      hasPublicInsurance: (patientData.publicInsurances || []).length > 0,
-      copayYen: insuranceAmounts.patientCopayYen
-    });
-  const receiptBarcode = receiptBarcodeResult?.ok
-    ? { payload: receiptBarcodeResult.payload, caption: receiptBarcodeResult.caption }
-    : null;
-  const receiptBarcodeStatus: ReceiptBarcodeStatus = receiptBarcodeResult === null
-    ? { kind: 'none', message: '点数が未設定で金額が確定しないため、バーコードは印字しません。' }
-    : receiptBarcodeResult.ok
-      ? {
-        kind: 'ok',
-        payload: receiptBarcodeResult.payload,
-        categoryText: describeBarcodeCategory(receiptBarcodeResult.classification),
-        amountYen: receiptBarcodeResult.amountYen,
-        assumed: receiptBarcodeResult.classification.assumed,
-        reason: receiptBarcodeResult.classification.reason
-      }
-      : { kind: 'none', message: receiptBarcodeResult.message };
+  const {
+    result: receiptBarcodeResult,
+    barcode: receiptBarcode,
+    status: receiptBarcodeStatus
+  } = buildPrintReceiptBarcodeState({
+    receiptAmountsPending,
+    insuranceType: patientData.insuranceInfo?.insuranceType,
+    provider: patientData.insuranceInfo?.provider,
+    hasPublicInsurance: (patientData.publicInsurances || []).length > 0,
+    copayYen: insuranceAmounts.patientCopayYen
+  });
 
   const sumFeePoints = (codes: FeeCode[]) => (
     calculatedFees
@@ -1570,12 +1556,7 @@ export default function PrintPage() {
       }),
       print: () => {
         // 印刷の間だけ、領収証以外の帳票を印刷から外す (print.css の print-receipt-only)
-        document.body.classList.add('print-receipt-only');
-        try {
-          window.print();
-        } finally {
-          document.body.classList.remove('print-receipt-only');
-        }
+        runPrintWithBodyClass('print-receipt-only', document.body.classList, () => window.print());
       }
     });
     if (outcome.status !== 'printed') {
@@ -1786,113 +1767,22 @@ export default function PrintPage() {
         />
 
         {/* 請求ライフサイクルパネル */}
-        <section className={`print-preview-card card claim-lifecycle-panel no-print status-${claimLifecycleStatus}`} data-testid="claim-lifecycle-panel">
-          <div className="preview-header claim-check-header">
-            <div>
-              <h3>
-                {claimLifecycleLocked ? <AlertTriangle size={18} aria-hidden="true" /> : <FileCheck2 size={18} aria-hidden="true" />}
-                請求ライフサイクル
-              </h3>
-              <p className="claim-check-subtitle">
-                UKE出力後は算定をロックし、返戻・月遅れ・再請求の理由と担当者を履歴に残します。
-              </p>
-            </div>
-            <span className={`claim-lifecycle-badge ${claimLifecycleStatus}`}>
-              {CLAIM_LIFECYCLE_STATUS_LABELS[claimLifecycleStatus]}
-            </span>
-          </div>
-
-          <div className="claim-lifecycle-grid">
-            <div className="claim-lifecycle-status-card">
-              <span>請求ロック</span>
-              <strong>{claimLifecycleLocked ? 'ロック中' : '変更可能'}</strong>
-              <p>
-                {claimLifecycleLocked
-                  ? `${claimLifecycle?.exportedFileName || 'UKE出力'} 後の算定変更は返戻登録または再請求準備が必要です。`
-                  : claimLifecycleStatus === 'draft'
-                    ? 'UKE出力前の請求です。請求前チェックを通してから出力してください。'
-                    : '返戻・再請求対応中のため、算定修正が可能です。'}
-              </p>
-            </div>
-
-            <div className="claim-lifecycle-status-card">
-              <span>最新イベント</span>
-              <strong>{latestClaimLifecycleEvent ? CLAIM_LIFECYCLE_STATUS_LABELS[getClaimLifecycleStatus({ status: latestClaimLifecycleEvent.type })] : '未出力'}</strong>
-              <p>
-                {latestClaimLifecycleEvent
-                  ? `${new Date(latestClaimLifecycleEvent.at).toLocaleString('ja-JP')} / ${latestClaimLifecycleEvent.by || '担当者未記録'}`
-                  : 'UKE出力後に履歴が作成されます。'}
-              </p>
-              {claimLifecycle?.returnReasonCode && (
-                <p className="claim-lifecycle-return-code" data-testid="claim-registered-return-reason">
-                  記録済みの返戻理由: {formatClaimReturnReasonLabel(claimLifecycle.returnReasonCode)}
-                </p>
-              )}
-            </div>
-
-            <div className="claim-lifecycle-return-reason" data-testid="claim-return-reason-picker">
-              <label htmlFor="claim-return-reason-code">返戻理由</label>
-              <select
-                id="claim-return-reason-code"
-                data-testid="claim-return-reason-code"
-                value={returnReasonCode}
-                onChange={(event) => setReturnReasonCode(event.target.value)}
-                disabled={!canChangeBilling || claimLifecycleStatus === 'draft'}
-              >
-                {OFFICIAL_CLAIM_RETURN_REASONS.map((reason) => (
-                  <option key={reason.code} value={reason.code}>
-                    {reason.code} {reason.title}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                id="claim-return-reason-note"
-                data-testid="claim-return-reason-note"
-                value={returnReasonNote}
-                onChange={(event) => setReturnReasonNote(event.target.value)}
-                placeholder="補足メモ（任意）"
-                maxLength={200}
-                disabled={!canChangeBilling || claimLifecycleStatus === 'draft'}
-              />
-              {selectedReturnReason && (
-                <p className="claim-return-reason-hint" data-testid="claim-return-reason-hint">
-                  {selectedReturnReason.suggestedAction}
-                </p>
-              )}
-            </div>
-
-            <div className="claim-lifecycle-actions">
-              <button
-                type="button"
-                className="btn-secondary compact-action"
-                onClick={handleRegisterReturn}
-                disabled={!canChangeBilling || claimLifecycleStatus === 'draft'}
-                title={!canChangeBilling ? getPermissionDeniedMessage(currentUser, 'change_billing') : undefined}
-              >
-                <span>返戻登録</span>
-              </button>
-              <button
-                type="button"
-                className="btn-secondary compact-action"
-                onClick={handlePrepareRebilling}
-                disabled={!canChangeBilling || claimLifecycleStatus !== 'returned'}
-                title={!canChangeBilling ? getPermissionDeniedMessage(currentUser, 'change_billing') : undefined}
-              >
-                <span>再請求/月遅れ</span>
-              </button>
-              <button
-                type="button"
-                className="btn-secondary compact-action"
-                onClick={handleCloseClaim}
-                disabled={!canChangeBilling || (claimLifecycleStatus !== 'exported' && claimLifecycleStatus !== 'rebilling')}
-                title={!canChangeBilling ? getPermissionDeniedMessage(currentUser, 'change_billing') : undefined}
-              >
-                <span>請求完了</span>
-              </button>
-            </div>
-          </div>
-        </section>
+        <ClaimLifecyclePanel
+          claimLifecycle={claimLifecycle}
+          claimLifecycleStatus={claimLifecycleStatus}
+          claimLifecycleLocked={claimLifecycleLocked}
+          latestClaimLifecycleEvent={latestClaimLifecycleEvent}
+          returnReasonCode={returnReasonCode}
+          returnReasonNote={returnReasonNote}
+          selectedReturnReason={selectedReturnReason}
+          canChangeBilling={canChangeBilling}
+          changeBillingDeniedMessage={getPermissionDeniedMessage(currentUser, 'change_billing')}
+          onReturnReasonCodeChange={setReturnReasonCode}
+          onReturnReasonNoteChange={setReturnReasonNote}
+          onRegisterReturn={handleRegisterReturn}
+          onPrepareRebilling={handlePrepareRebilling}
+          onCloseClaim={handleCloseClaim}
+        />
 
         {/* 電子処方箋ステータスパネル */}
         <ElectronicPrescriptionPrintPanel
@@ -1924,135 +1814,22 @@ export default function PrintPage() {
         />
 
         {/* 薬剤師確認パネル */}
-        <section className={`print-preview-card card claim-check-panel pharmacist-check-panel no-print ${pharmacistCheckStatus}`} data-testid="pharmacist-check-panel">
-          <div className="preview-header claim-check-header">
-            <div>
-              <h3>
-                {pharmacistCheckStatus === 'ok' ? <CheckCircle size={18} aria-hidden="true" /> : <AlertTriangle size={18} aria-hidden="true" />}
-                薬剤師確認
-              </h3>
-              <p className="claim-check-subtitle">
-                {prescriptionItems.length.toLocaleString()}薬品 / 要修正 {prescriptionAudit.errorCount} / 要確認 {prescriptionAudit.warningCount} / 情報 {prescriptionAudit.infoCount} / AI補助 {aiAssistSummary.totalCount}（{AI_ASSIST_MODE_LABELS[aiAssistMode]}）
-              </p>
-            </div>
-            <div className="claim-header-actions">
-              <button
-                type="button"
-                className="btn-secondary compact-action"
-                onClick={handleOpenIntervention}
-              >
-                <MessageSquare size={16} aria-hidden="true" />
-                <span>疑義照会を記録</span>
-              </button>
-              <span className={`claim-check-badge ${pharmacistCheckStatus}`}>
-                {pharmacistCheckStatus === 'ok' ? '確認済' : prescriptionAudit.errorCount > 0 ? '修正あり' : '確認あり'}
-              </span>
-            </div>
-          </div>
-
-          {visiblePrescriptionAuditIssues.length === 0 ? (
-            <div className="claim-check-ok-row">
-              <CheckCircle size={18} aria-hidden="true" />
-              <span>処方監査の確認事項はありません。</span>
-            </div>
-          ) : (
-            <div className="claim-issue-list">
-              {visiblePrescriptionAuditIssues.map((issue, index) => (
-                <div key={`${issue.code}-${issue.itemIds?.join('-') || issue.rpId || index}`} className={`claim-issue ${issue.severity}`}>
-                  <div className="claim-issue-icon" aria-hidden="true">
-                    {issue.severity === 'info' ? <Info size={17} /> : <AlertTriangle size={17} />}
-                  </div>
-                  <div>
-                    <div className="claim-issue-title-row">
-                      <strong className="claim-issue-title">{issue.title}</strong>
-                      <span className={`claim-issue-severity ${issue.severity}`}>
-                        {CLAIM_ISSUE_LABELS[issue.severity]}
-                      </span>
-                    </div>
-                    <p className="claim-issue-message">{issue.message}</p>
-                  </div>
-                </div>
-              ))}
-              {hiddenPrescriptionAuditIssueCount > 0 && (
-                <div className="claim-issue-more">他 {hiddenPrescriptionAuditIssueCount} 件</div>
-              )}
-            </div>
-          )}
-
-          {allAiAssistSuggestions.length > aiAssistSuggestions.length && (
-            <div className="ai-assist-mode-notice" role="status" data-testid="ai-assist-mode-notice">
-              AI補助は「{AI_ASSIST_MODE_LABELS[aiAssistMode]}」です。
-              {aiAssistMode === 'disabled'
-                ? '候補表示を停止しています。通常の処方監査は継続します。'
-                : `要修正以外の候補 ${allAiAssistSuggestions.length - aiAssistSuggestions.length}件を非表示にしています。`}
-            </div>
-          )}
-
-          {aiAssistSuggestions.length > 0 && (
-            <div className="ai-assist-panel" aria-label="AI補助提案">
-              <div className="ai-assist-topline">
-                <div className="ai-assist-heading">
-                  <Sparkles size={17} aria-hidden="true" />
-                  <strong>AI補助</strong>
-                  <span>根拠付き {aiAssistSummary.totalCount}件 / 最高信頼度 {aiAssistSummary.maxConfidence}%</span>
-                </div>
-                <span className="ai-assist-review-badge">薬剤師確認必須</span>
-              </div>
-
-              <div className="ai-assist-list">
-                {aiAssistSuggestions.map((suggestion) => (
-                  <div
-                    key={suggestion.suggestionId}
-                    className={`ai-assist-item ${suggestion.severity}`}
-                    data-testid="ai-assist-suggestion"
-                  >
-                    <div className="ai-assist-item-main">
-                      <div className="ai-assist-title-row">
-                        <strong>{suggestion.title}</strong>
-                      </div>
-                      <p>{suggestion.suggestedAction}</p>
-                      <div className="ai-assist-meta">
-                        <span>信頼度 {formatAiSuggestionConfidence(suggestion)}</span>
-                      </div>
-                    </div>
-                    <div className="ai-assist-actions">
-                      <button
-                        type="button"
-                        className="btn-secondary compact-action ai-assist-decision"
-                        onClick={() => handleRecordAiSuggestionDecision(suggestion, 'accepted')}
-                        disabled={!canReviewAiSuggestions}
-                        title="採用として監査ログに記録"
-                      >
-                        <CheckCircle size={15} aria-hidden="true" />
-                        <span>採用</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary compact-action ai-assist-decision"
-                        onClick={() => handleRecordAiSuggestionDecision(suggestion, 'modified')}
-                        disabled={!canReviewAiSuggestions}
-                        title="修正として監査ログに記録"
-                      >
-                        <Pencil size={15} aria-hidden="true" />
-                        <span>修正</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary compact-action ai-assist-decision"
-                        onClick={() => handleRecordAiSuggestionDecision(suggestion, 'rejected')}
-                        disabled={!canReviewAiSuggestions}
-                        title="却下として監査ログに記録"
-                      >
-                        <XCircle size={15} aria-hidden="true" />
-                        <span>却下</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+        <PharmacistCheckPanel
+          pharmacistCheckStatus={pharmacistCheckStatus}
+          prescriptionItemCount={prescriptionItems.length}
+          auditErrorCount={prescriptionAudit.errorCount}
+          auditWarningCount={prescriptionAudit.warningCount}
+          auditInfoCount={prescriptionAudit.infoCount}
+          visibleAuditIssues={visiblePrescriptionAuditIssues}
+          hiddenAuditIssueCount={hiddenPrescriptionAuditIssueCount}
+          aiAssistMode={aiAssistMode}
+          aiAssistSummary={aiAssistSummary}
+          allAiAssistSuggestionCount={allAiAssistSuggestions.length}
+          aiAssistSuggestions={aiAssistSuggestions}
+          canReviewAiSuggestions={canReviewAiSuggestions}
+          onOpenIntervention={handleOpenIntervention}
+          onRecordAiSuggestionDecision={handleRecordAiSuggestionDecision}
+        />
 
         {/* 算定調整パネル */}
         <section
@@ -2174,46 +1951,15 @@ export default function PrintPage() {
         </section>
 
         {/* 請求前チェックパネル */}
-        <section
-          className={`print-preview-card card claim-check-panel no-print ${claimCheckStatus}`}
-          data-testid="claim-check-panel"
-        >
-          <div className="preview-header claim-check-header">
-            <div>
-              <h3>
-                {claimCheckStatus === 'ok' ? <CheckCircle size={18} aria-hidden="true" /> : <AlertTriangle size={18} aria-hidden="true" />}
-                レセコン請求前チェック
-              </h3>
-              <p className="claim-check-subtitle">
-                エラー {claimValidationErrors.length} 件 / 警告 {claimValidationWarnings.length} 件 / 情報 {claimValidationInfos.length} 件
-              </p>
-            </div>
-            <span className={`claim-check-badge ${claimCheckStatus}`}>
-              {isSelfPayClaimExcluded ? '対象外' : claimCheckStatus === 'ok' ? '適合' : hasClaimErrors ? '要修正' : '要確認'}
-            </span>
-          </div>
-
-          {claimValidation.length > 0 && (
-            <div className="claim-issue-list" aria-label="請求前チェック結果">
-              {claimValidation.slice(0, 10).map((issue, idx) => (
-                <div key={`${issue.code}-${idx}`} className={`claim-issue-item ${issue.severity}`}>
-                  <div className="claim-issue-icon">
-                    {issue.severity === 'error' ? <AlertTriangle size={16} /> : issue.severity === 'warning' ? <AlertTriangle size={16} /> : <Info size={16} />}
-                  </div>
-                  <div>
-                    <div className="claim-issue-title-row">
-                      <strong className="claim-issue-title">{issue.title}</strong>
-                      <span className={`claim-issue-severity ${issue.severity}`}>
-                        {CLAIM_ISSUE_LABELS[issue.severity]}
-                      </span>
-                    </div>
-                    <p className="claim-issue-message">{issue.message}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        <ClaimCheckPanel
+          claimCheckStatus={claimCheckStatus}
+          isSelfPayClaimExcluded={isSelfPayClaimExcluded}
+          hasClaimErrors={hasClaimErrors}
+          errorCount={claimValidationErrors.length}
+          warningCount={claimValidationWarnings.length}
+          infoCount={claimValidationInfos.length}
+          issues={claimValidation}
+        />
 
         {/* 1. 調剤録 (dispensing-record) */}
         <DispensingRecordPrint

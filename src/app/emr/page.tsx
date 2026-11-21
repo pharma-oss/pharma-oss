@@ -16,6 +16,7 @@ import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runW
 import { extractErrorMessage } from '@/lib/user_facing_error';
 import { downloadTextFile } from '@/lib/blob_download';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
+import { evaluateActiveVisitEditability, parseEmrLocationSearch } from './emr_route_guards';
 import {
   buildSoapAiDraftSuggestions,
   soapDraftSuggestionToAiAssistSuggestion,
@@ -144,18 +145,16 @@ export default function EmrPage() {
       const search = window.location.search;
       if (search === appliedLocationSearchRef.current) return;
       appliedLocationSearchRef.current = search;
-      const searchParams = new URLSearchParams(search);
-      const visitId = searchParams.get('visitId');
-      if (visitId && visitId !== targetVisitId) {
-        setTargetVisitId(visitId);
+      const parsed = parseEmrLocationSearch(search);
+      if (parsed.visitId && parsed.visitId !== targetVisitId) {
+        setTargetVisitId(parsed.visitId);
       }
-      if (searchParams.get('openPicking') === '1') {
+      if (parsed.openPicking) {
         setIsPickingModalOpen(true);
       }
-      if (searchParams.get('openIntervention') === '1') {
+      if (parsed.openIntervention) {
         setIsInterventionModalOpen(true);
-        const reason = searchParams.get('reason');
-        if (reason) setIntReason(reason);
+        if (parsed.reason) setIntReason(parsed.reason);
       }
     };
     syncFromLocation();
@@ -229,17 +228,7 @@ export default function EmrPage() {
 
   const ensureActiveVisitEditable = useCallback(async (scope: 'prescription' | 'soap' | 'picking' | 'stock') => {
     const visit = await findActiveVisit();
-    if (!visit) {
-      return { ok: false as const, visit: null, message: '処理中の患者が見つかりません' };
-    }
-    if (isClaimEditBlocked(visit.claimLifecycle)) {
-      return {
-        ok: false as const,
-        visit,
-        message: getClaimEditBlockedMessage(visit.claimLifecycle, scope)
-      };
-    }
-    return { ok: true as const, visit, message: '' };
+    return evaluateActiveVisitEditability(visit, scope);
   }, [findActiveVisit]);
 
   // To receive the addEntry event from DocLinkInsightCard we need to pass a callback.
