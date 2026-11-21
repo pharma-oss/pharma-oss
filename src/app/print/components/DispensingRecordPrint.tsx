@@ -14,6 +14,7 @@ import {
   getRecordDrugName,
   getAmountLabel,
   getAmountText,
+  getDispensingAmountText,
   getRecordNotes
 } from '../helpers';
 import {
@@ -160,16 +161,24 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
               </tr>
             </thead>
             <tbody>
-              {prescriptionItems.map((item, index) => (
-                <tr key={`record-${item.itemId}`}>
-                  <td className="text-center">{item.rpNumber || '-'}</td>
-                  <td>{getRecordDrugName(item)}</td>
-                  <td>{getAmountLabel(item)} {getAmountText(item)}</td>
-                  <td>{item.usage || '未設定'}</td>
-                  <td>{item.days ? `${item.days} 日分` : '-'}</td>
-                  <td className="text-sm">{getRecordNotes(item, isFirstItemInRp(item, index)) || '-'}</td>
-                </tr>
-              ))}
+              {prescriptionItems.map((item, index) => {
+                const dispensingAmountText = getDispensingAmountText(item);
+                return (
+                  <tr key={`record-${item.itemId}`}>
+                    <td className="text-center">{item.rpNumber || '-'}</td>
+                    <td>{getRecordDrugName(item)}</td>
+                    <td>
+                      {getAmountLabel(item)} {getAmountText(item)}
+                      {dispensingAmountText && (
+                        <div className="record-dispensing-unit">調剤実量 {dispensingAmountText}</div>
+                      )}
+                    </td>
+                    <td>{item.usage || '未設定'}</td>
+                    <td>{item.days ? `${item.days} 日分` : '-'}</td>
+                    <td className="text-sm">{getRecordNotes(item, isFirstItemInRp(item, index)) || '-'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -466,6 +475,12 @@ export const DispensingRecordPrint = React.memo(function DispensingRecordPrint({
         .record-intervention-table .col-int-cat { width: 100px; }
         .record-intervention-table .col-int-consent { width: 45px; text-align: center; }
         .record-intervention-table .col-int-staff { width: 65px; text-align: center; }
+
+        .record-dispensing-unit {
+          font-size: 0.68rem;
+          color: #475569;
+          margin-top: 0.1rem;
+        }
 
         .intervention-cat-badge {
           display: inline-block;

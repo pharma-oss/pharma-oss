@@ -4,6 +4,7 @@ import type { PharmacyInfo } from '../types';
 import {
   getDisplayDrugName,
   getTotalAmountText,
+  getDispensingTotalAmountText,
   type AmountTextSourceItem
 } from '../helpers';
 
@@ -45,33 +46,39 @@ export const OintmentLabelSheetPrint = React.memo(function OintmentLabelSheetPri
       </div>
 
       <div className="print-document label-sheet" data-testid="ointment-label-sheet-doc">
-        {ointmentItems.map((item) => (
-          <div className="bottle-label ointment-label" key={`ointment-${item.itemId}`}>
-            <div className="label-head">
-              <div className="label-title">外用</div>
-              {renderIdentityMark('tiny')}
-            </div>
-            <div className="label-patient">{patientData.name} 様</div>
-            <div className="label-drug">{getDisplayDrugName(item)}</div>
-            <div className="label-usage">{item.usage || '患部に使用'}</div>
-            <div className="label-dose-grid">
-              <div>
-                <span>全量</span>
-                <strong>{getTotalAmountText(item)}</strong>
+        {ointmentItems.map((item) => {
+          const dispensingTotalText = getDispensingTotalAmountText(item);
+          return (
+            <div className="bottle-label ointment-label" key={`ointment-${item.itemId}`}>
+              <div className="label-head">
+                <div className="label-title">外用</div>
+                {renderIdentityMark('tiny')}
               </div>
-              <div>
-                <span>日数</span>
-                <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+              <div className="label-patient">{patientData.name} 様</div>
+              <div className="label-drug">{getDisplayDrugName(item)}</div>
+              <div className="label-usage">{item.usage || '患部に使用'}</div>
+              <div className="label-dose-grid">
+                <div>
+                  <span>全量</span>
+                  <strong>{getTotalAmountText(item)}</strong>
+                </div>
+                <div>
+                  <span>日数</span>
+                  <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+                </div>
+              </div>
+              {dispensingTotalText && (
+                <div className="label-dispensing-total">調剤量 {dispensingTotalText}</div>
+              )}
+              <div className="label-warning">使用部位と回数を確認してください</div>
+              <div className="label-footer">
+                <strong>{pharmacyInfo.name}</strong>
+                <span>{pharmacyAddressLine} / TEL: {pharmacyInfo.phone}</span>
+                <span>調剤薬剤師: {pharmacyInfo.pharmacistName} / {currentDateStr}</span>
               </div>
             </div>
-            <div className="label-warning">使用部位と回数を確認してください</div>
-            <div className="label-footer">
-              <strong>{pharmacyInfo.name}</strong>
-              <span>{pharmacyAddressLine} / TEL: {pharmacyInfo.phone}</span>
-              <span>調剤薬剤師: {pharmacyInfo.pharmacistName} / {currentDateStr}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <style jsx>{`
@@ -180,6 +187,12 @@ export const OintmentLabelSheetPrint = React.memo(function OintmentLabelSheetPri
           display: block;
           font-size: 0.8rem;
           color: #0f172a;
+        }
+
+        .label-dispensing-total {
+          margin-top: -0.15rem;
+          font-size: 0.62rem;
+          color: #475569;
         }
 
         .label-warning {

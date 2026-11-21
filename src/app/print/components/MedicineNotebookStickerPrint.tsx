@@ -5,6 +5,7 @@ import {
   getDisplayDrugName,
   getAmountLabel,
   getAmountText,
+  getDispensingAmountText,
   getTimingBadges,
   type AmountTextSourceItem
 } from '../helpers';
@@ -45,41 +46,47 @@ export const MedicineNotebookStickerPrint = React.memo(function MedicineNotebook
       </div>
 
       <div className="print-document sticker-sheet" data-testid="medicine-notebook-sticker-doc">
-        {prescriptionItems.map((item, index) => (
-          <div className="handbook-sticker" key={`sticker-${item.itemId}`}>
-            <div className="sticker-head">
-              <div>
-                <strong>{patientData.name} 様</strong>
-                <span>調剤日 {dispensingDateStr} / Rp {item.rpNumber || index + 1}</span>
+        {prescriptionItems.map((item, index) => {
+          const dispensingAmountText = getDispensingAmountText(item);
+          return (
+            <div className="handbook-sticker" key={`sticker-${item.itemId}`}>
+              <div className="sticker-head">
+                <div>
+                  <strong>{patientData.name} 様</strong>
+                  <span>調剤日 {dispensingDateStr} / Rp {item.rpNumber || index + 1}</span>
+                </div>
+                {renderIdentityMark('tiny')}
               </div>
-              {renderIdentityMark('tiny')}
-            </div>
-            <div className="sticker-drug">{getDisplayDrugName(item)}</div>
-            <div className="sticker-dose-panel">
-              <div>
-                <span>{getAmountLabel(item)}</span>
-                <strong>{getAmountText(item)}</strong>
+              <div className="sticker-drug">{getDisplayDrugName(item)}</div>
+              <div className="sticker-dose-panel">
+                <div>
+                  <span>{getAmountLabel(item)}</span>
+                  <strong>{getAmountText(item)}</strong>
+                  {dispensingAmountText && (
+                    <small className="sticker-dispensing-unit">調剤実量 {dispensingAmountText}</small>
+                  )}
+                </div>
+                <div>
+                  <span>日数</span>
+                  <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+                </div>
               </div>
-              <div>
-                <span>日数</span>
-                <strong>{item.days ? `${item.days}日分` : '-'}</strong>
+              <div className="sticker-usage">
+                {item.usage || '用法未設定'}
+                {item.usageSupplementText || item.electronicUsageSupplementText ? `（${item.usageSupplementText || item.electronicUsageSupplementText}）` : ''}
+              </div>
+              <div className="sticker-timing-row">
+                {(getTimingBadges(item.usage).length > 0 ? getTimingBadges(item.usage) : ['指示どおり']).map((badge) => (
+                  <span key={`sticker-${item.itemId}-${badge}`}>{badge}</span>
+                ))}
+              </div>
+              <div className="sticker-footer">
+                <strong>{pharmacyInfo.name}</strong>
+                <span>{pharmacyInfo.phone} / 担当 {pharmacyInfo.pharmacistName}</span>
               </div>
             </div>
-            <div className="sticker-usage">
-              {item.usage || '用法未設定'}
-              {item.usageSupplementText || item.electronicUsageSupplementText ? `（${item.usageSupplementText || item.electronicUsageSupplementText}）` : ''}
-            </div>
-            <div className="sticker-timing-row">
-              {(getTimingBadges(item.usage).length > 0 ? getTimingBadges(item.usage) : ['指示どおり']).map((badge) => (
-                <span key={`sticker-${item.itemId}-${badge}`}>{badge}</span>
-              ))}
-            </div>
-            <div className="sticker-footer">
-              <strong>{pharmacyInfo.name}</strong>
-              <span>{pharmacyInfo.phone} / 担当 {pharmacyInfo.pharmacistName}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <style jsx>{`
@@ -179,6 +186,13 @@ export const MedicineNotebookStickerPrint = React.memo(function MedicineNotebook
           display: block;
           font-size: 0.85rem;
           color: #0f172a;
+        }
+
+        .sticker-dispensing-unit {
+          display: block;
+          font-size: 0.6rem;
+          color: #475569;
+          margin-top: 0.1rem;
         }
 
         .sticker-usage {

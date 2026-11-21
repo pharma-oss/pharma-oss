@@ -11,6 +11,7 @@ import {
   getFormulationLabel,
   getAmountLabel,
   getAmountText,
+  getDispensingAmountText,
   getBagRpComments,
   type AmountTextSourceItem
 } from '../helpers';
@@ -107,15 +108,23 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
                   <span>中のお薬</span>
                   <strong>{groupItems.length} 種</strong>
                 </div>
-                {groupItems.map((item) => (
-                  <div key={item.itemId} className="yakutai-ledger-row">
-                    <div>
-                      <strong>{getDisplayDrugName(item)}</strong>
-                      <span>{getMedicationFlags(item).join(' / ') || getFormulationLabel(item)}</span>
+                {groupItems.map((item) => {
+                  const dispensingAmountText = getDispensingAmountText(item);
+                  return (
+                    <div key={item.itemId} className="yakutai-ledger-row">
+                      <div>
+                        <strong>{getDisplayDrugName(item)}</strong>
+                        <span>{getMedicationFlags(item).join(' / ') || getFormulationLabel(item)}</span>
+                      </div>
+                      <div className="yakutai-ledger-amount">
+                        <em>{getAmountLabel(item)} {getAmountText(item)}</em>
+                        {dispensingAmountText && (
+                          <small className="yakutai-dispensing-unit">調剤実量 {dispensingAmountText}</small>
+                        )}
+                      </div>
                     </div>
-                    <em>{getAmountLabel(item)} {getAmountText(item)}</em>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="yakutai-safety-strip">
@@ -355,10 +364,23 @@ export const MedicineBagPrint = React.memo(function MedicineBagPrint({
           color: #64748b;
         }
 
+        .yakutai-ledger-amount {
+          text-align: right;
+        }
+
         .yakutai-ledger-row em {
+          display: block;
           font-style: normal;
           color: #334155;
           font-weight: 600;
+        }
+
+        .yakutai-dispensing-unit {
+          display: block;
+          font-size: 0.62rem;
+          color: #475569;
+          font-weight: 500;
+          margin-top: 0.1rem;
         }
 
         .yakutai-safety-strip {

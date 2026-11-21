@@ -12,6 +12,7 @@ import {
   getPrescribedDrugName,
   getAmountLabel,
   getAmountText,
+  getDispensingAmountText,
   getFormulationLabel,
   getDrugShapeClass,
   getTimingBadges,
@@ -127,6 +128,9 @@ export const DrugInfoItemCard = React.memo(function DrugInfoItemCard({
         <div className="drug-info-fact">
           <span>{getAmountLabel(item)}</span>
           <strong>{getAmountText(item)}</strong>
+          {getDispensingAmountText(item) && (
+            <small className="drug-info-dispensing-unit">調剤実量 {getDispensingAmountText(item)}</small>
+          )}
         </div>
         <div className="drug-info-fact">
           <span>日数</span>
@@ -415,6 +419,14 @@ export const DrugInfoItemCard = React.memo(function DrugInfoItemCard({
           display: block;
           margin-top: 1mm;
           font-size: 0.92rem;
+        }
+
+        .drug-info-dispensing-unit {
+          display: block;
+          margin-top: 0.8mm;
+          font-size: 0.62rem;
+          color: #475569;
+          font-weight: 700;
         }
 
         .drug-info-safety-grid {

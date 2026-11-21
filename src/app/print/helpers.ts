@@ -284,8 +284,25 @@ export function getTotalAmountText(item: AmountTextSourceItem): string {
 }
 
 /**
- * 水剤ラベルの全量欄に併記する「調剤単位(薬価単位)での実量」。
- * 全量欄は投薬瓶の中身そのものを指すため、処方単位(例: 缶)だけでは患者が計量できない。
+ * 調剤録・薬袋・お薬手帳シール・薬情の「1日量 / 全量」欄へ併記する、調剤単位（薬価単位）の実量。
+ * 処方単位からの換算（electronicUnitConversion）がある明細のみ返し、換算がない場合は空文字を返す。
+ * 例: 処方「3 缶」→ 薬価単位「750 mL」の場合に "750 mL" を返す。
+ */
+export function getDispensingAmountText(item: AmountTextSourceItem): string {
+  const conv = item.electronicUnitConversion;
+  if (!conv?.prescribedUnitText?.trim()) {
+    return '';
+  }
+  if (item.amount == null || !Number.isFinite(item.amount) || item.amount <= 0) {
+    return '';
+  }
+  const unit = item.unitText?.trim() || conv.masterUnitText?.trim() || '';
+  return unit ? `${item.amount} ${unit}` : `${item.amount}`;
+}
+
+/**
+ * 水剤・軟膏ラベルの全量欄に併記する「調剤単位(薬価単位)での実量」。
+ * 全量欄は投薬瓶・容器の中身そのものを指すため、処方単位(例: 缶・本)だけでは患者が計量できない。
  * 換算がない明細は表示ペア = 薬価単位ペアなので併記不要 = 空文字を返す。
  */
 export function getDispensingTotalAmountText(item: AmountTextSourceItem): string {
@@ -296,7 +313,7 @@ export function getDispensingTotalAmountText(item: AmountTextSourceItem): string
   if (item.amount == null || !Number.isFinite(item.amount) || item.amount <= 0) {
     return '';
   }
-  const unit = item.unitText?.trim() || '';
+  const unit = item.unitText?.trim() || conv.masterUnitText?.trim() || '';
   // isDailyAmountItem が true のときは days > 0 が保証される (days <= 0 なら false を返す)
   const days = typeof item.days === 'number' ? item.days : 0;
   const total = isDailyAmountItem(item)
