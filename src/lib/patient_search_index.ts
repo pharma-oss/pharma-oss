@@ -256,6 +256,72 @@ export interface SearchPatientsBlindIndexResult {
   usedBlindIndex: boolean;
 }
 
+export interface PatientBirthDateBlindIndexQuery {
+  selector?: {
+    searchIndexVersion?: { $ne: string };
+    birthDateHash?: string;
+  };
+  limit?: number;
+}
+
+export interface PatientBlindIndexDocLike {
+  toJSON?: () => unknown;
+}
+
+export interface PatientBirthDateBlindIndexDb {
+  patients: {
+    find: (query?: PatientBirthDateBlindIndexQuery) => { exec: () => Promise<PatientBlindIndexDocLike[]> };
+  };
+}
+
+export interface FindPatientsByBirthDateBlindIndexResult {
+  patients: Patient[];
+  usedBlindIndex: boolean;
+}
+
+/**
+ * 生年月日（YYYY-MM-DD または 8 桁数字）に一致する患者候補をブラインドインデックス優先で取得する。
+ *
+ * - 登録済み HMAC 鍵があり、かつ全患者に現行鍵の索引が揃っている場合は `birthDateHash` だけで候補を絞り込む
+ *   （0 件でも全件復号へフォールバックしない）。
+ * - 鍵未登録・生年月日解析不可・未索引（旧 v4 / 別鍵復元直後）のレコードが 1 件でも残っている場合は
+ *   安全に全件取得へフォールバックし、重複患者の見逃しを防ぐ。
+ */
+export async function findPatientsByBirthDateViaBlindIndex(
+  db: PatientBirthDateBlindIndexDb,
+  birthDate: string,
+  explicitHmacKey?: string
+): Promise<FindPatientsByBirthDateBlindIndexResult> {
+  const hmacKey = explicitHmacKey ?? getRegisteredPatientSearchIndexKey(db);
+  if (hmacKey) {
+    const birthDigits = normalizeBirthDateDigits(birthDate);
+    const birthDateHash = computeBlindDigest(hmacKey, 'birthDate', birthDigits);
+    if (birthDateHash) {
+      const versionTag = getPatientSearchIndexVersionTag(hmacKey);
+      const unindexedDocs = await db.patients.find({
+        selector: { searchIndexVersion: { $ne: versionTag } },
+        limit: 1
+      }).exec();
+
+      if (unindexedDocs.length === 0) {
+        const candidateDocs = await db.patients.find({
+          selector: { birthDateHash }
+        }).exec();
+        const candidates = (candidateDocs || []).map((doc) => (
+          typeof doc?.toJSON === 'function' ? doc.toJSON() : doc
+        ) as Patient);
+        return { patients: candidates, usedBlindIndex: true };
+      }
+    }
+  }
+
+  const allDocs = await db.patients.find().exec();
+  const allPatients = (allDocs || []).map((doc) => (
+    typeof doc?.toJSON === 'function' ? doc.toJSON() : doc
+  ) as Patient);
+  return { patients: allPatients, usedBlindIndex: false };
+}
+
 /**
  * ブラインドインデックスを優先して暗号化患者を検索する。
  *

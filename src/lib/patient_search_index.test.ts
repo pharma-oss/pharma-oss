@@ -13,6 +13,7 @@ import {
   buildPatientBlindIndexSelector,
   computePatientBlindIndexFields,
   derivePatientSearchIndexKey,
+  findPatientsByBirthDateViaBlindIndex,
   getPatientSearchIndexVersionTag,
   registerPatientSearchIndexKey,
   searchPatientsViaBlindIndex
@@ -117,6 +118,13 @@ describe('patient_search_index (PATIENT_SCHEMA v5 keyed HMAC blind index)', () =
       assert.strictEqual(beforeBackfill.usedBlindIndex, false);
       assert.deepStrictEqual(beforeBackfill.patients.map((p) => p.patientId), ['pt_legacy']);
 
+      const birthDateBeforeBackfill = await findPatientsByBirthDateViaBlindIndex(
+        db as unknown as Pick<PharmacyDatabase, 'patients'>,
+        '1975-11-03'
+      );
+      assert.strictEqual(birthDateBeforeBackfill.usedBlindIndex, false);
+      assert.deepStrictEqual(birthDateBeforeBackfill.patients.map((p) => p.patientId), ['pt_legacy']);
+
       // 2. Attach hooks and backfill legacy patients
       attachPatientSearchIndexHooks(db.patients, hmacKey);
       const backfilled = await backfillPatientSearchIndexes(
@@ -165,6 +173,21 @@ describe('patient_search_index (PATIENT_SCHEMA v5 keyed HMAC blind index)', () =
       );
       assert.strictEqual(missingDate.usedBlindIndex, true);
       assert.strictEqual(missingDate.patients.length, 0);
+
+      // 5b. findPatientsByBirthDateViaBlindIndex narrows strictly to birthDateHash and avoids full scan on 0 hits
+      const exactBirthDateCandidates = await findPatientsByBirthDateViaBlindIndex(
+        db as unknown as Pick<PharmacyDatabase, 'patients'>,
+        '1980-05-12'
+      );
+      assert.strictEqual(exactBirthDateCandidates.usedBlindIndex, true);
+      assert.deepStrictEqual(exactBirthDateCandidates.patients.map((p) => p.patientId), ['pt_yamada']);
+
+      const missingBirthDateCandidates = await findPatientsByBirthDateViaBlindIndex(
+        db as unknown as Pick<PharmacyDatabase, 'patients'>,
+        '1999-12-31'
+      );
+      assert.strictEqual(missingBirthDateCandidates.usedBlindIndex, true);
+      assert.deepStrictEqual(missingBirthDateCandidates.patients, []);
 
       // 6. Search by surname/kana/given-name prefix uses blind index
       const byKana = await searchPatientsViaBlindIndex(

@@ -1,5 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { addRxPlugin, createRxDatabase } from 'rxdb';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
+import { wrappedKeyEncryptionCryptoJsStorage } from 'rxdb/plugins/encryption-crypto-js';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+import { PATIENT_SCHEMA } from '@/db/schema';
 import type { Patient } from '@/db/types';
 import { AuditLogFailedError } from '@/lib/audit_guard';
 import {
@@ -14,6 +20,16 @@ import {
   type PatientRegistrationDb,
   type PatientRegistrationForm
 } from '@/lib/patient_registration';
+import {
+  attachPatientSearchIndexHooks,
+  computePatientBlindIndexFields,
+  getPatientSearchIndexVersionTag,
+  registerPatientSearchIndexKey,
+  type PatientBirthDateBlindIndexQuery
+} from '@/lib/patient_search_index';
+
+addRxPlugin(RxDBMigrationSchemaPlugin);
+const identityMigration = <T>(doc: T): T => doc;
 
 const validForm: PatientRegistrationForm = {
   name: '山田 太郎',
@@ -333,5 +349,169 @@ describe('registerPatient', () => {
       { message: 'insert failed' }
     );
     assert.equal(audited, false);
+  });
+});
+
+async function createEncryptedPatientRxDb(password: string) {
+  const storage = wrappedKeyEncryptionCryptoJsStorage({
+    storage: wrappedValidateAjvStorage({
+      storage: getRxStorageMemory()
+    })
+  });
+  const db = await createRxDatabase({
+    name: `patient_reg_blind_index_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    password,
+    storage,
+    multiInstance: false
+  });
+  await db.addCollections({
+    patients: {
+      schema: PATIENT_SCHEMA,
+      migrationStrategies: {
+        1: identityMigration,
+        2: identityMigration,
+        3: identityMigration,
+        4: identityMigration,
+        5: identityMigration
+      }
+    }
+  });
+  return db;
+}
+
+describe('registerPatient with PATIENT_SCHEMA v5 keyed blind index', () => {
+  it('全患者が索引済みなら birthDateHash クエリのみで重複検出し、全件スキャンを行わない', async () => {
+    const password = 'reg-blind-index-password-2026';
+    const db = await createEncryptedPatientRxDb(password);
+    try {
+      const hmacKey = registerPatientSearchIndexKey(db, password);
+      const versionTag = getPatientSearchIndexVersionTag(hmacKey);
+      attachPatientSearchIndexHooks(db.patients, hmacKey);
+
+      await db.patients.insert({
+        patientId: 'pt_existing',
+        name: '山田　太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1985-03-15',
+        insuranceInfo: { burdenRatio: 30 }
+      });
+      await db.patients.insert({
+        patientId: 'pt_other',
+        name: '鈴木 一郎',
+        kana: 'スズキ イチロウ',
+        birthDate: '1970-04-05',
+        insuranceInfo: { burdenRatio: 30 }
+      });
+
+      const recordedQueries: Array<PatientBirthDateBlindIndexQuery | undefined> = [];
+      const spiedDb: PatientRegistrationDb = {
+        patients: {
+          find: (query?: PatientBirthDateBlindIndexQuery) => {
+            recordedQueries.push(query);
+            return db.patients.find(query);
+          },
+          insert: (doc: Patient) => db.patients.insert(doc),
+          findOne: (id: string) => db.patients.findOne(id)
+        }
+      };
+      registerPatientSearchIndexKey(spiedDb, password);
+
+      const expectedHash = computePatientBlindIndexFields(
+        { name: '山田 太郎', kana: 'ヤマダ タロウ', birthDate: '1985-03-15' },
+        hmacKey
+      ).birthDateHash;
+
+      // 1. 重複患者は birthDateHash 索引のみで検出し、無条件 find() を呼ばない
+      const dupOutcome = await registerPatient({
+        db: spiedDb,
+        value: expectOk(validForm),
+        generatePatientId: () => 'pt_dup_blocked',
+        logAudit: async () => true
+      });
+      assert.equal(dupOutcome.status, 'duplicate');
+      if (dupOutcome.status === 'duplicate') {
+        assert.equal(dupOutcome.patient.patientId, 'pt_existing');
+      }
+      assert.deepEqual(recordedQueries, [
+        { selector: { searchIndexVersion: { $ne: versionTag } }, limit: 1 },
+        { selector: { birthDateHash: expectedHash } }
+      ]);
+
+      // 2. 同生年月日・別氏名の患者も全件スキャンなしで新規登録でき、索引が付与される
+      recordedQueries.length = 0;
+      const sameBirthDifferentName = await registerPatient({
+        db: spiedDb,
+        value: expectOk({ ...validForm, name: '高橋 花子', kana: 'タカハシ ハナコ', gender: 'female' }),
+        generatePatientId: () => 'pt_same_birth',
+        logAudit: async () => true
+      });
+      assert.equal(sameBirthDifferentName.status, 'registered');
+      assert.equal(recordedQueries.every((query) => query !== undefined), true);
+      const savedSameBirth = await db.patients.findOne('pt_same_birth').exec();
+      assert.equal((savedSameBirth?.toJSON() as Patient).searchIndexVersion, versionTag);
+      assert.equal((savedSameBirth?.toJSON() as Patient).birthDateHash, expectedHash);
+
+      // 3. 該当生年月日が 0 件でも全件スキャンへフォールバックせず登録完了する
+      recordedQueries.length = 0;
+      const newBirthOutcome = await registerPatient({
+        db: spiedDb,
+        value: expectOk({ ...validForm, name: '佐藤 新規', birthDate: '1991-09-09' }),
+        generatePatientId: () => 'pt_new_birth',
+        logAudit: async () => true
+      });
+      assert.equal(newBirthOutcome.status, 'registered');
+      assert.equal(recordedQueries.length, 2);
+      assert.equal(recordedQueries.every((query) => query !== undefined), true);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('未索引レコードが残っている場合は安全に全件フォールバックし、重複患者を見逃さない', async () => {
+    const password = 'reg-blind-index-legacy-2026';
+    const db = await createEncryptedPatientRxDb(password);
+    try {
+      // フック登録前に旧 v4 相当の未索引レコードを挿入
+      await db.patients.insert({
+        patientId: 'pt_legacy_unindexed',
+        name: '山田　太郎',
+        kana: 'ヤマダ タロウ',
+        birthDate: '1985-03-15',
+        insuranceInfo: { burdenRatio: 30 }
+      });
+
+      const recordedQueries: Array<PatientBirthDateBlindIndexQuery | undefined> = [];
+      const spiedDb: PatientRegistrationDb = {
+        patients: {
+          find: (query?: PatientBirthDateBlindIndexQuery) => {
+            recordedQueries.push(query);
+            return db.patients.find(query);
+          },
+          insert: (doc: Patient) => db.patients.insert(doc),
+          findOne: (id: string) => db.patients.findOne(id)
+        }
+      };
+      const hmacKey = registerPatientSearchIndexKey(spiedDb, password);
+      const versionTag = getPatientSearchIndexVersionTag(hmacKey);
+
+      const outcome = await registerPatient({
+        db: spiedDb,
+        value: expectOk(validForm),
+        generatePatientId: () => 'pt_should_not_insert',
+        logAudit: async () => true
+      });
+      assert.equal(outcome.status, 'duplicate');
+      if (outcome.status === 'duplicate') {
+        assert.equal(outcome.patient.patientId, 'pt_legacy_unindexed');
+      }
+      assert.deepEqual(recordedQueries, [
+        { selector: { searchIndexVersion: { $ne: versionTag } }, limit: 1 },
+        undefined
+      ]);
+      const blockedDoc = await db.patients.findOne('pt_should_not_insert').exec();
+      assert.equal(blockedDoc, null);
+    } finally {
+      await db.close();
+    }
   });
 });

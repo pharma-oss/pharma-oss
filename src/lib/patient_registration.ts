@@ -3,6 +3,10 @@ import { runWithAuditRollback } from '@/lib/audit_guard';
 import { parseFlexibleDateInput } from '@/lib/date_input';
 import type { MynaCardReaderResult } from '@/lib/myna_card_reader';
 import { findMatchingPatient } from '@/lib/patient_matching';
+import {
+  findPatientsByBirthDateViaBlindIndex,
+  type PatientBirthDateBlindIndexQuery
+} from '@/lib/patient_search_index';
 
 // 処方箋受付の前に行う、新規患者の登録。
 //
@@ -198,7 +202,7 @@ export interface PatientInsertedDocumentLike extends PatientDocumentLike {
 
 export interface PatientRegistrationDb {
   patients: {
-    find: () => { exec: () => Promise<PatientDocumentLike[]> };
+    find: (query?: PatientBirthDateBlindIndexQuery) => { exec: () => Promise<PatientDocumentLike[]> };
     insert: (doc: Patient) => Promise<PatientInsertedDocumentLike>;
     findOne: (id: string) => { exec: () => Promise<{ remove: () => Promise<unknown> } | null> };
   };
@@ -225,8 +229,7 @@ export async function registerPatient(params: {
 }): Promise<PatientRegistrationOutcome> {
   const { db, value, generatePatientId, logAudit } = params;
 
-  const existingDocs = await db.patients.find().exec();
-  const existing = existingDocs.map((doc) => doc.toJSON() as Patient);
+  const { patients: existing } = await findPatientsByBirthDateViaBlindIndex(db, value.birthDate);
   const duplicate = findMatchingPatient(existing, { name: value.name, birthDate: value.birthDate });
   if (duplicate) return { status: 'duplicate', patient: duplicate.patient };
 
