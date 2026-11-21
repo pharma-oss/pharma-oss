@@ -67,11 +67,157 @@ import {
   formatMonthlyOfficialUkeExportAuditMessage
 } from '@/lib/receipt/uke_migration_policy';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
-import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient } from '@/db/types';
+import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient, FacilitySettings, Drug } from '@/db/types';
 import { calculateDispensingFees } from '@/lib/calculator';
 import { toLocalDateKey } from '@/lib/local_date';
-import { describeSelfPayExclusion, partitionSelfPayClaims } from '@/lib/self_pay_claim';
+import { describeSelfPayExclusion, partitionSelfPayClaims, type SelfPayExcludedClaim } from '@/lib/self_pay_claim';
 import { applyReversiblePatches, plainCopy, undoAppliedPatchesNote, type ReversiblePatch } from '@/lib/rxdb_restore';
+
+export type ClaimWorkbenchPlainOrDoc<T> = T | { toJSON: () => T };
+
+export async function buildClaimWorkbenchUkeCasesData<
+  TVisitDoc extends { visitId: string } & ClaimWorkbenchPlainOrDoc<Visit>
+>(
+  db: {
+    facility_settings: { findOne: (id: string) => { exec: () => Promise<ClaimWorkbenchPlainOrDoc<FacilitySettings> | null> } };
+    visits: { find: (query: { selector: { visitId: { $in: string[] } } }) => { exec: () => Promise<TVisitDoc[]> } };
+    prescription_items: { find: (query: { selector: { visitId: { $in: string[] } } }) => { exec: () => Promise<Array<ClaimWorkbenchPlainOrDoc<PrescriptionItem>>> } };
+    patients: { findByIds: (ids: string[]) => { exec: () => Promise<Map<string, ClaimWorkbenchPlainOrDoc<Patient>>> } };
+    drugs: { findByIds: (ids: string[]) => { exec: () => Promise<Map<string, ClaimWorkbenchPlainOrDoc<Drug>>> } };
+    interventions: { find: (query: { selector: { visitId: { $in: string[] } } }) => { exec: () => Promise<Array<ClaimWorkbenchPlainOrDoc<Intervention>>> } };
+  },
+  workItems: ReadonlyArray<Pick<DashboardClaimWorkItem, 'visitId'>>
+): Promise<{
+  cases: MonthlyClaimUkeCase[];
+  selfPayExcluded: SelfPayExcludedClaim[];
+  missingMessages: string[];
+  visits: Visit[];
+  visitDocs: TVisitDoc[];
+}> {
+  const targetVisitIds = Array.from(new Set(workItems.map((item) => item.visitId)));
+  const [settingsDoc, visitDocs] = await Promise.all([
+    db.facility_settings.findOne('default').exec(),
+    db.visits.find({ selector: { visitId: { $in: targetVisitIds } } }).exec()
+  ]);
+  const settingsData = settingsDoc ? toPlain<MonthlyClaimUkeCase['settings']>(settingsDoc) : null;
+  if (!settingsData) {
+    throw new Error('施設基準・薬局情報を保存してから一括UKEを作成してください。');
+  }
+
+  const visitRows = visitDocs
+    .map((doc) => ({ doc, visit: toPlain<Visit>(doc) }))
+    // 念のための防御: デモ受付が請求対象に紛れても、UKEへは絶対に載せない
+    .filter((row) => !isDemoVisit(row.visit))
+    .sort((left, right) => {
+      const leftDate = left.visit.dispensingDate || left.visit.prescriptionDate || left.visit.issueDate || '';
+      const rightDate = right.visit.dispensingDate || right.visit.prescriptionDate || right.visit.issueDate || '';
+      return leftDate.localeCompare(rightDate) || String(left.visit.visitId).localeCompare(String(right.visit.visitId));
+    });
+  const visits = visitRows.map((row) => row.visit);
+  const orderedVisitDocs = visitRows.map((row) => row.doc);
+  const patientIds = Array.from(new Set(visits.map((visit) => visit.patientId).filter(Boolean)));
+  const prescriptionDocs = targetVisitIds.length > 0
+    ? await db.prescription_items.find({ selector: { visitId: { $in: targetVisitIds } } }).exec()
+    : [];
+  const prescriptionItems = prescriptionDocs.map((doc) => toPlain<PrescriptionItem>(doc));
+  const drugIds = new Set<string>();
+  for (const item of prescriptionItems) {
+    if (item.drugId) drugIds.add(item.drugId);
+    if (item.dispensedDrugCode) drugIds.add(item.dispensedDrugCode);
+  }
+
+  const [patientMap, drugMap, interventionDocs] = await Promise.all([
+    patientIds.length > 0 ? db.patients.findByIds(patientIds).exec() : Promise.resolve(new Map()),
+    drugIds.size > 0 ? db.drugs.findByIds(Array.from(drugIds)).exec() : Promise.resolve(new Map()),
+    targetVisitIds.length > 0 ? db.interventions.find({ selector: { visitId: { $in: targetVisitIds } } }).exec() : Promise.resolve([])
+  ]);
+  const interventions = interventionDocs.map((doc) => toPlain<Intervention>(doc));
+  const interventionsByVisitId = new Map<string, Intervention[]>();
+  for (const intervention of interventions) {
+    const list = interventionsByVisitId.get(intervention.visitId) || [];
+    list.push(intervention);
+    interventionsByVisitId.set(intervention.visitId, list);
+  }
+
+  const cases: MonthlyClaimUkeCase[] = [];
+  const missingMessages: string[] = [];
+
+  for (const visit of visits) {
+    const patient = toPlain<Patient>(patientMap.get(visit.patientId));
+    if (!patient) {
+      missingMessages.push(`患者ID ${visit.patientId} (受付 ${visit.visitId}) の患者情報が見つかりません。`);
+      continue;
+    }
+    const rawItems = prescriptionItems.filter((item) => item.visitId === visit.visitId);
+    if (rawItems.length === 0) {
+      missingMessages.push(`受付 ${visit.visitId} (${patient.name || '氏名未設定'}) の処方明細が見つかりません。`);
+      continue;
+    }
+
+    // 月次請求も薬価は「調剤日時点」で引く。現在のマスター薬価で組むと、
+    // 薬価改定後の再請求で過去分の点数が動いてしまう。
+    const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
+
+    const items = buildClaimCalculationItems(rawItems, drugMap, dispensingDateForPrice);
+
+    const calculatedFees = calculateDispensingFees(
+      settingsData,
+      items,
+      patient,
+      visit.issueDate,
+      visit.claimOptions
+    );
+
+    cases.push({
+      visit,
+      patient,
+      settings: settingsData,
+      items,
+      calculatedFees,
+      interventions: interventionsByVisitId.get(visit.visitId) || []
+    });
+  }
+
+  // 保険種別が「自費」の患者は請求 (UKE) の対象外。ここで外し、外した件数は呼び出し側が画面に出す。
+  // 保険種別が空の患者は外さない (これまで請求できている患者を落とさないため)。
+  const { claimable, excluded: selfPayExcluded } = partitionSelfPayClaims(cases);
+
+  // 出力後に請求状態 (UKE出力済み) を付ける対象も、UKEに載せた受付だけにする。
+  // 自費の受付を visits に残すと、UKEに含まれていないのに「出力済み・ロック」にしてしまう。
+  const selfPayVisitIds = new Set(selfPayExcluded.map((entry) => entry.visitId));
+  const claimableVisits = visits.filter((visit) => !selfPayVisitIds.has(visit.visitId));
+  const claimableVisitDocs = orderedVisitDocs.filter((doc) => !selfPayVisitIds.has(doc.visitId));
+
+  return { cases: claimable, selfPayExcluded, missingMessages, visits: claimableVisits, visitDocs: claimableVisitDocs };
+}
+
+/**
+ * 自費患者を除外したあとの通知メッセージと継続可否を決定する純粋関数。
+ * 全件が自費で空になったときは二重通知（「受付がありません」）を行わず、エラーにもせず静かに終了する。
+ */
+export function resolveClaimWorkbenchSelfPayFlow(params: {
+  selfPayExcluded: readonly SelfPayExcludedClaim[];
+  remainingCaseCount: number;
+  emptyFallbackMessage: string;
+}): {
+  selfPayNote: string | null;
+  emptyNotice: string | null;
+  shouldStop: boolean;
+} {
+  const selfPayNote = describeSelfPayExclusion(params.selfPayExcluded, params.remainingCaseCount);
+  if (params.remainingCaseCount === 0) {
+    return {
+      selfPayNote,
+      emptyNotice: selfPayNote ? null : params.emptyFallbackMessage,
+      shouldStop: true
+    };
+  }
+  return {
+    selfPayNote,
+    emptyNotice: null,
+    shouldStop: false
+  };
+}
 
 export interface ClaimWorkbenchSectionProps {
   db: PharmacyDatabase | null | undefined;
@@ -105,102 +251,7 @@ export function ClaimWorkbenchSection({
     if (!db) {
       throw new Error('データベースの初期化が完了していません。');
     }
-
-    const targetVisitIds = Array.from(new Set(workItems.map((item) => item.visitId)));
-    const [settingsDoc, visitDocs] = await Promise.all([
-      db.facility_settings.findOne('default').exec(),
-      db.visits.find({ selector: { visitId: { $in: targetVisitIds } } }).exec()
-    ]);
-    const settingsData = settingsDoc ? toPlain(settingsDoc) : null;
-    if (!settingsData) {
-      throw new Error('施設基準・薬局情報を保存してから一括UKEを作成してください。');
-    }
-
-    const visitRows = visitDocs
-      .map((doc) => ({ doc, visit: toPlain<Visit>(doc) }))
-      // 念のための防御: デモ受付が請求対象に紛れても、UKEへは絶対に載せない
-      .filter((row) => !isDemoVisit(row.visit))
-      .sort((left, right) => {
-        const leftDate = left.visit.dispensingDate || left.visit.prescriptionDate || left.visit.issueDate || '';
-        const rightDate = right.visit.dispensingDate || right.visit.prescriptionDate || right.visit.issueDate || '';
-        return leftDate.localeCompare(rightDate) || String(left.visit.visitId).localeCompare(String(right.visit.visitId));
-      });
-    const visits = visitRows.map((row) => row.visit);
-    const orderedVisitDocs = visitRows.map((row) => row.doc);
-    const patientIds = Array.from(new Set(visits.map((visit) => visit.patientId).filter(Boolean)));
-    const prescriptionDocs = targetVisitIds.length > 0
-      ? await db.prescription_items.find({ selector: { visitId: { $in: targetVisitIds } } }).exec()
-      : [];
-    const prescriptionItems = prescriptionDocs.map((doc) => toPlain<PrescriptionItem>(doc));
-    const drugIds = new Set<string>();
-    for (const item of prescriptionItems) {
-      if (item.drugId) drugIds.add(item.drugId);
-      if (item.dispensedDrugCode) drugIds.add(item.dispensedDrugCode);
-    }
-
-    const [patientMap, drugMap, interventionDocs] = await Promise.all([
-      patientIds.length > 0 ? db.patients.findByIds(patientIds).exec() : Promise.resolve(new Map()),
-      drugIds.size > 0 ? db.drugs.findByIds(Array.from(drugIds)).exec() : Promise.resolve(new Map()),
-      targetVisitIds.length > 0 ? db.interventions.find({ selector: { visitId: { $in: targetVisitIds } } }).exec() : Promise.resolve([])
-    ]);
-    const interventions = interventionDocs.map((doc) => toPlain<Intervention>(doc));
-    const interventionsByVisitId = new Map<string, Intervention[]>();
-    for (const intervention of interventions) {
-      const list = interventionsByVisitId.get(intervention.visitId) || [];
-      list.push(intervention);
-      interventionsByVisitId.set(intervention.visitId, list);
-    }
-
-    const cases: MonthlyClaimUkeCase[] = [];
-    const missingMessages: string[] = [];
-
-    for (const visit of visits) {
-      const patient = toPlain<Patient>(patientMap.get(visit.patientId));
-      if (!patient) {
-        missingMessages.push(`患者ID ${visit.patientId} (受付 ${visit.visitId}) の患者情報が見つかりません。`);
-        continue;
-      }
-      const rawItems = prescriptionItems.filter((item) => item.visitId === visit.visitId);
-      if (rawItems.length === 0) {
-        missingMessages.push(`受付 ${visit.visitId} (${patient.name || '氏名未設定'}) の処方明細が見つかりません。`);
-        continue;
-      }
-
-      // 月次請求も薬価は「調剤日時点」で引く。現在のマスター薬価で組むと、
-      // 薬価改定後の再請求で過去分の点数が動いてしまう。
-      const dispensingDateForPrice = visit.dispensingDate || visit.issueDate || '';
-
-      const items = buildClaimCalculationItems(rawItems, drugMap, dispensingDateForPrice);
-
-      const calculatedFees = calculateDispensingFees(
-        settingsData,
-        items,
-        patient,
-        visit.issueDate,
-        visit.claimOptions
-      );
-
-      cases.push({
-        visit,
-        patient,
-        settings: settingsData,
-        items,
-        calculatedFees,
-        interventions: interventionsByVisitId.get(visit.visitId) || []
-      });
-    }
-
-    // 保険種別が「自費」の患者は請求 (UKE) の対象外。ここで外し、外した件数は呼び出し側が画面に出す。
-    // 保険種別が空の患者は外さない (これまで請求できている患者を落とさないため)。
-    const { claimable, excluded: selfPayExcluded } = partitionSelfPayClaims(cases);
-
-    // 出力後に請求状態 (UKE出力済み) を付ける対象も、UKEに載せた受付だけにする。
-    // 自費の受付を visits に残すと、UKEに含まれていないのに「出力済み・ロック」にしてしまう。
-    const selfPayVisitIds = new Set(selfPayExcluded.map((entry) => entry.visitId));
-    const claimableVisits = visits.filter((visit) => !selfPayVisitIds.has(visit.visitId));
-    const claimableVisitDocs = orderedVisitDocs.filter((doc) => !selfPayVisitIds.has(doc.visitId));
-
-    return { cases: claimable, selfPayExcluded, missingMessages, visits: claimableVisits, visitDocs: claimableVisitDocs };
+    return buildClaimWorkbenchUkeCasesData(db, workItems);
   }, [db]);
 
   const handleDownloadClaimWorkbenchOfficialReadiness = useCallback(async () => {
@@ -227,10 +278,14 @@ export function ClaimWorkbenchSection({
         return;
       }
       // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
-      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
-      if (selfPayNote) toast.info(selfPayNote);
-      if (cases.length === 0) {
-        if (!selfPayNote) toast.info('公式提出準備を確認できる受付がありません。');
+      const selfPayFlow = resolveClaimWorkbenchSelfPayFlow({
+        selfPayExcluded,
+        remainingCaseCount: cases.length,
+        emptyFallbackMessage: '公式提出準備を確認できる受付がありません。'
+      });
+      if (selfPayFlow.selfPayNote) toast.info(selfPayFlow.selfPayNote);
+      if (selfPayFlow.shouldStop) {
+        if (selfPayFlow.emptyNotice) toast.info(selfPayFlow.emptyNotice);
         return;
       }
 
@@ -300,10 +355,14 @@ export function ClaimWorkbenchSection({
         return;
       }
       // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
-      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
-      if (selfPayNote) toast.info(selfPayNote);
-      if (cases.length === 0) {
-        if (!selfPayNote) toast.info('算定ルールを確認できる受付がありません。');
+      const selfPayFlow = resolveClaimWorkbenchSelfPayFlow({
+        selfPayExcluded,
+        remainingCaseCount: cases.length,
+        emptyFallbackMessage: '算定ルールを確認できる受付がありません。'
+      });
+      if (selfPayFlow.selfPayNote) toast.info(selfPayFlow.selfPayNote);
+      if (selfPayFlow.shouldStop) {
+        if (selfPayFlow.emptyNotice) toast.info(selfPayFlow.emptyNotice);
         return;
       }
 
@@ -360,10 +419,14 @@ export function ClaimWorkbenchSection({
         return;
       }
       // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
-      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
-      if (selfPayNote) toast.info(selfPayNote);
-      if (cases.length === 0) {
-        if (!selfPayNote) toast.info('公式UKEを作成できる受付がありません。');
+      const selfPayFlow = resolveClaimWorkbenchSelfPayFlow({
+        selfPayExcluded,
+        remainingCaseCount: cases.length,
+        emptyFallbackMessage: '公式UKEを作成できる受付がありません。'
+      });
+      if (selfPayFlow.selfPayNote) toast.info(selfPayFlow.selfPayNote);
+      if (selfPayFlow.shouldStop) {
+        if (selfPayFlow.emptyNotice) toast.info(selfPayFlow.emptyNotice);
         return;
       }
 
@@ -504,10 +567,14 @@ export function ClaimWorkbenchSection({
         return;
       }
       // 自費の患者を外した件数を知らせる。全件が自費で空になったときは、エラーにはせず、そのことを伝えて終える。
-      const selfPayNote = describeSelfPayExclusion(selfPayExcluded, cases.length);
-      if (selfPayNote) toast.info(selfPayNote);
-      if (cases.length === 0) {
-        if (!selfPayNote) toast.info('UKEを出力できる受付がありません。');
+      const selfPayFlow = resolveClaimWorkbenchSelfPayFlow({
+        selfPayExcluded,
+        remainingCaseCount: cases.length,
+        emptyFallbackMessage: 'UKEを出力できる受付がありません。'
+      });
+      if (selfPayFlow.selfPayNote) toast.info(selfPayFlow.selfPayNote);
+      if (selfPayFlow.shouldStop) {
+        if (selfPayFlow.emptyNotice) toast.info(selfPayFlow.emptyNotice);
         return;
       }
 

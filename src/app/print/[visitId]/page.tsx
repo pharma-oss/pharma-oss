@@ -13,7 +13,6 @@ import {
   Loader2,
   SlidersHorizontal,
   AlertTriangle,
-  Info,
   MessageSquare,
   Sparkles,
   Clipboard,
@@ -35,7 +34,7 @@ import {
 } from '@/lib/claim_conditions';
 import { previewClaimOptions, previewConditionChoices } from '@/lib/claim_condition_previews';
 import { buildReceiptBarcode, describeBarcodeCategory } from '@/lib/receipt_barcode';
-import { calculateInsuranceAmounts, formatYen } from '@/lib/billing';
+import { formatYen } from '@/lib/billing';
 import { validateDispensingClaim } from '@/lib/claim_validation';
 import {
   buildClaimExportSnapshot,
@@ -127,6 +126,9 @@ import {
   buildPrintPickingSupportUrl,
   buildPrintReceiptBarcodeState,
   runPrintWithBodyClass,
+  getSingleLegacyUkeBlockReason,
+  buildSingleOfficialUkeModalClaimState,
+  calculatePrintReceiptInsuranceAmounts,
   getPrintVisitDataViewState,
   PRINT_LOAD_ERROR_HEADING,
   PRINT_LOAD_ERROR_DESCRIPTION,
@@ -162,6 +164,7 @@ import { ClaimLifecyclePanel } from '../components/ClaimLifecyclePanel';
 import { PharmacistCheckPanel } from '../components/PharmacistCheckPanel';
 import { ClaimCheckPanel } from '../components/ClaimCheckPanel';
 import { CopaymentGuidanceBanner } from '../components/CopaymentGuidanceBanner';
+import { ReceiptConsoleSummaryPanel } from '../components/ReceiptConsoleSummaryPanel';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
 import {
@@ -180,7 +183,7 @@ import { usePrintPresetConfig } from '@/hooks/usePrintPresetConfig';
 import { usePrintElectronicPrescription } from '@/hooks/usePrintElectronicPrescription';
 import { usePrintDeviceIntegration } from '@/hooks/usePrintDeviceIntegration';
 import { toLocalDateKey } from '@/lib/local_date';
-import { SELF_PAY_CLAIM_EXCLUSION_NOTE, SELF_PAY_UKE_BLOCKED_MESSAGE, isSelfPayPatient } from '@/lib/self_pay_claim';
+import { isSelfPayPatient } from '@/lib/self_pay_claim';
 import { restoreFields } from '@/lib/rxdb_restore';
 
 export default function PrintPage() {
@@ -1058,16 +1061,13 @@ export default function PrintPage() {
 
   const handleDownloadUke = async () => {
     if (!ensurePermission('export_uke')) return;
-    if (isSelfPayClaimExcluded) {
-      alert(SELF_PAY_UKE_BLOCKED_MESSAGE);
-      return;
-    }
-    if (isDemoVisit(visitData)) {
-      alert('チュートリアルのデモ受付のため、UKEファイルは出力できません。\nUKE出力前チェックまでの流れは、この画面の薬剤師確認・請求前チェックで練習できます。');
-      return;
-    }
-    if (claimLifecycleStatus !== 'draft' && claimLifecycleStatus !== 'rebilling') {
-      alert('UKEを再出力する場合は、返戻登録または再請求/月遅れ準備に切り替えてから出力してください。');
+    const legacyBlockReason = getSingleLegacyUkeBlockReason({
+      isSelfPayClaimExcluded,
+      isDemo: isDemoVisit(visitData),
+      claimLifecycleStatus
+    });
+    if (legacyBlockReason) {
+      alert(legacyBlockReason);
       return;
     }
     try {
@@ -1413,7 +1413,12 @@ export default function PrintPage() {
   };
 
   const pharmacyAddressLine = `${pharmacyInfo.postalCode ? `〒${pharmacyInfo.postalCode} ` : ''}${pharmacyInfo.address}`.trim();
-  const insuranceAmounts = calculateInsuranceAmounts(totalPoints, patientData.insuranceInfo?.burdenRatio ?? 30);
+  const insuranceAmounts = calculatePrintReceiptInsuranceAmounts(totalPoints, patientData.insuranceInfo?.burdenRatio);
+  const officialUkeModalClaimState = buildSingleOfficialUkeModalClaimState({
+    isSelfPayClaimExcluded,
+    hasClaimErrors,
+    claimValidationErrors
+  });
   const copaymentGuidance = buildVisitCopaymentGuidance(patientData, insuranceAmounts);
   const prescriptionDateStr = new Date(visitData.prescriptionDate || visitData.issueDate || Date.now()).toLocaleDateString('ja-JP');
   const dispensingDateStr = new Date(visitData.dispensingDate || visitData.issueDate || Date.now()).toLocaleDateString('ja-JP');
@@ -1631,47 +1636,23 @@ export default function PrintPage() {
       <div className="print-workspace">
         {/* レセコン算定コンソール */}
         <section className="receipt-console-panel no-print" aria-label="レセコン算定コンソール">
-          <div className="receipt-console-main">
-            <div>
-              <span className="console-kicker">RECEIPT COMPUTATION CONSOLE</span>
-              <h2>算定・請求前点検・帳票管理</h2>
-              <p>保険調剤点数、請求前チェック、UKE出力、印刷帳票のプレビューを調停します。</p>
-            </div>
-            <div className="console-total">
-              <span>合計請求点数</span>
-              <strong>{totalPoints.toLocaleString()} 点</strong>
-              <small>患者負担 ¥{formatYen(insuranceAmounts.patientCopayYen)}（{insuranceAmounts.burdenRatio}%）</small>
-            </div>
-          </div>
-
-          {isSelfPayClaimExcluded && (
-            <p className="claim-self-pay-note" role="status" data-testid="print-self-pay-claim-note">
-              <Info size={14} aria-hidden="true" /> {SELF_PAY_CLAIM_EXCLUSION_NOTE}
-            </p>
-          )}
-
-          <div className="receipt-flow-grid">
-            <div className={`receipt-flow-step ${pharmacistCheckStatus}`}>
-              <span>1 薬剤師確認</span>
-              <strong>{pharmacistCheckStatus === 'ok' ? '確認済' : `${prescriptionAudit.errorCount}件 修正要`}</strong>
-            </div>
-            <div className={`receipt-flow-step ${claimCheckStatus}`}>
-              <span>2 請求前チェック</span>
-              <strong>{isSelfPayClaimExcluded ? '対象外（自費）' : claimCheckStatus === 'ok' ? '適合' : `${claimValidationErrors.length}件 不備`}</strong>
-            </div>
-            <div className={`receipt-flow-step ${claimLifecycleLocked ? 'locked' : claimLifecycleStatus}`}>
-              <span>3 請求ロック</span>
-              <strong>{CLAIM_LIFECYCLE_STATUS_LABELS[claimLifecycleStatus]}</strong>
-            </div>
-            <div className={`receipt-flow-step ${pharmacyDeviceFlowStatus}`}>
-              <span>4 調剤機器</span>
-              <strong>{pharmacyDeviceHandoff ? PHARMACY_DEVICE_HANDOFF_STATUS_LABELS[pharmacyDeviceHandoff.status] : '未送信'}</strong>
-            </div>
-            <div className={`receipt-flow-step ${electronicPrescriptionFlowStatus}`}>
-              <span>5 電子処方箋</span>
-              <strong>{electronicPrescription ? ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS[electronicPrescriptionDispensingResultStatus] : '対象外'}</strong>
-            </div>
-          </div>
+          <ReceiptConsoleSummaryPanel
+            totalPoints={totalPoints}
+            patientCopayYen={insuranceAmounts.patientCopayYen}
+            burdenRatio={insuranceAmounts.burdenRatio}
+            isSelfPayClaimExcluded={isSelfPayClaimExcluded}
+            pharmacistCheckStatus={pharmacistCheckStatus}
+            pharmacistErrorCount={prescriptionAudit.errorCount}
+            claimCheckStatus={claimCheckStatus}
+            claimValidationErrorCount={claimValidationErrors.length}
+            claimLifecycleLocked={claimLifecycleLocked}
+            claimLifecycleStatus={claimLifecycleStatus}
+            claimLifecycleLabel={CLAIM_LIFECYCLE_STATUS_LABELS[claimLifecycleStatus]}
+            pharmacyDeviceFlowStatus={pharmacyDeviceFlowStatus}
+            pharmacyDeviceLabel={pharmacyDeviceHandoff ? PHARMACY_DEVICE_HANDOFF_STATUS_LABELS[pharmacyDeviceHandoff.status] : '未送信'}
+            electronicPrescriptionFlowStatus={electronicPrescriptionFlowStatus}
+            electronicPrescriptionLabel={electronicPrescription ? ELECTRONIC_PRESCRIPTION_DISPENSING_STATUS_LABELS[electronicPrescriptionDispensingResultStatus] : '対象外'}
+          />
 
           <div className="claim-snapshot-panel">
             <div className="claim-snapshot-header">
@@ -2134,10 +2115,8 @@ export default function PrintPage() {
           prescriptionItems={itemsForUke}
           calculatedFees={calculatedFees}
           interventions={interventions}
-          hasClaimErrors={hasClaimErrors || isSelfPayClaimExcluded}
-          claimErrorMessages={isSelfPayClaimExcluded
-            ? [SELF_PAY_UKE_BLOCKED_MESSAGE]
-            : claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))}
+          hasClaimErrors={officialUkeModalClaimState.hasClaimErrors}
+          claimErrorMessages={officialUkeModalClaimState.claimErrorMessages}
           onExportSuccess={handleOfficialUkeExportSuccess}
         />
       )}

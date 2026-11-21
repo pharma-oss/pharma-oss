@@ -14,6 +14,9 @@ import {
 } from '@/lib/receipt_barcode';
 import type { ReceiptBarcodeStatus } from './components/ReceiptConditionPanel';
 import { PATIENT_IDENTITY_MARKS, type PatientIdentityMark, type PrintItemMasterFacts, type PrintPrescriptionItem } from './types';
+import { calculateInsuranceAmounts, type InsuranceAmountBreakdown } from '@/lib/billing';
+import { SELF_PAY_UKE_BLOCKED_MESSAGE } from '@/lib/self_pay_claim';
+import type { ClaimLifecycleStatus } from '@/lib/claim_lifecycle';
 
 export interface PrintDrugMasterDoc {
   name?: string;
@@ -593,5 +596,54 @@ export function runPrintWithBodyClass(
   } finally {
     classList.remove(className);
   }
+}
+
+/**
+ * 単票画面の旧形式UKE出力前の事前ブロック理由を返す純粋関数。
+ * 出力可能なら null、ブロック対象なら利用者向けアラート文言を返す。
+ */
+export function getSingleLegacyUkeBlockReason(params: {
+  isSelfPayClaimExcluded: boolean;
+  isDemo: boolean;
+  claimLifecycleStatus: ClaimLifecycleStatus;
+}): string | null {
+  if (params.isSelfPayClaimExcluded) {
+    return SELF_PAY_UKE_BLOCKED_MESSAGE;
+  }
+  if (params.isDemo) {
+    return 'チュートリアルのデモ受付のため、UKEファイルは出力できません。\nUKE出力前チェックまでの流れは、この画面の薬剤師確認・請求前チェックで練習できます。';
+  }
+  if (params.claimLifecycleStatus !== 'draft' && params.claimLifecycleStatus !== 'rebilling') {
+    return 'UKEを再出力する場合は、返戻登録または再請求/月遅れ準備に切り替えてから出力してください。';
+  }
+  return null;
+}
+
+/**
+ * 単票公式UKEモーダルへ渡すエラー有無とメッセージ配列を組み立てる純粋関数。
+ * 自費患者は請求前チェックエラー有無にかかわらず公式UKE出力をブロックする。
+ */
+export function buildSingleOfficialUkeModalClaimState(params: {
+  isSelfPayClaimExcluded: boolean;
+  hasClaimErrors: boolean;
+  claimValidationErrors: ReadonlyArray<string | { message?: string }>;
+}): { hasClaimErrors: boolean; claimErrorMessages: string[] } {
+  return {
+    hasClaimErrors: params.hasClaimErrors || params.isSelfPayClaimExcluded,
+    claimErrorMessages: params.isSelfPayClaimExcluded
+      ? [SELF_PAY_UKE_BLOCKED_MESSAGE]
+      : params.claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))
+  };
+}
+
+/**
+ * 領収証・算定コンソール用の患者負担額を算出する純粋関数。
+ * 自費患者であっても、領収金額はこれまでどおり保険点数×負担割合で計算する（自費除外判定を持ち込まない）。
+ */
+export function calculatePrintReceiptInsuranceAmounts(
+  totalPoints: number,
+  burdenRatio?: number | null
+): InsuranceAmountBreakdown {
+  return calculateInsuranceAmounts(totalPoints, burdenRatio ?? 30);
 }
 
