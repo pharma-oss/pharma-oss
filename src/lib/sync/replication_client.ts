@@ -1,6 +1,12 @@
 import { replicateRxCollection, type RxReplicationState } from 'rxdb/plugins/replication';
 import type { RxCollection, WithDeleted } from 'rxdb';
 import type { PharmacyDatabase } from '@/db/types';
+import {
+  computePatientBlindIndexFields,
+  getRegisteredPatientSearchIndexKey,
+  migratePatientV4ToV5,
+  stripPatientBlindIndexFields
+} from '@/lib/patient_search_index';
 import { ALL_SYNC_COLLECTIONS, isPushOnlyFromSatelliteCollection, type SyncCollectionName } from './sync_collections';
 import type { HubPullResult, HubPushRow } from './hub_store';
 
@@ -74,7 +80,7 @@ function buildPullHandler(collectionName: SyncCollectionName, fetchImpl: typeof 
 function enqueueRowsToLocalQueue(
   collectionName: SyncCollectionName,
   primaryPath: string,
-  rows: { newDocumentState: Record<string, unknown>; assumedMasterState?: Record<string, unknown> }[]
+  rows: HubPushRow[]
 ): void {
   // 送信失敗時は未送信ローカル暗号化キューに登録 (assumedMasterState も保持)
   import('@/lib/sync/satellite_local_queue').then(({ enqueueUnsentRecord }) => {
@@ -86,12 +92,43 @@ function enqueueRowsToLocalQueue(
   });
 }
 
-function buildPushHandler(collectionName: SyncCollectionName, primaryPath: string, fetchImpl: typeof fetch) {
+function normalizeRemotePatientDoc(
+  db: PharmacyDatabase,
+  docData: WithDeleted<Record<string, unknown>>
+): WithDeleted<Record<string, unknown>> {
+  const normalized = migratePatientV4ToV5(docData);
+  const localSearchKey = getRegisteredPatientSearchIndexKey(db);
+  if (localSearchKey && !normalized._deleted) {
+    const indexed = computePatientBlindIndexFields(
+      {
+        name: typeof normalized.name === 'string' ? normalized.name : '',
+        kana: typeof normalized.kana === 'string' ? normalized.kana : '',
+        birthDate: typeof normalized.birthDate === 'string' ? normalized.birthDate : ''
+      },
+      localSearchKey
+    );
+    return { ...normalized, ...indexed, _deleted: Boolean(normalized._deleted) };
+  }
+  return { ...normalized, _deleted: Boolean(normalized._deleted) };
+}
+
+function buildPushHandler(
+  db: PharmacyDatabase,
+  collectionName: SyncCollectionName,
+  primaryPath: string,
+  fetchImpl: typeof fetch
+) {
   return async (rows: { newDocumentState: Record<string, unknown>; assumedMasterState?: Record<string, unknown> }[]) => {
     const pushRows: HubPushRow[] = rows.map((row) => ({
       docId: String(row.newDocumentState[primaryPath]),
-      newDocumentState: row.newDocumentState,
-      assumedMasterState: row.assumedMasterState ?? null
+      newDocumentState: collectionName === 'patients'
+        ? stripPatientBlindIndexFields(row.newDocumentState)
+        : row.newDocumentState,
+      assumedMasterState: row.assumedMasterState
+        ? (collectionName === 'patients'
+          ? stripPatientBlindIndexFields(row.assumedMasterState)
+          : row.assumedMasterState)
+        : null
     }));
 
     let response: Response;
@@ -103,7 +140,7 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
       });
     } catch (err) {
       // fetch自体が失敗した(=Hubに届いていない)場合のみローカルキューへ退避する
-      enqueueRowsToLocalQueue(collectionName, primaryPath, rows);
+      enqueueRowsToLocalQueue(collectionName, primaryPath, pushRows);
       throw err;
     }
 
@@ -115,7 +152,7 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
           console.error('[Replication Client] Failed to trigger purge on revocation in push:', e);
         });
       }
-      enqueueRowsToLocalQueue(collectionName, primaryPath, rows);
+      enqueueRowsToLocalQueue(collectionName, primaryPath, pushRows);
       throw new Error(`同期pushに失敗しました(${collectionName}): HTTP ${response.status}`);
     }
 
@@ -124,6 +161,9 @@ function buildPushHandler(collectionName: SyncCollectionName, primaryPath: strin
     // ローカルキューには積まない。積むと古いassumedMasterStateで再送し、
     // 無用な競合をhub_store側に生成してしまう。RxDB自身のリトライに委ねる。
     const body = await response.json() as { conflicts: WithDeleted<Record<string, unknown>>[] };
+    if (collectionName === 'patients') {
+      return body.conflicts.map((doc) => normalizeRemotePatientDoc(db, doc));
+    }
     return body.conflicts;
   };
 }
@@ -152,13 +192,19 @@ export function startReplication(db: PharmacyDatabase, options: StartReplication
       // 1端末1タブ運用が前提のため、タブ間の代表選出はせず全タブで同期する。
       waitForLeadership: false,
       push: {
-        handler: buildPushHandler(collectionName, primaryPath, fetchImpl)
+        handler: buildPushHandler(db, collectionName, primaryPath, fetchImpl)
       },
       // audit_logs はサテライトからはpush専用(他端末分のログを保持しない)。
       ...(pushOnly ? {} : {
         pull: {
           handler: buildPullHandler(collectionName, fetchImpl, batchSize),
-          batchSize
+          batchSize,
+          ...(collectionName === 'patients'
+            ? {
+                modifier: (docData: WithDeleted<Record<string, unknown>>): WithDeleted<Record<string, unknown>> =>
+                  normalizeRemotePatientDoc(db, docData)
+              }
+            : {})
         }
       })
     }) as RxReplicationState<unknown, unknown>;

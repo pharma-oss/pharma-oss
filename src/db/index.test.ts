@@ -16,6 +16,7 @@ import type { PharmacyDatabase } from './types';
 import {
   attachPatientSearchIndexHooks,
   backfillPatientSearchIndexes,
+  migratePatientV4ToV5,
   registerPatientSearchIndexKey,
   searchPatientsViaBlindIndex
 } from '@/lib/patient_search_index';
@@ -208,6 +209,7 @@ describe('Database initialization contracts', () => {
 
     const v4PatientSchema = structuredClone(PATIENT_SCHEMA);
     v4PatientSchema.version = 4;
+    v4PatientSchema.required = ['patientId', 'name', 'kana', 'birthDate'];
     delete v4PatientSchema.indexes;
     delete (v4PatientSchema.properties as Record<string, unknown>).searchIndexVersion;
     delete (v4PatientSchema.properties as Record<string, unknown>).birthDateHash;
@@ -236,7 +238,9 @@ describe('Database initialization contracts', () => {
     await db5.addCollections({
       patients: {
         schema: PATIENT_SCHEMA,
-        migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {})
+        migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {
+          4: migratePatientV4ToV5
+        })
       }
     });
     const hmacKey = registerPatientSearchIndexKey(db5, password);

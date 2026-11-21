@@ -15,7 +15,7 @@ import {
   AUDIT_LOG_SCHEMA
 } from './schema.ts';
 
-const ajv = new Ajv({ strict: false });
+const ajv = new Ajv({ strict: false, useDefaults: true });
 ajv.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
 ajv.addFormat(
   'date-time',

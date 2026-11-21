@@ -16,11 +16,59 @@ export const PATIENT_BLIND_INDEX_FORMAT = 'v1';
 
 export interface PatientBlindIndexFields {
   searchIndexVersion: string;
-  birthDateHash?: string;
-  namePrefixHash?: string;
-  kanaPrefixHash?: string;
-  givenNamePrefixHash?: string;
-  givenKanaPrefixHash?: string;
+  birthDateHash: string;
+  namePrefixHash: string;
+  kanaPrefixHash: string;
+  givenNamePrefixHash: string;
+  givenKanaPrefixHash: string;
+}
+
+export const EMPTY_PATIENT_BLIND_INDEX_FIELDS: PatientBlindIndexFields = {
+  searchIndexVersion: '',
+  birthDateHash: '',
+  namePrefixHash: '',
+  kanaPrefixHash: '',
+  givenNamePrefixHash: '',
+  givenKanaPrefixHash: ''
+};
+
+export const PATIENT_BLIND_INDEX_FIELD_NAMES = [
+  'searchIndexVersion',
+  'birthDateHash',
+  'namePrefixHash',
+  'kanaPrefixHash',
+  'givenNamePrefixHash',
+  'givenKanaPrefixHash'
+] as const;
+
+/**
+ * 端末ローカル鍵から派生するブラインドインデックス項目を同期ペイロードから除去する。
+ * ハブ正本ストアには平文・正本属性のみを保持し、異なる端末鍵間で無用な競合を起こさないために使う。
+ */
+export function stripPatientBlindIndexFields<T extends Record<string, unknown>>(doc: T): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...doc };
+  for (const field of PATIENT_BLIND_INDEX_FIELD_NAMES) {
+    delete result[field];
+  }
+  return result;
+}
+
+/**
+ * PATIENT_SCHEMA v4 -> v5 マイグレーション戦略。
+ * Dexie.js（DXE1）はインデックス付きフィールドの必須化を要求するため、
+ * 既存 v4 ドキュメントに空文字のブラインドインデックス初期値を補完し、起動後の非同期バックフィルへ引き渡す。
+ */
+export function migratePatientV4ToV5<T extends Record<string, unknown>>(oldDoc: T): T & PatientBlindIndexFields {
+  return {
+    ...EMPTY_PATIENT_BLIND_INDEX_FIELDS,
+    ...oldDoc,
+    searchIndexVersion: typeof oldDoc.searchIndexVersion === 'string' ? oldDoc.searchIndexVersion : '',
+    birthDateHash: typeof oldDoc.birthDateHash === 'string' ? oldDoc.birthDateHash : '',
+    namePrefixHash: typeof oldDoc.namePrefixHash === 'string' ? oldDoc.namePrefixHash : '',
+    kanaPrefixHash: typeof oldDoc.kanaPrefixHash === 'string' ? oldDoc.kanaPrefixHash : '',
+    givenNamePrefixHash: typeof oldDoc.givenNamePrefixHash === 'string' ? oldDoc.givenNamePrefixHash : '',
+    givenKanaPrefixHash: typeof oldDoc.givenKanaPrefixHash === 'string' ? oldDoc.givenKanaPrefixHash : ''
+  };
 }
 
 const dbBlindIndexKeyMap = new WeakMap<object, string>();
@@ -86,34 +134,22 @@ export function computePatientBlindIndexFields(
   const normalizedKana = normalizeBlindIndexText(patient.kana);
   const birthDigits = normalizeBirthDateDigits(patient.birthDate);
 
-  const fields: PatientBlindIndexFields = {
-    searchIndexVersion: getPatientSearchIndexVersionTag(hmacKey)
+  return {
+    searchIndexVersion: getPatientSearchIndexVersionTag(hmacKey),
+    birthDateHash: computeBlindDigest(hmacKey, 'birthDate', birthDigits) ?? '',
+    namePrefixHash: computeBlindDigest(hmacKey, 'nameInitial', extractFirstCharacter(normalizedName)) ?? '',
+    kanaPrefixHash: computeBlindDigest(hmacKey, 'kanaInitial', extractFirstCharacter(normalizedKana)) ?? '',
+    givenNamePrefixHash: computeBlindDigest(
+      hmacKey,
+      'givenNameInitial',
+      extractGivenPartFirstCharacter(normalizedName)
+    ) ?? '',
+    givenKanaPrefixHash: computeBlindDigest(
+      hmacKey,
+      'givenKanaInitial',
+      extractGivenPartFirstCharacter(normalizedKana)
+    ) ?? ''
   };
-
-  const birthDateHash = computeBlindDigest(hmacKey, 'birthDate', birthDigits);
-  if (birthDateHash) fields.birthDateHash = birthDateHash;
-
-  const namePrefixHash = computeBlindDigest(hmacKey, 'nameInitial', extractFirstCharacter(normalizedName));
-  if (namePrefixHash) fields.namePrefixHash = namePrefixHash;
-
-  const kanaPrefixHash = computeBlindDigest(hmacKey, 'kanaInitial', extractFirstCharacter(normalizedKana));
-  if (kanaPrefixHash) fields.kanaPrefixHash = kanaPrefixHash;
-
-  const givenNamePrefixHash = computeBlindDigest(
-    hmacKey,
-    'givenNameInitial',
-    extractGivenPartFirstCharacter(normalizedName)
-  );
-  if (givenNamePrefixHash) fields.givenNamePrefixHash = givenNamePrefixHash;
-
-  const givenKanaPrefixHash = computeBlindDigest(
-    hmacKey,
-    'givenKanaInitial',
-    extractGivenPartFirstCharacter(normalizedKana)
-  );
-  if (givenKanaPrefixHash) fields.givenKanaPrefixHash = givenKanaPrefixHash;
-
-  return fields;
 }
 
 export function applyPatientBlindIndexToDocData(
@@ -122,16 +158,11 @@ export function applyPatientBlindIndexToDocData(
 ): void {
   const fields = computePatientBlindIndexFields(docData, hmacKey);
   docData.searchIndexVersion = fields.searchIndexVersion;
-  if (fields.birthDateHash) docData.birthDateHash = fields.birthDateHash;
-  else delete docData.birthDateHash;
-  if (fields.namePrefixHash) docData.namePrefixHash = fields.namePrefixHash;
-  else delete docData.namePrefixHash;
-  if (fields.kanaPrefixHash) docData.kanaPrefixHash = fields.kanaPrefixHash;
-  else delete docData.kanaPrefixHash;
-  if (fields.givenNamePrefixHash) docData.givenNamePrefixHash = fields.givenNamePrefixHash;
-  else delete docData.givenNamePrefixHash;
-  if (fields.givenKanaPrefixHash) docData.givenKanaPrefixHash = fields.givenKanaPrefixHash;
-  else delete docData.givenKanaPrefixHash;
+  docData.birthDateHash = fields.birthDateHash;
+  docData.namePrefixHash = fields.namePrefixHash;
+  docData.kanaPrefixHash = fields.kanaPrefixHash;
+  docData.givenNamePrefixHash = fields.givenNamePrefixHash;
+  docData.givenKanaPrefixHash = fields.givenKanaPrefixHash;
 }
 
 export interface PatientHookableCollectionLike {

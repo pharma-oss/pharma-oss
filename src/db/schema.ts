@@ -152,14 +152,26 @@ export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
       }
     },
     // v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMAC-SHA256、平文PIIを含まないスカラー索引）
-    searchIndexVersion: { type: 'string', maxLength: 16 },
-    birthDateHash: { type: 'string', maxLength: 64 },
-    namePrefixHash: { type: 'string', maxLength: 64 },
-    kanaPrefixHash: { type: 'string', maxLength: 64 },
-    givenNamePrefixHash: { type: 'string', maxLength: 64 },
-    givenKanaPrefixHash: { type: 'string', maxLength: 64 }
+    // Dexie.js ストレージ（DXE1）は indexes に含む全項目を required にすることを要求するため default: '' を付与する
+    searchIndexVersion: { type: 'string', maxLength: 16, default: '' },
+    birthDateHash: { type: 'string', maxLength: 64, default: '' },
+    namePrefixHash: { type: 'string', maxLength: 64, default: '' },
+    kanaPrefixHash: { type: 'string', maxLength: 64, default: '' },
+    givenNamePrefixHash: { type: 'string', maxLength: 64, default: '' },
+    givenKanaPrefixHash: { type: 'string', maxLength: 64, default: '' }
   },
-  required: ['patientId', 'name', 'kana', 'birthDate'],
+  required: [
+    'patientId',
+    'name',
+    'kana',
+    'birthDate',
+    'searchIndexVersion',
+    'birthDateHash',
+    'namePrefixHash',
+    'kanaPrefixHash',
+    'givenNamePrefixHash',
+    'givenKanaPrefixHash'
+  ],
   indexes: [
     'birthDateHash',
     'namePrefixHash',

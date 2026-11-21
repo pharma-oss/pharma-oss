@@ -41,6 +41,7 @@ import { isDevelopment, getDbPassword } from '@/lib/env';
 import {
     attachPatientSearchIndexHooks,
     backfillPatientSearchIndexes,
+    migratePatientV4ToV5,
     registerPatientSearchIndexKey
 } from '@/lib/patient_search_index';
 
@@ -306,8 +307,8 @@ const create = async () => {
                 // いずれも任意項目なので、既存ドキュメントはそのまま持ち上げる。
                 3: keepDocument,
                 // v4 -> v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMACスカラー索引）を追加。
-                // いずれも任意項目なので既存ドキュメントはそのまま持ち上げ、起動後に非同期バックフィルする。
-                4: keepDocument
+                // Dexie.js（DXE1）は indexes 対象を required にすることを要求するため空文字で初期化し、起動後に非同期バックフィルする。
+                4: migratePatientV4ToV5
             })
         },
         visits: {

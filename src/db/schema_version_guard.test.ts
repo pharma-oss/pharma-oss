@@ -45,7 +45,7 @@ const EXPECTED_SCHEMA_SNAPSHOTS: Record<string, SchemaSnapshot> = {
   LOCATION_SCHEMA: { version: 1, shapeHash: 'c809ea900995813b' },
   MEDICATION_GUIDANCE_SCHEMA: { version: 1, shapeHash: '40a9753dded38dbc' },
   PATIENT_MEDICATION_INFO_TEMPLATE_SCHEMA: { version: 1, shapeHash: '5450e1a3dc0998ff' },
-  PATIENT_SCHEMA: { version: 5, shapeHash: '7efe43860fbc1d9b' },
+  PATIENT_SCHEMA: { version: 5, shapeHash: '4b307e10558c45c1' },
   PRESCRIPTION_ITEM_SCHEMA: { version: 18, shapeHash: 'b8c670e8d3888710' },
   SOAP_RECORD_SCHEMA: { version: 4, shapeHash: '4ca4bb3dddbb3b8d' },
   USER_SCHEMA: { version: 2, shapeHash: '8cc1ffeb1d1b2a96' },
@@ -88,6 +88,20 @@ describe('Schema version guard (P6-1)', () => {
         actualShapeHash,
         expected.shapeHash,
         `${name} shapeHash changed (${expected.shapeHash} -> ${actualShapeHash}). Update EXPECTED_SCHEMA_SNAPSHOTS.`
+      );
+    });
+    test(`${name} declares every indexed field as required for Dexie.js DXE1 compatibility`, () => {
+      const schema = (schemas as Record<string, unknown>)[name] as {
+        required?: string[];
+        indexes?: Array<string | string[]>;
+      };
+      const requiredSet = new Set(schema.required || []);
+      const indexedFields = (schema.indexes || []).flat();
+      const nonRequired = indexedFields.filter((field) => !requiredSet.has(field));
+      assert.deepStrictEqual(
+        nonRequired,
+        [],
+        `${name} has non-required indexed fields (${nonRequired.join(', ')}) which crash RxDB Dexie storage with DXE1.`
       );
     });
   }

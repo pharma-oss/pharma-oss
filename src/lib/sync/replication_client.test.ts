@@ -9,6 +9,12 @@ import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { PATIENT_SCHEMA } from '@/db/schema';
 import type { PharmacyDatabase } from '@/db/types';
+import {
+  attachPatientSearchIndexHooks,
+  getPatientSearchIndexVersionTag,
+  registerPatientSearchIndexKey,
+  searchPatientsViaBlindIndex
+} from '@/lib/patient_search_index';
 import { openHubStore, type HubStore } from './hub_store.ts';
 import { performSyncPull, performSyncPush } from './sync_client.ts';
 import { startReplication } from './replication_client.ts';
@@ -266,5 +272,49 @@ test('restarting the replication under a new epoch pulls the standby in full and
     await db.close();
     main.close();
     standby.close();
+  }
+});
+
+test('cross-terminal patient sync strips terminal-local blind index fields on push and re-indexes on pull without false conflicts', async () => {
+  const store = openHubStore({ dbPath: ':memory:', encryptionKey: randomBytes(32) });
+  const dbA = await createPatientsOnlyDatabase();
+  const dbB = await createPatientsOnlyDatabase();
+  const keyA = registerPatientSearchIndexKey(dbA, 'terminal-A-secret-password');
+  const keyB = registerPatientSearchIndexKey(dbB, 'terminal-B-secret-password');
+  attachPatientSearchIndexHooks(dbA.patients, keyA);
+  attachPatientSearchIndexHooks(dbB.patients, keyB);
+  const fetchImpl = buildHubBackedFetch(store);
+  const handleA = startReplication(dbA, { role: 'satellite', fetchImpl, collections: ['patients'], retryTimeMs: 200, pollIntervalMs: 100 });
+  const handleB = startReplication(dbB, { role: 'satellite', fetchImpl, collections: ['patients'], retryTimeMs: 200, pollIntervalMs: 100 });
+  try {
+    await handleA.awaitInitialReplication();
+    await handleB.awaitInitialReplication();
+
+    await dbA.patients.insert({ patientId: 'p_keyed', name: '鈴木 一郎', kana: 'スズキ イチロウ', birthDate: '1975-03-14' });
+    await waitUntil(() => store.pull('patients', 0, 10).documents.some((d) => d.patientId === 'p_keyed'));
+
+    // ハブ正本には端末固有のブラインドインデックス項目を送信しない
+    const hubDoc = store.pull('patients', 0, 10).documents.find((d) => d.patientId === 'p_keyed');
+    assert.equal(hubDoc?.searchIndexVersion, undefined);
+    assert.equal(hubDoc?.birthDateHash, undefined);
+
+    // 端末B は自分の鍵で再索引された患者を受信し、そのままブラインドインデックス検索できる
+    await waitUntil(async () => (await dbB.patients.findOne('p_keyed').exec()) !== null);
+    const docInB = await dbB.patients.findOne('p_keyed').exec();
+    assert.equal(docInB?.searchIndexVersion, getPatientSearchIndexVersionTag(keyB));
+    const searchResultB = await searchPatientsViaBlindIndex(dbB, '19750314');
+    assert.equal(searchResultB.usedBlindIndex, true);
+    assert.equal(searchResultB.patients[0]?.patientId, 'p_keyed');
+
+    // 端末B の更新もハブへ無競合で反映される（端末鍵差による誤競合を起こさない）
+    await docInB!.patch({ name: '鈴木 一郎（改）' });
+    await waitUntil(() => store.pull('patients', 0, 10).documents.find((d) => d.patientId === 'p_keyed')?.name === '鈴木 一郎（改）');
+    assert.equal(store.listConflicts().length, 0);
+  } finally {
+    await handleA.cancel();
+    await handleB.cancel();
+    await dbA.close();
+    await dbB.close();
+    store.close();
   }
 });
