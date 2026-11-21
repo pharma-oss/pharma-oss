@@ -1,11 +1,15 @@
 # サテライト端末同期（メイン端末集約）導入計画
 
-最終更新: 2026-07-12
+最終更新: 2026-11-21
 
-## 実装状況（2026-07-12）
+## 実装状況（2026-11-21 更新）
 
 - **Phase 1〜3は実装済み。** ハブストア(`src/lib/sync/hub_store.ts`)、同期API(`src/app/api/sync/*`)、役割分岐DB(`src/db/index.ts`)、レプリケーション(`src/lib/sync/replication_client.ts`)、初回同期ゲート(`src/db/DatabaseProvider.tsx`)、端末別監査チェーン(`src/lib/audit.ts` / `src/lib/audit_integrity.ts`)、同期ステータス表示(`src/components/SyncStatusIndicator.tsx`)、設定>端末同期タブ(`src/components/TerminalSyncPanel.tsx`)。
 - **Phase 4は移行導線・E2E実装済み。** 2プロセスE2E(`scripts/runSyncE2E.mjs`、`npm run test:e2e:sync`)、CI組み込み、サテライト化後の旧ローカルデータ削除導線(設定>端末同期)。既存端末のデータ移行は既存のバックアップ書き出し→メイン端末で復旧の導線を使う(下記「既存端末のサテライト化手順」)。
+- **2026-11-21 確定・追補**:
+  - **競合解決仕様の正式確定**: 「ハブ正本優先＋薬剤師手動レビュー（`TerminalSyncPanel`）」を正式仕様として確定（暗黙の Last-Write-Wins による自動上書きは行わない。医療安全最優先）。
+  - **ホスト検証の共通化（Q-4、`a59f367`）**: ループバック（`localhost` / `127.0.0.0/8` / `[::1]`）およびプライベート LAN IP（RFC 1918 / IPv6 ULA）判定を `src/lib/network_host_policy.ts` に一元化し、`sync_config.ts`・調剤機器コネクタ・電子処方箋コネクタ・外部連携診断で共用。
+  - **`PATIENT_SCHEMA` v5 ブラインドインデックス同期整合（`5454628`・`a650206`）**: 端末ローカル暗号鍵から派生する 6 つのブラインドインデックス項目（`searchIndexVersion`・`birthDateHash`・`namePrefixHash`・`kanaPrefixHash`・`givenNamePrefixHash`・`givenKanaPrefixHash`）は、`replication_client.ts` の push 時およびオフライン未送信キュー退避時に `stripPatientBlindIndexFields` で除去し、ハブ正本へ端末固有ハッシュを持ち込まない。pull および push 競合返却時は `normalizeRemotePatientDoc` で v4/v5 正規化と自端末ローカル鍵による再索引を行い、Dexie.js `DXE1` 要件（全索引項目の `required` 化）と異なる端末鍵間・予備機切替（`replicationEpoch`）時の無競合同期を両立している。
 - 実装済みの環境変数は本書「環境変数」の節のとおり。
 
 ## 目的
