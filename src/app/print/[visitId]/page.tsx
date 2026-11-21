@@ -161,8 +161,13 @@ import { PrintHeaderActions } from '../components/PrintHeaderActions';
 import { ClaimLifecyclePanel } from '../components/ClaimLifecyclePanel';
 import { PharmacistCheckPanel } from '../components/PharmacistCheckPanel';
 import { ClaimCheckPanel } from '../components/ClaimCheckPanel';
+import { CopaymentGuidanceBanner } from '../components/CopaymentGuidanceBanner';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
+import {
+  formatSingleLegacyUkeExportAuditMessage,
+  formatSingleOfficialUkeExportAuditMessage
+} from '@/lib/receipt/uke_migration_policy';
 import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
 import {
   type DbKeyEscrowPayload,
@@ -1039,7 +1044,11 @@ export default function PrintPage() {
       () => logAuditAction(
         db,
         'uke_export',
-        `公式レセプト（UKE / RECEIPTY.CYO）エクスポート: 患者「${patientData?.name}」の公式電子レセプト（点数: ${result.totalPoints}点、レコード数: ${result.records.length}行）を出力しました。`,
+        formatSingleOfficialUkeExportAuditMessage({
+          patientName: patientData?.name,
+          totalPoints: result.totalPoints,
+          recordCount: result.records.length
+        }),
         visitData?.patientId,
         patientData?.name
       ),
@@ -1142,7 +1151,11 @@ export default function PrintPage() {
       const auditOk = await logAuditAction(
         db,
         'uke_export',
-        `レセプト（UKE・点検用旧形式）エクスポート: 患者「${patientData?.name}」の電子レセプト（点数: ${totalPoints}点、ファイル: ${fileName}）を出力しました。`,
+        formatSingleLegacyUkeExportAuditMessage({
+          patientName: patientData?.name,
+          totalPoints,
+          fileName
+        }),
         visitData?.patientId,
         patientData?.name
       );
@@ -1875,18 +1888,7 @@ export default function PrintPage() {
 
           <div className="copayment-block" data-testid="official-copayment-block">
             <h4>一部負担金額（窓口で徴収した額）</h4>
-            {copaymentGuidance.hasGuidance && (
-              <div
-                className={`copayment-guidance-banner alert-${copaymentGuidance.alertType}`}
-                data-testid="copayment-guidance-banner"
-              >
-                {copaymentGuidance.items.map((item, idx) => (
-                  <p key={idx} className="copayment-guidance-item">
-                    ⚠️ {item}
-                  </p>
-                ))}
-              </div>
-            )}
+            <CopaymentGuidanceBanner guidance={copaymentGuidance} />
             <p className="copayment-help">
               公式レセプトの HO 第9項目・KO 第7/第9項目です。
               <strong>点数×負担割合からは算出しません。</strong>

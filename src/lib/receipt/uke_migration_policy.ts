@@ -78,3 +78,39 @@ export const UKE_UI_GUIDANCE = {
     legacyButtonTitle: '月次一括UKE出力（点検用・旧形式: RECEIPT_{month}.uke）'
   }
 } as const;
+
+export function formatSingleOfficialUkeExportAuditMessage(params: {
+  patientName?: string;
+  totalPoints: number;
+  recordCount: number;
+}): string {
+  return `公式レセプト（UKE / RECEIPTY.CYO）エクスポート: 患者「${params.patientName}」の公式電子レセプト（点数: ${params.totalPoints}点、レコード数: ${params.recordCount}行）を出力しました。`;
+}
+
+export function formatSingleLegacyUkeExportAuditMessage(params: {
+  patientName?: string;
+  totalPoints: number;
+  fileName: string;
+}): string {
+  return `レセプト（UKE・点検用旧形式）エクスポート: 患者「${params.patientName}」の電子レセプト（点数: ${params.totalPoints}点、ファイル: ${params.fileName}）を出力しました。`;
+}
+
+export function formatMonthlyOfficialUkeExportAuditMessage(params: {
+  officialFileName: string;
+  claimCount: number;
+  totalPoints: number;
+  totalSupplementalRecordCount: number;
+  totalPrescriptionRecordCount: number;
+  totalSplitRecordCount: number;
+  goTotalPoints?: number;
+}): string {
+  return `月次公式UKE出力: ${params.officialFileName} / RECEIPTY.CYO|bundle.fileName / 受付 ${params.claimCount}件 / 合計 ${params.totalPoints}点 / 提出準備確認済み / 集計突合OK (IR加算・情報料・調基 ${params.totalSupplementalRecordCount} / 処方 ${params.totalPrescriptionRecordCount} / 剤 ${params.totalSplitRecordCount} / 請求 ${params.goTotalPoints}点)。`;
+}
+
+export function formatMonthlyLegacyUkeExportAuditMessage(params: {
+  ukeFileName: string;
+  claimCount: number;
+  totalPoints: number;
+}): string {
+  return `月次一括UKE（点検用旧形式）出力: ${params.ukeFileName} / 受付 ${params.claimCount}件 / 合計 ${params.totalPoints}点。`;
+}

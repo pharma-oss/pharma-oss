@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { Patient } from '@/db/types';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
+import {
+  PatientBanner,
+  buildPatientInsuranceInfoPayload
+} from '@/app/emr/components/PatientBanner';
+import { SelectedPatientCard } from '@/app/ocr/components/SelectedPatientCard';
+import { CopaymentGuidanceBanner } from '@/app/print/components/CopaymentGuidanceBanner';
 import {
   createEmptyEditableCopaymentSupport,
   toEditableCopaymentSupport,
@@ -157,45 +166,117 @@ test('patient_copayment_support: validateCopaymentSupportReadiness flags invalid
   assert.ok(codes.includes('copayment_reduction_cert_number_invalid'));
 });
 
-test('patient_copayment_support: PatientBanner modal surfaces structured inputs and preserves data on save', async () => {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
-  const bannerPath = path.resolve(process.cwd(), 'src/app/emr/components/PatientBanner.tsx');
-  const bannerSource = fs.readFileSync(bannerPath, 'utf8');
+test('patient_copayment_support: PatientBanner modal renders structured inputs, banner renders badges, and save payload preserves data', () => {
+  const patientWithCopayment = createSamplePatient({
+    highCostLimitCategory: 'ウ',
+    highCostMultipleOccurrence: true,
+    copaymentCategoryCode: '1',
+    copaymentReduction: {
+      code: '2',
+      certificateNumber: '101'
+    }
+  });
 
-  // 1. 高額療養費・減免の構造化入力フォームがモーダル内に存在すること
-  assert.match(bannerSource, /data-testid="emr-high-cost-editor"/);
-  assert.match(bannerSource, /data-testid="m-high-cost-category"/);
-  assert.match(bannerSource, /data-testid="m-copay-category-code"/);
-  assert.match(bannerSource, /data-testid="m-high-cost-multiple"/);
-  assert.match(bannerSource, /data-testid="emr-reduction-editor"/);
-  assert.match(bannerSource, /data-testid="m-reduction-code"/);
-  assert.match(bannerSource, /data-testid="m-reduction-cert"/);
+  const html = renderMarkupWithReactUseStateMock(
+    () => React.createElement(PatientBanner, {
+      patientAlerts: [],
+      targetVisitId: 'v-copay-banner',
+      onOpenPicking: () => {}
+    }),
+    {
+      componentName: 'PatientBanner',
+      restoreAtCallIndex: 37,
+      minCalls: 38,
+      overrides: {
+        0: { value: patientWithCopayment },
+        7: { value: true }
+      }
+    }
+  );
+  const domHtml = html.replace(/<style[\s\S]*?<\/style>/g, '');
 
-  // 2. 保存処理で fromEditableCopaymentSupport を通してデータ消失を防止していること
-  assert.match(bannerSource, /const copaymentPatch = fromEditableCopaymentSupport\(editCopaymentSupport\);/);
-  assert.match(bannerSource, /\.\.\.copaymentPatch/);
+  // 1. 高額療養費・減免の構造化入力フォームがモーダル内に実描画されること
+  assert.match(domHtml, /data-testid="emr-high-cost-editor"/);
+  assert.match(domHtml, /data-testid="m-high-cost-category"/);
+  assert.match(domHtml, /data-testid="m-copay-category-code"/);
+  assert.match(domHtml, /data-testid="m-high-cost-multiple"/);
+  assert.match(domHtml, /data-testid="emr-reduction-editor"/);
+  assert.match(domHtml, /data-testid="m-reduction-code"/);
+  assert.match(domHtml, /data-testid="m-reduction-cert"/);
 
-  // 3. バナー上に高額療養費・減免のバッジが表示されること
-  assert.match(bannerSource, /data-testid=\{`patient-copay-badge-\$\{idx\}`\}/);
+  // 2. バナー上に高額療養費・減免のバッジが実描画されること
+  assert.match(domHtml, /data-testid="patient-copay-badge-0"/);
+  assert.match(domHtml, /data-testid="patient-copay-badge-1"/);
+  assert.match(domHtml, /data-testid="patient-copay-badge-2"/);
+  assert.ok(domHtml.includes('限度額: 多ウ（多数回）'));
+  assert.ok(domHtml.includes('一部負担区分: 1'));
+  assert.ok(domHtml.includes('減免: 免除'));
+
+  // 3. 保存ペイロード組み立てで高額療養費・減免データが消失せず保持されること
+  const editable = toEditableCopaymentSupport(patientWithCopayment.insuranceInfo);
+  const nextInsuranceInfo = buildPatientInsuranceInfoPayload({
+    provider: '06139999',
+    number: '123456',
+    burdenRatio: '30',
+    insuranceType: '社保',
+    relationship: '本人',
+    validFrom: '2026-04-01',
+    validTo: '2027-03-31',
+    eligibilityCheckedAt: '2026-06-01',
+    eligibilityStatus: 'valid',
+    copaymentSupport: editable
+  });
+  assert.equal(nextInsuranceInfo.highCostLimitCategory, 'ウ');
+  assert.equal(nextInsuranceInfo.highCostMultipleOccurrence, true);
+  assert.equal(nextInsuranceInfo.copaymentCategoryCode, '1');
+  assert.deepEqual(nextInsuranceInfo.copaymentReduction, {
+    code: '2',
+    certificateNumber: '101'
+  });
 });
 
-test('patient_copayment_support: ocr page and print page surface copayment badges and guidance', async () => {
-  const fs = await import('node:fs');
-  const path = await import('node:path');
+test('patient_copayment_support: OCR selected patient card and print copayment guidance banner render badges and warnings', () => {
+  const patient = createSamplePatient({
+    highCostLimitCategory: 'エ',
+    copaymentReduction: {
+      code: '2',
+      certificateNumber: '007'
+    }
+  });
 
-  // 1. 処方受付画面（/ocr）
-  const ocrPath = path.resolve(process.cwd(), 'src/app/ocr/page.tsx');
-  const ocrSource = fs.readFileSync(ocrPath, 'utf8');
-  assert.match(ocrSource, /selectedPatientCopaymentBadges/);
-  assert.match(ocrSource, /data-testid=\{`selected-patient-copay-badge-\$\{idx\}`\}/);
+  // 1. 処方受付画面（/ocr）の選択中患者カード実描画
+  const copaymentBadges = buildHighCostCopaymentBadges(patient.insuranceInfo);
+  const ocrCardHtml = renderToStaticMarkup(
+    React.createElement(SelectedPatientCard, {
+      patient,
+      publicBadges: [],
+      copaymentBadges,
+      receptionAlerts: [],
+      onReselect: () => {}
+    })
+  );
+  assert.match(ocrCardHtml, /data-testid="selected-patient-copay-badge-0"/);
+  assert.match(ocrCardHtml, /data-testid="selected-patient-copay-badge-1"/);
+  assert.ok(ocrCardHtml.includes('限度額: 区エ'));
+  assert.ok(ocrCardHtml.includes('減免: 免除'));
 
-  // 2. 印刷画面（/print/[visitId]）
-  const printPath = path.resolve(process.cwd(), 'src/app/print/[visitId]/page.tsx');
-  const printSource = fs.readFileSync(printPath, 'utf8');
-  assert.match(printSource, /buildVisitCopaymentGuidance/);
-  assert.match(printSource, /data-testid="copayment-guidance-banner"/);
-  assert.match(printSource, /copayment-guidance-item/);
+  // 2. 印刷画面（/print/[visitId]）の一部負担金ガイダンスバナー実描画
+  const guidance = buildVisitCopaymentGuidance(patient, { patientCopayYen: 3000, burdenRatio: 30 });
+  const printBannerHtml = renderToStaticMarkup(
+    React.createElement(CopaymentGuidanceBanner, { guidance })
+  );
+  assert.match(printBannerHtml, /data-testid="copayment-guidance-banner"/);
+  assert.match(printBannerHtml, /class="copayment-guidance-item"/);
+  assert.ok(printBannerHtml.includes('高額療養費限度額適用認定証【区分エ】'));
+  assert.ok(printBannerHtml.includes('窓口徴収額が0円であること'));
+
+  // ガイダンス不要時は描画しないこと
+  const emptyGuidanceHtml = renderToStaticMarkup(
+    React.createElement(CopaymentGuidanceBanner, {
+      guidance: buildVisitCopaymentGuidance(createSamplePatient(), { patientCopayYen: 1500, burdenRatio: 30 })
+    })
+  );
+  assert.equal(emptyGuidanceHtml, '');
 });
 
 test('patient_copayment_support: monthly claim readiness report detects invalid copayment settings', async () => {

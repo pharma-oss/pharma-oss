@@ -1,15 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   categorizeUkeExportAuditType,
   evaluateUkeRetirementReadiness,
+  formatMonthlyLegacyUkeExportAuditMessage,
+  formatMonthlyOfficialUkeExportAuditMessage,
+  formatSingleLegacyUkeExportAuditMessage,
+  formatSingleOfficialUkeExportAuditMessage,
   UKE_UI_GUIDANCE
 } from './uke_migration_policy';
 import { PrintHeaderActions } from '@/app/print/components/PrintHeaderActions';
+import { ClaimWorkbenchSection } from '@/components/dashboard/ClaimWorkbenchSection';
+import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
+import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
+
+const SAMPLE_WORKBENCH_COUNTS: DashboardCounts = {
+  todayReceptionCount: 3,
+  waitingCount: 0,
+  processingCount: 0,
+  reviewCount: 0,
+  completedCount: 3,
+  pickingPendingCount: 0,
+  inventoryShortageCount: 0,
+  claimRiskCount: 0,
+  urgentClaimRiskCount: 0,
+  claimWorkbenchCount: 1,
+  returnedClaimCount: 0,
+  rebillingClaimCount: 1,
+  followUpDueCount: 0,
+  urgentFollowUpCount: 0
+};
+
+const SAMPLE_WORKBENCH_ITEM: DashboardClaimWorkItem = {
+  visitId: 'v-step5a-1',
+  patientId: 'p-step5a-1',
+  name: '請求 テスト',
+  issueDateLabel: '11/1',
+  monthLabel: '11月',
+  status: 'rebilling',
+  statusLabel: '再請求準備',
+  priority: 'normal',
+  priorityLabel: '通常',
+  totalPoints: 1500,
+  prescriptionCount: 1,
+  latestEventLabel: '再請求準備 11/1',
+  actionLabel: '月遅れ/UKE再出力'
+};
 
 test('track C-1 step 4: categorizeUkeExportAuditType distinguishes official from legacy inspection exports', () => {
   // 1. 公式提出用の監査ログ
@@ -72,7 +110,7 @@ test('track C-1 step 4: evaluateUkeRetirementReadiness strictly enforces safe re
   assert.equal(resultReady.blockers.length, 0);
 });
 
-test('track C-1 step 5a: single visit print header promotes official UKE and nests legacy UKE inside details disclosure', () => {
+test('track C-1 step 5a: single visit print header promotes official UKE, nests legacy UKE, and formats distinct audit logs', () => {
   const html = renderToStaticMarkup(
     React.createElement(PrintHeaderActions, {
       canExportUke: true,
@@ -98,34 +136,76 @@ test('track C-1 step 5a: single visit print header promotes official UKE and nes
   assert.ok(html.includes(UKE_UI_GUIDANCE.singleVisit.officialButtonTitle));
   assert.ok(html.includes(UKE_UI_GUIDANCE.singleVisit.legacyButtonTitleReady));
 
-  // 3. 監査ログメッセージが「点検用旧形式」と「公式レセプト（UKE / RECEIPTY.CYO）」で厳密に区別されていること
-  const printPagePath = path.resolve(process.cwd(), 'src/app/print/[visitId]/page.tsx');
-  const printSource = fs.readFileSync(printPagePath, 'utf8');
-  assert.match(printSource, /レセプト（UKE・点検用旧形式）エクスポート:/);
-  assert.match(printSource, /公式レセプト（UKE \/ RECEIPTY\.CYO）エクスポート:/);
+  // 3. 監査ログメッセージが「点検用旧形式」と「公式レセプト（UKE / RECEIPTY.CYO）」で厳密に区別され分類器と一致すること
+  const legacyMessage = formatSingleLegacyUkeExportAuditMessage({
+    patientName: '田中 太郎',
+    totalPoints: 1500,
+    fileName: 'RECEIPT_1.uke'
+  });
+  const officialMessage = formatSingleOfficialUkeExportAuditMessage({
+    patientName: '田中 太郎',
+    totalPoints: 1500,
+    recordCount: 12
+  });
+  assert.match(legacyMessage, /^レセプト（UKE・点検用旧形式）エクスポート:/);
+  assert.match(officialMessage, /^公式レセプト（UKE \/ RECEIPTY\.CYO）エクスポート:/);
+  assert.equal(categorizeUkeExportAuditType(legacyMessage), 'legacy_inspection');
+  assert.equal(categorizeUkeExportAuditType(officialMessage), 'official');
 });
 
-test('track C-1 step 5a: monthly claim workbench promotes official UKE and nests legacy UKE inside details disclosure', () => {
-  const workbenchPath = path.resolve(process.cwd(), 'src/components/dashboard/ClaimWorkbenchSection.tsx');
-  const workbenchSource = fs.readFileSync(workbenchPath, 'utf8');
-
-  // 1. 公式UKEボタンが primary スタイルとして正本強調されていること
-  assert.match(
-    workbenchSource,
-    /className="section-action-button primary"[\s\S]*?data-testid="monthly-claim-official-uke-button"/
+test('track C-1 step 5a: monthly claim workbench renders promoted official UKE, nests legacy UKE in closed details, and formats distinct audit logs', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ClaimWorkbenchSection, {
+      db: null,
+      claimWorkItems: [SAMPLE_WORKBENCH_ITEM],
+      counts: SAMPLE_WORKBENCH_COUNTS,
+      isLoading: false,
+      onOpenTask: () => {},
+      onRefresh: () => {}
+    })
   );
 
-  // 2. 点検用旧形式ボタンが <details> 折りたたみ内に格納されていること
-  assert.match(
-    workbenchSource,
-    /<details[\s\S]*?data-testid="monthly-claim-legacy-uke-disclosure"[\s\S]*?<summary className="legacy-uke-summary">旧形式UKE<\/summary>[\s\S]*?data-testid="monthly-claim-uke-button"[\s\S]*?<\/details>/
+  // 1. 公式UKEボタンが primary スタイルとして前面配置され、title 属性で公式正本が明記されていること
+  const officialBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-official-uke-button"', 'button');
+  assert.ok(officialBtnTag.includes('class="section-action-button primary"'), '公式UKEボタンが primary クラスを持つこと');
+  assert.ok(
+    officialBtnTag.includes(`title="${UKE_UI_GUIDANCE.monthlyClaim.officialButtonTitle}"`),
+    '公式UKEボタンの title が正本ガイダンスと一致すること'
   );
 
-  // 3. 各ボタンの title 属性で公式正本と点検用旧形式が明記されていること
-  assert.match(workbenchSource, new RegExp(UKE_UI_GUIDANCE.monthlyClaim.officialButtonTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(workbenchSource, new RegExp(UKE_UI_GUIDANCE.monthlyClaim.legacyButtonTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  // 2. 点検用旧形式ボタンが閉じた <details> 折りたたみ内に格納され、title 属性で点検用旧形式が明記されていること
+  assert.match(
+    html,
+    /<details class="legacy-uke-details" data-testid="monthly-claim-legacy-uke-disclosure"><summary class="legacy-uke-summary">旧形式UKE<\/summary>[\s\S]*?data-testid="monthly-claim-uke-button"[\s\S]*?<\/details>/
+  );
+  assert.equal(
+    html.includes('data-testid="monthly-claim-legacy-uke-disclosure" open'),
+    false,
+    '月次ワークベンチの旧形式UKE折りたたみは初期状態で閉じていること'
+  );
+  const legacyBtnTag = findOpeningTag(html, 'data-testid="monthly-claim-uke-button"', 'button');
+  assert.ok(
+    legacyBtnTag.includes(`title="${UKE_UI_GUIDANCE.monthlyClaim.legacyButtonTitle}"`),
+    '旧形式UKEボタンの title が点検用ガイダンスと一致すること'
+  );
 
-  // 4. 監査ログが点検用旧形式と公式正本で区別されていること
-  assert.match(workbenchSource, /月次一括UKE（点検用旧形式）出力:/);
-  assert.match(workbenchSource, /月次公式UKE出力: \$\{officialFileName\} \/ RECEIPTY\.CYO/);
+  // 3. 監査ログが点検用旧形式と公式正本で区別され分類器と一致すること
+  const monthlyLegacyMessage = formatMonthlyLegacyUkeExportAuditMessage({
+    ukeFileName: 'RECEIPT_2026-11.uke',
+    claimCount: 12,
+    totalPoints: 18000
+  });
+  const monthlyOfficialMessage = formatMonthlyOfficialUkeExportAuditMessage({
+    officialFileName: 'RECEIPT_2026-11.uke',
+    claimCount: 12,
+    totalPoints: 18000,
+    totalSupplementalRecordCount: 4,
+    totalPrescriptionRecordCount: 12,
+    totalSplitRecordCount: 18,
+    goTotalPoints: 18000
+  });
+  assert.match(monthlyLegacyMessage, /^月次一括UKE（点検用旧形式）出力:/);
+  assert.match(monthlyOfficialMessage, /^月次公式UKE出力: RECEIPT_2026-11\.uke \/ RECEIPTY\.CYO/);
+  assert.equal(categorizeUkeExportAuditType(monthlyLegacyMessage), 'legacy_inspection');
+  assert.equal(categorizeUkeExportAuditType(monthlyOfficialMessage), 'official');
 });

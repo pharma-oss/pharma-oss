@@ -1,46 +1,104 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
+import { DrugInfoPrint } from './components/DrugInfoPrint';
 import { DrugInfoClaimTools } from './components/DrugInfoClaimTools';
+import type { PharmacyInfo, PrintPrescriptionItem } from './types';
 
-test('DrugInfoClaimTools contracts and style encapsulation', () => {
+test('DrugInfoClaimTools render contracts and scoped style encapsulation', () => {
   // 1. コンポーネントが React コンポーネントとして正しくエクスポートされていること
   assert.ok(DrugInfoClaimTools, 'DrugInfoClaimTools should be exported');
   assert.strictEqual(typeof DrugInfoClaimTools, 'object', 'React.memo returns an object component');
 
-  // 2. ソースコードの静的契約検証: DrugInfoPrint からの分離と重複排除
-  const drugInfoPrintSource = readFileSync(new URL('./components/DrugInfoPrint.tsx', import.meta.url), 'utf8');
-  const claimToolsSource = readFileSync(new URL('./components/DrugInfoClaimTools.tsx', import.meta.url), 'utf8');
+  const noopAsync = async () => {};
+  const samplePharmacyInfo: PharmacyInfo = {
+    code: '1312345',
+    name: 'テスト薬局',
+    postalCode: '100-0001',
+    address: '東京都千代田区1-1-1',
+    phone: '03-1234-5678',
+    registrationNumber: '1312345',
+    pharmacistName: '薬剤 太郎'
+  };
 
-  // DrugInfoPrint.tsx は DrugInfoClaimTools を呼び出していること
-  assert.match(drugInfoPrintSource, /<DrugInfoClaimTools\b/);
+  // 2. DrugInfoPrint の実描画出力で DrugInfoClaimTools が組み込まれており、親自身の <style> にはツール用セレクタが無いこと
+  const parentHtml = renderToStaticMarkup(
+    React.createElement(DrugInfoPrint, {
+      patientData: { name: '患者 太郎' },
+      visitData: { institutionName: 'テスト医院' },
+      prescriptionItems: [],
+      pharmacyInfo: samplePharmacyInfo,
+      pharmacyAddressLine: '〒100-0001 東京都千代田区1-1-1',
+      receiptRunId: 'RUN-2',
+      patientBirthDateStr: '1980/01/01',
+      dispensingDateStr: '2026/06/01',
+      prescriptionDateStr: '2026/06/01',
+      medicationInfoFallbackCount: 0,
+      getMedicationInfoContent: () => ({
+        drugName: '',
+        source: 'safe_fallback' as const,
+        sourceRevisionDate: '',
+        sideEffectText: '',
+        usageCautionText: '',
+        officialSearchUrl: ''
+      }),
+      canEditBilling: true,
+      remarks: {},
+      renderIdentityMark: () => React.createElement('span', null, 'M'),
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      dispensingDateForPrice: '2026-06-01',
+      drugPriceChoicesByItemId: {},
+      drugPriceWarningByItemId: {},
+      handleDrugPriceOverrideChange: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+  const parentDom = parentHtml.replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.match(parentDom, /class="drug-info-claim-tools no-print"/);
 
-  // 移動対象5セレクタが DrugInfoPrint.tsx から完全に削除（移動）されていること
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-claim-tools\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-claim-row\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-control-panel\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.input-agent-group\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.input-receipt-remark\s*\{/);
+  const parentStyles = parentHtml.match(/<style[^>]*>[\s\S]*?<\/style>/g) ?? [];
+  assert.ok(parentStyles.length >= 2, 'DrugInfoPrint should render child style and its own style');
+  const drugInfoPrintStyle = parentStyles[parentStyles.length - 1];
 
-  // 3. 移動対象5セレクタが DrugInfoClaimTools.tsx に漏れなく定義されていること
-  assert.match(claimToolsSource, /\.drug-info-claim-tools\s*\{/);
-  assert.match(claimToolsSource, /\.drug-info-claim-row\s*\{/);
-  assert.match(claimToolsSource, /\.drug-info-control-panel\s*\{/);
-  assert.match(claimToolsSource, /\.input-agent-group\s*\{/);
-  assert.match(claimToolsSource, /\.input-receipt-remark\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-claim-tools\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-claim-row\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-control-panel\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.input-agent-group\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.input-receipt-remark\s*\{/);
 
-  // 4. 定義値の厳格検証 (print.css にない 80px と 120px の維持)
-  assert.match(claimToolsSource, /\.input-agent-group\s*\{[^}]*width:\s*80px/);
-  assert.match(claimToolsSource, /\.input-receipt-remark\s*\{[^}]*width:\s*120px/);
+  // 3. DrugInfoClaimTools 単体の実描画出力で 5 セレクタ・幅定義・印刷非表示が保持されていること
+  const claimToolsHtml = renderToStaticMarkup(
+    React.createElement(DrugInfoClaimTools, {
+      prescriptionItems: [],
+      canEditBilling: true,
+      remarks: {},
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync,
+      handleReceiptRemarkChange: () => {}
+    })
+  );
+  const claimToolsStyle = claimToolsHtml.match(/<style[^>]*>[\s\S]*?<\/style>/)?.[0] ?? '';
 
-  // 5. 印刷時非表示（@media print）が含まれていること
-  assert.match(claimToolsSource, /@media\s+print\s*\{[^}]*\.no-print\s*\{[^}]*display:\s*none\s*!important/);
+  assert.match(claimToolsStyle, /\.drug-info-claim-tools\s*\{/);
+  assert.match(claimToolsStyle, /\.drug-info-claim-row\s*\{/);
+  assert.match(claimToolsStyle, /\.drug-info-control-panel\s*\{/);
+  assert.match(claimToolsStyle, /\.input-agent-group\s*\{/);
+  assert.match(claimToolsStyle, /\.input-receipt-remark\s*\{/);
+  assert.match(claimToolsStyle, /\.input-agent-group\s*\{[^}]*width:\s*80px/);
+  assert.match(claimToolsStyle, /\.input-receipt-remark\s*\{[^}]*width:\s*120px/);
+  assert.match(claimToolsStyle, /@media\s+print\s*\{[^}]*\.no-print\s*\{[^}]*display:\s*none\s*!important/);
 });
-
-import { renderToStaticMarkup } from 'react-dom/server';
-import type { PrintPrescriptionItem } from './types';
 
 test('DrugInfoClaimTools true HTML rendering and input controls', () => {
   const mockItems: PrintPrescriptionItem[] = [

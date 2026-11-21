@@ -61,6 +61,11 @@ import {
 } from '@/lib/dashboard_helpers';
 import { EmptyState } from './DashboardCards';
 import { ClaimWorkbenchRow } from './DashboardRows';
+import {
+  UKE_UI_GUIDANCE,
+  formatMonthlyLegacyUkeExportAuditMessage,
+  formatMonthlyOfficialUkeExportAuditMessage
+} from '@/lib/receipt/uke_migration_policy';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
 import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient } from '@/db/types';
 import { calculateDispensingFees } from '@/lib/calculator';
@@ -439,7 +444,15 @@ export function ClaimWorkbenchSection({
       const exportAuditOk = await logAuditAction(
         db,
         'uke_export',
-        `月次公式UKE出力: ${officialFileName} / RECEIPTY.CYO|bundle.fileName / 受付 ${cases.length}件 / 合計 ${bundle.totalPoints}点 / 提出準備確認済み / 集計突合OK (IR加算・情報料・調基 ${reconciliation.totalSupplementalRecordCount} / 処方 ${reconciliation.totalPrescriptionRecordCount} / 剤 ${reconciliation.totalSplitRecordCount} / 請求 ${reconciliation.goTotalPoints}点)。`
+        formatMonthlyOfficialUkeExportAuditMessage({
+          officialFileName,
+          claimCount: cases.length,
+          totalPoints: bundle.totalPoints,
+          totalSupplementalRecordCount: reconciliation.totalSupplementalRecordCount,
+          totalPrescriptionRecordCount: reconciliation.totalPrescriptionRecordCount,
+          totalSplitRecordCount: reconciliation.totalSplitRecordCount,
+          goTotalPoints: reconciliation.goTotalPoints
+        })
       );
       if (!exportAuditOk) {
         throw new Error('月次公式UKE出力の監査ログ記録に失敗したため、出力を中止しました。');
@@ -561,7 +574,11 @@ export function ClaimWorkbenchSection({
       const exportAuditOk = await logAuditAction(
         db,
         'uke_export',
-        `月次一括UKE（点検用旧形式）出力: ${ukeFileName} / 受付 ${cases.length}件 / 合計 ${bundle.totalPoints}点。`
+        formatMonthlyLegacyUkeExportAuditMessage({
+          ukeFileName,
+          claimCount: cases.length,
+          totalPoints: bundle.totalPoints
+        })
       );
       if (!exportAuditOk) {
         throw new Error('月次一括UKE出力の監査ログ記録に失敗したため、出力を中止しました。');
@@ -773,7 +790,7 @@ export function ClaimWorkbenchSection({
             type="button"
             className="section-action-button primary"
             data-testid="monthly-claim-official-uke-button"
-            title="公式提出用UKE出力（正本: RECEIPTY.CYO / 支払基金・国保連仕様 / 突合点検付き）"
+            title={UKE_UI_GUIDANCE.monthlyClaim.officialButtonTitle}
             onClick={handleDownloadClaimWorkbenchOfficialUke}
             disabled={!hasExportableClaimWorkItems || isExportingOfficialUke || isExportingUke || isCheckingOfficialReadiness || isCheckingRules}
           >
@@ -790,7 +807,7 @@ export function ClaimWorkbenchSection({
                 type="button"
                 className="section-action-button"
                 data-testid="monthly-claim-uke-button"
-                title="月次一括UKE出力（点検用・旧形式: RECEIPT_{month}.uke）"
+                title={UKE_UI_GUIDANCE.monthlyClaim.legacyButtonTitle}
                 onClick={handleDownloadClaimWorkbenchUke}
                 disabled={!hasExportableClaimWorkItems || isExportingUke || isExportingOfficialUke || isCheckingOfficialReadiness || isCheckingRules}
               >

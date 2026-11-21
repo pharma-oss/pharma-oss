@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { findOpeningTag, listDisabledOpeningTags } from '@/lib/test_support/html_disabled_tags';
+import { DrugInfoPrint } from './components/DrugInfoPrint';
 import {
   DrugInfoItemCard,
   hasPrescriptionChange,
@@ -10,6 +11,9 @@ import {
   formatUsageText,
   formatMedicationSourceText
 } from './components/DrugInfoItemCard';
+import type { PharmacyInfo, PrintPrescriptionItem } from './types';
+import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
+import type { DrugPriceRevisionChoice } from '@/lib/drug_price_history';
 
 test('DrugInfoItemCard exports and component type', () => {
   assert.ok(DrugInfoItemCard, 'DrugInfoItemCard should be exported');
@@ -70,68 +74,177 @@ test('DrugInfoItemCard pure functions: formatMedicationSourceText', () => {
   );
 });
 
-test('DrugInfoItemCard static contract and style relocation', () => {
-  const drugInfoPrintSource = readFileSync(new URL('./components/DrugInfoPrint.tsx', import.meta.url), 'utf8');
-  const itemCardSource = readFileSync(new URL('./components/DrugInfoItemCard.tsx', import.meta.url), 'utf8');
+test('DrugInfoItemCard render contract, parent/child composition, and scoped style relocation', () => {
+  const noopAsync = async () => {};
+  const samplePharmacyInfo: PharmacyInfo = {
+    code: '1312345',
+    name: 'テスト薬局',
+    postalCode: '100-0001',
+    address: '東京都千代田区1-1-1',
+    phone: '03-1234-5678',
+    registrationNumber: '1312345',
+    pharmacistName: '薬剤 太郎'
+  };
+  const sampleItem: PrintPrescriptionItem = {
+    itemId: 'item-contract-1',
+    visitId: 'visit-contract',
+    drugId: '620000001',
+    dispensedDrugCode: '620000001',
+    drugName: 'アムロジピン錠5mg',
+    amount: 1,
+    days: 14,
+    usage: '1日1回朝食後',
+    rpNumber: 1,
+    dosageCategory: 'internal',
+    drugPrice: 10.1,
+    claimDrugFee: true
+  } as unknown as PrintPrescriptionItem;
+  const sampleMedicationInfo = {
+    drugName: 'アムロジピン錠5mg',
+    source: 'approved_template' as const,
+    sourceRevisionDate: '2026-04-01',
+    sideEffectText: 'めまい・ふらつきに注意',
+    usageCautionText: '毎日決まった時間に服用してください',
+    officialSearchUrl: 'https://www.pmda.go.jp/PmdaSearch/iyakuSearch/',
+    // 禁止項目が誤って描画されないことを確認するためのダミー拡張プロパティ
+    effectText: 'FORBIDDEN_EFFECT_TEXT',
+    interactionText: 'FORBIDDEN_INTERACTION_TEXT',
+    storageText: 'FORBIDDEN_STORAGE_TEXT'
+  } as MedicationInfoPrintContent;
 
-  // DrugInfoPrint.tsx は DrugInfoItemCard を呼び出していること
-  assert.match(drugInfoPrintSource, /<DrugInfoItemCard\b/);
+  // 1. 親 DrugInfoPrint は処方アイテムあり時に DrugInfoItemCard を実描画する
+  const parentWithItemHtml = renderToStaticMarkup(
+    React.createElement(DrugInfoPrint, {
+      patientData: { name: '患者 花子' },
+      visitData: { institutionName: 'テスト医院' },
+      prescriptionItems: [sampleItem],
+      pharmacyInfo: samplePharmacyInfo,
+      pharmacyAddressLine: '〒100-0001 東京都千代田区1-1-1',
+      receiptRunId: 'RUN-1',
+      patientBirthDateStr: '1980/01/01',
+      dispensingDateStr: '2026/06/01',
+      prescriptionDateStr: '2026/06/01',
+      medicationInfoFallbackCount: 0,
+      getMedicationInfoContent: () => sampleMedicationInfo,
+      canEditBilling: true,
+      remarks: {},
+      renderIdentityMark: () => React.createElement('span', { className: 'test-mark' }, 'M'),
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      dispensingDateForPrice: '2026-06-01',
+      drugPriceChoicesByItemId: {},
+      drugPriceWarningByItemId: {},
+      handleDrugPriceOverrideChange: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+  const parentWithItemDom = parentWithItemHtml.replace(/<style[\s\S]*?<\/style>/g, '');
+  assert.match(parentWithItemDom, /class="drug-info-row drug-info-card\b/);
 
-  // カード専用セレクタが DrugInfoPrint.tsx から移動（削除）されていること
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-row\.drug-info-card\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-appearance-cell/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-shape\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-shape\.tablet/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-shape\.powder/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-shape\.liquid/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-shape\.ointment/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-counseling-grid\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-safety-grid\s*\{/);
-  assert.doesNotMatch(drugInfoPrintSource, /\.drug-info-source-line\s*\{/);
+  // 2. 親 DrugInfoPrint 自身の <style>（アイテム0件描画の末尾 style）からカード専用セレクタが除去され、文書枠組みスタイルを維持していること
+  const parentEmptyHtml = renderToStaticMarkup(
+    React.createElement(DrugInfoPrint, {
+      patientData: { name: '患者 花子' },
+      visitData: { institutionName: 'テスト医院' },
+      prescriptionItems: [],
+      pharmacyInfo: samplePharmacyInfo,
+      pharmacyAddressLine: '〒100-0001 東京都千代田区1-1-1',
+      receiptRunId: 'RUN-1',
+      patientBirthDateStr: '1980/01/01',
+      dispensingDateStr: '2026/06/01',
+      prescriptionDateStr: '2026/06/01',
+      medicationInfoFallbackCount: 0,
+      getMedicationInfoContent: () => sampleMedicationInfo,
+      canEditBilling: true,
+      remarks: {},
+      renderIdentityMark: () => React.createElement('span', { className: 'test-mark' }, 'M'),
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      dispensingDateForPrice: '2026-06-01',
+      drugPriceChoicesByItemId: {},
+      drugPriceWarningByItemId: {},
+      handleDrugPriceOverrideChange: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+  const parentStyles = parentEmptyHtml.match(/<style[^>]*>[\s\S]*?<\/style>/g) ?? [];
+  assert.ok(parentStyles.length >= 2, 'DrugInfoPrint should emit child claim tools style and its own parent style');
+  const drugInfoPrintStyle = parentStyles[parentStyles.length - 1];
 
-  // カード専用セレクタが DrugInfoItemCard.tsx に漏れなく定義されていること
-  assert.match(itemCardSource, /\.drug-info-row\.drug-info-card\s*\{/);
-  assert.match(itemCardSource, /\.drug-appearance-cell/);
-  assert.match(itemCardSource, /\.drug-shape\s*\{/);
-  assert.match(itemCardSource, /\.drug-shape\.tablet\s*\{/);
-  assert.match(itemCardSource, /\.drug-shape\.powder\s*\{/);
-  assert.match(itemCardSource, /\.drug-shape\.liquid\s*\{/);
-  assert.match(itemCardSource, /\.drug-shape\.ointment\s*\{/);
-  assert.match(itemCardSource, /\.drug-info-counseling-grid\s*\{/);
-  assert.match(itemCardSource, /\.drug-info-safety-grid\s*\{/);
-  assert.match(itemCardSource, /\.drug-info-source-line\s*\{/);
-  assert.match(itemCardSource, /\.paper-embedded-control\s*\{[^}]*display:\s*none/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-row\.drug-info-card\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-appearance-cell/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-shape\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-shape\.tablet/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-shape\.powder/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-shape\.liquid/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-shape\.ointment/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-counseling-grid\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-safety-grid\s*\{/);
+  assert.doesNotMatch(drugInfoPrintStyle, /\.drug-info-source-line\s*\{/);
 
-  // 親 DrugInfoPrint.tsx が文書枠組みスタイルを維持していること
-  assert.match(drugInfoPrintSource, /\.yakujo-doc\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-doc\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-titlebar\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-patient-line\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-list\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-bottom-note\s*\{/);
-  assert.match(drugInfoPrintSource, /\.drug-info-footer\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.yakujo-doc\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-doc\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-titlebar\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-patient-line\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-list\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-bottom-note\s*\{/);
+  assert.match(drugInfoPrintStyle, /\.drug-info-footer\s*\{/);
 
-  // PrintLayoutRegression で要求される契約キーワードが存在すること
-  assert.match(itemCardSource, /参照版日/);
-  assert.match(itemCardSource, /PMDAで公式情報を確認/);
-  assert.match(itemCardSource, /副作用・相談目安/);
-  assert.match(itemCardSource, /使用上の注意/);
-  assert.match(itemCardSource, /medicationInfo\.sideEffectText/);
-  assert.match(itemCardSource, /medicationInfo\.usageCautionText/);
+  // 3. DrugInfoItemCard 単体の実描画出力でカード専用スタイル・必須文言・禁止要素不在を検証
+  const cardHtml = renderToStaticMarkup(
+    React.createElement(DrugInfoItemCard, {
+      item: sampleItem,
+      idx: 0,
+      medicationInfo: sampleMedicationInfo,
+      canEditBilling: true,
+      remarks: {},
+      handleToggleIppoka: noopAsync,
+      handleToggleCrushed: noopAsync,
+      handleItemClaimToggle: noopAsync,
+      handleTokkanChange: noopAsync,
+      handleDrugPriceOverrideChange: noopAsync,
+      handleReceiptRemarkChange: () => {},
+      handleBillingAgentOverrideLocalChange: () => {},
+      persistBillingAgentOverride: noopAsync
+    })
+  );
+  const cardStyle = cardHtml.match(/<style[^>]*>[\s\S]*?<\/style>/)?.[0] ?? '';
+  const cardDom = cardHtml.replace(/<style[\s\S]*?<\/style>/g, '');
 
-  // 禁止キーワードが含まれていないこと
-  assert.doesNotMatch(itemCardSource, /identity-copy/);
-  assert.doesNotMatch(itemCardSource, /shiori/i);
-  assert.doesNotMatch(itemCardSource, /medicationInfo\.effectText/);
-  assert.doesNotMatch(itemCardSource, /medicationInfo\.interactionText/);
-  assert.doesNotMatch(itemCardSource, /medicationInfo\.storageText/);
-  assert.doesNotMatch(itemCardSource, /drug-info-message-box/);
+  assert.match(cardStyle, /\.drug-info-row\.drug-info-card\s*\{/);
+  assert.match(cardStyle, /\.drug-appearance-cell/);
+  assert.match(cardStyle, /\.drug-shape\s*\{/);
+  assert.match(cardStyle, /\.drug-shape\.tablet\s*\{/);
+  assert.match(cardStyle, /\.drug-shape\.powder\s*\{/);
+  assert.match(cardStyle, /\.drug-shape\.liquid\s*\{/);
+  assert.match(cardStyle, /\.drug-shape\.ointment\s*\{/);
+  assert.match(cardStyle, /\.drug-info-counseling-grid\s*\{/);
+  assert.match(cardStyle, /\.drug-info-safety-grid\s*\{/);
+  assert.match(cardStyle, /\.drug-info-source-line\s*\{/);
+  assert.match(cardStyle, /\.paper-embedded-control\s*\{[^}]*display:\s*none/);
+
+  assert.match(cardDom, /参照版日/);
+  assert.match(cardDom, /PMDAで公式情報を確認/);
+  assert.match(cardDom, /副作用・相談目安/);
+  assert.match(cardDom, /使用上の注意/);
+  assert.ok(cardDom.includes('めまい・ふらつきに注意'));
+  assert.ok(cardDom.includes('毎日決まった時間に服用してください'));
+
+  assert.doesNotMatch(cardHtml, /identity-copy/);
+  assert.doesNotMatch(cardHtml, /shiori/i);
+  assert.doesNotMatch(cardDom, /FORBIDDEN_EFFECT_TEXT/);
+  assert.doesNotMatch(cardDom, /FORBIDDEN_INTERACTION_TEXT/);
+  assert.doesNotMatch(cardDom, /FORBIDDEN_STORAGE_TEXT/);
+  assert.doesNotMatch(cardHtml, /drug-info-message-box/);
 });
-
-import { renderToStaticMarkup } from 'react-dom/server';
-import type { PrintPrescriptionItem } from './types';
-import type { MedicationInfoPrintContent } from '@/lib/patient_medication_info';
-import type { DrugPriceRevisionChoice } from '@/lib/drug_price_history';
 
 test('DrugInfoItemCard true HTML rendering with approved template and brand/generic change', () => {
   const mockItemWithSubstitution: PrintPrescriptionItem = {

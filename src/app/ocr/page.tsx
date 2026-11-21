@@ -53,6 +53,7 @@ import { buildHighCostCopaymentBadges } from '@/lib/patient_copayment_support';
 import DrugSearchModal from './components/DrugSearchModal';
 import PrescriptionQrReader from './components/PrescriptionQrReader';
 import { PatientRegistrationModal } from './components/PatientRegistrationModal';
+import { SelectedPatientCard } from './components/SelectedPatientCard';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 import type { Prescription, PrescriptionFieldValue } from './types';
 import { groupPrescriptionsByRp } from './types';
@@ -1735,66 +1736,13 @@ export default function OcrPage() {
                       </div>
                     )}
                     {selectedPatient && (
-                      <div className="selected-patient-card" data-testid="selected-patient-card">
-                        <div className="selected-patient-header">
-                          <div className="selected-patient-title-line">
-                            <span className="selected-patient-badge">選択中患者</span>
-                            <strong className="selected-patient-name">{selectedPatient.name}</strong>
-                            <span className="selected-patient-birth">（{selectedPatient.birthDate}）</span>
-                            <span className="selected-patient-insurance">
-                              保険者番号: {pickReceptionInsuranceNumber(selectedPatient.insuranceInfo) || '未登録'}
-                            </span>
-                            <button
-                              type="button"
-                              className="btn-secondary selected-patient-reselect"
-                              onClick={clearSelectedPatient}
-                              data-testid="reselect-patient-button"
-                            >
-                              選び直す
-                            </button>
-                          </div>
-                          {(selectedPatientPublicBadges.length > 0 || selectedPatientCopaymentBadges.length > 0) && (
-                            <div className="selected-patient-public-badges" data-testid="selected-patient-public-badges">
-                              {selectedPatientPublicBadges.map((badge) => (
-                                <span
-                                  key={`selected-pub-badge-${badge.index}`}
-                                  className={`selected-pub-badge ${badge.hasError ? 'error' : badge.hasWarning ? 'warning' : 'normal'}`}
-                                  title={badge.warningMessage || `${badge.label} (負担者: ${badge.provider} / 受給者: ${badge.recipient})`}
-                                >
-                                  公費{badge.index}: {badge.label}
-                                  {badge.hasError && '【要確認】'}
-                                  {badge.hasWarning && '【期限注意】'}
-                                </span>
-                              ))}
-                              {selectedPatientCopaymentBadges.map((badge, idx) => (
-                                <span
-                                  key={`selected-copay-badge-${idx}`}
-                                  className={`selected-pub-badge ${badge.severity === 'orange' ? 'warning' : badge.severity === 'red' ? 'error' : 'normal'}`}
-                                  title={badge.title}
-                                  data-testid={`selected-patient-copay-badge-${idx}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {selectedPatientReceptionAlerts.length > 0 && (
-                          <div className="selected-patient-alerts" data-testid="selected-patient-alerts">
-                            {selectedPatientReceptionAlerts.map((issue) => (
-                              <div
-                                key={issue.code}
-                                className={`selected-patient-alert-item ${issue.severity}`}
-                              >
-                                <AlertTriangle size={13} aria-hidden="true" />
-                                <span className="alert-item-title">{issue.title}:</span>
-                                <span className="alert-item-message">{issue.message}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <SelectedPatientCard
+                        patient={selectedPatient}
+                        publicBadges={selectedPatientPublicBadges}
+                        copaymentBadges={selectedPatientCopaymentBadges}
+                        receptionAlerts={selectedPatientReceptionAlerts}
+                        onReselect={clearSelectedPatient}
+                      />
                     )}
                     {(isLoadingPatientMergeReview || patientMergeReview || patientMergeMessage) && (
                       <div className="patient-merge-review">

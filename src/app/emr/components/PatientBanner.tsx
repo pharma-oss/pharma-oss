@@ -136,6 +136,37 @@ export async function executePatientInsuranceSave(handlers: PatientInsuranceSave
   }
 }
 
+export interface PatientInsuranceInfoFormInput {
+  provider: string;
+  number: string;
+  burdenRatio: string | number;
+  insuranceType: string;
+  relationship: string;
+  validFrom: string;
+  validTo: string;
+  eligibilityCheckedAt: string;
+  eligibilityStatus: InsuranceEligibilityStatus;
+  copaymentSupport: EditableCopaymentSupport;
+}
+
+export function buildPatientInsuranceInfoPayload(
+  input: PatientInsuranceInfoFormInput
+): NonNullable<Patient['insuranceInfo']> {
+  const copaymentPatch = fromEditableCopaymentSupport(input.copaymentSupport);
+  return {
+    provider: input.provider,
+    number: input.number,
+    burdenRatio: Number(input.burdenRatio),
+    insuranceType: input.insuranceType,
+    relationship: input.relationship,
+    validFrom: input.validFrom || undefined,
+    validTo: input.validTo || undefined,
+    eligibilityCheckedAt: input.eligibilityCheckedAt || undefined,
+    eligibilityStatus: input.eligibilityStatus,
+    ...copaymentPatch
+  };
+}
+
 export interface PatientBannerDbLike {
   visits: {
     findOne: (id: string) => { exec: () => Promise<{ patientId: string } | null> };
@@ -444,20 +475,18 @@ export const PatientBanner = React.memo(function PatientBanner({
     setIsSavingInsurance(true);
     try {
       const publicInsurances = toPublicInsurances(editPublicInsurances);
-      const copaymentPatch = fromEditableCopaymentSupport(editCopaymentSupport);
-
-      const nextInsuranceInfo = {
+      const nextInsuranceInfo = buildPatientInsuranceInfoPayload({
         provider: editProvider,
         number: editNumber,
-        burdenRatio: Number(editBurden),
+        burdenRatio: editBurden,
         insuranceType: editType,
         relationship: editRel,
-        validFrom: editValidFrom || undefined,
-        validTo: editValidTo || undefined,
-        eligibilityCheckedAt: editEligibilityCheckedAt || undefined,
+        validFrom: editValidFrom,
+        validTo: editValidTo,
+        eligibilityCheckedAt: editEligibilityCheckedAt,
         eligibilityStatus: editEligibilityStatus,
-        ...copaymentPatch
-      };
+        copaymentSupport: editCopaymentSupport
+      });
       const now = new Date().toISOString();
       const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
         ? {

@@ -10,7 +10,9 @@ import {
   luhnCheckDigit,
   parseReceiptBarcodePayload
 } from './receipt_barcode.ts';
-import { readFileSync } from 'node:fs';
+import React from 'react';
+import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_state_mock';
+import { PatientBanner } from '@/app/emr/components/PatientBanner';
 import { isCode128Printable, layoutCode128B } from './code128.ts';
 
 // ---- チェックデジット (Luhn / mod 10) ----
@@ -237,8 +239,32 @@ test('a public-expense registration does not change the category of a patient wh
 });
 
 test('every 保険種別 the patient editor offers has a defined barcode category, and 自費 is one of them', () => {
-  const source = readFileSync(new URL('../app/emr/components/PatientBanner.tsx', import.meta.url), 'utf8');
-  const select = source.match(/<select id="m-ins-type"[\s\S]*?<\/select>/)?.[0] ?? '';
+  const html = renderMarkupWithReactUseStateMock(
+    () => React.createElement(PatientBanner, {
+      patientAlerts: [],
+      targetVisitId: 'v-barcode-ins-types',
+      onOpenPicking: () => {}
+    }),
+    {
+      componentName: 'PatientBanner',
+      restoreAtCallIndex: 37,
+      minCalls: 38,
+      overrides: {
+        0: {
+          value: {
+            patientId: 'pt_barcode_ins_types',
+            name: 'テスト 太郎',
+            kana: 'テスト タロウ',
+            birthDate: '1980-01-01',
+            insuranceInfo: { insuranceType: '社保', burdenRatio: 30 }
+          }
+        },
+        7: { value: true }
+      }
+    }
+  );
+  const select = html.match(/<select[^>]*id="m-ins-type"[^>]*>[\s\S]*?<\/select>/)?.[0] ?? '';
+  assert.ok(select.length > 0, 'PatientBanner edit modal must render <select id="m-ins-type">');
   const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
   assert.deepStrictEqual(values, ['社保', '国保', '後期高齢', '自費']);
   const categories = values.map((value) => {
