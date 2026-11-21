@@ -197,7 +197,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 14 / `as any` 3） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
 | CI 相当 E2E 4 本 | `npm run test:e2e:sync`・`onboarding`・`return-correction`・`print-layout` | すべて通過（2026-11-21 `252f7dc` 実機 Chrome 検証：`sync` 全項通過、`onboarding` `skipped: []`、`return-correction` 3 ターゲット通過、`print-layout` 11 帳票キャプチャ確認） |
-| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | **2026-11-20 は未実行**（下の 2026-10-02 の記録のまま） |
+| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 通過（2026-11-21 実機 Chrome 検証：`/ocr`・`/emr`・`/print/[visitId]`・`/inventory` 各 1280/768/375px オーバーフロー 0px、Tab 操作・公式 UKE モーダル起動＆Escape 閉鎖通過、`pageErrors: []`、14 枚保存） |
 
 以下の段落は 2026-10-02 の記録。`npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボード、薬歴画面（/emr）、処方受付画面（/ocr）、印刷・調剤録画面（/print/[visitId]）、在庫管理・発注画面（/inventory）は幅1280 / 768 / 375pxの実ブラウザ表示と主要操作を通しドリルで確認した。
 

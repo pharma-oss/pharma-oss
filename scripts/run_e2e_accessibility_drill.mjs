@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -8,13 +8,15 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 
-const port = 3480;
-const baseUrl = `http://127.0.0.1:${port}`;
-
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/30ea8a4b-6e84-41f1-b254-cb9de74708a4/.tempmediaStorage';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'accessibility-e2e-drill');
+const port = Number(process.env.YAKUREKI_E2E_PORT || 3480);
+const externalBaseUrl = process.env.YAKUREKI_E2E_BASE_URL || '';
+const baseUrl = externalBaseUrl || `http://127.0.0.1:${port}`;
+const artifactDir = process.env.YAKUREKI_E2E_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'accessibility-e2e-drill');
 
 function findChromePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
   const commonPaths = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
@@ -23,7 +25,7 @@ function findChromePath() {
   for (const p of commonPaths) {
     if (fs.existsSync(p)) return p;
   }
-  throw new Error('Chrome binary not found on macOS');
+  return undefined;
 }
 
 async function wait(ms) {
@@ -31,7 +33,7 @@ async function wait(ms) {
 }
 
 function startServer(p) {
-  const child = spawn(NEXT_BIN, ['start', '-p', String(p)], {
+  const child = spawn(NEXT_BIN, ['start', '-H', '127.0.0.1', '-p', String(p)], {
     env: { ...process.env, PORT: String(p) },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true
@@ -60,7 +62,7 @@ async function stopServer(server) {
 async function waitForServerReady(url) {
   for (let i = 0; i < 40; i++) {
     try {
-      const res = await fetch(`${url}/api/sync/config`);
+      const res = await fetch(`${url}/app`);
       if (res.ok) return true;
     } catch {}
     await wait(1000);
@@ -83,14 +85,16 @@ async function checkOverflow(page, expectedWidth) {
 }
 
 async function run() {
-  await mkdir(localArtifactDir, { recursive: true });
   await mkdir(artifactDir, { recursive: true });
 
   const results = {
     timestamp: new Date().toISOString(),
+    baseUrl,
+    artifactDir,
     viewports: [1280, 768, 375],
     screens: {},
     keyboardFlow: {},
+    pageErrors: [],
     summary: { passed: true, overflowErrors: 0, keyboardErrors: 0 }
   };
 
@@ -98,19 +102,28 @@ async function run() {
   let browser;
 
   try {
-    console.log('[E2E Drill] Starting Next.js server on port', port);
-    server = startServer(port);
-    await waitForServerReady(baseUrl);
-    console.log('[E2E Drill] Server ready!');
+    if (!externalBaseUrl) {
+      console.log('[E2E Drill] Starting Next.js server on 127.0.0.1:', port);
+      server = startServer(port);
+      await waitForServerReady(baseUrl);
+      console.log('[E2E Drill] Server ready!');
+    } else {
+      console.log('[E2E Drill] Using external server:', baseUrl);
+      await waitForServerReady(baseUrl);
+    }
 
+    const executablePath = findChromePath();
     browser = await puppeteer.launch({
-      executablePath: findChromePath(),
+      ...(executablePath ? { executablePath } : {}),
       headless: 'new',
       args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=ja-JP']
     });
 
     const page = await browser.newPage();
-    page.on('pageerror', err => console.error('[Page Error]:', err.message));
+    page.on('pageerror', (err) => {
+      console.error('[Page Error]:', err.message);
+      results.pageErrors.push(err.message);
+    });
 
     // Suppress tutorial modals and pre-populate onboarding
     await page.evaluateOnNewDocument(() => {
@@ -123,34 +136,38 @@ async function run() {
       localStorage.setItem('pharma-oss:first-time-modal-dismissed', 'true');
     });
 
-    // 0. Seed Demo Data at Root and Obtain Valid visitId
-    console.log('[E2E Drill] Seeding demo data at / and obtaining valid visitId...');
+    // 0. Seed Demo Data at /app and Obtain Valid visitId
+    console.log('[E2E Drill] Seeding demo data at /app and obtaining valid visitId...');
     await page.setViewport({ width: 1280, height: 900 });
-    await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle2' });
-    await wait(2000);
+    await page.goto(`${baseUrl}/app`, { waitUntil: 'networkidle2' });
 
-    const demoStartClicked = await page.evaluate(() => {
-      const demoBtn = document.querySelector('button[data-testid="pre-login-tour-start-guest-demo"]') ||
-                      document.querySelector('.btn-resume-demo');
+    const demoBtnSelector = 'button[data-testid="guest-demo-start"], button[data-testid="pre-login-tour-start-guest-demo"], .btn-resume-demo';
+    await page.waitForSelector(demoBtnSelector, { timeout: 20000 });
+    const demoStartClicked = await page.evaluate((selector) => {
+      const demoBtn = document.querySelector(selector);
       if (demoBtn) {
         demoBtn.click();
         return true;
       }
       return false;
-    });
+    }, demoBtnSelector);
     console.log('[E2E Drill] Demo start clicked:', demoStartClicked);
+    if (!demoStartClicked) {
+      throw new Error('Guest demo start button could not be clicked on /app');
+    }
 
     // Wait for redirect to /emr?visitId=...
-    await wait(4000);
+    await page.waitForFunction(
+      () => window.location.pathname.startsWith('/emr') && new URLSearchParams(window.location.search).has('visitId'),
+      { timeout: 25000 }
+    );
     const redirectUrl = page.url();
     console.log('[E2E Drill] Current URL after demo start:', redirectUrl);
 
-    let visitId = 'v_demo_round1';
-    try {
-      const urlObj = new URL(redirectUrl);
-      const extractedId = urlObj.searchParams.get('visitId');
-      if (extractedId) visitId = extractedId;
-    } catch {}
+    const visitId = new URL(redirectUrl).searchParams.get('visitId');
+    if (!visitId) {
+      throw new Error(`Failed to extract visitId from redirect URL: ${redirectUrl}`);
+    }
     console.log('[E2E Drill] Verified active visitId for flow:', visitId);
 
     // Dismiss any residual dialogs
@@ -184,7 +201,6 @@ async function run() {
       }
 
       const shotName = `e2e_drill_ocr_${width}px.png`;
-      await page.screenshot({ path: join(localArtifactDir, shotName), fullPage: true });
       await page.screenshot({ path: join(artifactDir, shotName), fullPage: true });
       console.log(`  - /ocr @ ${width}px: overflow = ${overflow.overflowPx}px (Shot: ${shotName})`);
     }
@@ -228,7 +244,6 @@ async function run() {
       }
 
       const shotName = `e2e_drill_emr_${width}px.png`;
-      await page.screenshot({ path: join(localArtifactDir, shotName), fullPage: true });
       await page.screenshot({ path: join(artifactDir, shotName), fullPage: true });
       console.log(`  - /emr @ ${width}px: overflow = ${overflow.overflowPx}px (Shot: ${shotName})`);
     }
@@ -281,7 +296,6 @@ async function run() {
       }
 
       const shotName = `e2e_drill_print_${width}px.png`;
-      await page.screenshot({ path: join(localArtifactDir, shotName), fullPage: true });
       await page.screenshot({ path: join(artifactDir, shotName), fullPage: true });
       console.log(`  - /print/${visitId} @ ${width}px: overflow = ${overflow.overflowPx}px (Shot: ${shotName})`);
     }
@@ -340,7 +354,6 @@ async function run() {
     }
 
     const modalShotName = 'e2e_drill_print_official_uke_modal.png';
-    await page.screenshot({ path: join(localArtifactDir, modalShotName), fullPage: false });
     await page.screenshot({ path: join(artifactDir, modalShotName), fullPage: false });
     console.log(`  - Official UKE modal opened: visible = true, hasCyoHeader = ${modalCheck.hasCyoHeader} (Shot: ${modalShotName})`);
 
@@ -419,7 +432,6 @@ async function run() {
       }
 
       const shotName = `e2e_drill_inventory_${width}px.png`;
-      await page.screenshot({ path: join(localArtifactDir, shotName), fullPage: true });
       await page.screenshot({ path: join(artifactDir, shotName), fullPage: true });
       console.log(`  - /inventory @ ${width}px: overflow = ${overflow.overflowPx}px (Shot: ${shotName})`);
     }
@@ -437,13 +449,12 @@ async function run() {
     if (orderTabClicked) {
       await wait(1000);
       const orderWorkbenchShot = 'e2e_drill_inventory_order_workbench.png';
-      await page.screenshot({ path: join(localArtifactDir, orderWorkbenchShot), fullPage: true });
       await page.screenshot({ path: join(artifactDir, orderWorkbenchShot), fullPage: true });
       console.log(`  - Order Workbench tab activated (Shot: ${orderWorkbenchShot})`);
     }
 
     // Save final report JSON
-    const reportPath = join(localArtifactDir, 'e2e_accessibility_drill_report.json');
+    const reportPath = join(artifactDir, 'e2e_accessibility_drill_report.json');
     await writeFile(reportPath, JSON.stringify(results, null, 2), 'utf8');
     console.log('[E2E Drill] Report saved to:', reportPath);
 
