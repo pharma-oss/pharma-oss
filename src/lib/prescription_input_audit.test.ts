@@ -391,12 +391,12 @@ test('buildPrescriptionInputAudit flags conflict between manual dosage category 
     }
   ]);
   const conflict1 = auditInternalWithOphthalmic.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
-  assert.equal(conflict1.length, 1, '手動指定: 内服、算定: 外用のとき dosage_category_calculation_conflict が 1 件出ること');
+  assert.equal(conflict1.length, 1, '手動指定: 内服、用法推定: 外用のとき dosage_category_calculation_conflict が 1 件出ること');
   assert.equal(conflict1[0].severity, 'warning', 'severity は warning であること');
-  assert.match(conflict1[0].title, /調剤区分（内服）と算定判定（外用）が食い違っています/);
-  assert.match(conflict1[0].message, /手動指定は「内服」ですが、算定では「外用」として計算されます/);
+  assert.match(conflict1[0].title, /手動調剤区分（内服）と用法の推定区分（外用）が一致していません/);
+  assert.match(conflict1[0].message, /手動指定の「内服」で算定・帳票とも計算されますが、用法の記載からは「外用」と判定されます/);
 
-  // 2. 手動指定は内服（internal）だが用法に「頓服」が含まれ算定側が屯服（as_needed）になる場合 → 警告が 1 件出る
+  // 2. 手動指定は内服（internal）だが用法に「頓服」が含まれ用法推定が屯服（as_needed）になる場合 → 警告が 1 件出る
   const auditInternalWithTonpuku = buildPrescriptionInputAudit([
     {
       id: 'i2',
@@ -412,10 +412,10 @@ test('buildPrescriptionInputAudit flags conflict between manual dosage category 
     }
   ]);
   const conflict2 = auditInternalWithTonpuku.issues.filter((i) => i.code === 'dosage_category_calculation_conflict');
-  assert.equal(conflict2.length, 1, '手動指定: 内服、算定: 屯服のとき dosage_category_calculation_conflict が 1 件出ること');
+  assert.equal(conflict2.length, 1, '手動指定: 内服、用法推定: 屯服のとき dosage_category_calculation_conflict が 1 件出ること');
   assert.equal(conflict2[0].severity, 'warning', 'severity は warning であること');
-  assert.match(conflict2[0].title, /調剤区分（内服）と算定判定（屯服）が食い違っています/);
-  assert.match(conflict2[0].message, /手動指定は「内服」ですが、算定では「屯服」として計算されます/);
+  assert.match(conflict2[0].title, /手動調剤区分（内服）と用法の推定区分（屯服）が一致していません/);
+  assert.match(conflict2[0].message, /手動指定の「内服」で算定・帳票とも計算されますが、用法の記載からは「屯服」と判定されます/);
 
   // 3. 手動指定と算定側判定が一致している場合（内服 ＋ 朝食後） → 警告は出ない
   const auditInternalMatched = buildPrescriptionInputAudit([

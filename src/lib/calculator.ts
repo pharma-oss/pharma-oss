@@ -41,7 +41,7 @@ export interface FeeCalculationOptions extends ClaimConditionOptions {
   disabledFeeRationales?: { [feeCode: string]: string };
   currentVisitId?: string;
   monthlyFeeHistory?: MonthlyFeeHistoryEntry[];
-  /** 既定は 'legacy'。点検画面の what-if 計算だけが 'respect_manual' を渡す */
+  /** 既定は 'respect_manual'（A-3 合意済み：手動指定を帳票・算定で統一尊重）。旧判定との差分点検のみ 'legacy' を明示指定する */
   dosageCategoryResolution?: DosageCategoryResolution;
   /** 手帳なし・時間外等の点数表。既定は DEFAULT_CONDITION_FEE_TABLE (保存はされない。テストと差し替え用) */
   conditionFeeTable?: ConditionFeeTable;

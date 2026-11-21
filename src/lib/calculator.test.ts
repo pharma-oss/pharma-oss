@@ -1428,3 +1428,42 @@ test('calculateDispensingFees formulation judgment table-driven tests', () => {
     }
   }
 });
+
+test('A-3: calculateDispensingFees defaults to respecting pharmacist manual dosageCategory over usage regex', () => {
+  const manualInternalItem: ItemWithPrice = {
+    itemId: 'a3-manual-1',
+    visitId: 'v-a3',
+    drugId: 'd-a3',
+    drugName: 'テスト薬A',
+    amount: 1,
+    days: 14,
+    drugPrice: 10,
+    usage: '1日1回点眼',
+    dosageCategory: 'internal',
+    dosageCategorySource: 'manual'
+  };
+
+  // デフォルト算定（A-3: respect_manual）では手動指定「内服」として算定（薬剤調製料 24点）
+  const defaultFees = calculateDispensingFees(mockSettings, [manualInternalItem], mockPatient, '2026-06-01');
+  const legacyFees = calculateDispensingFees(mockSettings, [manualInternalItem], mockPatient, '2026-06-01', {
+    dosageCategoryResolution: 'legacy'
+  });
+
+  const defaultPrep = defaultFees.find((r) => r.name === '薬剤調製料')?.points;
+  const legacyPrep = legacyFees.find((r) => r.name === '薬剤調製料')?.points;
+  assert.strictEqual(defaultPrep, 24, '手動指定「内服」は既定算定で内服(24点)として算定されること');
+  assert.strictEqual(legacyPrep, 10, '明示的な legacy 指定は旧挙動(外用 10点)を維持すること');
+
+  // 自動判定（dosageCategorySource: 'auto'）は用法テキストの外用パターンを維持すること
+  const autoItem: ItemWithPrice = {
+    ...manualInternalItem,
+    itemId: 'a3-auto-1',
+    dosageCategorySource: 'auto'
+  };
+  const autoFees = calculateDispensingFees(mockSettings, [autoItem], mockPatient, '2026-06-01');
+  assert.strictEqual(
+    autoFees.find((r) => r.name === '薬剤調製料')?.points,
+    10,
+    '自動判定(auto)時は用法パターンによる外用(10点)判定を維持すること'
+  );
+});

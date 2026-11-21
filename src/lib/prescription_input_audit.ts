@@ -394,23 +394,23 @@ export function buildPrescriptionInputAudit(
     }
 
     // 手動指定（dosageCategorySource === 'manual'）がある明細において、
-    // 算定側の判定（resolveCalculationDosageFlags 'legacy'）と帳票側の実効剤形（resolveEffectiveDosageCategory）が
-    // 食い違っている場合、点数計算・レセプトと帳票で剤形解釈の齟齬が生じるため警告を提示する（第八条・第四条・トラック A-3）
+    // 算定・帳票で採用される手動指定（resolveEffectiveDosageCategory）と用法テキスト由来の旧推定（'legacy'）が
+    // 食い違っている場合、入力ミスの可能性があるため確認警告を提示する（第八条・トラック A-3）
     const manualItem = group.find((item) => item.dosageCategorySource === 'manual' && item.dosageCategory);
     if (manualItem) {
       const effectiveCategory = resolveEffectiveDosageCategory(manualItem);
-      const calcFlags = resolveCalculationDosageFlags(manualItem, 'legacy');
-      const calcCategory = getCalculationDosageCategory(calcFlags);
+      const legacyCalcFlags = resolveCalculationDosageFlags(manualItem, 'legacy');
+      const legacyCalcCategory = getCalculationDosageCategory(legacyCalcFlags);
 
-      if (effectiveCategory !== calcCategory) {
+      if (effectiveCategory !== legacyCalcCategory) {
         const effectiveLabel = DOSAGE_CATEGORY_LABELS[effectiveCategory] || effectiveCategory;
-        const calcLabel = DOSAGE_CATEGORY_LABELS[calcCategory] || calcCategory;
+        const legacyCalcLabel = DOSAGE_CATEGORY_LABELS[legacyCalcCategory] || legacyCalcCategory;
         const rpNum = group[0]?.rpNumber ?? rpLoopIndex;
         addIssue(issues, {
           severity: 'warning',
           code: 'dosage_category_calculation_conflict',
-          title: `Rp${rpNum} の調剤区分（${effectiveLabel}）と算定判定（${calcLabel}）が食い違っています`,
-          message: `手動指定は「${effectiveLabel}」ですが、算定では「${calcLabel}」として計算されます。用法の記載または調剤区分をご確認ください。`,
+          title: `Rp${rpNum} の手動調剤区分（${effectiveLabel}）と用法の推定区分（${legacyCalcLabel}）が一致していません`,
+          message: `手動指定の「${effectiveLabel}」で算定・帳票とも計算されますが、用法の記載からは「${legacyCalcLabel}」と判定されます。用法の記載または調剤区分をご確認ください。`,
           itemIds: group.map((item) => item.id).filter(Boolean) as string[],
           rpId
         });

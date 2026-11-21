@@ -115,13 +115,12 @@ export interface CalculationDosageFlags {
 
 /**
  * 算定側の剤形フラグ。
- * 'legacy' は 2026-09-17 時点の calculator.ts の判定をそのまま保つ（既定）。
- * 'respect_manual' は手動指定を最優先する。帳票側 (resolveEffectiveDosageCategory) と同じ扱いになる。
- * 既定を 'respect_manual' に変えてはならない。点数が変わる（金科玉条 A-3 は要判断のまま）。
+ * 'respect_manual'（既定・トラック A-3 合意済み）は薬剤師の手動指定を最優先し、帳票側 (resolveEffectiveDosageCategory) と完全に一致させる。
+ * 'legacy' は旧仕様（用法テキスト正規表現を優先）との差分・点数変動点検（what-if 比較）用途にのみ明示指定する。
  */
 export function resolveCalculationDosageFlags(
   item: DosageCategorySourceItem,
-  resolution: DosageCategoryResolution = 'legacy'
+  resolution: DosageCategoryResolution = 'respect_manual'
 ): CalculationDosageFlags {
   const usage = item.usage || '';
 

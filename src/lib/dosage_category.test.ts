@@ -104,8 +104,8 @@ test('inferDosageCategory classifies external usage pattern with precedence over
   assert.strictEqual(inferDosageCategory('アムロジピン錠5mg', '1日1回朝食後'), 'internal');
 });
 
-test('resolveCalculationDosageFlags defaults to legacy mode (PR-H1)', () => {
-  // 手動「内服」＋用法「点眼」の明細で、第2引数未指定時に legacy 判定（isExternal === true）になること
+test('resolveCalculationDosageFlags defaults to respect_manual mode (Track A-3)', () => {
+  // 手動「内服」＋用法「点眼」の明細で、第2引数未指定時に手動指定を尊重（isExternal === false）すること
   const item = {
     drugName: '点眼テスト薬',
     usage: '1日1回点眼',
@@ -113,10 +113,14 @@ test('resolveCalculationDosageFlags defaults to legacy mode (PR-H1)', () => {
     dosageCategorySource: 'manual' as const
   };
   const flags = resolveCalculationDosageFlags(item);
-  assert.strictEqual(flags.isExternal, true, 'Default resolution must be legacy (isExternal should be true due to usage)');
+  assert.strictEqual(flags.isExternal, false, 'Default resolution must respect manual designation (A-3)');
   assert.strictEqual(flags.isTonpuku, false);
   assert.strictEqual(flags.isNaiteki, false);
   assert.strictEqual(flags.isInjection, false);
+
+  // 明示的に 'legacy' を渡した場合は旧判定（isExternal === true）を返すこと（what-if 比較用）
+  const legacyFlags = resolveCalculationDosageFlags(item, 'legacy');
+  assert.strictEqual(legacyFlags.isExternal, true, 'Explicit legacy mode must still evaluate usage pattern first');
 });
 
 test('resolveCalculationDosageFlags handles legacy mode with EXTERNAL_USAGE_PATTERN', () => {
