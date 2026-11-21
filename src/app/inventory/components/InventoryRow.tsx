@@ -47,9 +47,7 @@ export async function saveDrugLocationChange(params: {
         console.error('Failed to update drug location:', error);
         return {
             ok: false,
-            alertMessage: locationString
-                ? '薬品の棚番地の保存に失敗しました。画面の表示を元に戻します。もう一度お試しください。'
-                : '棚番地のクリアに失敗しました。画面の表示を元に戻します。もう一度お試しください。'
+            alertMessage: '薬品の棚番地の保存に失敗しました。画面の表示を元に戻します。もう一度お試しください。'
         };
     }
 }

@@ -283,7 +283,7 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
     assert.equal(patchCalledOnInsertFail, false);
     assert.match(insertFail.alertMessage || '', /新しい棚番地の登録に失敗しました/);
 
-    // 薬品 patch 失敗時は保存失敗・クリア失敗それぞれに応じた通知を返す
+    // 薬品 patch 失敗時は保存失敗・クリア失敗いずれも画面復元を促す通知を返す
     const patchFail = await saveDrugLocationChange({
       drugDoc: { patch: async () => { throw new Error('CONFLICT'); } },
       locationString: 'B-01-02'
@@ -296,6 +296,6 @@ describe('InventoryRow UI disabled states and markup pinning', () => {
       locationString: ''
     });
     assert.equal(clearFail.ok, false);
-    assert.match(clearFail.alertMessage || '', /棚番地のクリアに失敗しました/);
+    assert.match(clearFail.alertMessage || '', /薬品の棚番地の保存に失敗しました/);
   });
 });
