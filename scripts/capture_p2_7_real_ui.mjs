@@ -1,12 +1,11 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'child_process';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
 
-const ARTIFACT_DIR = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
-const SCREENSHOT_DIR = '/Users/takeaki/pharma-oss/screenshots';
+const SCREENSHOT_DIR = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'p2-7-real-ui');
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,7 +47,7 @@ async function run() {
   if (!isReady) {
     console.log(`Starting dev server on port ${port}...`);
     serverProcess = spawn('npx', ['next', 'dev', '-H', '127.0.0.1', '-p', String(port)], {
-      cwd: '/Users/takeaki/pharma-oss',
+      cwd: process.cwd(),
       env: { ...process.env, PORT: String(port) },
       stdio: 'inherit'
     });
@@ -214,9 +213,7 @@ async function run() {
     await wait(1000);
 
     const step1Path = path.join(SCREENSHOT_DIR, 'p2_7_step1_ai_draft_card.png');
-    const step1Artifact = path.join(ARTIFACT_DIR, 'p2_7_step1_ai_draft_card.png');
     await page.screenshot({ path: step1Path, fullPage: false });
-    fs.copyFileSync(step1Path, step1Artifact);
     console.log('Saved Step 1 screenshot:', step1Path);
 
     // Step 2: Apply AI draft to create an unconfirmed AI entry box
@@ -242,9 +239,7 @@ async function run() {
     await wait(1000);
 
     const step2Path = path.join(SCREENSHOT_DIR, 'p2_7_step2_ai_unconfirmed_box.png');
-    const step2Artifact = path.join(ARTIFACT_DIR, 'p2_7_step2_ai_unconfirmed_box.png');
     await page.screenshot({ path: step2Path, fullPage: false });
-    fs.copyFileSync(step2Path, step2Artifact);
     console.log('Saved Step 2 screenshot:', step2Path);
 
     // Step 3: Trigger completion confirmation warning modal
@@ -270,9 +265,7 @@ async function run() {
     }, { timeout: 15000 });
 
     const step3Path = path.join(SCREENSHOT_DIR, 'p2_7_step3_completion_warning_modal.png');
-    const step3Artifact = path.join(ARTIFACT_DIR, 'p2_7_step3_completion_warning_modal.png');
     await page.screenshot({ path: step3Path, fullPage: false });
-    fs.copyFileSync(step3Path, step3Artifact);
     console.log('Saved Step 3 screenshot:', step3Path);
 
     // Dismiss completion modal
@@ -302,9 +295,7 @@ async function run() {
     await wait(1000);
 
     const step4Path = path.join(SCREENSHOT_DIR, 'p2_7_step4_ai_approved_box.png');
-    const step4Artifact = path.join(ARTIFACT_DIR, 'p2_7_step4_ai_approved_box.png');
     await page.screenshot({ path: step4Path, fullPage: false });
-    fs.copyFileSync(step4Path, step4Artifact);
     console.log('Saved Step 4 screenshot:', step4Path);
 
     // Step 5: Check Audit Log in Settings
@@ -373,9 +364,7 @@ async function run() {
     }
 
     const step5Path = path.join(SCREENSHOT_DIR, 'p2_7_step5_audit_log_ai_approval.png');
-    const step5Artifact = path.join(ARTIFACT_DIR, 'p2_7_step5_audit_log_ai_approval.png');
     await page.screenshot({ path: step5Path, fullPage: false });
-    fs.copyFileSync(step5Path, step5Artifact);
     console.log('Saved Step 5 screenshot:', step5Path);
 
     console.log('All 5 screenshots captured successfully!');

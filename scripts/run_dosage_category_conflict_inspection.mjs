@@ -1,12 +1,12 @@
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const port = 3348;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/e11142a9-4b43-4f52-b6ae-99b071e0968e';
+const artifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'dosage-category-conflict-inspection');
 
 function findChromePath() {
   const commonPaths = [
@@ -235,6 +235,7 @@ async function run() {
     await page.$eval(sectionSelector, (el) => el.scrollIntoView({ behavior: 'auto', block: 'center' }));
     await wait(1000);
 
+    mkdirSync(artifactDir, { recursive: true });
     const screenshotPath = join(artifactDir, 'dosage_category_conflict_inspection.png');
     await page.screenshot({ path: screenshotPath, fullPage: false });
     console.log('Screenshot saved to:', screenshotPath);

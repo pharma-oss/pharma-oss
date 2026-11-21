@@ -14,8 +14,7 @@ const satPort = 3422;
 const hubUrl = `http://127.0.0.1:${hubPort}`;
 const satUrl = `http://127.0.0.1:${satPort}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'p2-4-ui-verification');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'p2-4-ui-verification');
 const encKey = 'mock_satellite_persistent_key_123';
 
 async function wait(ms) {
@@ -100,7 +99,6 @@ async function seedOnboardingData(page) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let hubServer;
   let satServer;
@@ -186,9 +184,7 @@ async function run() {
     await wait(3000);
 
     const path1Local = join(localArtifactDir, 'step4_satellite_online_synced.png');
-    const path1Artifact = join(artifactDir, 'step4_satellite_online_synced.png');
     await page.screenshot({ path: path1Local, fullPage: false });
-    await page.screenshot({ path: path1Artifact, fullPage: false });
     console.log('Saved Screen 1:', path1Local);
 
     // -------------------------------------------------------------
@@ -200,9 +196,7 @@ async function run() {
     await wait(5000); // Wait for reachability probe to update status and trigger offline auth mode
 
     const path2Local = join(localArtifactDir, 'step4_satellite_offline_login.png');
-    const path2Artifact = join(artifactDir, 'step4_satellite_offline_login.png');
     await page.screenshot({ path: path2Local, fullPage: false });
-    await page.screenshot({ path: path2Artifact, fullPage: false });
     console.log('Saved Screen 2:', path2Local);
 
     // -------------------------------------------------------------
@@ -216,9 +210,7 @@ async function run() {
     await wait(3000);
 
     const path3Local = join(localArtifactDir, 'step4_satellite_revoked_offline_blocked.png');
-    const path3Artifact = join(artifactDir, 'step4_satellite_revoked_offline_blocked.png');
     await page.screenshot({ path: path3Local, fullPage: false });
-    await page.screenshot({ path: path3Artifact, fullPage: false });
     console.log('Saved Screen 3:', path3Local);
 
     // -------------------------------------------------------------
@@ -275,9 +267,7 @@ async function run() {
     await wait(3000);
 
     const path4Local = join(localArtifactDir, 'step4_satellite_standby_hub_switch.png');
-    const path4Artifact = join(artifactDir, 'step4_satellite_standby_hub_switch.png');
     await page.screenshot({ path: path4Local, fullPage: false });
-    await page.screenshot({ path: path4Artifact, fullPage: false });
     console.log('Saved Screen 4:', path4Local);
 
     console.log('All 4 screenshots captured successfully!');

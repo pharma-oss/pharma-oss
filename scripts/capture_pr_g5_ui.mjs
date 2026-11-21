@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const port = 3000;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/e11142a9-4b43-4f52-b6ae-99b071e0968e';
+const artifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'pr-g5-ui');
 
 function findChromePath() {
   const commonPaths = [

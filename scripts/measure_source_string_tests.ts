@@ -17,7 +17,8 @@ function findTestFiles(dir: string): string[] {
   return files;
 }
 
-const testFiles = findTestFiles('/Users/takeaki/pharma-oss/src');
+const repoRoot = process.cwd();
+const testFiles = findTestFiles(path.join(repoRoot, 'src'));
 
 interface TestStat {
   file: string;
@@ -32,7 +33,7 @@ const stats: TestStat[] = [];
 
 for (const file of testFiles) {
   const content = readFileSync(file, 'utf8');
-  const relPath = path.relative('/Users/takeaki/pharma-oss', file);
+  const relPath = path.relative(repoRoot, file);
   const hasReadFileSync = content.includes('readFileSync');
 
   // match assert count (assert.match, assert.doesNotMatch, section, indexOf on source)

@@ -6,8 +6,7 @@ import { join } from 'node:path';
 const port = 3400;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'step3-ui-verification');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'step3-ui-verification');
 
 async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,7 +80,6 @@ async function seedOnboardingData(page) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let server;
   let browser;
@@ -155,11 +153,9 @@ async function run() {
     });
     await wait(1000);
 
-    const outPath1 = join(artifactDir, 'step3_terminal_sync_panel_hub.png');
     const outPathLocal = join(localArtifactDir, 'step3_terminal_sync_panel_hub.png');
-    await page.screenshot({ path: outPath1, fullPage: false });
     await page.screenshot({ path: outPathLocal, fullPage: false });
-    console.log(`Saved screenshot to: ${outPath1} and ${outPathLocal}`);
+    console.log(`Saved screenshot to: ${outPathLocal}`);
 
     console.log('TerminalSyncPanel hub screenshot captured successfully!');
   } finally {

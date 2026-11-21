@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -11,8 +11,7 @@ const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 const port = 3470;
 const baseUrl = `http://127.0.0.1:${port}`;
 
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/30ea8a4b-6e84-41f1-b254-cb9de74708a4/.tempmediaStorage';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'emr-design-before');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'emr-design-before');
 
 function findChromePath() {
   const commonPaths = [
@@ -70,7 +69,6 @@ async function waitForServerReady(url) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let server;
   let browser;
@@ -118,21 +116,18 @@ async function run() {
     await page.setViewport({ width: 1280, height: 1000 });
     await wait(1000);
     await page.screenshot({ path: join(localArtifactDir, 'before_1280px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'before_1280px.png'), fullPage: true });
 
     // 768px キャプチャ
     console.log('Capturing 768px...');
     await page.setViewport({ width: 768, height: 1000 });
     await wait(1000);
     await page.screenshot({ path: join(localArtifactDir, 'before_768px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'before_768px.png'), fullPage: true });
 
     // 375px キャプチャ
     console.log('Capturing 375px...');
     await page.setViewport({ width: 375, height: 1000 });
     await wait(1000);
     await page.screenshot({ path: join(localArtifactDir, 'before_375px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'before_375px.png'), fullPage: true });
 
     console.log('All baseline captures complete!');
   } finally {

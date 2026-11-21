@@ -1,12 +1,12 @@
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const port = 3338;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/eeed9ebb-8039-450c-9934-845d17eb9340';
+const artifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'pr3-real-ui');
 
 function findChromePath() {
   const commonPaths = [
@@ -190,6 +190,7 @@ async function run() {
     await wait(1500);
 
     // Full page capture with everything expanded
+    mkdirSync(artifactDir, { recursive: true });
     const outFullPageExpanded = join(artifactDir, 'pr3_drug_info_full_page.png');
     await page.screenshot({ path: outFullPageExpanded, fullPage: true });
     console.log(`Saved full page expanded screenshot: ${outFullPageExpanded}`);

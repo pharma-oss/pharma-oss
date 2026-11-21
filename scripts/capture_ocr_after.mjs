@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -11,8 +11,7 @@ const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 const port = 3473;
 const baseUrl = `http://127.0.0.1:${port}`;
 
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/30ea8a4b-6e84-41f1-b254-cb9de74708a4/.tempmediaStorage';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'ocr-design-after');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'ocr-design-after');
 
 function findChromePath() {
   const commonPaths = [
@@ -70,7 +69,6 @@ async function waitForServerReady(url) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let server;
   let browser;
@@ -145,7 +143,6 @@ async function run() {
       await page.setViewport({ width, height: 900 });
       await wait(600);
       await page.screenshot({ path: join(localArtifactDir, `after_choice_${width}px.png`), fullPage: true });
-      await page.screenshot({ path: join(artifactDir, `after_choice_${width}px.png`), fullPage: true });
 
       const metrics = await page.evaluate((w) => {
         const bodyScrollWidth = document.body.scrollWidth;
@@ -176,7 +173,6 @@ async function run() {
       await page.setViewport({ width, height: 900 });
       await wait(800);
       await page.screenshot({ path: join(localArtifactDir, `after_form_${width}px.png`), fullPage: true });
-      await page.screenshot({ path: join(artifactDir, `after_form_${width}px.png`), fullPage: true });
 
       const metrics = await page.evaluate((w) => {
         const bodyScrollWidth = document.body.scrollWidth;

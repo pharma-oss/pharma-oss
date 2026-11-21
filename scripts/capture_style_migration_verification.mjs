@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -11,8 +11,7 @@ const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 const port = 3459;
 const baseUrl = `http://127.0.0.1:${port}`;
 
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/30ea8a4b-6e84-41f1-b254-cb9de74708a4/.tempmediaStorage';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'style-migration-verification');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'style-migration-verification');
 
 function findChromePath() {
   const commonPaths = [
@@ -70,7 +69,6 @@ async function waitForServerReady(url) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let server;
   let browser;
@@ -134,9 +132,7 @@ async function run() {
     await wait(2000);
 
     const path3 = join(localArtifactDir, '03_client_layout_revoked_terminal.png');
-    const path3Media = join(artifactDir, '03_client_layout_revoked_terminal.png');
     await pageRevoked.screenshot({ path: path3, fullPage: true });
-    await pageRevoked.screenshot({ path: path3Media, fullPage: true });
     console.log('Captured 03_client_layout_revoked_terminal.png');
 
     // 4. 設定 > 端末同期パネルの検証 (TerminalSyncPanel.tsx)
@@ -166,9 +162,7 @@ async function run() {
     await wait(2000);
 
     const path1 = join(localArtifactDir, '01_terminal_sync_panel.png');
-    const path1Media = join(artifactDir, '01_terminal_sync_panel.png');
     await page.screenshot({ path: path1, fullPage: true });
-    await page.screenshot({ path: path1Media, fullPage: true });
     console.log('Captured 01_terminal_sync_panel.png');
 
     console.log('All verification screenshots captured successfully!');

@@ -14,8 +14,7 @@ const satPort = 3412;
 const hubUrl = `http://127.0.0.1:${hubPort}`;
 const satUrl = `http://127.0.0.1:${satPort}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'p2-5-ui-verification');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'p2-5-ui-verification');
 
 async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -90,7 +89,6 @@ async function ensureInitialAdmin(page) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let hubServer;
   let satServer;
@@ -178,11 +176,9 @@ async function run() {
     });
     await wait(3000);
 
-    const outPath1 = join(artifactDir, 'step5_satellite_normal.png');
     const outLocal1 = join(localArtifactDir, 'step5_satellite_normal.png');
-    await page.screenshot({ path: outPath1, fullPage: false });
     await page.screenshot({ path: outLocal1, fullPage: false });
-    console.log(`Saved screenshot 1: ${outPath1}`);
+    console.log(`Saved screenshot 1: ${outLocal1}`);
 
     // ==========================================
     // 2. 期限超過未送信データ（24h超 / 前日未送信）滞留時の警告画面
@@ -226,11 +222,9 @@ async function run() {
     // Wait for polling interval (4s) in SyncStatusIndicator to update queue health & badge to is-danger
     await wait(4500);
 
-    const outPath2 = join(artifactDir, 'step5_satellite_expired_warning.png');
     const outLocal2 = join(localArtifactDir, 'step5_satellite_expired_warning.png');
-    await page.screenshot({ path: outPath2, fullPage: false });
     await page.screenshot({ path: outLocal2, fullPage: false });
-    console.log(`Saved screenshot 2: ${outPath2}`);
+    console.log(`Saved screenshot 2: ${outLocal2}`);
 
     // ==========================================
     // 3. 上限接近（800件超）状態の注意 UI
@@ -255,11 +249,9 @@ async function run() {
     }, encryptedNearLimit);
     await wait(4500);
 
-    const outPath3 = join(artifactDir, 'step5_satellite_near_limit.png');
     const outLocal3 = join(localArtifactDir, 'step5_satellite_near_limit.png');
-    await page.screenshot({ path: outPath3, fullPage: false });
     await page.screenshot({ path: outLocal3, fullPage: false });
-    console.log(`Saved screenshot 3: ${outPath3}`);
+    console.log(`Saved screenshot 3: ${outLocal3}`);
 
     // ==========================================
     // 4. サテライト端末の「設定 > 端末同期」タブ詳細画面
@@ -308,11 +300,9 @@ async function run() {
     });
     await wait(3000);
 
-    const outPath4 = join(artifactDir, 'step5_satellite_terminal_sync_panel.png');
     const outLocal4 = join(localArtifactDir, 'step5_satellite_terminal_sync_panel.png');
-    await page.screenshot({ path: outPath4, fullPage: false });
     await page.screenshot({ path: outLocal4, fullPage: false });
-    console.log(`Saved screenshot 4: ${outPath4}`);
+    console.log(`Saved screenshot 4: ${outLocal4}`);
 
     console.log('All P2-5 satellite visual screenshots captured successfully with consistent badges!');
   } finally {

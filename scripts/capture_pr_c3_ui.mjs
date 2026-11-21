@@ -1,12 +1,12 @@
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const port = 3339;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/f95a18ae-4214-42e1-bf3d-c41a638574c6';
+const artifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'pr-c3-ui');
 
 function findChromePath() {
   const commonPaths = [
@@ -219,6 +219,7 @@ async function run() {
     }
 
     // Capture viewport screenshot showing the prescription row and unit field in context
+    mkdirSync(artifactDir, { recursive: true });
     const outViewport = join(artifactDir, 'pr_c3_ocr_prescription_viewport.png');
     await page.screenshot({ path: outViewport, fullPage: false });
     console.log(`Saved prescription viewport screenshot: ${outViewport}`);

@@ -13,8 +13,7 @@ const hubPort = 3410;
 const satPort = 3412;
 const hubUrl = `http://127.0.0.1:${hubPort}`;
 const satUrl = `http://127.0.0.1:${satPort}`;
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'p2-5-ui-verification');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'p2-5-ui-verification');
 
 async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,7 +65,6 @@ async function waitForServerReady(url, expectedRole) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let hubServer;
   let satServer;
@@ -173,11 +171,9 @@ async function run() {
     await page.goto(`${satUrl}/settings?tab=terminalSync`, { waitUntil: 'domcontentloaded' });
     await wait(4000);
 
-    const outPath4 = join(artifactDir, 'step5_satellite_terminal_sync_panel.png');
     const outLocal4 = join(localArtifactDir, 'step5_satellite_terminal_sync_panel.png');
-    await page.screenshot({ path: outPath4, fullPage: false });
     await page.screenshot({ path: outLocal4, fullPage: false });
-    console.log(`Saved screenshot 4: ${outPath4}`);
+    console.log(`Saved screenshot 4: ${outLocal4}`);
 
     console.log('Satellite Terminal Sync Panel screenshot captured successfully!');
   } finally {

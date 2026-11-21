@@ -1,11 +1,12 @@
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const port = 3335;
 const baseUrl = `http://127.0.0.1:${port}`;
 const setupPassword = 'SetupPass123';
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/7ad7cc77-8091-43b0-8626-4a614821a8f9';
+const artifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'step5-real-ui');
 
 async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,6 +111,7 @@ async function run() {
     await page.goto(`${baseUrl}/print/e2e_onboarding_visit`, { waitUntil: 'networkidle2' });
     await wait(3000);
 
+    mkdirSync(artifactDir, { recursive: true });
     const outPath1 = join(artifactDir, 'step5_print_page_main.png');
     await page.screenshot({ path: outPath1, fullPage: true });
     console.log(`Saved screenshot: ${outPath1}`);

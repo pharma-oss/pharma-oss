@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -11,8 +11,7 @@ const NEXT_BIN = join(__dirname, '..', 'node_modules', '.bin', 'next');
 const port = 3475;
 const baseUrl = `http://127.0.0.1:${port}`;
 
-const artifactDir = '/Users/takeaki/.gemini/antigravity-ide/brain/30ea8a4b-6e84-41f1-b254-cb9de74708a4/.tempmediaStorage';
-const localArtifactDir = join(process.cwd(), 'artifacts', 'emr-design-after');
+const localArtifactDir = process.env.YAKUREKI_CAPTURE_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'emr-design-after');
 
 function findChromePath() {
   const commonPaths = [
@@ -70,7 +69,6 @@ async function waitForServerReady(url) {
 
 async function run() {
   await mkdir(localArtifactDir, { recursive: true });
-  await mkdir(artifactDir, { recursive: true });
 
   let server;
   let browser;
@@ -121,7 +119,6 @@ async function run() {
     const isOverflow1280 = scrollWidth1280 > 1280;
     console.log(`1280px: scrollWidth=${scrollWidth1280}, overflow=${isOverflow1280}`);
     await page.screenshot({ path: join(localArtifactDir, 'after_1280px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'after_1280px.png'), fullPage: true });
 
     // 768px キャプチャ & 横はみ出しチェック
     console.log('Capturing 768px...');
@@ -131,7 +128,6 @@ async function run() {
     const isOverflow768 = scrollWidth768 > 768;
     console.log(`768px: scrollWidth=${scrollWidth768}, overflow=${isOverflow768}`);
     await page.screenshot({ path: join(localArtifactDir, 'after_768px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'after_768px.png'), fullPage: true });
 
     // 375px キャプチャ & 横はみ出しチェック & ボタン位置チェック
     console.log('Capturing 375px...');
@@ -159,7 +155,6 @@ async function run() {
     console.log('375px action buttons metrics:', JSON.stringify(actionButtonsMetrics, null, 2));
 
     await page.screenshot({ path: join(localArtifactDir, 'after_375px.png'), fullPage: true });
-    await page.screenshot({ path: join(artifactDir, 'after_375px.png'), fullPage: true });
 
     console.log('All after captures complete!');
   } finally {
