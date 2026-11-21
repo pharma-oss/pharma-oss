@@ -691,14 +691,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           toast.error('データベースに接続できませんでした。');
           return;
         }
-        const docs = await db.patients.find().exec();
-        const lower = query.toLowerCase();
-        const matches: Patient[] = (docs || [])
-          .map((doc) => (typeof doc?.toJSON === 'function' ? doc.toJSON() : doc) as Patient)
-          .filter((p) =>
-            (p.name || '').toLowerCase().includes(lower) || (p.kana || '').toLowerCase().includes(lower)
-          )
-          .slice(0, 8);
+        const { searchPatientsViaBlindIndex } = await import('@/lib/patient_search_index');
+        const { patients: matches } = await searchPatientsViaBlindIndex(db, query, 8);
         if (cancelled) return;
         setPatientResults(matches);
         setHasPatientSearchError(false);

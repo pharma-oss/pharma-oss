@@ -99,7 +99,7 @@ export const FACILITY_SETTINGS_SCHEMA: RxJsonSchema<FacilitySettings> = {
 
 export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
   title: 'patient schema',
-  version: 4,
+  version: 5,
   description: 'Patient master data',
   primaryKey: 'patientId',
   type: 'object',
@@ -150,9 +150,24 @@ export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
         },
         required: ['provider', 'recipient']
       }
-    }
+    },
+    // v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMAC-SHA256、平文PIIを含まないスカラー索引）
+    searchIndexVersion: { type: 'string', maxLength: 16 },
+    birthDateHash: { type: 'string', maxLength: 64 },
+    namePrefixHash: { type: 'string', maxLength: 64 },
+    kanaPrefixHash: { type: 'string', maxLength: 64 },
+    givenNamePrefixHash: { type: 'string', maxLength: 64 },
+    givenKanaPrefixHash: { type: 'string', maxLength: 64 }
   },
   required: ['patientId', 'name', 'kana', 'birthDate'],
+  indexes: [
+    'birthDateHash',
+    'namePrefixHash',
+    'kanaPrefixHash',
+    'givenNamePrefixHash',
+    'givenKanaPrefixHash',
+    'searchIndexVersion'
+  ],
   encrypted: ['name', 'kana', 'birthDate', 'insuranceInfo', 'publicInsurances']
 };
 

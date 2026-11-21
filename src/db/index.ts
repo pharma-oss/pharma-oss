@@ -38,6 +38,11 @@ import {
 } from './db_password';
 
 import { isDevelopment, getDbPassword } from '@/lib/env';
+import {
+    attachPatientSearchIndexHooks,
+    backfillPatientSearchIndexes,
+    registerPatientSearchIndexKey
+} from '@/lib/patient_search_index';
 
 // Add migration plugin
 addRxPlugin(RxDBMigrationSchemaPlugin);
@@ -257,13 +262,16 @@ async function createSatelliteDatabase(collectionDefinitions: CollectionDefiniti
     const storageWithEncryption = wrappedKeyEncryptionCryptoJsStorage({
         storage: storageWithValidation
     });
+    const satellitePassword = generateRandomPassword();
     const db = await createRxDatabase<PharmacyDatabaseCollections>({
         name: 'pharmacy_os_db_satellite',
-        password: generateRandomPassword(),
+        password: satellitePassword,
         storage: storageWithEncryption,
         ignoreDuplicate: isDevelopment()
     });
     await db.addCollections(collectionDefinitions);
+    const satelliteSearchKey = registerPatientSearchIndexKey(db, satellitePassword);
+    attachPatientSearchIndexHooks(db.patients, satelliteSearchKey);
     return db;
 }
 
@@ -296,7 +304,10 @@ const create = async () => {
                 2: keepDocument,
                 // v3 -> v4: 高額療養費の適用区分と一部負担金の減免を insuranceInfo へ追加。
                 // いずれも任意項目なので、既存ドキュメントはそのまま持ち上げる。
-                3: keepDocument
+                3: keepDocument,
+                // v4 -> v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMACスカラー索引）を追加。
+                // いずれも任意項目なので既存ドキュメントはそのまま持ち上げ、起動後に非同期バックフィルする。
+                4: keepDocument
             })
         },
         visits: {
@@ -616,7 +627,9 @@ const create = async () => {
         const candidateDb = await openDatabase(candidatePassword);
         try {
             await candidateDb.addCollections(collectionDefinitions);
-            return candidateDb;
+            const searchIndexKey = registerPatientSearchIndexKey(candidateDb, candidatePassword);
+            attachPatientSearchIndexHooks(candidateDb.patients, searchIndexKey);
+            return { candidateDb, searchIndexKey };
         } catch (error) {
             // 同名DBを別の鍵で開き直せるよう、失敗したインスタンスは閉じてから投げ直す
             try {
@@ -629,8 +642,11 @@ const create = async () => {
     };
 
     let db;
+    let activeSearchIndexKey: string;
     try {
-        db = await openWithCollections(password);
+        const opened = await openWithCollections(password);
+        db = opened.candidateDb;
+        activeSearchIndexKey = opened.searchIndexKey;
         if (password === LEGACY_FIXED_DB_PASSWORD) {
             recordLegacyDbKeyInUse();
         }
@@ -641,7 +657,9 @@ const create = async () => {
         const isPasswordMismatch = error?.code === 'DB1';
         if (isPasswordMismatch && password !== LEGACY_FIXED_DB_PASSWORD) {
             try {
-                db = await openWithCollections(LEGACY_FIXED_DB_PASSWORD);
+                const openedLegacy = await openWithCollections(LEGACY_FIXED_DB_PASSWORD);
+                db = openedLegacy.candidateDb;
+                activeSearchIndexKey = openedLegacy.searchIndexKey;
                 persistResolvedDbPassword(LEGACY_FIXED_DB_PASSWORD);
                 recordLegacyDbKeyInUse();
                 console.warn(
@@ -699,6 +717,9 @@ const create = async () => {
     const warmReferenceData = () => {
         seedReferenceData(db).catch((error) => {
             console.error('Failed to warm reference data:', error);
+        });
+        backfillPatientSearchIndexes(db, activeSearchIndexKey).catch((error) => {
+            console.warn('Failed to backfill patient blind search indexes:', error);
         });
     };
     if (typeof window !== 'undefined') {

@@ -319,6 +319,13 @@ export interface Patient {
     };
   };
   publicInsurances?: PublicInsurance[];
+  /** 暗号化患者検索用ブラインドインデックス（鍵付きHMAC-SHA256。平文PIIは一切含めない） */
+  searchIndexVersion?: string;
+  birthDateHash?: string;
+  namePrefixHash?: string;
+  kanaPrefixHash?: string;
+  givenNamePrefixHash?: string;
+  givenKanaPrefixHash?: string;
 }
 
 export type InterventionCategory =

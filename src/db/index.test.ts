@@ -11,7 +11,14 @@ import {
   PRESCRIPTION_ITEM_ZERO_BASED_STRATEGIES,
   getPrescriptionItemMigrationStrategies
 } from './index';
-import { DRUG_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from './schema';
+import { DRUG_SCHEMA, PATIENT_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from './schema';
+import type { PharmacyDatabase } from './types';
+import {
+  attachPatientSearchIndexHooks,
+  backfillPatientSearchIndexes,
+  registerPatientSearchIndexKey,
+  searchPatientsViaBlindIndex
+} from '@/lib/patient_search_index';
 
 describe('Database initialization contracts', () => {
   it('exports getDatabase as a callable factory function', () => {
@@ -189,6 +196,67 @@ describe('Database initialization contracts', () => {
       ['v_new', 'v_mid']
     );
     await db26.remove();
+  });
+
+  it('migrates v4 encrypted patients to v5 without losing PII and backfills keyed HMAC blind indexes', async () => {
+    addRxPlugin(RxDBMigrationSchemaPlugin);
+    const dbName = `patient_v4_to_v5_${Date.now()}`;
+    const storage = wrappedValidateAjvStorage({
+      storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+    });
+    const password = 'test-migration-password-v5-patient';
+
+    const v4PatientSchema = structuredClone(PATIENT_SCHEMA);
+    v4PatientSchema.version = 4;
+    delete v4PatientSchema.indexes;
+    delete (v4PatientSchema.properties as Record<string, unknown>).searchIndexVersion;
+    delete (v4PatientSchema.properties as Record<string, unknown>).birthDateHash;
+    delete (v4PatientSchema.properties as Record<string, unknown>).namePrefixHash;
+    delete (v4PatientSchema.properties as Record<string, unknown>).kanaPrefixHash;
+    delete (v4PatientSchema.properties as Record<string, unknown>).givenNamePrefixHash;
+    delete (v4PatientSchema.properties as Record<string, unknown>).givenKanaPrefixHash;
+
+    const db4 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db4.addCollections({
+      patients: {
+        schema: v4PatientSchema,
+        migrationStrategies: legacyMigrationStrategies(v4PatientSchema, {})
+      }
+    });
+    await db4.patients.insert({
+      patientId: 'pt_v4_carry',
+      name: '高橋 美咲',
+      kana: 'タカハシ ミサキ',
+      birthDate: '1988-03-15',
+      gender: 'female'
+    });
+    await db4.close();
+
+    const db5 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db5.addCollections({
+      patients: {
+        schema: PATIENT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {})
+      }
+    });
+    const hmacKey = registerPatientSearchIndexKey(db5, password);
+    attachPatientSearchIndexHooks(db5.patients, hmacKey);
+
+    const carried = await db5.patients.findOne('pt_v4_carry').exec();
+    assert.ok(carried, 'existing v4 patient must remain readable after v5 migration');
+    assert.strictEqual(carried.name, '高橋 美咲');
+    assert.strictEqual(carried.kana, 'タカハシ ミサキ');
+    assert.strictEqual(carried.birthDate, '1988-03-15');
+
+    const patientDbView = db5 as unknown as Pick<PharmacyDatabase, 'patients'>;
+    const backfilled = await backfillPatientSearchIndexes(patientDbView, hmacKey);
+    assert.strictEqual(backfilled, 1);
+
+    const found = await searchPatientsViaBlindIndex(patientDbView, '19880315', 8);
+    assert.strictEqual(found.usedBlindIndex, true);
+    assert.deepStrictEqual(found.patients.map((p) => p.patientId), ['pt_v4_carry']);
+
+    await db5.remove();
   });
 });
 

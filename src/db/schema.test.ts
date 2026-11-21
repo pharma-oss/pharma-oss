@@ -101,7 +101,7 @@ describe('Schema Validation', () => {
       };
 
       assert.strictEqual(getErrors(PATIENT_SCHEMA, patientWithHighCost), null);
-      assert.strictEqual(PATIENT_SCHEMA.version, 4);
+      assert.strictEqual(PATIENT_SCHEMA.version, 5);
     });
 
     test('should reject a high-cost limit category outside 区ア〜区キ', () => {
