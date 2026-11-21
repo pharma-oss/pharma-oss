@@ -19,7 +19,7 @@ export const OcrRawTextArea = React.memo(({ isProcessing, ocrResult }: { isProce
         background: var(--bg-base);
         padding: 0.5rem;
         font-family: monospace;
-        font-size: 0.75rem;
+        font-size: var(--fs-2xs);
         color: var(--text-muted);
       }
     `}</style>

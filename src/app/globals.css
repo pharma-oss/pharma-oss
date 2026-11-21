@@ -3453,7 +3453,7 @@ input[type="search"]::-webkit-search-cancel-button {
   }
 
   .brand h1 {
-    font-size: 0.95rem;
+    font-size: var(--fs-md);
   }
 
   .logo-spark {
@@ -3475,7 +3475,7 @@ input[type="search"]::-webkit-search-cancel-button {
 
 @media (max-width: 340px) {
   .brand h1 {
-    font-size: 0.85rem;
+    font-size: var(--fs-sm);
   }
 
   .nav-item {

@@ -126,7 +126,7 @@
 
 .ocr-page .manual-entry-subtitle {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -175,7 +175,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 1rem;
@@ -248,13 +248,13 @@
 
 .ocr-page .readiness-item span {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
 }
 
 .ocr-page .readiness-item strong {
   color: var(--text-main);
-  font-size: 0.82rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 
@@ -318,7 +318,7 @@
   margin-bottom: 0;
   min-height: 1.4em;
   line-height: 1.4;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -328,7 +328,7 @@
 }
 
 .ocr-page .field-hint {
-  font-size: 0.75rem;
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
 
@@ -451,7 +451,7 @@
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
   border: 1px solid var(--border);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   background: #f8fafc;
 }
@@ -500,12 +500,12 @@
 .ocr-page .electronic-prescription-header strong {
   display: block;
   color: var(--text-main);
-  font-size: 0.92rem;
+  font-size: var(--fs-md);
 }
 
 .ocr-page .electronic-prescription-controls label {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -524,7 +524,7 @@
   border-radius: 6px;
   background: transparent;
   color: #1e40af;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 900;
   cursor: pointer;
 }
@@ -542,7 +542,7 @@
   border: 1px solid #93c5fd;
   border-radius: var(--radius-md);
   background: #ffffff;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .ocr-page .electronic-prescription-note,
@@ -551,7 +551,7 @@
 .ocr-page .electronic-prescription-warnings {
   margin: 0;
   color: #1e40af;
-  font-size: 0.76rem;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   line-height: 1.5;
 }
@@ -603,7 +603,7 @@
   margin: 0.1rem 0 0;
   overflow-wrap: anywhere;
   color: var(--text-main);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -612,7 +612,7 @@
   align-items: flex-start;
   gap: 0.5rem;
   color: #92400e;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   line-height: 1.45;
 }
@@ -630,7 +630,7 @@
   border-radius: 6px;
   background: #ffffff;
   color: #1e40af;
-  font-size: 0.76rem;
+  font-size: var(--fs-2xs);
   line-height: 1.45;
 }
 
@@ -657,7 +657,7 @@
 }
 
 .ocr-page .panel-title {
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -718,7 +718,7 @@
 .ocr-page .selected-patient-note,
 .ocr-page .temporary-registration-note {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   line-height: 1.45;
 }
 
@@ -804,14 +804,14 @@
 }
 
 .ocr-page .selected-patient-name {
-  font-size: 0.92rem;
+  font-size: var(--fs-md);
   font-weight: 800;
   color: var(--text-main);
 }
 
 .ocr-page .selected-patient-birth,
 .ocr-page .selected-patient-insurance {
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -863,7 +863,7 @@
   gap: 0.4rem;
   padding: 0.35rem 0.55rem;
   border-radius: var(--radius-sm);
-  font-size: 0.76rem;
+  font-size: var(--fs-2xs);
   line-height: 1.4;
 }
 
@@ -958,7 +958,7 @@
   align-items: center;
   gap: 0.4rem;
   color: #1e3a8a;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
 }
 
@@ -991,7 +991,7 @@
 
 .ocr-page .merge-patient-grid strong {
   color: var(--text-main);
-  font-size: 0.88rem;
+  font-size: var(--fs-sm);
   overflow-wrap: anywhere;
 }
 
@@ -1125,7 +1125,7 @@
   align-items: center;
   gap: 0.35rem;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   max-width: 100%;
 }
 
@@ -1135,7 +1135,7 @@
 }
 
 .ocr-page .form-section-title {
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   border-bottom: 2px solid var(--primary-light);
   padding-bottom: 4px;
@@ -1164,7 +1164,7 @@
 
 .ocr-page .section-kicker {
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--fs-2xs);
   font-weight: 800;
 }
 
@@ -1188,7 +1188,7 @@
   gap: 0.3rem;
   padding: 0 0.65rem;
   border-radius: 6px;
-  font-size: 0.76rem;
+  font-size: var(--fs-2xs);
   font-weight: 850;
   white-space: nowrap;
 }

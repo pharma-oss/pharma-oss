@@ -236,7 +236,7 @@ export const UsageSearchModal = React.memo(({
         }
 
         .category-tag {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
           padding: 2px 8px;
           border-radius: 4px;
@@ -246,7 +246,7 @@ export const UsageSearchModal = React.memo(({
         }
 
         .count-badge {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           font-weight: 600;
           color: #64748b;
         }
@@ -287,7 +287,7 @@ export const UsageSearchModal = React.memo(({
           border: 1px solid #cbd5e1;
           border-radius: 6px;
           padding: 0.5rem 0.75rem;
-          font-size: 0.95rem;
+          font-size: var(--fs-md);
           outline: none;
           transition: border-color 0.15s, box-shadow 0.15s;
         }
@@ -323,7 +323,7 @@ export const UsageSearchModal = React.memo(({
           padding: 3rem 1rem;
           text-align: center;
           color: #94a3b8;
-          font-size: 0.95rem;
+          font-size: var(--fs-md);
         }
 
         .usage-list {
@@ -360,13 +360,13 @@ export const UsageSearchModal = React.memo(({
         }
 
         .usage-label {
-          font-size: 0.95rem;
+          font-size: var(--fs-md);
           font-weight: 600;
           color: #1e293b;
         }
 
         .usage-kana {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           color: #64748b;
         }
 
@@ -378,7 +378,7 @@ export const UsageSearchModal = React.memo(({
         }
 
         .code-badge {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           font-family: monospace;
           color: #475569;
           background: #f1f5f9;
@@ -387,7 +387,7 @@ export const UsageSearchModal = React.memo(({
         }
 
         .selected-indicator {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           font-weight: 700;
           color: #2563eb;
           background: #dbeafe;
@@ -405,7 +405,7 @@ export const UsageSearchModal = React.memo(({
         }
 
         .help-text {
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           color: #94a3b8;
         }
 
@@ -415,7 +415,7 @@ export const UsageSearchModal = React.memo(({
           color: #334155;
           padding: 0.4rem 0.85rem;
           border-radius: 6px;
-          font-size: 0.875rem;
+          font-size: var(--fs-sm);
           font-weight: 500;
           cursor: pointer;
         }

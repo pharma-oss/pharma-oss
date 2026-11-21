@@ -181,7 +181,7 @@ export const SoapEntryBox = React.memo(function SoapEntryBox({
           display: inline-flex;
           align-items: center;
           gap: 0.25rem;
-          font-size: 0.75rem;
+          font-size: var(--fs-2xs);
           font-weight: 800;
           color: #fff;
           background: #10b981;

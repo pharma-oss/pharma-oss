@@ -1438,7 +1438,7 @@ export default function BackupSettingsTab({
         .backup-schedule-summary strong {
           display: block;
           color: var(--text-main);
-          font-size: 0.98rem;
+          font-size: var(--fs-base);
           font-weight: 800;
           margin-top: 0.1rem;
         }
