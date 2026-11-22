@@ -86,6 +86,7 @@ Tier 4  複数 Tier の成果物を統合する
 | `migration:trial-acceptance` | `runMigrationTrialAcceptance.ts` | 移行トライアルの受け入れ判定 |
 | `staff:access-recovery-review` | `runStaffAccessRecoveryReview.ts` | スタッフ認証復旧の月次レビュー |
 | `electronic-prescription:connector-preflight` | `runElectronicPrescriptionConnectorPreflight.ts` | 電子処方箋コネクタの事前確認 |
+| `ops:field-evidence-bundle` | `runFieldEvidenceBundle.ts` | Phase C 現地証跡 9 スロットの一括雛形生成・保管ガード・真正性監査（I-2 / I-4） |
 | `test:e2e:print-layout` | `runPrintLayoutRegression.mjs` | 印刷帳票 9 種の実描画キャプチャ（`manifest.json` を出力） |
 
 ### Tier 2 — Tier 1 の出力が必要
@@ -156,8 +157,18 @@ Tier 4  複数 Tier の成果物を統合する
 
 ## 4. 未整理・今後の課題
 
-- 各スクリプトの `status` 値（`pass` / `attention` / `blocked`）の定義がスクリプト間で
-  完全には揃っていない。統一するかどうかは未決。
-- `evidence:integrity` は他レビューの証跡を検証するが、Nightly では入力が揃わないため
-  現状スキップしている。
-- 証跡 JSON の保管場所（リポジトリ外）の運用ルールは未定。
+- `evidence:integrity` は他レビューの証跡を検証するが、Nightly では入力が揃わないため現状スキップしている。
+
+---
+
+## 5. 証跡 JSON の保管・保持ルール（I-2 確定版）
+
+現地証跡（`YAKUREKI_*_EVIDENCE`）および運用レビュー CLI の出力証跡は、次のルールで保管・運用します。
+
+| 項目 | ルール |
+|---|---|
+| **保管場所** | **リポジトリ外**のディスク暗号化・アクセス制御済みディレクトリまたは院内 NAS（例: `/var/lib/yakureki-evidence/<store-code>/<YYYY-MM>/`）。Git 管理下へのコミット禁止（`ops:field-evidence-bundle` がリポジトリ内パスを既定で拒否） |
+| **最低保持期間** | **5 年間**（監査ログ WORM 保全・調剤録等の店舗規程・法令がより長い場合は長い方を優先） |
+| **必須メタ情報** | `capturedAt`（ISO 8601 実測日時）、`operatorReviewId` / `reviewRecordId`（匿名確認記録 ID）、`sourceArtifactSha256`（元資料 SHA-256 64 桁 hex）、`noPatientDataConfirmed: true` |
+| **記載禁止項目** | 患者氏名・患者 ID・生年月日・被保険者記号番号・公費受給者番号、API トークン・パスワード・秘密鍵、ローカルフルパス・内部 URL、`demo`/`dummy`/`mock`/`localhost` 等の合成文字列 |
+| **一括初期化・点検** | 雛形生成: `npm run ops:field-evidence-bundle -- --init /var/lib/yakureki-evidence/<store>/`<br>一括監査: `YAKUREKI_FIELD_EVIDENCE_DIR=/var/lib/yakureki-evidence/<store>/ npm run ops:field-evidence-bundle`（全 9 スロット合格時のみ `exit 0`） |

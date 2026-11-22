@@ -232,6 +232,17 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     }
   },
   {
+    npmScript: 'ops:field-evidence-bundle',
+    outputDirEnv: 'YAKUREKI_FIELD_EVIDENCE_BUNDLE_OUTPUT_DIR',
+    reportsEvidenceIntegrity: true,
+    outputs: {
+      reviewJson: 'field-evidence-bundle-review.json',
+      reviewCsv: 'field-evidence-bundle-review.csv',
+      checklist: 'field-evidence-bundle-checklist.txt',
+      storagePolicy: 'field-evidence-storage-policy.json'
+    }
+  },
+  {
     npmScript: 'electronic-prescription:field-readiness',
     outputDirEnv: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_REQUEST_ONLY: '1' },
