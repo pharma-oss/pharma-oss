@@ -182,17 +182,17 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ---
 
-# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `62fe33c` 実測。§4 の現地証跡ステータスは未変更）
+# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `126e1b4` 実測。§4 の現地証跡ステータスは未変更）
 
 ## 1. 品質ゲート
 
-2026-11-22 に Phase A 品質強化（`7bb0c9e`〜`05f713c`）および Phase B 機能実装（B-1 `930f442`・F-1 `a2a4917`・F-3 `f0df698`・G-1 `b3fc878`・H-1 `62fe33c`）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1005-H-1-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-11-22 に Phase A 品質強化（`7bb0c9e`〜`05f713c`）・Phase B 機能実装（B-1 `930f442`・F-1 `a2a4917`・F-3 `f0df698`・G-1 `b3fc878`・H-1 `62fe33c`）・Phase C 準備（`346d411`・`126e1b4`）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1034-C-prep-2-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,222 pass / 0 fail / 217 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,227 pass / 0 fail / 218 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
 | SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 10 / `as any` 3。残存 10 件はすべて除外対象の `src/db/index.ts`・`src/lib/electronic_prescription_client.ts` のみ） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
@@ -205,10 +205,10 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 項目 | 実測 |
 |---|---|
-| `src/` の TS/TSX（テスト除く） | 391 ファイル |
-| テストファイル | 364 ファイル |
+| `src/` の TS/TSX（テスト除く） | 392 ファイル |
+| テストファイル | 365 ファイル |
 | 主要 6 画面の行数 | 8,852 行（ocr 1,991 / emr 2,570 / print 2,125 / inventory 857 / settings 844 / dashboard〔`src/app/app/page.tsx`〕465。※ 上位 3 画面は P7 行数予算テストで固定） |
-| `scripts/` | 78 ファイル（第 1 階層）、npm scripts 48 本 |
+| `scripts/` | 79 ファイル（第 1 階層）、npm scripts 49 本 |
 | `PrintPickingFlow.test.ts` の `readFileSync` | **0 件**（2026-11-21 `abbf183` で残存 7 箇所を完全撤廃。さらに 2026-11-22 Phase A `7bb0c9e`/`b7d3d42`/`fb88e6a` で印刷・自費請求・受付の残存ソース文字列テストも実描画・実行テストへ移行完了） |
 | 非印刷 CSS 生 sub-1rem フォントサイズ | **0 箇所**（2026-11-22 `9d809dd` で残存 41 箇所を `--fs-*` トークンへ統一完了） |
 | インライン `style={{}}` | **3 箇所**（`AuditSettingsTab` 2、印刷ページ 1）。すべて動的 CSS 変数（`--bar-height` / `--print-*`）の正当な受け渡しのみ。`TerminalSyncPanel` 18 箇所と `ClientLayout` 6 箇所は CSS クラスへ移行完了し、予算上限 3 を `TerminalSyncPanel.test.ts` で自動防壁化 |
@@ -468,11 +468,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
   - **2026-11-21（`abbf183`）に残り全 7 箇所の `readFileSync` を完全撤廃（0 件）**。`src/app/emr/emr_route_guards.ts`・`src/app/print/components/ClaimLifecyclePanel.tsx`・`PharmacistCheckPanel.tsx`・`ClaimCheckPanel.tsx` および `src/app/print/helpers.ts` の純粋ヘルパー 4 関数（`buildPrintPickingSupportUrl`・`buildPrintInterventionUrl`・`buildPrintReceiptBarcodeState`・`runPrintWithBodyClass`）へ抽出し、実実行・React `renderToStaticMarkup` 契約テスト（17 テスト・fail-first mutation 4 件実証済み）へ全面移行完了。併せて印刷画面も 2,434→2,144 行（-290 行）へ軽量化。
   - **2026-11-22（Phase A `7bb0c9e`・`b7d3d42`・`fb88e6a`・`dc95e0f`・`9d809dd`・`05f713c`）**: 印刷・自費請求・受付の残存ソース文字列テストを実描画・実行テストへ移行完了。併せて `registerPatient` 重複患者照合の鍵付きブラインドインデックス化、非印刷 CSS sub-1rem 生フォントサイズ 41→0 の `--fs-*` トークン統一、および除外 2 ファイル以外の `: any` 全撤廃（`colon-any` 14→10）を完了。
 
-### I-2 運用レビュー CLI の `status` 定義統一と証跡保管ルール（status定義統一完了）
-- **前提**: `pass` / `attention` / `blocked` の共通定義と終了コード規約は `ops_review_status.ts` と運用レビュー台帳にある。残課題は証跡 JSON の保管場所（リポジトリ外）・運用ルールの確定と、Nightly へ必要な入力を渡す運用である。
-- **進捗**: PR-H3（`7d2c6df`）により、台帳（`docs/ops_review_ledger.md`）に status 定義表を明記し、`ops_review_cli.test.ts` で全 CLI の出力が台帳契約と一致することを検証する契約テストを整備完了。
-- **方針**: 証跡 JSON の保管場所・運用ルールを確定し、Nightly での検証網羅を進める。
-- **要判断**: 証跡の保管場所と保存期間。
+### I-2 運用レビュー CLI の `status` 定義統一と証跡保管ルール（実装完了 `7d2c6df`・`126e1b4`）
+- **前提**: `pass` / `attention` / `blocked` の共通定義と終了コード規約は `ops_review_status.ts` と運用レビュー台帳にある。証跡 JSON のリポジトリ外保管ルールと一括点検 CLI が残課題だった。
+- **進捗**:
+  - PR-H3（`7d2c6df`）により、台帳（`docs/ops_review_ledger.md`）に status 定義表を明記し、`ops_review_cli.test.ts` で全 CLI の出力が台帳契約と一致することを検証する契約テストを整備完了。
+  - **2026-11-22（`126e1b4`）**: `docs/ops_review_ledger.md` §5 に証跡 JSON 保管・保持ルール（リポジトリ外の暗号化ディレクトリ/院内 NAS、最低保持期間 5 年、必須メタ 4 項目、禁止項目）を策定し、`src/lib/field_evidence_bundle.ts`・`scripts/runFieldEvidenceBundle.ts`（`npm run ops:field-evidence-bundle`）で Phase C 全 9 スロットの雛形一括生成（`--init`、`wx` 既存保護）、リポジトリ内パス拒否ガード、および `evidence_integrity.ts` による真正性・患者個人情報ゼロ・未記入テンプレート検知の一括監査を実装・台帳契約テストへ統合完了（fail-first 変異テスト 3/3 件実証）。
 
 ### I-3 アクセシビリティとレスポンシブの通し確認（通し確認完了）
 - **前提**: 単一画面単位のデザイン改善後、受付→請求の一連フローでのキーボード操作・タブレット/モバイル通し確認が未完だった。
@@ -480,13 +480,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **方針**: 新規画面やフロー追加時にも同様の通しスクリプトで横オーバーフロー 0px とキーボード操作性を自動検査する。
 
 ### I-4 パイロット複数店舗の 4 週間 KPI とリリース運用受入
-- **前提**: `pilot:kpi-review` / `pilot:operational-readiness` / `release:ops-acceptance` は実装済みだが、まっさらな作業ツリーでは 7 ゲート未達で `blocked`。これは設計どおり（証跡が無いため）。
-- **方針**: 現地証跡（実紙検証、資格確認、電子処方箋、サポート訓練、SLA）を順に投入し、`pass` に至る過程を第Ⅱ部 §4 の status に反映する。**ここが完成形の条件 5・6 に直結する。**
+- **前提**: `pilot:kpi-review` / `pilot:operational-readiness` / `release:ops-acceptance` に加え、全 9 証跡スロットを一括初期化・点検する `ops:field-evidence-bundle` が実装済み。まっさらな作業ツリーでは現地証跡が無いため `blocked`（設計どおり）。
+- **方針**: `npm run ops:field-evidence-bundle -- --init /var/lib/yakureki-evidence/<store>/` でリポジトリ外に雛形を配置し、現地証跡（実紙検証、資格確認、電子処方箋、NSIPS、AI 実症例、移行、予備機・スケジューラ、4 週間 KPI）を順に投入して `pass` に至る過程を第Ⅱ部 §4 の status に反映する。**ここが完成形の条件 5・6 に直結する。**
 
-### I-5 リポジトリ運用
-- **前提**: 引き継ぎ書（2026-08-27）時点で `git push` が 403 で拒否されていた。2026-09-28 の `git status -sb` は `main...origin/main [ahead 21]`。これはローカルの追跡参照との比較であり、9月28日の確認時点では fetch / push 未実施のため、リモートの最新状態・書込権限は未確認だった。
-- **進捗**: 2026-09-29 に `git fetch origin` が成功し、デザイン改善のコミット前に `ahead 21` を再確認した。利用者からプッシュの指示を受けており、検証・コミット後の同期結果は実際の push 出力をもって報告する。
-- **方針**: `git push origin main` で同期する。権限エラーが再発した場合は GitHub 側の write 権限・認証情報を確認する。以後、1 PR = 1 コミットの慣習を維持する。
+### I-5 リポジトリ運用（2026-11-22 同期済み）
+- **進捗**: 2026-11-22 に Phase A・B の 12 コミット（`ddda47a..22d6a7f`）を `git push origin main` で正常同期確認済み。引き続き 1 PR = 1 コミットの慣習と明示的 push 承認ルールを維持する。
 
 ### I-6 デザインと日常操作の改善（ダッシュボード第1段・薬歴画面第2段・処方受付画面第3段・印刷調剤録第4段・在庫発注第5段・設定画面第6段完了）
 - **前提**: `globals.css` に色・文字サイズ・余白・角丸のトークンがあり、ダッシュボードはカードと一覧で構成されている。改善前の「進行中のタスク」は AI 補助予測・請求リスク・月次請求・在庫の各セクションより後にあった。
@@ -516,13 +514,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 状態 | 対象 | 再開条件 |
 |---|---|---|
-| 実装完了 | A-1〜A-5 / B-1・B-2 / C-4・C-5（Q-5） / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-3・I-6 | 回帰を維持。通常の実装待ちには戻さない |
-| 一部完了・残りは判断待ちまたは条件待ち | C-1（ステップ1〜4・ステップ5a 完了、旧形式完全削除は条件A/B/C待ち）/ I-2（status統一済み） | UKE旧形式廃止条件（A:実績1ヶ月、B:出力0件、C:合意）の達成確認／証跡の保管場所と期間を決める |
+| 実装完了 | A-1〜A-5 / B-1・B-2 / C-4・C-5（Q-5） / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-2・I-3・I-5・I-6 | 回帰を維持。通常の実装待ちには戻さない |
+| 一部完了・残りは条件待ち | C-1（ステップ1〜4・ステップ5a 完了、旧形式完全削除は条件A/B/C待ち） | UKE旧形式廃止条件（A:実績1ヶ月、B:出力0件、C:合意）の達成確認をもって `<details>` 内旧形式と旧生成コードを完全削除 |
 | 挙動・対象の判断待ち | C-2 / H-2 | 各項目の「要判断」（薬価改定「変更年月日」の解釈、RxDB コレクション統合枠または恒久策）を解消 |
-| 切替判断待ち | C-1 の旧形式完全削除（ステップ 5b） | 条件A・B・C（実機受付確認・出力0件継続・現場合意）の充足を確認し、`<details>` 内旧形式と旧生成コードを完全削除 |
 | 公式資料・症例待ち | C-3 | 出典と具体的な未対応ケースを入手し、点数影響を確認する |
-| 現地証跡・実データ待ち | D-1（Q-5 マイナ読取実機仕様突合含む） / E-1 / E-2 / F-4 / H-3 / H-4 / I-4 | 対象機器・店舗・実施担当を決め、実施記録を投入する。E-2 は対象機器の順序も判断する |
-| リモート状態・権限の確認が必要 | I-5 | 利用者からの push 指示とリモート差分を確認してから同期する |
+| 現地証跡・実データ待ち | D-1（Q-5 マイナ読取実機仕様突合含む） / E-1 / E-2 / F-4 / H-3 / H-4 / I-4 | `ops:field-evidence-bundle -- --init <外部保管先>` で雛形を配置し、対象機器・店舗・実施担当の実測証跡を投入する。E-2 は対象機器の順序も判断する |
 
 全トラックの完了を、ローカルの自動テスト通過だけでは判定しない。現地証跡が必要な項目は引き続き未完とする。
 
