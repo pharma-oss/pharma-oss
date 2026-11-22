@@ -371,7 +371,8 @@ test('backup audit item tracks restore drill evidence separately from actual res
   assert.ok(backupItem.remainingWork.some((work) => work.includes('OSスケジューラ')));
   assert.ok(backupItem.remainingWork.some((work) => work.includes('ログイン済みプロファイル')));
   assert.ok(backupItem.remainingWork.some((work) => work.includes('点検受領書の現物継続保管')));
-  assert.ok(backupItem.remainingWork.some((work) => work.includes('S3以外のWORM')));
+  assert.ok(backupItem.implementationEvidence.some((evidence) => evidence.includes('ローカル/NAS 追記専用 WORM')));
+  assert.ok(!backupItem.remainingWork.some((work) => work.includes('S3以外のWORM保存先コネクタ')));
   assert.ok(backupItem.remainingWork.some((work) => work.includes('他社ソフト実データ相当')));
   assert.ok(!backupItem.remainingWork.some((work) => work.includes('本番認証')));
   assert.ok(!backupItem.remainingWork.some((work) => work.includes('自動バックアップ書き出し')));
@@ -696,4 +697,26 @@ test('insurance audit item tracks eligibility period and public expense limit st
   assert.ok(!insuranceItem.remainingWork.some((work) => work.includes('資格確認日、資格有効性、公費期限、負担上限の構造化')));
   assert.ok(!insuranceItem.remainingWork.some((work) => work.includes('正式レスポンス項目へのマッピング')));
   assert.ok(!insuranceItem.remainingWork.some((work) => work.includes('正式仕様サンプルによる項目名差分テスト')));
+});
+
+test('official audit records Phase B implemented evidence without elevating field-evidence-gated statuses', () => {
+  const forms = OFFICIAL_AUDIT_ITEMS.find((item) => item.id === 'printed_forms');
+  const security = OFFICIAL_AUDIT_ITEMS.find((item) => item.id === 'security_permissions_audit');
+  const backup = OFFICIAL_AUDIT_ITEMS.find((item) => item.id === 'backup_sync_recovery');
+  const ops = OFFICIAL_AUDIT_ITEMS.find((item) => item.id === 'e2e_return_rebilling');
+
+  assert.ok(forms && security && backup && ops);
+  assert.strictEqual(forms.status, 'implemented');
+  assert.strictEqual(security.status, 'partial');
+  assert.strictEqual(backup.status, 'partial');
+  assert.strictEqual(ops.status, 'partial');
+
+  assert.ok(forms.implementationEvidence.some((e) => e.includes('調剤実量') && e.includes('B-1')));
+  assert.ok(forms.implementationEvidence.some((e) => e.includes('照合バーコード')));
+  assert.ok(security.implementationEvidence.some((e) => e.includes('ローカル/NAS追記専用WORM') && e.includes('H-1')));
+  assert.ok(security.implementationEvidence.some((e) => e.includes('AUDIT_LOG_SCHEMA v21') && e.includes('G-1')));
+  assert.ok(backup.implementationEvidence.some((e) => e.includes('サテライト端末同期')));
+  assert.ok(ops.implementationEvidence.some((e) => e.includes('aiStatus=unconfirmed') && e.includes('F-1')));
+  assert.ok(ops.implementationEvidence.some((e) => e.includes('PATIENT_SCHEMA v6') && e.includes('F-3')));
+  assert.ok(ops.implementationEvidence.some((e) => e.includes('FEFO先入先出逸脱警告') && e.includes('G-1')));
 });

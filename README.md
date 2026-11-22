@@ -5,7 +5,7 @@
 A local-first pharmacy EMR & dispensing-receipt (UKE) system for Japanese community pharmacies, built with Next.js and RxDB. Prescription intake (OCR / QR / e-prescription), GS1-verified picking, SOAP medication records with AI-drafts, R8 (2026) fee calculation, UKE export, inventory with lot/expiry tracking, tamper-evident audit logs, and encrypted offline-capable local storage — no server required.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1700%2B_passing-brightgreen.svg)](docs/developer_manual.md)
+[![Tests](https://img.shields.io/badge/tests-3200%2B_passing-brightgreen.svg)](docs/developer_manual.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 ![ダッシュボード](docs/images/dashboard.png)
@@ -46,7 +46,7 @@ AI-assist scope and safeguards.
 - **手入力受付と名寄せ** — 氏名＋生年月日で既存患者へ自動紐付け。同姓同名は統合確認へ
 
 ### 調剤・ピッキング
-- **棚番地順ピッキングリスト** と **GS1データバー現物照合**（薬品・ロット・使用期限の一致確認）
+- **棚番地順ピッキングリスト** と **GS1データバー現物照合**（薬品・ロット・使用期限の一致確認、および先入先出 **FEFO 逸脱警告＋監査ログ記録**）
 - **不足のその場記録** — 棚不足は発注ワークベンチの候補へ自動連動
 - **既存ピッキングシステム連携** — 指示CSV（棚番地・JAN・必要量・ロット候補入り）書き出しと、結果CSV/TSV取込（完了→照合済み、不足→不足記録）
 - **NSIPS準拠の調剤機器・POS連携** — 施設内コネクタ経由の送信・差替・取消
@@ -54,28 +54,28 @@ AI-assist scope and safeguards.
 ![ピッキング支援](docs/images/picking.png)
 
 ### 薬歴（電子薬歴）
-- **4パネルSOAPエディタ** ＋ 服薬状況・残薬・副作用などの**構造化チェック**
+- **4パネルSOAPエディタ** ＋ 服薬状況・残薬・副作用などの**構造化チェック**、**フォロー定型テンプレート**（残薬・副作用・アドヒアランス・次回確認事項）および **EMR フォロー予約カード**（ダッシュボード KPI「フォロー候補」連動）
 - **前回Do・処方差分・薬歴タイムライン** — 前回来局との違いを見落としにくく
-- **安全チェック** — 患者アレルギー/副作用歴との突合（一般名ベースのファジー一致）、PMDA添付文書由来の相互作用・禁忌警告、同効薬重複検知
-- **AI補助SOAP下書き** — 処方・アラートを根拠に候補を提示。反映は薬剤師確認として記録
+- **安全チェック** — 患者アレルギー/副作用歴との突合（一般名ベースのファジー一致）、PMDA添付文書由来の相互作用・禁忌警告、同効薬重複検知に加え、**腎機能（eGFR/Cr/CrCl・90日超過「参考値」警告・未登録「判定不能」明示）・妊娠/授乳・併用OTC/サプリ**の安全チェック（手動入力＋電子処方箋検査値取込、暗号化保存）
+- **AI補助SOAP下書き・テンプレート安全設計** — 処方・アラート根拠付き候補およびテンプレート挿入はすべて未確認下書き（`unconfirmed`）として記録され、薬剤師の確認・承認を経て確定（未確認のまま院外トレーシングレポートへ出力されない）
 
 ![薬歴入力](docs/images/emr-soap.png)
 
 ### 算定・レセプト
-- **令和8年（2026年）調剤報酬ベースの自動算定** — 薬剤調製料、調剤管理料、服薬管理指導料、各種加算。算定OFF理由の記録つき
+- **令和8年（2026年）調剤報酬ベースの自動算定** — 薬剤調製料、調剤管理料、服薬管理指導料、各種加算、算定条件（手帳有無・時間外等・特管）。算定OFF理由の記録つき。自費患者は保険請求対象から自動除外
 - **請求前チェック** — 廃止薬・薬価未設定・レセ電コード欠落・UKE必須レコード/並び順/合計点数を検査し、問題があれば出力を停止
-- **UKE出力（Shift-JIS）** — 単票・月次一括。請求スナップショットと差分表示、返戻修正メモ、月次請求ワークベンチ（受付済一括締め・再請求）
+- **UKE出力（Shift-JIS）** — 単票・月次一括（公式提出形式 `RECEIPTY.CYO` 正本＋`<details>` 内旧形式点検用）。請求スナップショットと差分表示、返戻修正メモ、月次請求ワークベンチ（受付済一括締め・再請求）
 
 ![帳票・請求確認](docs/images/print.png)
 
 ### 帳票
-- 調剤録、レセプト（調剤明細・領収証）、薬袋、薬情（薬情テンプレは薬剤師承認制）、お薬手帳シール、水剤・軟膏ラベル、レジロールピッキングリスト。余白・フォントは端末ごとに調整可
+- 調剤録、レセプト（調剤明細・領収証＋9桁 Luhn 照合バーコード）、薬袋、薬情（薬情テンプレは薬剤師承認制）、お薬手帳シール、水剤・軟膏ラベル、レジロールピッキングリスト。単位換算時は全帳票へ調剤実量を併記。余白・フォントは端末ごとに調整可
 
 ### 在庫
-- ロット・使用期限単位の在庫、入庫登録（GS1/JAN）、発注ワークベンチ（患者名を含まない発注CSV）、分譲（店舗間移動）、デッドストック検知、棚番地管理
+- ロット・使用期限単位の在庫、入庫登録（GS1/JAN）、発注ワークベンチ（発注点・期限切迫・院内代替薬候補・患者名を含まない発注CSV）、分譲（店舗間移動）、デッドストック検知、棚番地管理、**取消・返品・廃棄・棚卸差異の構造化監査ログ**、および**麻薬・向精神薬 受払・残高補助帳簿**（`法定帳簿の補助記録` 明記・患者個人情報なし CSV/印刷）
 
 ### 運用・ガバナンス
-- **監査ログ** — 主要操作をハッシュチェーン署名付きで記録（複数端末では端末別チェーン）。整合性検証、JSON書き出し、S3 Object Lock（WORM）保全ジョブ
+- **監査ログ** — 主要操作をハッシュチェーン署名付きで記録（複数端末では端末別チェーン）。整合性検証、JSON書き出し、**S3 Object Lock（WORM）** および **ローカル/NAS 追記専用 WORM**（`wx` 排他追記・`chmod 0444`・SHA-256 書き戻し照合・マニフェストチェーン検証）保全ジョブ
 - **バックアップ/復旧** — パスワード暗号化JSON、世代管理、復旧前差分プレビュー、閉店時バックアップ予定、OSスケジューラ用の自動書き出し/外部保存ジョブ
 - **サテライト端末同期（複数端末）** — メイン端末に患者データを集約し、サテライト端末はメモリのみ（ディスク保存なし）。メイン停止中も入力継続＋未同期警告、再接続で自動送信。競合はハブ優先＋薬剤師レビュー。端末の追加・廃棄はトークン発行・失効のみ（[docs/satellite_terminal_sync_plan.md](docs/satellite_terminal_sync_plan.md)）
 - **権限とスタッフ管理** — 管理者/薬剤師/事務のロール制御、パスキー対応、退職・端末移行の復旧手順
@@ -105,7 +105,7 @@ npm run dev
 | 参照マスタ | SQLite WASM/OPFS（薬品検索・用法コード） |
 | OCR / バーコード | Tesseract.js（日本語）/ @zxing（GS1・QR） |
 | 帳票 | ブラウザ印刷（CSSレイアウト、実紙検証手順つき） |
-| テスト | node:test + tsx（ユニット 1,700+）、Puppeteer（E2E・印刷回帰） |
+| テスト | node:test + tsx（ユニット 3,200+）、Puppeteer（E2E・印刷回帰） |
 
 サーバーサイドの患者データ保存は既定ではありません（単独端末運用）。バックエンドAPIは開発用ユーティリティ（公式PDF照合など）のみです。店舗内で複数端末を使う場合のみ、メイン端末のNext.jsサーバー内（`node:sqlite`・AES-256-GCM暗号化）に正本を集約し、サテライト端末は患者データを端末に保存しません（`PHARMACY_SYNC_ROLE`、詳細は [docs/satellite_terminal_sync_plan.md](docs/satellite_terminal_sync_plan.md)）。
 
