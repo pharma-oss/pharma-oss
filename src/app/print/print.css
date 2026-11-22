@@ -3909,6 +3909,24 @@
   margin: 0.2rem 0;
 }
 
+.official-uke-claim-error-list {
+  margin: 0.45rem 0 0.25rem;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.official-uke-claim-error-list li {
+  line-height: 1.45;
+}
+
+.official-uke-claim-error-list li strong {
+  display: inline;
+  font-size: inherit;
+  margin-bottom: 0;
+}
+
 .official-uke-alert-hint {
   display: block;
   margin-top: 0.4rem;

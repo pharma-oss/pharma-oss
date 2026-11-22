@@ -175,13 +175,39 @@ test('SingleOfficialUkeModal displays blocking alert and disables download when 
     })
   );
 
-  // 1. エラーアラートの表示
+  // 1. エラーアラートの表示および具体的な不足コード・要修正項目の列挙
   assert.match(html, /公式仕様未充足による出力制限/);
   assert.match(html, /公式提出準備に/);
+  assert.match(html, /data-testid="official-uke-readiness-issue-list"/);
+  assert.match(html, /アムロジピンOD錠5mg/);
   assert.match(html, /厚労省コード/);
 
   // 2. ダウンロードボタンが disabled であること
   assert.match(html, /<button[^>]*data-testid="download-official-cyo-button"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="download-official-cyo-button"/);
+});
+
+test('SingleOfficialUkeModal lists missing official fee code issues concretely when fee code is unset', () => {
+  const data = createModalTestData();
+  // 調剤基本料1の公式算定コードを未設定にする
+  data.calculatedFees[0] = {
+    ...data.calculatedFees[0],
+    receiptFeeCode: undefined
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(SingleOfficialUkeModal, {
+      isOpen: true,
+      onClose: () => {},
+      visitData: data.visit,
+      patientData: data.patient,
+      settingsData: data.settings,
+      prescriptionItems: data.items,
+      calculatedFees: data.calculatedFees
+    })
+  );
+
+  assert.match(html, /data-testid="official-uke-readiness-issue-list"/);
+  assert.match(html, /調剤基本料1/);
 });
 
 test('SingleOfficialUkeModal blocks download and displays claim error alert when hasClaimErrors is true', () => {

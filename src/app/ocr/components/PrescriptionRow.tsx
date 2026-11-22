@@ -19,6 +19,7 @@ export function countActiveRowOptions(prescription: Pick<Prescription, 'isIppoka
 export interface PrescriptionRowProps {
   prescription: Prescription;
   index: number;
+  amountLabel?: string;
   onChange: (id: string, field: string, value: PrescriptionFieldValue, index: number) => void;
   onOpenDrugSearch: (id: string, currentDrug: string, targetField: 'prescribed' | 'dispensed', prescribedCode?: string) => void;
   onToggleIppoka: (id: string, checked: boolean, index: number) => void;
@@ -30,6 +31,7 @@ export interface PrescriptionRowProps {
 export const PrescriptionRow = React.memo(({
   prescription,
   index,
+  amountLabel = '1日量',
   onChange,
   onOpenDrugSearch,
   onToggleIppoka,
@@ -54,11 +56,11 @@ export const PrescriptionRow = React.memo(({
           />
         </div>
         <div className="field-stack amount-stack">
-          <span className="field-label">1日量</span>
+          <span className="field-label">{amountLabel}</span>
           <StepperField
             value={prescription.amount}
             onChange={(next) => onChange(prescription.id, 'amount', next, index)}
-            ariaLabel={`1日量 ${index + 1}`}
+            ariaLabel={`${amountLabel} ${index + 1}`}
             inputClassName="amount"
             placeholder="1"
             maxLength={10}
@@ -236,6 +238,7 @@ export const PrescriptionRow = React.memo(({
         }
 
         .field-label {
+          display: none;
           color: var(--text-muted);
           font-size: var(--fs-xs);
           font-weight: 850;
@@ -470,6 +473,10 @@ export const PrescriptionRow = React.memo(({
 
           .prescription-row-index {
             display: none;
+          }
+
+          .field-label {
+            display: block;
           }
 
           .drug-stack {

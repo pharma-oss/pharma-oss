@@ -2,6 +2,7 @@ import type { Alert } from '@/db/types';
 import type { DosageCategory } from './dosage_category';
 import {
   DOSAGE_CATEGORY_LABELS,
+  getDosageAmountLabel,
   resolveEffectiveDosageCategory,
   resolveCalculationDosageFlags
 } from './dosage_category';
@@ -91,6 +92,17 @@ const isNoSubstitution = (value: string, labels: Set<string>) => {
   return !normalized || labels.has(normalized);
 };
 
+const isSameAsPrescribedDrug = (
+  drugName: string,
+  drugCode: string,
+  dispensedDrug: string,
+  dispensedDrugCode: string
+) => {
+  if (!drugName || !dispensedDrug) return false;
+  if (drugCode && dispensedDrugCode && drugCode !== dispensedDrugCode) return false;
+  return normalizeDrugKey(drugName) === normalizeDrugKey(dispensedDrug);
+};
+
 const getEffectiveYjCode = (item: PrescriptionInputAuditItem) => (
   normalizeText(item.dispensedYjCode) || normalizeText(item.yjCode)
 );
@@ -130,6 +142,7 @@ export function buildPrescriptionInputAudit(
     const usage = normalizeText(item.usage);
     const rpComment = normalizeText(item.rpComment);
     const dispensedDrug = normalizeText(item.dispensedDrug);
+    const dispensedDrugCode = normalizeText(item.dispensedDrugCode);
     const changeReason = normalizeText(item.changeReason);
     const yjCode = getEffectiveYjCode(item);
     const genericName = getEffectiveGenericName(item);
@@ -156,11 +169,12 @@ export function buildPrescriptionInputAudit(
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
+      const amountLabel = getDosageAmountLabel(resolveEffectiveDosageCategory(item));
       addIssue(issues, {
         severity: 'error',
         code: 'amount_invalid',
-        title: `${label} の1日量が未確定です`,
-        message: '1日量は0より大きい数値で入力してください。',
+        title: `${label} の${amountLabel}が未確定です`,
+        message: `${amountLabel}は0より大きい数値で入力してください。`,
         itemIds: itemId ? [itemId] : undefined,
         rpId: item.rpId
       });
@@ -219,7 +233,11 @@ export function buildPrescriptionInputAudit(
       });
     }
 
-    if (!isNoSubstitution(dispensedDrug, noSubstitutionLabels) && !changeReason) {
+    if (
+      !isNoSubstitution(dispensedDrug, noSubstitutionLabels) &&
+      !isSameAsPrescribedDrug(drugName, drugCode, dispensedDrug, dispensedDrugCode) &&
+      !changeReason
+    ) {
       addIssue(issues, {
         severity: 'warning',
         code: 'substitution_reason_missing',

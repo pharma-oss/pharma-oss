@@ -14,6 +14,14 @@ export const DOSAGE_CATEGORY_LABELS: Record<DosageCategory, string> = {
   injection: '注射'
 };
 
+/**
+ * 調剤区分に応じた数量欄のラベルを返す。
+ * 内服は1日あたりの量（1日量）、外用・屯服・内滴・注射は総量として扱う。
+ */
+export function getDosageAmountLabel(category?: DosageCategory): '1日量' | '総量' {
+  return !category || category === 'internal' ? '1日量' : '総量';
+}
+
 // 外用: 剤形キーワード(点眼・貼付・軟膏など)を名称から拾う
 const EXTERNAL_NAME_PATTERN = new RegExp(
   [

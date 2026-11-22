@@ -43,7 +43,7 @@ import {
   findContraindicatedConditionWarnings
 } from '@/lib/drug_contraindicated_condition_check';
 import {
-  consumeFromStockLot, inquiryStatusLabel, applyReversiblePatches, rollbackAppliedPatches,
+  consumeFromStockLot, executeManualVisualPicking, inquiryStatusLabel, applyReversiblePatches, rollbackAppliedPatches,
   safeStockQuantity, tracingStatusLabel, type EmrPickingItem, type EmrPrescribedDrugItem, type ReversiblePatch
 } from '@/lib/emr_helpers';
 import {
@@ -1362,7 +1362,7 @@ export default function EmrPage() {
 
       if (unverifiedPickingItems.length > 0) {
         setIsPickingModalOpen(true);
-        toast.error(`GS1未照合の薬剤が ${unverifiedPickingItems.length} 件あります。ピッキング支援で照合してください。`);
+        toast.error(`未照合の薬剤が ${unverifiedPickingItems.length} 件あります。ピッキング支援でGS1照合または目視確認を行ってください。`);
         return;
       }
 
@@ -2042,6 +2042,7 @@ export default function EmrPage() {
           const res = await handleVerifyPickingScan(scannedCode);
           return { success: res.ok, message: res.message };
         }}
+        onManualVerify={(itemId, reason) => executeManualVisualPicking({ db, ensureActiveVisitEditable, itemId, reason, pharmacistName: getCurrentUser().name, notify: toast })}
         onResetPick={handleResetPickingItem}
         onRecordShortage={(itemId, qty, note) => handleRecordPickingShortage(itemId, qty, note)}
         onPrintReceipt={handlePrintPickingReceipt}

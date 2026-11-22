@@ -129,5 +129,42 @@ test('PrescriptionGroupEditor displays mismatch warning badge when usage does no
 
   // 用法の値が消されずに保持されていること (G5-2)
   assert.ok(html.includes('value="１日３回朝昼夕食後　服用"'), '用法がクリアされず保持されていること');
+  // 外用区分ではヘッダー・行ラベルとも「総量」に切り替わること
+  assert.ok(html.includes('<span class="header-amount">総量</span>'), '外用Rpの数量ヘッダーは「総量」であること');
+  assert.ok(html.includes('<span class="field-label">総量</span>'), '外用Rpの行ラベルも「総量」であること');
+  assert.ok(html.includes('aria-label="総量 1"'), '外用Rpの数量入力 aria-label も「総量 1」であること');
+});
+
+test('PrescriptionGroupEditor switches quantity header to 総量 for as_needed, internal_drop, and injection', () => {
+  for (const category of ['as_needed', 'internal_drop', 'injection'] as const) {
+    const group: PrescriptionGroup = {
+      ...mockGroup,
+      prescriptions: [
+        {
+          ...mockGroup.prescriptions[0],
+          dosageCategory: category,
+          dosageCategorySource: 'manual'
+        }
+      ]
+    };
+    const html = renderToStaticMarkup(
+      React.createElement(PrescriptionGroupEditor, {
+        group,
+        groupIndex: 0,
+        onChange: () => {},
+        onOpenDrugSearch: () => {},
+        onToggleIppoka: () => {},
+        onToggleCrushed: () => {},
+        onToggleReceiptRemark: () => {},
+        onRpFieldChange: () => {},
+        onRpDosageCategoryChange: () => {},
+        onAddDrugToRp: () => {},
+        onAddRpAfter: () => {},
+        onDelete: () => {}
+      })
+    );
+    assert.ok(html.includes('<span class="header-amount">総量</span>'), `${category} のヘッダーは「総量」であること`);
+    assert.ok(!html.includes('<span class="header-amount">1日量</span>'), `${category} に「1日量」が出ないこと`);
+  }
 });
 

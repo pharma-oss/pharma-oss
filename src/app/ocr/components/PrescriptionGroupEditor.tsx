@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, type DosageCategory } from '@/lib/dosage_category';
+import { DOSAGE_CATEGORIES, DOSAGE_CATEGORY_LABELS, getDosageAmountLabel, type DosageCategory } from '@/lib/dosage_category';
 import { ELECTRONIC_USAGE_OPTIONS, filterUsageOptionsByCategory } from '@/lib/master-data/usage_master';
 import type { ElectronicUsageOption } from '@/lib/master-data/types';
 import {
@@ -52,6 +52,7 @@ export const PrescriptionGroupEditor = React.memo(({
 }: PrescriptionGroupEditorProps) => {
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const { category: dosageCategory, isManual: isManualDosageCategory } = getGroupDosageCategory(group);
+  const amountLabel = getDosageAmountLabel(dosageCategory);
 
   // 「最近使った用法」は端末ごと(localStorage)。マウント後に読むので、サーバー描画では定番だけが並ぶ。
   const [recentUsageLabels, setRecentUsageLabels] = useState<string[]>([]);
@@ -141,7 +142,7 @@ export const PrescriptionGroupEditor = React.memo(({
       <div className="prescription-row-header" aria-hidden="true">
         <span></span>
         <span>薬品名</span>
-        <span className="header-amount">1日量</span>
+        <span className="header-amount">{amountLabel}</span>
         <span className="header-unit">単位</span>
       </div>
 
@@ -150,6 +151,7 @@ export const PrescriptionGroupEditor = React.memo(({
           key={prescription.id}
           prescription={prescription}
           index={group.startIndex + itemIndex}
+          amountLabel={amountLabel}
           onChange={onChange}
           onOpenDrugSearch={onOpenDrugSearch}
           onToggleIppoka={onToggleIppoka}

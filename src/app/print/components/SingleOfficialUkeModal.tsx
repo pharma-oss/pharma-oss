@@ -16,7 +16,7 @@ import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { CalculationResultItem } from '@/lib/calculator';
 import type { DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
 import {
-  buildSingleDispensingUkeOfficial,
+  inspectAndBuildSingleDispensingUkeOfficial,
   type SingleDispensingUkeOfficialResult
 } from '@/lib/receipt/dispensing_uke_official_single';
 
@@ -137,23 +137,22 @@ export function SingleOfficialUkeModal({
     };
   }, [isOpen, handleClose]);
 
-  // 1件公式 UKE の生成試行
-  const { officialResult, buildError } = useMemo(() => {
-    if (!isOpen) return { officialResult: null, buildError: null };
-    try {
-      const result = buildSingleDispensingUkeOfficial({
-        visit: visitData,
-        patient: patientData,
-        settings: settingsData,
-        items: prescriptionItems,
-        calculatedFees,
-        interventions
-      });
-      return { officialResult: result, buildError: null };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '公式提出用UKEの生成に失敗しました。';
-      return { officialResult: null, buildError: message };
-    }
+  // 1件公式 UKE の生成試行および不足コード・仕様点検
+  const { officialResult, buildError, blockingIssues } = useMemo(() => {
+    if (!isOpen) return { officialResult: null, buildError: null, blockingIssues: [] };
+    const inspection = inspectAndBuildSingleDispensingUkeOfficial({
+      visit: visitData,
+      patient: patientData,
+      settings: settingsData,
+      items: prescriptionItems,
+      calculatedFees,
+      interventions
+    });
+    return {
+      officialResult: inspection.result,
+      buildError: inspection.errorMessage,
+      blockingIssues: inspection.blockingIssues
+    };
   }, [isOpen, visitData, patientData, settingsData, prescriptionItems, calculatedFees, interventions]);
 
   // レコード種別のユニーク一覧
@@ -274,8 +273,17 @@ export function SingleOfficialUkeModal({
               <div>
                 <strong>公式仕様未充足による出力制限</strong>
                 <p>{buildError}</p>
+                {blockingIssues.length > 0 && (
+                  <ul className="official-uke-claim-error-list" data-testid="official-uke-readiness-issue-list">
+                    {blockingIssues.map((issue, idx) => (
+                      <li key={`${issue.code}-${idx}`}>
+                        <strong>{issue.title}</strong>: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <span className="official-uke-alert-hint">
-                  ※ 厚労省コード（レセ電医薬品コード・調剤基本料コード）の確認、または受付の必須入力項目を点検してください。
+                  ※ 厚労省コード（レセ電医薬品コード・調剤基本料コード）の確認（「設定 &gt; 施設基準設定」または「医薬品マスタ」）、または受付の必須入力項目を点検してください。
                 </span>
               </div>
             </div>

@@ -67,3 +67,22 @@ test('PrescriptionRow renders empty value in unit input field when unitText is u
   assert.ok(html.includes('aria-label="単位 2"'), 'aria-label="単位 2" を持つ input が含まれること');
   assert.ok(html.includes('value=""'), 'unitText 未設定時は value="" として安全に描画されること');
 });
+
+test('PrescriptionRow renders dynamic amountLabel (e.g. 総量) in field-label and aria-label', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PrescriptionRow, {
+      prescription: basePrescription,
+      index: 2,
+      amountLabel: '総量',
+      onChange: () => {},
+      onOpenDrugSearch: () => {},
+      onToggleIppoka: () => {},
+      onToggleCrushed: () => {},
+      onToggleReceiptRemark: () => {}
+    })
+  );
+
+  assert.ok(html.includes('<span class="field-label">総量</span>'), 'amountLabel="総量" が field-label に反映されること');
+  assert.ok(html.includes('aria-label="総量 3"'), 'amountLabel="総量" が aria-label に反映されること');
+  assert.ok(!html.includes('<span class="field-label">1日量</span>'), '総量指定時に「1日量」が残らないこと');
+});

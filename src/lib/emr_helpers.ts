@@ -1,4 +1,6 @@
-import type { TracingReportStatus } from '@/db/types';
+import type { PrescriptionItem, TracingReportStatus } from '@/db/types';
+import { logAuditAction, type AuditLogDatabaseLike } from './audit';
+import { recordAuditOrNotify } from './audit_guard';
 import { toLocalDateKey } from './local_date';
 
 export function toDateInputValue(value?: string): string {
@@ -117,6 +119,116 @@ export function consumeFromStockLot(
   return deducted;
 }
 
+export const MANUAL_PICKING_VERIFICATION_PREFIX = 'MANUAL_VISUAL_CHECK:';
+
+export const MANUAL_PICKING_VERIFICATION_REASONS = [
+  { code: 'no_scanner', label: 'バーコードスキャナ未導入' },
+  { code: 'unregistered_barcode', label: 'GS1・JAN未登録品目' },
+  { code: 'unreadable_barcode', label: 'バーコード汚損・読取不可' },
+  { code: 'other', label: 'その他（目視確認済み）' }
+] as const;
+
+export function isValidManualPickingReason(reason: string): boolean {
+  const trimmed = reason.trim();
+  return MANUAL_PICKING_VERIFICATION_REASONS.some((item) => item.label === trimmed);
+}
+
+export function formatManualPickingMarker(reason: string): string {
+  return `${MANUAL_PICKING_VERIFICATION_PREFIX}${reason.trim()}`.slice(0, 200);
+}
+
+export function parseManualPickingReason(pickedGs1Code?: string): string | null {
+  if (!pickedGs1Code || !pickedGs1Code.startsWith(MANUAL_PICKING_VERIFICATION_PREFIX)) {
+    return null;
+  }
+  const reason = pickedGs1Code.slice(MANUAL_PICKING_VERIFICATION_PREFIX.length).trim();
+  return reason || null;
+}
+
+export function buildManualPickingAuditMessage(params: {
+  drugName: string;
+  reason: string;
+  pharmacistName?: string;
+}): string {
+  const actor = params.pharmacistName?.trim() || '担当薬剤師';
+  return `[目視照合] 「${params.drugName}」を薬剤師の目視確認で照合しました（理由: ${params.reason.trim()} / 確認者: ${actor}）。`;
+}
+
+export interface ManualPickingDbLike extends AuditLogDatabaseLike {
+  prescription_items: {
+    findOne: (itemId: string) => {
+      exec: () => Promise<{
+        dispensedDrug?: string;
+        drugId: string;
+        modify: (fn: (data: PrescriptionItem) => PrescriptionItem) => Promise<unknown>;
+      } | null>;
+    };
+  };
+}
+
+export async function executeManualVisualPicking(params: {
+  db: ManualPickingDbLike | null | undefined;
+  ensureActiveVisitEditable: (stage: 'picking') => Promise<{ ok: true } | { ok: false; message: string }>;
+  itemId: string;
+  reason: string;
+  pharmacistName?: string;
+  notify: { success: (msg: string) => void; error: (msg: string) => void; warning: (msg: string) => void };
+}): Promise<{ success: boolean; message: string }> {
+  if (!params.db) {
+    return { success: false, message: 'データベースが未接続です。' };
+  }
+  const trimmedReason = params.reason.trim();
+  if (!isValidManualPickingReason(trimmedReason)) {
+    return { success: false, message: '目視照合の理由を選択してください。' };
+  }
+  try {
+    const editable = await params.ensureActiveVisitEditable('picking');
+    if (!editable.ok) {
+      params.notify.error(editable.message);
+      return { success: false, message: editable.message };
+    }
+    const doc = await params.db.prescription_items.findOne(params.itemId).exec();
+    if (!doc) {
+      const message = 'ピッキング対象の処方明細が見つかりません。';
+      params.notify.error(message);
+      return { success: false, message };
+    }
+    const drugName = doc.dispensedDrug || doc.drugId;
+    const marker = formatManualPickingMarker(trimmedReason);
+    await doc.modify((data: PrescriptionItem) => {
+      data.isPicked = true;
+      data.pickedAt = new Date().toISOString();
+      data.pickedGs1Code = marker;
+      delete data.pickedGtin;
+      delete data.pickedLotNumber;
+      delete data.pickedExpirationDate;
+      delete data.pickedStockId;
+      return data;
+    });
+    const activeDb = params.db;
+    await recordAuditOrNotify(
+      () => logAuditAction(
+        activeDb,
+        'stock_update',
+        buildManualPickingAuditMessage({
+          drugName,
+          reason: trimmedReason,
+          pharmacistName: params.pharmacistName
+        })
+      ),
+      (message) => params.notify.warning(message)
+    );
+    const successMessage = `${drugName} を目視確認で照合しました（理由: ${trimmedReason}）。`;
+    params.notify.success(successMessage);
+    return { success: true, message: successMessage };
+  } catch (e) {
+    console.error('Failed to record manual visual picking:', e);
+    const message = '目視照合の保存に失敗しました。';
+    params.notify.error(message);
+    return { success: false, message };
+  }
+}
+
 export interface PickingItem {
   itemId: string;
   drugName: string;
@@ -125,6 +237,7 @@ export interface PickingItem {
   isPicked: boolean;
   shortageQuantity: number;
   shortageNote?: string;
+  pickedGs1Code?: string;
   pickedGtin?: string;
   pickedLotNumber?: string;
   pickedExpirationDate?: string;

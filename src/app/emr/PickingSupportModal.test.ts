@@ -6,11 +6,22 @@ import { renderMarkupWithReactUseStateMock } from '@/lib/test_support/react_use_
 import {
   PickingSupportModal,
   getPickingLoadErrorBannerMessage,
+  INITIAL_MANUAL_VERIFY_STATE,
   PICKING_LOAD_ERROR_MESSAGE,
   submitPickingShortageSave,
+  type ManualVerifyState,
   type PickingSupportModalProps
 } from './components/PickingSupportModal';
-import type { PickingItem } from '@/lib/emr_helpers';
+import {
+  buildManualPickingAuditMessage,
+  executeManualVisualPicking,
+  formatManualPickingMarker,
+  isValidManualPickingReason,
+  MANUAL_PICKING_VERIFICATION_REASONS,
+  parseManualPickingReason,
+  type PickingItem
+} from '@/lib/emr_helpers';
+import type { AuditLog, PrescriptionItem } from '@/db/types';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
@@ -48,6 +59,7 @@ function createMockPickingSupportModalProps(
     prescriptionId: 'rx-20261007-001',
     userId: 'user-ph-01',
     onScanGs1: async () => ({ success: true, message: '照合成功' }),
+    onManualVerify: async () => ({ success: true, message: '目視照合成功' }),
     onRecordShortage: async () => {},
     onResetPick: () => {},
     onExportInstruction: async () => {},
@@ -63,6 +75,7 @@ interface PickingStateOverrides {
   editingShortageItemId?: string | null;
   isImportingSystemResult?: boolean;
   isSavingShortage?: boolean;
+  manualVerifyState?: ManualVerifyState;
 }
 
 function renderWithStateOverrides(
@@ -74,14 +87,15 @@ function renderWithStateOverrides(
     isVerifyingScan = false,
     editingShortageItemId = null,
     isImportingSystemResult = false,
-    isSavingShortage = false
+    isSavingShortage = false,
+    manualVerifyState = INITIAL_MANUAL_VERIFY_STATE
   } = overrides;
   return renderMarkupWithReactUseStateMock(
     () => React.createElement(PickingSupportModal, props),
     {
       componentName: 'PickingSupportModal',
-      restoreAtCallIndex: 7,
-      expectedCalls: 8,
+      restoreAtCallIndex: 8,
+      expectedCalls: 9,
       overrides: {
         0: {
           assertInitial: (initialState) =>
@@ -127,6 +141,15 @@ function renderWithStateOverrides(
               `Expected PickingSupportModal useState call #7 initial value to be false (isSavingShortage), got ${String(initialState)}`
             ),
           value: isSavingShortage
+        },
+        8: {
+          assertInitial: (initialState) =>
+            assert.deepEqual(
+              initialState,
+              INITIAL_MANUAL_VERIFY_STATE,
+              `Expected PickingSupportModal useState call #8 initial value to be INITIAL_MANUAL_VERIFY_STATE`
+            ),
+          value: manualVerifyState
         }
       }
     }
@@ -346,5 +369,143 @@ test('PickingSupportModal disables close/done while busy and shortage actions wh
   assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>完了</button>', 'button')));
   assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>保存</button>', 'button')));
   assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(idleHtml, '>取消</button>', 'button')));
+});
+
+test('PickingSupportModal renders manual visual-check button on unpicked items, requires reason selection, and shows manual badge', () => {
+  const props = createMockPickingSupportModalProps({
+    items: [
+      {
+        itemId: 'item-manual-done',
+        drugName: 'アムロジピン錠5mg',
+        totalQuantity: 14,
+        location: 'A-01',
+        isPicked: true,
+        pickedGs1Code: formatManualPickingMarker('バーコードスキャナ未導入'),
+        shortageQuantity: 0
+      },
+      {
+        itemId: 'item-unpicked',
+        drugName: 'ロキソプロフェンNa錠60mg',
+        totalQuantity: 21,
+        location: 'B-02',
+        isPicked: false,
+        shortageQuantity: 0
+      }
+    ]
+  });
+
+  // 初期状態: 未照合品目に「目視確認で照合」ボタンがあり、目視照合済み品目に理由付きバッジが出る
+  const initialHtml = renderToStaticMarkup(React.createElement(PickingSupportModal, props));
+  assert.ok(initialHtml.includes('data-testid="manual-verify-open-item-unpicked"'));
+  assert.ok(initialHtml.includes('目視確認で照合'));
+  assert.ok(initialHtml.includes('data-testid="manual-verified-badge-item-manual-done"'));
+  assert.ok(initialHtml.includes('目視照合済み（理由: バーコードスキャナ未導入）'));
+
+  // 理由未選択では確定ボタンが disabled
+  const emptyReasonHtml = renderWithStateOverrides(props, {
+    manualVerifyState: { itemId: 'item-unpicked', reason: '', isSubmitting: false }
+  });
+  const disabledConfirmBtn = findOpeningTag(emptyReasonHtml, 'data-testid="manual-verify-confirm-item-unpicked"', 'button');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(disabledConfirmBtn), '理由未選択時は目視照合確定ボタンが disabled であること');
+
+  // 理由選択済みなら確定ボタンが enabled
+  const selectedReasonHtml = renderWithStateOverrides(props, {
+    manualVerifyState: {
+      itemId: 'item-unpicked',
+      reason: MANUAL_PICKING_VERIFICATION_REASONS[0].label,
+      isSubmitting: false
+    }
+  });
+  const enabledConfirmBtn = findOpeningTag(selectedReasonHtml, 'data-testid="manual-verify-confirm-item-unpicked"', 'button');
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(enabledConfirmBtn), '理由選択後は目視照合確定ボタンが enabled であること');
+});
+
+test('executeManualVisualPicking enforces mandatory reason, marks item picked with marker, and writes audit log', async () => {
+  assert.equal(isValidManualPickingReason(''), false);
+  assert.equal(isValidManualPickingReason('任意の不正テキスト'), false);
+  assert.equal(isValidManualPickingReason('バーコードスキャナ未導入'), true);
+  assert.equal(parseManualPickingReason(formatManualPickingMarker('GS1・JAN未登録品目')), 'GS1・JAN未登録品目');
+  assert.equal(parseManualPickingReason('0104987001001001'), null);
+  assert.ok(
+    buildManualPickingAuditMessage({ drugName: 'アムロジピン錠5mg', reason: 'バーコードスキャナ未導入', pharmacistName: '佐藤 薬剤師' })
+      .includes('[目視照合]')
+  );
+
+  let storedItem: PrescriptionItem = {
+    itemId: 'item-100',
+    visitId: 'visit-1',
+    drugId: '620000001',
+    dispensedDrug: 'アムロジピン錠5mg',
+    amount: 1,
+    days: 14,
+    usage: '1日1回朝食後',
+    isPicked: false,
+    pickedGtin: '04987000000000'
+  };
+  const insertedAudits: AuditLog[] = [];
+  const notifications: string[] = [];
+
+  const mockDb = {
+    prescription_items: {
+      findOne: (id: string) => ({
+        exec: async () => (id === 'item-100'
+          ? {
+            dispensedDrug: storedItem.dispensedDrug,
+            drugId: storedItem.drugId,
+            modify: async (fn: (data: PrescriptionItem) => PrescriptionItem) => {
+              storedItem = fn({ ...storedItem });
+              return storedItem;
+            }
+          }
+          : null)
+      })
+    },
+    audit_logs: {
+      find: () => ({ exec: async () => insertedAudits }),
+      insert: async (doc: AuditLog) => {
+        insertedAudits.push(doc);
+        return doc;
+      }
+    }
+  };
+
+  // 理由が空なら拒否して DB を変更しない
+  const rejected = await executeManualVisualPicking({
+    db: mockDb,
+    ensureActiveVisitEditable: async () => ({ ok: true }),
+    itemId: 'item-100',
+    reason: '',
+    pharmacistName: '佐藤 薬剤師',
+    notify: {
+      success: (m) => notifications.push(`ok:${m}`),
+      error: (m) => notifications.push(`err:${m}`),
+      warning: (m) => notifications.push(`warn:${m}`)
+    }
+  });
+  assert.equal(rejected.success, false);
+  assert.equal(storedItem.isPicked, false);
+  assert.equal(insertedAudits.length, 0);
+
+  // 有効な理由で確定すると isPicked=true, MANUAL_VISUAL_CHECK マーカー付与, 監査ログ記録
+  const accepted = await executeManualVisualPicking({
+    db: mockDb,
+    ensureActiveVisitEditable: async () => ({ ok: true }),
+    itemId: 'item-100',
+    reason: 'バーコードスキャナ未導入',
+    pharmacistName: '佐藤 薬剤師',
+    notify: {
+      success: (m) => notifications.push(`ok:${m}`),
+      error: (m) => notifications.push(`err:${m}`),
+      warning: (m) => notifications.push(`warn:${m}`)
+    }
+  });
+  assert.equal(accepted.success, true);
+  assert.equal(storedItem.isPicked, true);
+  assert.equal(parseManualPickingReason(storedItem.pickedGs1Code), 'バーコードスキャナ未導入');
+  assert.equal(storedItem.pickedGtin, undefined);
+  assert.equal(insertedAudits.length, 1);
+  assert.ok(insertedAudits[0].details.includes('[目視照合]'));
+  assert.ok(insertedAudits[0].details.includes('バーコードスキャナ未導入'));
+  assert.ok(insertedAudits[0].details.includes('佐藤 薬剤師'));
 });
 

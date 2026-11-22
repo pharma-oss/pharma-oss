@@ -1104,9 +1104,6 @@ export function validateReceptionSaveInputs(params: {
   if (!params.institutionName.trim()) {
     return { ok: false, kind: 'alert', message: '医療機関名を入力してください。' };
   }
-  if (!params.departmentName.trim()) {
-    return { ok: false, kind: 'alert', message: '診療科を入力してください。' };
-  }
   if (!params.doctorName.trim()) {
     return { ok: false, kind: 'alert', message: '医師名を入力してください。' };
   }
@@ -1240,7 +1237,7 @@ export function buildReceptionReadinessSteps(params: {
   doctorName: string;
   missingPrescriptionTotal: number;
 }): ReceptionReadinessStep[] {
-  const providerReady = !!(params.institutionName.trim() && params.departmentName.trim() && params.doctorName.trim());
+  const providerReady = !!(params.institutionName.trim() && params.doctorName.trim());
   const prescriptionReady = params.missingPrescriptionTotal === 0;
   return [
     {

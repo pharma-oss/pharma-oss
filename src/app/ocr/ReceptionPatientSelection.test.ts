@@ -277,4 +277,56 @@ describe('reception page selects an existing patient and registers new ones firs
       text: '選択済'
     });
   });
+
+  it('allows empty departmentName in reception save validation and readiness steps while requiring institutionName and doctorName', () => {
+    const okWithoutDept = validateReceptionSaveInputs({
+      selectedPatientId: 'pt_1',
+      insuranceNumber: '06139999',
+      institutionName: '佐藤クリニック',
+      departmentName: '',
+      doctorName: '佐藤 一郎',
+      prescriptionDate: '2026-11-22',
+      dispensingDate: '2026-11-22',
+      prescriptions: [validPrescription]
+    });
+    assert.deepEqual(okWithoutDept, { ok: true });
+
+    const missingInstitution = validateReceptionSaveInputs({
+      selectedPatientId: 'pt_1',
+      insuranceNumber: '06139999',
+      institutionName: '   ',
+      departmentName: '',
+      doctorName: '佐藤 一郎',
+      prescriptionDate: '2026-11-22',
+      dispensingDate: '2026-11-22',
+      prescriptions: [validPrescription]
+    });
+    assert.equal(missingInstitution.ok, false);
+
+    const missingDoctor = validateReceptionSaveInputs({
+      selectedPatientId: 'pt_1',
+      insuranceNumber: '06139999',
+      institutionName: '佐藤クリニック',
+      departmentName: '',
+      doctorName: '   ',
+      prescriptionDate: '2026-11-22',
+      dispensingDate: '2026-11-22',
+      prescriptions: [validPrescription]
+    });
+    assert.equal(missingDoctor.ok, false);
+
+    const stepsWithoutDept = buildReceptionReadinessSteps({
+      selectedPatientId: 'pt_1',
+      institutionName: '佐藤クリニック',
+      departmentName: '',
+      doctorName: '佐藤 一郎',
+      missingPrescriptionTotal: 0
+    });
+    assert.deepEqual(stepsWithoutDept[1], {
+      key: 'provider',
+      label: '処方元',
+      ready: true,
+      text: '入力済'
+    });
+  });
 });

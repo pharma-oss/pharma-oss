@@ -149,6 +149,84 @@ test('buildPrescriptionInputAudit accepts clean prescriptions', () => {
   assert.deepStrictEqual(audit.issues, []);
 });
 
+test('buildPrescriptionInputAudit does not flag substitution_reason_missing when saved dispensedDrug matches prescribed drugName', () => {
+  // 処方受付保存時は変更なし品目にも dispensedDrug = drugName が格納される
+  const unmodifiedAudit = buildPrescriptionInputAudit([
+    {
+      id: 'i1',
+      rpId: 'rp1',
+      drugCode: '620000001',
+      drugName: 'アムロジピン錠５ｍｇ',
+      dispensedDrug: 'アムロジピン錠５ｍｇ',
+      dispensedDrugCode: '',
+      changeReason: '',
+      amount: '1',
+      usage: '１日１回朝食後　服用',
+      days: '14',
+      yjCode: '2171022F1010',
+      stockQuantity: 28
+    },
+    {
+      id: 'i2',
+      rpId: 'rp2',
+      drugCode: '620000002',
+      drugName: 'ロキソプロフェンNa錠60mg',
+      dispensedDrug: 'ロキソプロフェンNa錠60mg',
+      dispensedDrugCode: '620000002',
+      changeReason: '',
+      amount: '3',
+      usage: '１日３回朝昼夕食後　服用',
+      days: '7',
+      yjCode: '1149019F1010',
+      stockQuantity: 30
+    }
+  ]);
+  assert.strictEqual(
+    unmodifiedAudit.issues.filter((i) => i.code === 'substitution_reason_missing').length,
+    0,
+    '処方薬と調剤薬が同一（変更なし）であれば substitution_reason_missing を出さないこと'
+  );
+
+  // コードが異なる変更調剤は名称が似ていても引き続き変更理由未入力を検出する
+  const codeChangedAudit = buildPrescriptionInputAudit([
+    {
+      id: 'i3',
+      rpId: 'rp3',
+      drugCode: '620000001',
+      drugName: 'アムロジピン錠５ｍｇ',
+      dispensedDrug: 'アムロジピン錠５ｍｇ',
+      dispensedDrugCode: '622290901',
+      changeReason: '',
+      amount: '1',
+      usage: '１日１回朝食後　服用',
+      days: '14'
+    }
+  ]);
+  assert.strictEqual(
+    codeChangedAudit.issues.filter((i) => i.code === 'substitution_reason_missing').length,
+    1,
+    'dispensedDrugCode が drugCode と異なる変更調剤では変更理由未入力を検出すること'
+  );
+
+  // 外用薬の数量未確定エラーは「1日量」ではなく「総量」で案内する
+  const externalAmountAudit = buildPrescriptionInputAudit([
+    {
+      id: 'i4',
+      rpId: 'rp4',
+      drugCode: '620000009',
+      drugName: 'ロキソニンテープ50mg',
+      dosageCategory: 'external',
+      amount: '0',
+      usage: '疼痛時　貼付',
+      usageSupplementText: '腰部',
+      days: '0'
+    }
+  ]);
+  const amountIssue = externalAmountAudit.issues.find((i) => i.code === 'amount_invalid');
+  assert.ok(amountIssue, 'amount_invalid が検出されること');
+  assert.ok(amountIssue.title.includes('総量'), '外用薬の amount_invalid タイトルは「総量」を用いること');
+});
+
 test('buildPrescriptionInputAudit flags usage_dosage_category_mismatch as warning (G5-3, G5-4)', () => {
   // 1. 剤形 external ＋ 用法「１日３回朝昼夕食後　服用」（内服） → warning 1件
   const audit1 = buildPrescriptionInputAudit([

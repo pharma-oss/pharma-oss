@@ -12,7 +12,11 @@ import {
   Printer,
   Edit2
 } from 'lucide-react';
-import type { PickingItem } from '@/lib/emr_helpers';
+import {
+  MANUAL_PICKING_VERIFICATION_REASONS,
+  parseManualPickingReason,
+  type PickingItem
+} from '@/lib/emr_helpers';
 import WorkflowMiniTutorial from '@/components/WorkflowMiniTutorial';
 
 export const PICKING_LOAD_ERROR_MESSAGE =
@@ -33,6 +37,18 @@ export async function submitPickingShortageSave(params: {
   }
 }
 
+export interface ManualVerifyState {
+  itemId: string | null;
+  reason: string;
+  isSubmitting: boolean;
+}
+
+export const INITIAL_MANUAL_VERIFY_STATE: ManualVerifyState = {
+  itemId: null,
+  reason: '',
+  isSubmitting: false
+};
+
 export interface PickingSupportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +58,7 @@ export interface PickingSupportModalProps {
   prescriptionId: string;
   userId?: string;
   onScanGs1: (scannedCode: string) => Promise<{ success: boolean; message: string }>;
+  onManualVerify?: (itemId: string, reason: string) => Promise<{ success: boolean; message: string }>;
   onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<boolean | void>;
   onResetPick: (itemId: string) => void;
   onExportInstruction: () => Promise<void>;
@@ -58,6 +75,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   prescriptionId,
   userId,
   onScanGs1,
+  onManualVerify,
   onRecordShortage,
   onResetPick,
   onExportInstruction,
@@ -73,6 +91,7 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   const [shortageNoteInput, setShortageNoteInput] = useState('');
   const [isImportingSystemResult, setIsImportingSystemResult] = useState(false);
   const [isSavingShortage, setIsSavingShortage] = useState(false);
+  const [manualVerifyState, setManualVerifyState] = useState<ManualVerifyState>(INITIAL_MANUAL_VERIFY_STATE);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -119,16 +138,41 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
     }
   };
 
-  const isBusy = isVerifyingScan || isImportingSystemResult || isSavingShortage;
+  const isBusy =
+    isVerifyingScan || isImportingSystemResult || isSavingShortage || manualVerifyState.isSubmitting;
 
   const handleRequestClose = () => {
     if (!isBusy) onClose();
   };
 
   const openShortageEditor = (item: PickingItem) => {
+    setManualVerifyState(INITIAL_MANUAL_VERIFY_STATE);
     setEditingShortageItemId(item.itemId);
     setShortageQtyInput(item.shortageQuantity || 0);
     setShortageNoteInput(item.shortageNote || '');
+  };
+
+  const openManualVerifyEditor = (itemId: string) => {
+    setEditingShortageItemId(null);
+    setManualVerifyState({ itemId, reason: '', isSubmitting: false });
+  };
+
+  const submitManualVerify = async (itemId: string) => {
+    if (!onManualVerify || manualVerifyState.isSubmitting || !manualVerifyState.reason) return;
+    setManualVerifyState((prev) => ({ ...prev, isSubmitting: true }));
+    setScanMessage(null);
+    try {
+      const res = await onManualVerify(itemId, manualVerifyState.reason);
+      setScanMessage({ text: res.message, isError: !res.success });
+      if (res.success) {
+        setManualVerifyState(INITIAL_MANUAL_VERIFY_STATE);
+      } else {
+        setManualVerifyState((prev) => ({ ...prev, isSubmitting: false }));
+      }
+    } catch {
+      setScanMessage({ text: '目視照合の保存中にエラーが発生しました。', isError: true });
+      setManualVerifyState((prev) => ({ ...prev, isSubmitting: false }));
+    }
   };
 
   const saveShortage = async (itemId: string) => {
@@ -232,7 +276,10 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
         )}
 
         <div className="picking-list">
-          {items.map((item) => (
+          {items.map((item) => {
+            const manualReason = parseManualPickingReason(item.pickedGs1Code);
+            const isEditingManual = manualVerifyState.itemId === item.itemId;
+            return (
             <div
               key={item.itemId}
               className={`picking-item-card ${item.isPicked ? 'picked' : ''}`}
@@ -253,6 +300,12 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                 {item.pickedGtin && (
                   <div className="item-gtin">
                     GTIN: {item.pickedGtin} {item.pickedLotNumber ? ` / Lot: ${item.pickedLotNumber}` : ''}
+                  </div>
+                )}
+
+                {item.isPicked && !item.pickedGtin && manualReason && (
+                  <div className="item-manual-badge" data-testid={`manual-verified-badge-${item.itemId}`}>
+                    目視照合済み（理由: {manualReason}）
                   </div>
                 )}
               </div>
@@ -296,6 +349,47 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                       </button>
                     </div>
                   </div>
+                ) : isEditingManual ? (
+                  <div className="manual-verify-editor" data-testid={`manual-verify-editor-${item.itemId}`}>
+                    <select
+                      aria-label={`${item.drugName} の目視照合理由`}
+                      className="manual-verify-select"
+                      data-testid={`manual-verify-reason-${item.itemId}`}
+                      value={manualVerifyState.reason}
+                      disabled={manualVerifyState.isSubmitting}
+                      onChange={(e) => setManualVerifyState((prev) => ({ ...prev, reason: e.target.value }))}
+                    >
+                      <option value="">目視照合の理由を選択（必須）</option>
+                      {MANUAL_PICKING_VERIFICATION_REASONS.map((option) => (
+                        <option key={option.code} value={option.label}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="shortage-btn-row">
+                      <button
+                        type="button"
+                        className="btn-primary btn-shortage-action"
+                        data-testid={`manual-verify-confirm-${item.itemId}`}
+                        onClick={() => void submitManualVerify(item.itemId)}
+                        disabled={!manualVerifyState.reason || manualVerifyState.isSubmitting}
+                      >
+                        {manualVerifyState.isSubmitting ? '照合中...' : '目視照合を確定'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-shortage-action"
+                        onClick={() => {
+                          if (!manualVerifyState.isSubmitting) {
+                            setManualVerifyState(INITIAL_MANUAL_VERIFY_STATE);
+                          }
+                        }}
+                        disabled={manualVerifyState.isSubmitting}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <button
@@ -316,15 +410,28 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                         解除
                       </button>
                     ) : (
-                      <div className="unpicked-label">
-                        未照合
+                      <div className="unpicked-actions">
+                        <div className="unpicked-label">
+                          未照合
+                        </div>
+                        {onManualVerify && (
+                          <button
+                            type="button"
+                            className="btn-secondary btn-manual-verify"
+                            data-testid={`manual-verify-open-${item.itemId}`}
+                            onClick={() => openManualVerifyEditor(item.itemId)}
+                          >
+                            目視確認で照合
+                          </button>
+                        )}
                       </div>
                     )}
                   </>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -553,10 +660,42 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           color: var(--success);
           font-family: monospace;
         }
+        .item-manual-badge {
+          font-size: var(--fs-xs);
+          color: var(--primary-dark);
+          font-weight: 600;
+        }
         .item-actions {
           display: flex;
           align-items: center;
           gap: var(--space-2);
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .unpicked-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+        }
+        .btn-manual-verify {
+          padding: var(--space-1) var(--space-2);
+          font-size: var(--fs-sm);
+          color: var(--primary-dark);
+        }
+        .manual-verify-editor {
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-1-5);
+          align-items: flex-end;
+        }
+        .manual-verify-select {
+          font-size: var(--fs-sm);
+          padding: var(--space-1) var(--space-2);
+          border-radius: var(--radius-sm);
+          border: 1px solid var(--border);
+          background: #ffffff;
+          color: var(--text-main);
+          max-width: 240px;
         }
         .shortage-editor {
           display: flex;

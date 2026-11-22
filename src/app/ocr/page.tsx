@@ -1082,7 +1082,7 @@ export default function OcrPage() {
         () => logAuditAction(
           db,
           'prescription_ocr',
-          `処方箋受付: 既存患者選択「${savedPatientName}」の処方データ（${institutionName.trim()} ${departmentName.trim()} ${doctorName.trim()}、処方薬${prescriptionItems.length}件）を登録しました。`,
+          `処方箋受付: 既存患者選択「${savedPatientName}」の処方データ（${[institutionName.trim(), departmentName.trim(), doctorName.trim()].filter(Boolean).join(' ')}、処方薬${prescriptionItems.length}件）を登録しました。`,
           patientId,
           savedPatientName
         ),
@@ -1780,8 +1780,7 @@ export default function OcrPage() {
                 </div>
                 <div className="form-group">
                   <label htmlFor="departmentName">
-                    診療科
-                    <span className="text-danger ml-1 text-sm" aria-hidden="true">*</span>
+                    診療科（任意）
                   </label>
                   <input
                     id="departmentName"
@@ -1790,9 +1789,7 @@ export default function OcrPage() {
                     list="departmentHistory"
                     value={departmentName}
                     onChange={(e) => setDepartmentName(e.target.value)}
-                    placeholder="例: 内科"
-                    required
-                    aria-required="true"
+                    placeholder="例: 内科（未記載可）"
                   />
                   <datalist id="departmentHistory">
                     {selectedProvider?.departments.map((department) => (
