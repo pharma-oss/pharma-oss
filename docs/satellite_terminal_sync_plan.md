@@ -79,18 +79,18 @@ conflicts(id TEXT PRIMARY KEY, collection TEXT, doc_id TEXT,
 | patients, visits, prescription_items, soap_records, alerts, interventions, drugs, drug_stocks, locations, medication_guidances, patient_medication_info_templates, users, facility_settings | 双方向 | サテライトは参照データの JSON シードを行わず、すべてハブから pull する（シード→push の二重登録ノイズ回避） |
 | audit_logs | サテライト: push 専用 / メイン: 双方向 | メイン端末ブラウザが全端末分を保持し、既存バックアップ（`src/lib/backup.ts` の `BACKUP_COLLECTIONS`）が全量を含む状態を維持 |
 
-### コレクション上限（RxDB open-core 14個）と患者情報の拡張戦略
+### コレクション上限（RxDB open-core 14個）と患者情報の拡張戦略（2026-11-22 H-2 設計確定）
 
-RxDB 17.1.0 open-core は同時にオープンできるコレクションを14個までに制限しており（`src/db/index.ts` の `ACTIVE_RXDB_COLLECTION_LIMIT`）、現状ちょうど14個で満杯である。この制約と本計画・今後の患者情報拡張の関係を明確にする。
+RxDB open-core は同時にオープンできるコレクションを14個までに制限しており（`src/db/index.ts` の `ACTIVE_RXDB_COLLECTION_LIMIT`）、現状ちょうど14個で満杯である。この制約に対する正式決定は [ADR: RxDB コレクション上限 14 に対する統合枠・恒久策の設計決定](adr_rxdb_collection_limit.md) に確定した。
 
-- **上限の対象は「コレクション数」であり、ドキュメント内のフィールド数ではない。** 患者情報の項目追加は `PATIENT_SCHEMA` のスキーマバージョンアップ＋マイグレーション（既存の仕組み）で行い、上限を消費しない。同期はドキュメント全体を JSON として転送し、ハブストアもペイロードをスキーマ非依存の暗号化 BLOB として保存するため、**項目追加時に同期側の変更は不要**。
+- **現時点の決定: 14 枠のまま維持（即時統合なし）。** 上限の対象は「コレクション数」であり、ドキュメント内のフィールド数ではない。患者・受付の項目追加は既存スキーマのバージョンアップ＋暗号化入れ子フィールド（実績: `patients.publicInsurances`・`visits.interventionEvents`〔F-2〕・`patients.clinicalProfile`〔F-3〕）で行い、上限を消費しない。同期はドキュメント全体を JSON として転送し、ハブストアもペイロードをスキーマ非依存の暗号化 BLOB として保存するため、**項目追加時に同期側の変更は不要**。
 - **本計画はコレクションを1つも追加しない。** レプリケーションのチェックポイントは RxDB 内部ストレージに保存され、ハブストアは RxDB 外の SQLite である。
-- 新しい記録種別（検査値履歴、在宅訪問記録など）を**コレクションとして**追加したい場合は、次の順で対応する。
-  1. **フィールド埋め込み**: 患者/受付と 1:1 または少数件のデータは、既存ドキュメントの入れ子フィールドにする（既存例: `patients.publicInsurances`）。
-  2. **汎用 `patient_records` コレクションの確保**: `recordType` フィールドと `patientId + recordType` 複合インデックスを持つ多重化コレクションを1枠だけ新設し、以後の患者系記録種別はすべてここに収容する。枠は既存コレクションの統合で捻出する（候補: `medication_guidances` と `patient_medication_info_templates` を参照データ1コレクションへ統合、`locations` の `facility_settings` への吸収）。統合は既存のマイグレーション機構とバックアップ形式のバージョンアップで行う。
+- 将来、単一ドキュメント内配列では収まらない独立した患者系時系列記録（在宅訪問記録等）を**コレクションとして**追加する必要が生じた場合は、次の確定順序で対応する。
+  1. **フィールド埋め込み優先**: 患者/受付と 1:1 または少数件のデータは、既存ドキュメントの暗号化入れ子フィールドにする。
+  2. **汎用 `patient_records` コレクションの確保（第 1 統合候補 = `locations` の `facility_settings` 吸収）**: `recordType` フィールドと `patientId + recordType` 複合インデックスを持つ多重化コレクションを1枠だけ新設し、以後の患者系時系列記録はすべてここに収容する。第 1 統合候補は参照箇所が最小な `locations` の `facility_settings` 吸収、第 2 候補は同一 `drugCode` キーの `medication_guidances` + `patient_medication_info_templates` 統合とする。統合は既存のマイグレーション機構とバックアップ形式のバージョンアップで行う。
   3. **非患者参照データは RxDB 外へ**: 端末に残ってよい参照系マスタは SQLite-WASM マスタストア（`src/lib/master-data/`）へ置く。`drug_infos` を RxDB から退避した前例あり（`src/db/collection_limit.test.ts`）。患者データはサテライトで永続化できないためこの手は使わず、2. の多重化コレクションで受ける。
-  4. **恒久策**: 上限撤廃が必要になった場合は RxDB Premium ライセンスの購入、または Dexie（依存導入済み）＋自前チェックポイント同期クライアントへの移行を検討する。ハブ集約後は正本がハブ側 SQLite になり同期エンドポイントも自前実装のため、ブラウザ側ストレージの差し替え難度は現行構成より下がる。
-- 新コレクション追加時は、同期対象表・`BACKUP_COLLECTIONS`（`src/lib/backup.ts`）・`collection_limit.test.ts` の3点を併せて更新する。
+  4. **恒久策（確定）**: RxDB Premium は Apache-2.0 OSS 方針・無償導入原則に反するため**採用しない**。上限撤廃が必要になった場合は、依存導入済みの **Dexie 直接利用（WebCrypto 暗号化ラッパー）＋自前チェックポイント同期クライアント** へ移行する（ハブ側 `node:sqlite` + `/api/sync/*` はそのまま流用可能）。
+- 新コレクション追加・統合時は、同期対象表・`BACKUP_COLLECTIONS`（`src/lib/backup.ts`）・`collection_limit.test.ts` の3点を併せて更新する（1対1一致は `collection_limit.test.ts` が自動検証）。
 
 ### 監査ログのハッシュチェーン変更
 

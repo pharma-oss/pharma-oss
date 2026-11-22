@@ -182,17 +182,17 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ---
 
-# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `126e1b4` 実測。§4 の現地証跡ステータスは未変更）
+# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `artifacts/improvement/20261122-1133-H2-final/` 実測。§4 の現地証跡ステータスは未変更）
 
 ## 1. 品質ゲート
 
-2026-11-22 に Phase A 品質強化（`7bb0c9e`〜`05f713c`）・Phase B 機能実装（B-1 `930f442`・F-1 `a2a4917`・F-3 `f0df698`・G-1 `b3fc878`・H-1 `62fe33c`）・Phase C 準備（`346d411`・`126e1b4`）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1034-C-prep-2-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-11-22 に Phase A・Phase B・Phase C 準備、および判断 4 項目（C-1 ステップ 5b 廃止判定チェッカー `dfe9872`・C-2 項番 30 仕様確定/適用開始日上書き `6aa3513`・C-3 令和 8 年公式ルール拡充/返戻フィクスチャ基盤 `9198c60`・H-2 ADR/1:1 整合防壁）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1133-H2-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,227 pass / 0 fail / 218 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,249 pass / 0 fail / 218 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
 | SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 10 / `as any` 3。残存 10 件はすべて除外対象の `src/db/index.ts`・`src/lib/electronic_prescription_client.ts` のみ） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
@@ -206,9 +206,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | 項目 | 実測 |
 |---|---|
 | `src/` の TS/TSX（テスト除く） | 392 ファイル |
-| テストファイル | 365 ファイル |
+| テストファイル | 368 ファイル |
 | 主要 6 画面の行数 | 8,852 行（ocr 1,991 / emr 2,570 / print 2,125 / inventory 857 / settings 844 / dashboard〔`src/app/app/page.tsx`〕465。※ 上位 3 画面は P7 行数予算テストで固定） |
-| `scripts/` | 79 ファイル（第 1 階層）、npm scripts 49 本 |
+| `scripts/` | 80 ファイル（第 1 階層）、npm scripts 50 本 |
 | `PrintPickingFlow.test.ts` の `readFileSync` | **0 件**（2026-11-21 `abbf183` で残存 7 箇所を完全撤廃。さらに 2026-11-22 Phase A `7bb0c9e`/`b7d3d42`/`fb88e6a` で印刷・自費請求・受付の残存ソース文字列テストも実描画・実行テストへ移行完了） |
 | 非印刷 CSS 生 sub-1rem フォントサイズ | **0 箇所**（2026-11-22 `9d809dd` で残存 41 箇所を `--fs-*` トークンへ統一完了） |
 | インライン `style={{}}` | **3 箇所**（`AuditSettingsTab` 2、印刷ページ 1）。すべて動的 CSS 変数（`--bar-height` / `--print-*`）の正当な受け渡しのみ。`TerminalSyncPanel` 18 箇所と `ClientLayout` 6 箇所は CSS クラスへ移行完了し、予算上限 3 を `TerminalSyncPanel.test.ts` で自動防壁化 |
@@ -261,10 +261,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ## 6. 今回の照合で修正した前提
 
-- **C-1**: ステップ 1〜4 およびステップ 5a（旧形式点検用 UKE ボタンの `<details>` 詳細メニュー格納、`49c590d`）を完了。ステップ 5b（旧形式コードの完全削除）は条件 A（公式運用実績 1 ヶ月以上）・条件 B（直近 3 ヶ月旧形式出力 0 件）・条件 C（ステークホルダー合意）の充足まで並行維持する方針を確定。
+- **C-1**: ステップ 1〜4、ステップ 5a（旧形式点検用 UKE ボタンの `<details>` 詳細メニュー格納、`49c590d`）、およびステップ 5b 廃止判定チェッカー（直近 90 日監査ログ実測 UI/CLI `npm run ops:uke-retirement-check`、`dfe9872`）を完了。旧形式コードの完全削除は条件 A・B・C の実店舗達成（CLI `pass`）まで並行維持する方針を確定。
+- **C-2・C-3・H-2（2026-11-22 方針合意・実装/ADR確定）**: C-2（`6aa3513`: 項番 30 公式仕様明文化＋薬価適用開始日明示上書き＋過去版保護警告バナー）、C-3（`9198c60`: 特別調剤基本料 B × 地域支援加算 1〜5 算定不可の計算・レビュー・設定警告反映、特管 1/3・廃止薬品ルール追加、公式通知/返戻事例フィクスチャ基盤）、H-2（[ADR](adr_rxdb_collection_limit.md): 14 枠維持・将来第 1 統合候補 `locations` 吸収・恒久策 Dexie 直接移行/RxDB Premium 不採用＋1:1 整合防壁テスト）をすべて確定・検証完了。
 - **Phase B 承認済み 5 機能（B-1・F-1・F-3・G-1・H-1）**: 要判断事項の合意を受けすべて実装・fail-first 変異テスト・全品質ゲート・実機 Chrome E2E 検証まで完了。
 - **Q-5（2026-10-30〜11-17 追補）**: 算定条件（`claim_conditions.ts`・`facility_settings` v6）、領収証照合バーコード（`receipt_barcode.ts`）、自費患者の請求除外（`b73d7f3`・`b7d3d42`）を第Ⅲ部トラック C（C-5）へ、マイナ読取連携フォルダ XML の公式仕様突合・実機検証をトラック D（D-1）へ正式編入完了。
-- **実施順序**: 実装可能な Phase A・Phase B 項目（A-1〜A-5 / B-1・B-2 / C-4・C-5 / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-3・I-6）を完了済みへ整理し、残存タスクを条件待ち（C-1 ステップ 5b）、要判断・公式資料待ち（C-2 / C-3 / H-2 / I-2 保管ルール）、現地証跡・実データ待ち（D-1 / E-1 / E-2 / F-4 / H-3 / H-4 / I-4）、およびリモート同期（I-5）へ集約した。
+- **実施順序**: 開発・設計で確定できる項目（A-1〜A-5 / B-1・B-2 / C-2・C-4・C-5 / D-2 / F-1〜F-3 / G-1・G-2 / H-1・H-2 / I-1・I-2・I-3・I-5・I-6）を完了済みへ整理し、残存タスクを条件待ち（C-1 旧形式完全削除）、継続投入（C-3 現物返戻事例）、および現地証跡・実データ待ち（D-1 / E-1 / E-2 / F-4 / H-3 / H-4 / I-4）へ集約した。
 - 今回も実プリンタ・現地機器・実症例での本番証跡収集は未実施であるため、実ブラウザ E2E 確認と領域別の本番証跡は厳格に区別し、第Ⅱ部 §4 の領域別 `status` は引き上げない。
 
 ---
@@ -342,23 +343,32 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
   - **2026-11-21 にステップ 5a（旧形式ボタンの UI 詳細メニュー格納、`49c590d`）を完了**:
     - 単票画面（`src/app/print/components/PrintHeaderActions.tsx`）および月次請求ワークベンチ（`src/components/dashboard/ClaimWorkbenchSection.tsx`）において、公的提出用正本（`RECEIPTY.CYO`）を前面ボタンとしつつ、旧形式点検用 UKE ボタンをネイティブ `<details>`/`<summary>` 折り畳み詳細メニュー（初期閉・Vanilla CSS・インライン style 0 件、`data-testid` 維持）へ格納。
     - 契約テスト（`dispensing_uke_step4_switchover.test.ts`・`ClaimWorkbenchSelfPay.test.ts`・`PrintResponsiveLayout.test.ts`）および fail-first mutation 2 件・実機 Chrome E2E（`onboarding`・`accessibility`）で実証。
+  - **2026-11-22 にステップ 5b 廃止判定チェッカー（`dfe9872`）を配備**:
+    - 条件 A/B/C ゲートを維持したまま、監査ログから直近 90 日の公式/旧形式 UKE 実出力件数を集計する純粋関数群（`summarizeUkeExportsFromAuditLogs`・`evaluateUkeRetirementFromAuditLogs`・`parseUkeAuditLogInput`・`buildUkeRetirementChecklist`、事前検証停止ログ除外対応）を `src/lib/receipt/uke_migration_policy.ts` へ実装。
+    - 月次ワークベンチ（`ClaimWorkbenchSection.tsx`）の `<details>` 内へ直近 90 日の旧形式出力状況バッジ（`data-testid="legacy-uke-retirement-status"`）を接続し、JSON/バックアップ JSON/JSONL（H-1 WORM アーカイブ含む）を読める運用 CLI `scripts/runUkeRetirementReadiness.ts`（`npm run ops:uke-retirement-check`、患者情報ゼロ・監査ログ未指定時は条件 B 未実測として強制ブロック）を新設。`uke_retirement_checker.test.ts`・台帳契約テスト・fail-first 変異テスト 3/3 件で実証。
 - **方針**: 公式ビルダを唯一の提出経路とする方針のもと、以下の段階的移行を進める。
   1. **経路と差分の固定**: 達成済み（ステップ 1）。
   2. **共通化と単票公式ビルダー確立**: 達成済み（ステップ 2）。SN/JD/MF/ST の条件付き生成ロジック共通化および単票公式生成関数を部品化。
   3. **単票画面への公式出力UI併設**: 達成済み（ステップ 3）。単票画面において既存の通常出力ボタンに加えて「公式提出用 UKE（RECEIPTY.CYO）プレビュー・ダウンロード」を併設し、実務並行検証環境を確立。
   4. **本番切替準備と安全な移行設計**: 達成済み（ステップ 4）。公式提出用を正本としつつ通常出力を点検用旧形式として並行維持し、監査ログによる利用追跡と完全廃止判定基準（条件A・B・C）を確立。
-  5. **UI集約（ステップ 5a 完了）と完全廃止（ステップ 5b・条件待ち）**: ステップ 5a として旧形式ボタンを UI 詳細メニュー（`<details>`）へ格納済み。条件A（実機受付確認1ヶ月以上）・条件B（直近3ヶ月旧形式出力0件）・条件C（ステークホルダー合意）の充足をもってステップ 5b（旧形式生成コードの完全削除）へ進む。
+  5. **UI集約（ステップ 5a 完了）・廃止ゲートチェッカー配備（`dfe9872` 完了）と完全削除（ステップ 5b・条件待ち）**: ステップ 5a として旧形式ボタンを UI 詳細メニュー（`<details>`）へ格納済み、さらに直近 90 日の監査ログ実測による自動判定 UI/CLI（`npm run ops:uke-retirement-check`）を配備済み。条件A（実機受付確認1ヶ月以上）・条件B（直近90日旧形式出力0件）・条件C（ステークホルダー合意）の充足が CLI `pass` で確認された段階で `<details>` 内旧形式ボタンと旧生成コードを完全削除する。
 - **受入基準**: 各段で変更前後の出力差分を提示し、骨格ゲート（先頭 YK / 末尾 GO / SH または KI 必須 / 非標準レコード混入なし）と集計突合を通す。公式資料・国保連サンプルとの確認済み範囲および未確認範囲を記録する。
 - **要判断**: 条件A・B・C 達成後の旧形式コードの完全削除時期。調査完了・部品化完了をもって出力経路を自動的に切り替えない。
 
-### C-2 薬価改定「変更年月日」の読み方の確定と遡り取込
-- **前提**: 項番 30「変更年月日」を薬価の適用開始日として読んでいるが、公式 PDF は列レイアウト表のみで意味の説明が無く、この読み方は**未確認**。当日取込では結果は同じ。
-- **方針**: 薬剤師・運用者へ確認し、確定するまで遡り取込（古いマスタファイルの取込）を始めない。既に古いファイルを取り込んでも現在薬価は巻き戻らない守りは入っている。
-- **要判断**: 「変更年月日 = 適用開始日」の解釈。
+### C-2 薬価改定「変更年月日」の読み方の確定と遡り取込（仕様確定・明示適用開始日上書き実装完了 `6aa3513`）
+- **前提**: 支払基金「基本マスターファイルレイアウト（医薬品マスター）」項番 30「変更年月日」の意味が未確認のまま遡り取込を保留していた。
+- **確定仕様と実装内容（2026-11-22、`6aa3513`）**:
+  - 支払基金・厚労省公式仕様を確認し、項番 30「変更年月日」は**基本マスター情報変更時の適用/変更日（名称変更・経過措置・非公表項目変更でも更新され、薬価適用開始日専用列ではない）**であることを `drug_master_csv.ts`・`drug_price_history.ts`（`DRUG_MASTER_CHANGE_DATE_POLICY`）・`docs/field_operation_manual.md` へ明文化。
+  - 薬価変更が無い行は履歴を追加しない現行保護を維持したうえで、薬価改定や過去マスタ遡り取込で項番 30 の非薬価更新による日付ズレを回避できる**「薬価適用開始日の明示指定（`YYYY-MM-DD` 厳密検証・不正日付拒否）」**（`normalizeDrugPriceRevisionOverrideDate`・`resolveDrugMasterRowPriceEffectiveFrom`）を `useDrugMasterSettings.ts`・`DrugMasterSettingsTab.tsx` へ実装。
+  - 明示指定日またはファイル最新日のいずれかが取込済み最新より古い場合は `reviewDrugMasterVintage` で過去版保護（現在薬価・廃止フラグの巻き戻り防止）を発動し、常駐警告バナー（`data-testid="drug-master-vintage-warning"`）と監査ログへ記録する。`drug_price_history.test.ts`・`SettingsDrugMasterChangeDate.test.ts`・fail-first 変異テスト 3/3 件で実証。
 
-### C-3 算定ルールの残パターンと施設基準加算/減算の月内条件
-- **前提**: 検査薬の薬剤料以外、電子的調剤情報連携体制整備加算の同月 2 回以上、特別調剤基本料 B、保険・公費の有効期間外は算定ルール確認へ集約済み。
-- **方針**: 現物返戻事例を `claim_rule_review.ts` へ継続投入し、疑義解釈の 1 ケース = 1 テストとして積む。点数が変わる修正は必ず「請求点数の変動点検」で影響件数を出してから入れる。
+### C-3 算定ルールの残パターンと施設基準加算/減算の月内条件（令和8年公式ルール拡充・返戻事例フィクスチャ基盤実装完了 `9198c60`、現物返戻事例は継続投入）
+- **前提**: 検査薬の薬剤料以外、電子的調剤情報連携体制整備加算の同月 2 回以上、特別調剤基本料 B の医療 DX 禁止、保険・公費の有効期間外は算定ルール確認へ集約済みだったが、令和 8 年度通知の「特別調剤基本料 B × 地域支援・医薬品供給対応体制加算 算定不可」や特管 1/3・廃止薬品チェックが未整備だった。
+- **実装内容（2026-11-22、`9198c60`）**:
+  - 令和 8 年度調剤報酬改定通知に基づき、`src/lib/calculator.ts` の `evaluateFeeOffReasons` と `calculateDispensingFees` で**特別調剤基本料 B 設定時の地域支援・医薬品供給対応体制加算 1〜5 を自動除外**（-27/-59/-67/-37/-59 点、`regional_support_special_b_prohibited` 理由付き、非 `special_b` への点数影響 0）、設定画面（`FacilitySettingsTab.tsx`）にも警告バナーを配備。
+  - `src/lib/claim_rule_review.ts` を 4 項目→**7 項目**へ拡充し、① `regional_support_special_b_prohibited`（特別調剤基本料 B × 地域支援加算）、② `special_management_guidance_and_limit`（特定薬剤管理指導加算の服薬管理指導料必須・同一区分重複禁止、別要件の加算 1＋3(イ) 併算定は許容）、③ `drug_master_claim_eligibility`（廃止薬品・レセ電コード欠落・薬価未設定、CSV 薬品名非漏洩）を追加。
+  - 構造化データ駆動の公式通知/疑義解釈/返戻事例回帰フィクスチャ基盤 `src/lib/claim_official_return_cases.test.ts`（`calculateDispensingFees`→`validateDispensingClaim`→`buildClaimOfficialRuleReview`→`inferClaimReturnReasonCode` 一貫検証）を新設し、fail-first 変異テスト 4/4 件で実証。
+- **方針**: 今後も実薬局の匿名化返戻事例・厚労省疑義解釈の追加分を `claim_official_return_cases.test.ts` へ 1 ケース = 1 フィクスチャとして継続投入する。点数が変わる修正は必ず影響点数差分を明示・合意してから入れる。
 - **受入基準**: 各ルールに出典（告示・疑義解釈の番号）が付き、テストで再現できる。
 
 ### C-4 減免区分・高額療養費の対応点検とUI・事前点検接続（完了）
@@ -446,10 +456,13 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **前提**: 従来は AWS S3 Object Lock のみ対応で、クラウドを使えない店舗向けのローカル/NAS 保全コネクタが無かった。
 - **実装内容（2026-11-22）**: 単一正本コア `scripts/lib/audit_local_worm_core.mjs`（型定義 `.d.mts`＋公開窓口 `src/lib/audit_integrity_local_worm.ts`）、CLI `scripts/runAuditLogLocalWormRetention.mjs`、および定期実行ラッパー `scripts/runScheduledAuditLogLocalWormRetention.mjs`（`npm run audit:local-worm-retention` / `:scheduled`、`docs/ops_review_ledger.md` 登録済み）を実装。排他追記（`flag: 'wx'` による `EEXIST` 上書き拒否）、読取専用ロック（`chmod 0o444`）、ディスク書き戻し SHA-256／`integrity.latestHash` 照合、`audit_worm_manifest.jsonl` ハッシュチェーン追記・`--verify-only` 改ざん検知、受領書 JSON 発行、および失敗通知 JSON／Webhook 送信を完備。NAS 側 WORM 設定の運用者確認（`--immutable-verified`）が無い場合は正直に `status: 'attention'` を返す（第四条遵守）。`audit_integrity_local_worm.test.ts` および fail-first 変異テスト 3/3 件で実証。
 
-### H-2 患者系記録の多重化コレクション `patient_records`
-- **前提**: RxDB open-core の上限 14 に満杯。新しい記録種別（検査値、在宅訪問記録等）をコレクションとして足せない。
-- **方針**: 計画書（`docs/satellite_terminal_sync_plan.md` の「コレクション上限」節）の手順に従う。①入れ子フィールドで足りるなら足さない、②足す場合は `medication_guidances` と `patient_medication_info_templates` の統合等で 1 枠を捻出し、`recordType` + `patientId` 複合インデックスの 1 コレクションに収容する、③同期対象表・`BACKUP_COLLECTIONS`・`collection_limit.test.ts` を同時更新。
-- **要判断**: 枠を捻出する統合対象。恒久策（RxDB Premium か Dexie 自前同期）の要否。
+### H-2 RxDB コレクション上限 14 に対する統合枠・恒久策（設計決定確定 2026-11-22）
+- **前提**: RxDB open-core の上限 14 に満杯（14 / 14）。将来的に独立した患者系時系列記録（在宅訪問記録等）をコレクションとして追加する場合の方針と恒久策が要判断だった。
+- **確定方針（[ADR: docs/adr_rxdb_collection_limit.md](adr_rxdb_collection_limit.md)・[同期計画](satellite_terminal_sync_plan.md) へ反映）**:
+  1. **現時点は 14 枠構成を維持（即時統合なし）**: F-2（`visits.interventionEvents`）・F-3（`patients.clinicalProfile`）で実証された通り、暗号化入れ子フィールド＋ `keepDocument` で当面の拡張は枠を消費せず安全に対応できる。
+  2. **将来の 1 枠統合と多重化 `patient_records`**: 独立コレクションが必要になった時点の第 1 統合候補は参照箇所が最小な **`locations` の `facility_settings` 吸収**（第 2 候補は `medication_guidances` + `patient_medication_info_templates` 統合）とし、捻出した 1 枠へ `recordType` + `patientId` 複合インデックスの `patient_records` を新設する。
+  3. **恒久策**: Apache-2.0 OSS 配布性・無償導入原則のため **RxDB Premium は不採用**とし、上限撤廃が必要になった場合は依存導入済みの **Dexie 直接利用（WebCrypto 暗号化ラッパー）＋自前チェックポイント同期クライアント**（既存ハブ `node:sqlite` + `/api/sync/*` を流用）へ移行する。
+  4. **自動防壁**: `src/db/collection_limit.test.ts` で 14 枠上限に加え、アクティブスキーマ集合・`BACKUP_COLLECTIONS`・`ALL_SYNC_COLLECTIONS` の 1 対 1 完全一致を常時検証する。
 
 ### H-3 ハブ予備機切替と復旧手順の現物証跡
 - **前提**: サテライトの「設定 > 端末同期 > 予備機切替」（P2-4）は 2026-10-22 に完成した（`src/lib/sync/standby_hub.ts`、`/api/sync/standby-hub/*`）。それ以前は固定の仮トークンで署名しており、実トークンのサテライトでは必ず「署名検証に失敗」になり、切替も画面の表示を変えるだけだった（「実装済み」は誤り）。いまは、この端末のサーバーが端末トークンで署名し、切替前に予備機が端末を受け付けることを確かめ、接続先を保存して、レプリケーションを世代つきでやり直す。予備機の実機リハーサル（年1回）の現物証跡と、本番端末の OS スケジューラ登録・点検受領書の現物証跡が無い。
@@ -514,10 +527,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 状態 | 対象 | 再開条件 |
 |---|---|---|
-| 実装完了 | A-1〜A-5 / B-1・B-2 / C-4・C-5（Q-5） / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-2・I-3・I-5・I-6 | 回帰を維持。通常の実装待ちには戻さない |
-| 一部完了・残りは条件待ち | C-1（ステップ1〜4・ステップ5a 完了、旧形式完全削除は条件A/B/C待ち） | UKE旧形式廃止条件（A:実績1ヶ月、B:出力0件、C:合意）の達成確認をもって `<details>` 内旧形式と旧生成コードを完全削除 |
-| 挙動・対象の判断待ち | C-2 / H-2 | 各項目の「要判断」（薬価改定「変更年月日」の解釈、RxDB コレクション統合枠または恒久策）を解消 |
-| 公式資料・症例待ち | C-3 | 出典と具体的な未対応ケースを入手し、点数影響を確認する |
+| 実装完了 | A-1〜A-5 / B-1・B-2 / C-2 / C-4・C-5（Q-5） / D-2 / F-1〜F-3 / G-1・G-2 / H-1・H-2（ADR確定） / I-1・I-2・I-3・I-5・I-6 | 回帰を維持。通常の実装待ちには戻さない |
+| 一部完了・残りは条件待ち | C-1（ステップ1〜4・ステップ5a・ステップ5b 廃止判定チェッカー完了、旧形式完全削除は条件A/B/C待ち） | `npm run ops:uke-retirement-check` で条件A・B・C の全達成（`pass`）を確認のうえ `<details>` 内旧形式と旧生成コードを完全削除 |
+| 基盤完了・現物事例を継続投入 | C-3（令和8年公式ルール拡充・返戻事例フィクスチャ基盤完了） | 実薬局の匿名化返戻事例・追加の厚労省疑義解釈を `claim_official_return_cases.test.ts` へ継続投入 |
 | 現地証跡・実データ待ち | D-1（Q-5 マイナ読取実機仕様突合含む） / E-1 / E-2 / F-4 / H-3 / H-4 / I-4 | `ops:field-evidence-bundle -- --init <外部保管先>` で雛形を配置し、対象機器・店舗・実施担当の実測証跡を投入する。E-2 は対象機器の順序も判断する |
 
 全トラックの完了を、ローカルの自動テスト通過だけでは判定しない。現地証跡が必要な項目は引き続き未完とする。
@@ -631,6 +643,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | `.agents/AGENTS.md`、`.agents/skills/honest-verification/SKILL.md` | 開発者の行動規範（本書第Ⅰ部第七条・第十条の出典） |
 | `docs/ai_architecture_policy.md` | AI 補助の設計方針（第一条の出典） |
 | `docs/satellite_terminal_sync_plan.md` | 複数端末同期の設計（第二条・第六条・H-2 の出典） |
+| `docs/adr_rxdb_collection_limit.md` | RxDB open-core コレクション上限 14 に対する統合枠・恒久策の設計決定（H-2 ADR） |
 | `docs/electronic_prescription_rollout_plan.md` | 電子処方箋の導入フェーズと本番可否判定（E-1・第Ⅳ部 §7 の出典） |
 | `docs/implementation_plan.md` | 2026-08 の段階的改善計画（Phase 1〜3、完了分の記録） |
 | `docs/phase3_investigation_20260827.md` | 高額療養費・減免・返戻・薬価改定の仕様所在の調査 |

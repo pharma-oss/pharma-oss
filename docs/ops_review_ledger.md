@@ -87,6 +87,7 @@ Tier 4  複数 Tier の成果物を統合する
 | `staff:access-recovery-review` | `runStaffAccessRecoveryReview.ts` | スタッフ認証復旧の月次レビュー |
 | `electronic-prescription:connector-preflight` | `runElectronicPrescriptionConnectorPreflight.ts` | 電子処方箋コネクタの事前確認 |
 | `ops:field-evidence-bundle` | `runFieldEvidenceBundle.ts` | Phase C 現地証跡 9 スロットの一括雛形生成・保管ガード・真正性監査（I-2 / I-4） |
+| `ops:uke-retirement-check` | `runUkeRetirementReadiness.ts` | 監査ログ直近90日実測に基づく旧形式UKE完全廃止（条件A/B/C）ゲート判定（C-1 ステップ 5b） |
 | `test:e2e:print-layout` | `runPrintLayoutRegression.mjs` | 印刷帳票 9 種の実描画キャプチャ（`manifest.json` を出力） |
 
 ### Tier 2 — Tier 1 の出力が必要

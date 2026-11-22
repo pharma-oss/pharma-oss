@@ -243,6 +243,14 @@ const RUNNABLE_CLIS: OpsCliContract[] = [
     }
   },
   {
+    npmScript: 'ops:uke-retirement-check',
+    outputDirEnv: 'YAKUREKI_UKE_RETIREMENT_OUTPUT_DIR',
+    outputs: {
+      reviewJson: 'uke-retirement-readiness.json',
+      checklist: 'uke-retirement-checklist.txt'
+    }
+  },
+  {
     npmScript: 'electronic-prescription:field-readiness',
     outputDirEnv: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_OUTPUT_DIR',
     extraEnv: { YAKUREKI_ELECTRONIC_PRESCRIPTION_FIELD_REQUEST_ONLY: '1' },
@@ -317,7 +325,8 @@ const OPTIONAL_INPUT_CLIS: Array<{ npmScript: string; outputDirEnv: string; env:
   { npmScript: 'drug-label:no-candidate-review', outputDirEnv: 'YAKUREKI_DRUG_LABEL_NO_CANDIDATE_OUTPUT_DIR', env: 'YAKUREKI_DRUG_LABEL_NO_CANDIDATE_EVIDENCE' },
   { npmScript: 'drug-label:queue-review', outputDirEnv: 'YAKUREKI_DRUG_LABEL_QUEUE_REVIEW_OUTPUT_DIR', env: 'YAKUREKI_DRUG_LABEL_QUEUE_JSON' },
   { npmScript: 'electronic-prescription:connector-contract', outputDirEnv: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_CONNECTOR_CONTRACT_OUTPUT_DIR', env: 'YAKUREKI_ELECTRONIC_PRESCRIPTION_CONNECTOR_CONTRACT' },
-  { npmScript: 'evidence:integrity', outputDirEnv: 'YAKUREKI_EVIDENCE_INTEGRITY_OUTPUT_DIR', env: 'YAKUREKI_EVIDENCE_INTEGRITY_JSON' }
+  { npmScript: 'evidence:integrity', outputDirEnv: 'YAKUREKI_EVIDENCE_INTEGRITY_OUTPUT_DIR', env: 'YAKUREKI_EVIDENCE_INTEGRITY_JSON' },
+  { npmScript: 'ops:uke-retirement-check', outputDirEnv: 'YAKUREKI_UKE_RETIREMENT_OUTPUT_DIR', env: 'YAKUREKI_UKE_AUDIT_LOG_PATH' }
 ];
 
 let workDir = '';
