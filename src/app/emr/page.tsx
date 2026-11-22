@@ -5,7 +5,8 @@ import { Clock, History, Save, MessageSquare, AlertTriangle, Loader2, CheckCircl
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/db/DatabaseProvider';
-import type { Alert, FacilitySettings, PrescriptionItem, SoapRecord as DbSoapRecord, SoapStructuredAssessment, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import type { Alert, FacilitySettings, Patient, PrescriptionItem, SoapRecord as DbSoapRecord, SoapStructuredAssessment, Visit, VisitInitialQuestionnaire, VisitMynaClinicalImport } from '@/db/types';
+import { buildClinicalSafetyWarningInsightItems } from '@/lib/clinical_safety_axes';
 import { evaluateUsageWarning } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
 import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
@@ -1129,14 +1130,13 @@ export default function EmrPage() {
         const newWarnings: WarningInsightItem[] = [];
 
         let patientAge: number | undefined;
+        let patientJson: Patient | null = null;
         let activePatientAlertsArr: Alert[] = [];
         let hasPatientDataFetchError = false;
         try {
             const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
             const patient = patients[0];
-            if (patient) {
-                patientAge = calculatePatientAge(patient.birthDate);
-            }
+            if (patient) { patientJson = patient.toJSON() as Patient; patientAge = calculatePatientAge(patient.birthDate); }
 
             const alerts = await db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
             if (cancelled) return;
@@ -1156,12 +1156,7 @@ export default function EmrPage() {
         const currentDrugs = [];
         const currentAlertItems = [];
 
-        // ⚡ Bolt: Eliminate N+1 queries by fetching all drugs in a single batch
-        const drugIdSet = new Set<string>();
-        for (let i = 0; i < items.length; i++) {
-          drugIdSet.add(items[i].drugId);
-        }
-        const drugIds = Array.from(drugIdSet);
+        const drugIds = Array.from(new Set(items.map((item) => item.drugId)));
         const drugsMap = await db.drugs.findByIds(drugIds).exec();
         if (cancelled) return;
 
@@ -1311,6 +1306,11 @@ export default function EmrPage() {
         if (hasPatientDataFetchError) {
            newWarnings.push(createPatientDataFetchErrorWarning());
         }
+        newWarnings.push(...buildClinicalSafetyWarningInsightItems({
+          drugs: currentAlertItems,
+          patient: patientJson,
+          electronicPrescriptionLabResults: visitJson.electronicPrescription?.supplementaryInformation?.laboratoryResults
+        }));
 
         if (cancelled) return;
         setWarnings(newWarnings);
@@ -1323,7 +1323,12 @@ export default function EmrPage() {
       }
     }
     fetchWarnings();
-    return () => { cancelled = true; };
+    const handleClinicalProfileUpdated = () => { void fetchWarnings(); };
+    document.addEventListener('patient-clinical-profile-updated', handleClinicalProfileUpdated);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('patient-clinical-profile-updated', handleClinicalProfileUpdated);
+    };
   }, [db, findActiveVisit]);
   const handleCompleteVisit = async (options?: { skipConfirmation?: boolean }) => {
     if (!db) return;
@@ -1695,21 +1700,13 @@ export default function EmrPage() {
             </div>
           )}
           {soapAiDraftSuggestions.length > 0 && (
-            <SoapAiDraftInsightCard
-              suggestions={soapAiDraftSuggestions}
-              onApplyDraft={handleApplySoapAiDraft}
-              onFocusEvidence={handleFocusSoapEvidence}
-            />
+            <SoapAiDraftInsightCard suggestions={soapAiDraftSuggestions} onApplyDraft={handleApplySoapAiDraft} onFocusEvidence={handleFocusSoapEvidence} />
           )}
-          <VitalInsightCard />
+          <VitalInsightCard targetVisitId={targetVisitId} />
           <DocLinkInsightCard prescribedDrugs={prescribedDrugs} onSelectGuidance={handleSelectGuidance} />
           <EmrFollowUpCard
-            db={db}
-            targetVisitId={targetVisitId}
-            patientName={currentPatientName}
-            prescribedDrugs={prescribedDrugs}
-            onEnsureVisitEditable={() => ensureActiveVisitEditable('soap')}
-            onInsertFollowUpDraft={handleInsertFollowUpDraft}
+            db={db} targetVisitId={targetVisitId} patientName={currentPatientName} prescribedDrugs={prescribedDrugs}
+            onEnsureVisitEditable={() => ensureActiveVisitEditable('soap')} onInsertFollowUpDraft={handleInsertFollowUpDraft}
           />
         </section>
 

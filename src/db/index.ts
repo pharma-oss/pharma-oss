@@ -308,7 +308,10 @@ const create = async () => {
                 3: keepDocument,
                 // v4 -> v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMACスカラー索引）を追加。
                 // Dexie.js（DXE1）は indexes 対象を required にすることを要求するため空文字で初期化し、起動後に非同期バックフィルする。
-                4: migratePatientV4ToV5
+                4: migratePatientV4ToV5,
+                // v5 -> v6: 臨床安全チェック用プロファイル（clinicalProfile: 検査値・妊娠授乳・併用OTC/サプリ、暗号化対象）を追加。
+                // 任意項目なので既存ドキュメントをそのまま持ち上げる。
+                5: keepDocument
             })
         },
         visits: {

@@ -99,7 +99,7 @@ export const FACILITY_SETTINGS_SCHEMA: RxJsonSchema<FacilitySettings> = {
 
 export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
   title: 'patient schema',
-  version: 5,
+  version: 6,
   description: 'Patient master data',
   primaryKey: 'patientId',
   type: 'object',
@@ -151,6 +151,52 @@ export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
         required: ['provider', 'recipient']
       }
     },
+    // v6: 臨床安全チェック用プロファイル（腎機能等の検査値・妊娠授乳・併用OTC/サプリ。暗号化保存）
+    clinicalProfile: {
+      type: 'object',
+      properties: {
+        labResults: {
+          type: 'array',
+          maxItems: 100,
+          items: {
+            type: 'object',
+            properties: {
+              testName: { type: 'string', maxLength: 100 },
+              value: { type: 'number' },
+              unit: { type: 'string', maxLength: 50 },
+              measuredAt: { type: 'string', maxLength: 50 },
+              source: { type: 'string', enum: ['manual', 'electronic_prescription'], maxLength: 40 },
+              note: { type: 'string', maxLength: 200 }
+            },
+            required: ['testName', 'value', 'source']
+          }
+        },
+        pregnancyStatus: {
+          type: 'string',
+          enum: ['unknown', 'not_pregnant', 'pregnant', 'possibly_pregnant'],
+          maxLength: 30
+        },
+        lactationStatus: {
+          type: 'string',
+          enum: ['unknown', 'not_lactating', 'lactating'],
+          maxLength: 30
+        },
+        otcSupplements: {
+          type: 'array',
+          maxItems: 50,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', maxLength: 120 },
+              category: { type: 'string', enum: ['otc', 'supplement', 'kampo', 'other'], maxLength: 30 },
+              note: { type: 'string', maxLength: 200 }
+            },
+            required: ['name']
+          }
+        },
+        updatedAt: { type: 'string', maxLength: 50 }
+      }
+    },
     // v5: 暗号化患者検索用ブラインドインデックス（鍵付きHMAC-SHA256、平文PIIを含まないスカラー索引）
     // Dexie.js ストレージ（DXE1）は indexes に含む全項目を required にすることを要求するため default: '' を付与する
     searchIndexVersion: { type: 'string', maxLength: 16, default: '' },
@@ -180,7 +226,7 @@ export const PATIENT_SCHEMA: RxJsonSchema<Patient> = {
     'givenKanaPrefixHash',
     'searchIndexVersion'
   ],
-  encrypted: ['name', 'kana', 'birthDate', 'insuranceInfo', 'publicInsurances']
+  encrypted: ['name', 'kana', 'birthDate', 'insuranceInfo', 'publicInsurances', 'clinicalProfile']
 };
 
 const ELECTRONIC_PRESCRIPTION_SUPPLEMENTARY_INFORMATION_SCHEMA = {

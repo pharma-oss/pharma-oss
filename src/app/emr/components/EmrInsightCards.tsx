@@ -321,18 +321,7 @@ export const SoapAiDraftInsightCard = React.memo(function SoapAiDraftInsightCard
   );
 });
 
-export const VitalInsightCard = React.memo(function VitalInsightCard() {
-  return (
-    <div className="insight-card vital">
-      <div className="insight-header">
-        <h3>バイタル・臨床検査値</h3>
-      </div>
-      <p className="insight-empty-text">
-        最新の検査値（eGFR / Blood Pressure等）は未登録です
-      </p>
-    </div>
-  );
-});
+export { VitalInsightCard } from './VitalInsightCard';
 
 type GuidanceDropdownEntry = { type: SoapEntryType; text: string };
 

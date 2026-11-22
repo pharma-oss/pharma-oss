@@ -372,7 +372,8 @@ async function createEncryptedPatientRxDb(password: string) {
         2: identityMigration,
         3: identityMigration,
         4: identityMigration,
-        5: identityMigration
+        5: identityMigration,
+        6: identityMigration
       }
     }
   });

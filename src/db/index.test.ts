@@ -217,6 +217,8 @@ describe('Database initialization contracts', () => {
     delete (v4PatientSchema.properties as Record<string, unknown>).kanaPrefixHash;
     delete (v4PatientSchema.properties as Record<string, unknown>).givenNamePrefixHash;
     delete (v4PatientSchema.properties as Record<string, unknown>).givenKanaPrefixHash;
+    delete (v4PatientSchema.properties as Record<string, unknown>).clinicalProfile;
+    v4PatientSchema.encrypted = (v4PatientSchema.encrypted || []).filter((field) => field !== 'clinicalProfile');
 
     const db4 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
     await db4.addCollections({
@@ -239,7 +241,8 @@ describe('Database initialization contracts', () => {
       patients: {
         schema: PATIENT_SCHEMA,
         migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {
-          4: migratePatientV4ToV5
+          4: migratePatientV4ToV5,
+          5: (doc) => doc
         })
       }
     });
@@ -247,7 +250,7 @@ describe('Database initialization contracts', () => {
     attachPatientSearchIndexHooks(db5.patients, hmacKey);
 
     const carried = await db5.patients.findOne('pt_v4_carry').exec();
-    assert.ok(carried, 'existing v4 patient must remain readable after v5 migration');
+    assert.ok(carried, 'existing v4 patient must remain readable after v5->v6 migration');
     assert.strictEqual(carried.name, '高橋 美咲');
     assert.strictEqual(carried.kana, 'タカハシ ミサキ');
     assert.strictEqual(carried.birthDate, '1988-03-15');
@@ -261,6 +264,77 @@ describe('Database initialization contracts', () => {
     assert.deepStrictEqual(found.patients.map((p) => p.patientId), ['pt_v4_carry']);
 
     await db5.remove();
+  });
+
+  it('migrates v5 encrypted patients to v6 preserving PII/blind indexes and encrypting clinicalProfile', async () => {
+    addRxPlugin(RxDBMigrationSchemaPlugin);
+    const dbName = `patient_v5_to_v6_${Date.now()}`;
+    const storage = wrappedValidateAjvStorage({
+      storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+    });
+    const password = 'test-migration-password-v6-patient';
+
+    const v5PatientSchema = structuredClone(PATIENT_SCHEMA);
+    v5PatientSchema.version = 5;
+    delete (v5PatientSchema.properties as Record<string, unknown>).clinicalProfile;
+    v5PatientSchema.encrypted = (v5PatientSchema.encrypted || []).filter((field) => field !== 'clinicalProfile');
+
+    const db5 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db5.addCollections({
+      patients: {
+        schema: v5PatientSchema,
+        migrationStrategies: legacyMigrationStrategies(v5PatientSchema, {
+          4: migratePatientV4ToV5
+        })
+      }
+    });
+    const v5Key = registerPatientSearchIndexKey(db5, password);
+    attachPatientSearchIndexHooks(db5.patients, v5Key);
+    await db5.patients.insert({
+      patientId: 'pt_v5_carry',
+      name: '中村 健一',
+      kana: 'ナカムラ ケンイチ',
+      birthDate: '1972-09-20',
+      gender: 'male'
+    });
+    await db5.close();
+
+    const db6 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db6.addCollections({
+      patients: {
+        schema: PATIENT_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(PATIENT_SCHEMA, {
+          4: migratePatientV4ToV5,
+          5: (doc) => doc
+        })
+      }
+    });
+    const v6Key = registerPatientSearchIndexKey(db6, password);
+    attachPatientSearchIndexHooks(db6.patients, v6Key);
+
+    const carried = await db6.patients.findOne('pt_v5_carry').exec();
+    assert.ok(carried, 'existing v5 patient must remain readable after v6 migration');
+    assert.strictEqual(carried.name, '中村 健一');
+    assert.strictEqual(carried.birthDate, '1972-09-20');
+
+    await carried.patch({
+      clinicalProfile: {
+        labResults: [{ testName: 'eGFR', value: 36, unit: 'mL/min/1.73m2', measuredAt: '2026-11-15', source: 'manual' }],
+        pregnancyStatus: 'not_pregnant',
+        lactationStatus: 'not_lactating',
+        otcSupplements: [{ name: 'ロキソニンS', category: 'otc' }]
+      }
+    });
+    const updated = await db6.patients.findOne('pt_v5_carry').exec();
+    assert.strictEqual(updated?.clinicalProfile?.labResults?.[0]?.value, 36);
+    assert.strictEqual(updated?.clinicalProfile?.otcSupplements?.[0]?.name, 'ロキソニンS');
+
+    const patientDbView = db6 as unknown as Pick<PharmacyDatabase, 'patients'>;
+    const found = await searchPatientsViaBlindIndex(patientDbView, '19720920', 8);
+    assert.strictEqual(found.usedBlindIndex, true);
+    assert.deepStrictEqual(found.patients.map((p) => p.patientId), ['pt_v5_carry']);
+
+    await db6.remove();
   });
 });
 

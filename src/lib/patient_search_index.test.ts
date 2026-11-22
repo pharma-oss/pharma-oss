@@ -93,7 +93,8 @@ describe('patient_search_index (PATIENT_SCHEMA v5 keyed HMAC blind index)', () =
             2: identityMigration,
             3: identityMigration,
             4: identityMigration,
-            5: identityMigration
+            5: identityMigration,
+            6: identityMigration
           }
         }
       });
@@ -233,7 +234,7 @@ describe('patient_search_index (PATIENT_SCHEMA v5 keyed HMAC blind index)', () =
       // 9. Verify PATIENT_SCHEMA keeps all PII fields encrypted (never exposed in plaintext)
       assert.deepStrictEqual(
         PATIENT_SCHEMA.encrypted,
-        ['name', 'kana', 'birthDate', 'insuranceInfo', 'publicInsurances']
+        ['name', 'kana', 'birthDate', 'insuranceInfo', 'publicInsurances', 'clinicalProfile']
       );
     } finally {
       await db.close();

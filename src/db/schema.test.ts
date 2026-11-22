@@ -101,7 +101,48 @@ describe('Schema Validation', () => {
       };
 
       assert.strictEqual(getErrors(PATIENT_SCHEMA, patientWithHighCost), null);
-      assert.strictEqual(PATIENT_SCHEMA.version, 5);
+      assert.strictEqual(PATIENT_SCHEMA.version, 6);
+    });
+
+    test('should validate encrypted clinicalProfile (labs, pregnancy/lactation, OTC) on PATIENT_SCHEMA v6', () => {
+      const patientWithClinicalProfile = {
+        patientId: 'pt_clinical',
+        name: '山田 花子',
+        kana: 'ヤマダ ハナコ',
+        birthDate: '1988-05-10',
+        gender: 'female',
+        clinicalProfile: {
+          labResults: [
+            {
+              testName: 'eGFR',
+              value: 42.5,
+              unit: 'mL/min/1.73m2',
+              measuredAt: '2026-11-10',
+              source: 'electronic_prescription'
+            }
+          ],
+          pregnancyStatus: 'pregnant',
+          lactationStatus: 'not_lactating',
+          otcSupplements: [
+            { name: 'ロキソニンS', category: 'otc', note: '頭痛時に頓用' }
+          ],
+          updatedAt: '2026-11-22T09:00:00Z'
+        }
+      };
+
+      assert.strictEqual(getErrors(PATIENT_SCHEMA, patientWithClinicalProfile), null);
+      assert.ok(PATIENT_SCHEMA.encrypted?.includes('clinicalProfile'));
+
+      const invalidPregnancy = {
+        ...patientWithClinicalProfile,
+        clinicalProfile: { pregnancyStatus: 'invalid_state' }
+      };
+      const errors = getErrors(PATIENT_SCHEMA, invalidPregnancy);
+      assert.ok(errors);
+      assert.deepStrictEqual(
+        errors.map((error: { instancePath?: string }) => error.instancePath),
+        ['/clinicalProfile/pregnancyStatus']
+      );
     });
 
     test('should reject a high-cost limit category outside 区ア〜区キ', () => {

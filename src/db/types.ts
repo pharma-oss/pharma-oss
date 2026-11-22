@@ -282,6 +282,32 @@ export interface VisitCareCommunication {
   updatedAt?: string;
 }
 
+export interface PatientLabResult {
+  testName: string;
+  value: number;
+  unit?: string;
+  measuredAt?: string;
+  source: 'manual' | 'electronic_prescription';
+  note?: string;
+}
+
+export type PatientPregnancyStatus = 'unknown' | 'not_pregnant' | 'pregnant' | 'possibly_pregnant';
+export type PatientLactationStatus = 'unknown' | 'not_lactating' | 'lactating';
+
+export interface PatientOtcSupplement {
+  name: string;
+  category?: 'otc' | 'supplement' | 'kampo' | 'other';
+  note?: string;
+}
+
+export interface PatientClinicalProfile {
+  labResults?: PatientLabResult[];
+  pregnancyStatus?: PatientPregnancyStatus;
+  lactationStatus?: PatientLactationStatus;
+  otcSupplements?: PatientOtcSupplement[];
+  updatedAt?: string;
+}
+
 export interface Patient {
   patientId: string;
   name: string;
@@ -319,6 +345,8 @@ export interface Patient {
     };
   };
   publicInsurances?: PublicInsurance[];
+  /** v6: 臨床安全チェック用プロファイル（腎機能等の検査値・妊娠授乳・併用OTC/サプリ。暗号化保存） */
+  clinicalProfile?: PatientClinicalProfile;
   /** 暗号化患者検索用ブラインドインデックス（鍵付きHMAC-SHA256。平文PIIは一切含めない） */
   searchIndexVersion?: string;
   birthDateHash?: string;
