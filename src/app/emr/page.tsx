@@ -64,6 +64,8 @@ import {
   CareChecklistCard, WarningInsightCard, type WarningInsightItem,
   SoapAiDraftInsightCard, VitalInsightCard, DocLinkInsightCard
 } from './components/EmrInsightCards';
+import { EmrFollowUpCard } from './components/EmrFollowUpCard';
+import { buildGuidanceSoapInsertDetail, type GuidanceSoapInsertDetail } from '@/lib/follow_up_templates';
 import { PickingSupportModal } from './components/PickingSupportModal';
 import { TracingReportModal } from './components/TracingReportModal';
 
@@ -231,12 +233,15 @@ export default function EmrPage() {
     return evaluateActiveVisitEditability(visit, scope);
   }, [findActiveVisit]);
 
-  // To receive the addEntry event from DocLinkInsightCard we need to pass a callback.
-  // Because SoapEditor manages its own state internally right now, we either need to lift SoapEditor state up
-  // or use an event dispatcher. Let's use a simple custom event for decoupled communication.
-  const handleSelectGuidance = useCallback((type: string, text: string) => {
-    document.dispatchEvent(new CustomEvent('insert-soap-guidance', { detail: { type, text, origin: 'manual' } }));
+  const handleInsertFollowUpDraft = useCallback((detail: GuidanceSoapInsertDetail) => {
+    document.dispatchEvent(new CustomEvent('insert-soap-guidance', { detail }));
+    toast.info(`SOAP ${detail.type} にテンプレートを未確認下書きとして挿入しました。内容を確認・承認してください。`);
   }, []);
+
+  const handleSelectGuidance = useCallback((type: string, text: string) => {
+    const detail = buildGuidanceSoapInsertDetail({ type, text, sourceKey: 'drug-guidance' });
+    handleInsertFollowUpDraft(detail);
+  }, [handleInsertFollowUpDraft]);
 
   const handleFocusSoapEvidence = useCallback((targetId?: string) => {
     if (!targetId) return;
@@ -1698,6 +1703,14 @@ export default function EmrPage() {
           )}
           <VitalInsightCard />
           <DocLinkInsightCard prescribedDrugs={prescribedDrugs} onSelectGuidance={handleSelectGuidance} />
+          <EmrFollowUpCard
+            db={db}
+            targetVisitId={targetVisitId}
+            patientName={currentPatientName}
+            prescribedDrugs={prescribedDrugs}
+            onEnsureVisitEditable={() => ensureActiveVisitEditable('soap')}
+            onInsertFollowUpDraft={handleInsertFollowUpDraft}
+          />
         </section>
 
         {/* Prescription Timeline / History */}

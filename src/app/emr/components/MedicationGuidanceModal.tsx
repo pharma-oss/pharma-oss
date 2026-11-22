@@ -8,6 +8,7 @@ import {
   isGuidanceEntryType,
   pickGuidanceDocument
 } from '@/lib/medication_guidance';
+import { buildDrugFollowUpTemplatePresets } from '@/lib/follow_up_templates';
 import { getCurrentUser, logAuditAction } from '@/lib/audit';
 import {
   checkMedicationGuidanceEditPermission,
@@ -293,10 +294,28 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
                 {['S', 'O', 'A', 'P'].map((type) => (
                   <button
                     key={type}
+                    type="button"
                     className={`btn-add-type is-${type.toLowerCase()}`}
                     onClick={() => addEntry(type)}
                   >
                     + {type}
+                  </button>
+                ))}
+              </div>
+
+              <div className="guidance-preset-bar">
+                <span className="guidance-add-label">
+                  フォロー定型文:
+                </span>
+                {buildDrugFollowUpTemplatePresets(drug?.name).map((preset) => (
+                  <button
+                    key={preset.category}
+                    type="button"
+                    className="btn-add-type"
+                    data-testid={`guidance-preset-${preset.category}`}
+                    onClick={() => setEntries((prev) => [...prev, { id: uuidv4(), type: preset.type, text: preset.text }])}
+                  >
+                    + {preset.label}
                   </button>
                 ))}
               </div>
@@ -384,10 +403,15 @@ export const MedicationGuidanceModal: React.FC<MedicationGuidanceModalProps> = (
         .btn-trash-action {
           padding: var(--space-2);
         }
-        .guidance-add-bar {
+        .guidance-add-bar,
+        .guidance-preset-bar {
           display: flex;
+          flex-wrap: wrap;
           gap: var(--space-2);
           align-items: center;
+        }
+        .guidance-preset-bar {
+          margin-top: var(--space-2);
         }
         .guidance-add-label {
           font-size: var(--fs-md);
