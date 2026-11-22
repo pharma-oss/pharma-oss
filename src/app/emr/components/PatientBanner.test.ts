@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -743,4 +744,23 @@ test('loadPatientBannerRecord resolves targetVisitId or latest processing visit 
   const missingVisit = await loadPatientBannerRecord(db, 'v-missing');
   assert.equal(missingVisit, null);
 });
+
+test('PatientBanner wraps complex badge rows cleanly, prevents mid-character pill splits, and styles .badge.teal', () => {
+  const filePath = new URL('./PatientBanner.tsx', import.meta.url);
+  const source = fs.readFileSync(filePath, 'utf8');
+  assert.ok(source.includes('.badge.teal {'), 'PatientBanner.tsx must define .badge.teal for public insurance / copayment pills');
+  assert.ok(
+    /\.patient-alerts-footer\s*\{[^}]*flex-wrap:\s*wrap;/.test(source),
+    '.patient-alerts-footer must set flex-wrap: wrap so multi-public-insurance badges do not squish on a single row'
+  );
+  assert.ok(
+    /\.patient-alerts-footer\s+\.badge\s*\{[^}]*white-space:\s*nowrap;/.test(source),
+    '.patient-alerts-footer .badge must set white-space: nowrap so badge labels do not break mid-word'
+  );
+  assert.ok(
+    /\.btn-myna\s*\{[^}]*white-space:\s*nowrap;/.test(source),
+    '.btn-myna must set white-space: nowrap so the Myna button label does not wrap mid-character'
+  );
+});
+
 

@@ -55,6 +55,20 @@ describe('EMR Responsive Layout and TimelineItem contracts (Track I-6)', () => {
     assert.ok(content.includes('.emr-actions .btn-label-sub'), 'Missing sublabel visibility handling');
   });
 
+  it('verifies that emr/page.tsx flushes desktop .emr-actions sticky bar to the bottom of .content-scroll and resets on <=920px', () => {
+    const filePath = path.join(process.cwd(), 'src', 'app', 'emr', 'page.tsx');
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    assert.ok(
+      /\.emr-actions\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*-1\.75rem;/.test(content),
+      '.emr-actions must use bottom: -1.75rem on desktop to stay flush with .content-scroll padding'
+    );
+    assert.ok(
+      /@media\s*\(max-width:\s*920px\)\s*\{[^}]*\.emr-actions\s*\{[^}]*bottom:\s*0;/.test(content),
+      '.emr-actions must reset bottom: 0 inside @media (max-width: 920px) where .content-scroll becomes overflow: visible'
+    );
+  });
+
   it('verifies that SoapEditor.tsx footer allows responsive wrapping for problem addition buttons', () => {
     const filePath = path.join(process.cwd(), 'src', 'app', 'emr', 'components', 'SoapEditor.tsx');
     const content = fs.readFileSync(filePath, 'utf-8');

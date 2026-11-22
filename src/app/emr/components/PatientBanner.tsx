@@ -1325,11 +1325,18 @@ export const PatientBanner = React.memo(function PatientBanner({
           margin-left: auto;
           display: flex;
           flex-direction: column;
+          align-items: flex-end;
           gap: 0.5rem;
-          min-width: min(100%, 280px);
+          flex: 1 1 320px;
+          min-width: 0;
+          max-width: 100%;
         }
 
         .badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          max-width: 100%;
           padding: 4px 12px;
           border-radius: 6px;
           font-size: var(--fs-sm);
@@ -1338,6 +1345,7 @@ export const PatientBanner = React.memo(function PatientBanner({
         .badge.red { background: #fee2e2; color: #dc2626; }
         .badge.orange { background: #fef3c7; color: #d97706; }
         .badge.blue { background: #dbeafe; color: #2563eb; }
+        .badge.teal { background: #ccfbf1; color: #115e59; }
         .badge-outline {
           border: 1px solid var(--border);
           padding: 2px 8px;
@@ -1349,12 +1357,12 @@ export const PatientBanner = React.memo(function PatientBanner({
         .flex { display: flex; }
         .align-center { align-items: center; }
         .gap-2 { gap: 0.5rem; }
-        .badge.green { background: #d1fae5; color: #059669; display: flex; align-items: center; gap: 4px; }
+        .badge.green { background: #d1fae5; color: #059669; display: inline-flex; align-items: center; gap: 4px; }
         .inline-icon { display: inline-block; }
         .patient-alert-badges {
           justify-content: flex-end;
           flex-wrap: wrap;
-          max-width: 420px;
+          max-width: min(100%, 520px);
         }
 
         .btn-myna {
@@ -1365,6 +1373,7 @@ export const PatientBanner = React.memo(function PatientBanner({
           border-radius: 6px;
           font-size: var(--fs-sm);
           font-weight: 600;
+          white-space: nowrap;
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -1508,7 +1517,14 @@ export const PatientBanner = React.memo(function PatientBanner({
 
         .patient-alerts-footer {
           justify-content: flex-end;
+          flex-wrap: wrap;
+          flex-wrap: balance;
           margin-top: var(--space-1);
+          max-width: 100%;
+        }
+
+        .patient-alerts-footer .badge {
+          white-space: nowrap;
         }
 
         .modal-section-header {

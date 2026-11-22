@@ -2143,7 +2143,7 @@ export default function EmrPage() {
 
         .emr-actions {
           position: sticky;
-          bottom: 0;
+          bottom: -1.75rem;
           z-index: 20;
           padding: 0.85rem 1.5rem;
           border-top: 2px solid var(--border-strong);
@@ -2512,6 +2512,10 @@ export default function EmrPage() {
             flex-direction: column;
             gap: 1rem;
           }
+        }
+
+        @media (max-width: 920px) {
+          .emr-actions { bottom: 0; }
         }
 
         @media (max-width: 640px) {
