@@ -24,6 +24,9 @@ interface DrugMasterSettingsTabProps {
   file: File | null;
   drugMasterSourceUrl: string;
   setDrugMasterSourceUrl: (value: string) => void;
+  priceRevisionEffectiveDateOverride?: string;
+  setPriceRevisionEffectiveDateOverride?: (value: string) => void;
+  lastMasterVintageWarning?: string;
   handleFetchDrugMasterOfficialPage: () => Promise<void>;
   isFetchingDrugMasterOfficialPage: boolean;
   drugMasterOfficialPageHtml: string;
@@ -99,6 +102,9 @@ export default function DrugMasterSettingsTab({
   file,
   drugMasterSourceUrl,
   setDrugMasterSourceUrl,
+  priceRevisionEffectiveDateOverride = '',
+  setPriceRevisionEffectiveDateOverride,
+  lastMasterVintageWarning = '',
   handleFetchDrugMasterOfficialPage,
   isFetchingDrugMasterOfficialPage,
   drugMasterOfficialPageHtml,
@@ -212,6 +218,31 @@ export default function DrugMasterSettingsTab({
             />
             <small className="help-text">入力すると監査ログとロールバックJSONに更新元URL、ファイルサイズ、SHA-256を記録します。</small>
           </div>
+
+          <div className="form-group">
+            <label htmlFor="drug-master-price-effective-override">薬価適用開始日の明示指定（任意・改定/遡り取込時）</label>
+            <input
+              id="drug-master-price-effective-override"
+              data-testid="drug-master-price-effective-override"
+              type="date"
+              value={priceRevisionEffectiveDateOverride}
+              onChange={(e) => setPriceRevisionEffectiveDateOverride?.(e.target.value)}
+              disabled={isUploading || isImportingDrugMasterFromUrl}
+            />
+            <small className="help-text">
+              支払基金マスター項番30「変更年月日」は名称変更・経過措置・非公表項目変更でも更新されます（薬価変更が無い行は履歴追加しません）。薬価改定や過去マスター遡り取込で適用開始日を明示したい場合（例: 2026-06-01）はここで指定すると項番30より優先して版を記録します。
+            </small>
+          </div>
+
+          {lastMasterVintageWarning && (
+            <div
+              role="alert"
+              className="status-message warning"
+              data-testid="drug-master-vintage-warning"
+            >
+              {lastMasterVintageWarning}
+            </div>
+          )}
 
           <section
             aria-label="支払基金マスター更新候補"

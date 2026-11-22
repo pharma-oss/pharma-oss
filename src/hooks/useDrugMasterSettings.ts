@@ -7,7 +7,10 @@ import type { PharmacyDatabase, User, Drug } from '@/db/types';
 import { logAuditAction, type PermissionAction } from '@/lib/audit';
 import {
   applyDrugMasterPrice,
+  formatDrugMasterVintageBanner,
   formatDrugMasterVintageLabel,
+  normalizeDrugPriceRevisionOverrideDate,
+  resolveDrugMasterRowPriceEffectiveFrom,
   reviewDrugMasterVintage,
   type DrugPriceRevision
 } from '@/lib/drug_price_history';
@@ -111,6 +114,8 @@ export function useDrugMasterSettings({
   const [isUploading, setIsUploading] = useState(false);
   const [isImportingDrugMasterFromUrl, setIsImportingDrugMasterFromUrl] = useState(false);
   const [drugMasterSourceUrl, setDrugMasterSourceUrl] = useState('');
+  const [priceRevisionEffectiveDateOverride, setPriceRevisionEffectiveDateOverride] = useState('');
+  const [lastMasterVintageWarning, setLastMasterVintageWarning] = useState('');
   const [drugMasterOfficialPageHtml, setDrugMasterOfficialPageHtml] = useState('');
   const [drugMasterCandidates, setDrugMasterCandidates] = useState<DrugMasterOfficialDownloadCandidate[]>([]);
   const [drugMasterCandidateMessage, setDrugMasterCandidateMessage] = useState('');
@@ -330,9 +335,18 @@ export function useDrugMasterSettings({
         return false;
       }
 
-      // 薬価の版に付ける適用開始日。行の「変更年月日」(項番30) を使う。
-      // 列が無い / 空の行は取込日で代用する。
+      // 薬価適用開始日の明示指定を検証（改定・遡り取込で項番30の非薬価変更によるズレを回避するため）
+      const overrideCheck = normalizeDrugPriceRevisionOverrideDate(priceRevisionEffectiveDateOverride);
+      if (!overrideCheck.ok) {
+        toast.error(overrideCheck.reason);
+        return false;
+      }
+      const explicitOverrideDate = overrideCheck.value;
+      setLastMasterVintageWarning('');
+
+      // 薬価の版に付ける適用開始日。優先順位: 明示指定 > 行の「変更年月日」(項番30) > 取込日。
       const importedOn = toLocalDateKey();
+      let priceRevisionFromOverride = 0;
       let priceRevisionFromChangeDate = 0;
       let priceRevisionFromImportDate = 0;
       let priceSkippedAsUnorderable = 0;
@@ -382,11 +396,12 @@ export function useDrugMasterSettings({
       const beforeRows: Partial<Drug>[] = Array.from(existingDrugsMap.values()).map((existingDrugDoc) => drugRecordFromDocument(existingDrugDoc));
 
       // 取込済みより古いマスターを取り込むと、版を持たない薬品の現在薬価が巻き戻る。
-      // ファイル全体の変更年月日と、取込済みの版の適用開始日で新旧を判定する。
+      // ファイル全体の変更年月日（および明示指定日）と、取込済みの版の適用開始日で新旧を判定する。
       const masterVintage = reviewDrugMasterVintage({
         changeDates: parsedMasterCsv.rows.map((row) => row.changeDate),
         storedRevisionDates: Array.from(existingDrugsMap.values())
-          .flatMap((doc) => (doc.priceHistory || []).map((revision) => revision?.effectiveFrom))
+          .flatMap((doc) => (doc.priceHistory || []).map((revision) => revision?.effectiveFrom)),
+        explicitOverrideDate
       });
 
       const bulkUpsertMap = new Map<string, Drug>();
@@ -394,7 +409,12 @@ export function useDrugMasterSettings({
 
       for (let i = 0; i < parsedMasterCsv.rows.length; i++) {
         const { code, name, price, yjCode, isAbolished, changeDate, unitText, unitCode } = parsedMasterCsv.rows[i];
-        const priceEffectiveFrom = changeDate || importedOn;
+        const resolvedEffective = resolveDrugMasterRowPriceEffectiveFrom({
+          rowChangeDate: changeDate,
+          importedOn,
+          explicitOverrideDate
+        });
+        const priceEffectiveFrom = resolvedEffective.effectiveFrom;
 
         let targetDoc: Drug | null;
         if (bulkUpsertMap.has(code)) {
@@ -413,7 +433,9 @@ export function useDrugMasterSettings({
             { sourceIsOlderThanStored: masterVintage.isOlderThanStored }
           );
           if (priceUpdate.revisionRecorded) {
-            if (changeDate) {
+            if (resolvedEffective.source === 'explicit_override') {
+              priceRevisionFromOverride++;
+            } else if (resolvedEffective.source === 'row_change_date') {
               priceRevisionFromChangeDate++;
             } else {
               priceRevisionFromImportDate++;
@@ -500,7 +522,7 @@ export function useDrugMasterSettings({
         logAudit: () => logAuditAction(
           db,
           'drug_master_update',
-          `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromChangeDate + priceRevisionFromImportDate}件（変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}（名称・廃止フラグを据え置いた薬品 ${attributesKeptStored}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
+          `支払基金マスタ同期: 支払基金の最新医薬品マスターCSVからマスタを更新しました（版: ${artifacts.versionId}, 入力: ${sourceExtractionLabel}, 列定義: ${layoutLabel}, 列定義照合: ${columnDefinitionReviewLabel}, 仕様PDF版: ${specificationRevisionReviewLabel}, 公式URL確認: ${sourceUrlReviewLabel}, 取込行: ${parsedMasterCsv.rows.length}件, スキップ: ${parsedMasterCsv.skippedRowCount}件, 新規: ${newCount}件, 更新: ${updatedCount}件, 廃止: ${abolishedCount}件, 薬価改定: ${priceRevisionFromOverride + priceRevisionFromChangeDate + priceRevisionFromImportDate}件（明示適用日 ${priceRevisionFromOverride}件 / 変更年月日 ${priceRevisionFromChangeDate}件 / 取込日で代用 ${priceRevisionFromImportDate}件）, 適用開始日明示指定: ${explicitOverrideDate || '未指定'}, ファイルの新旧: ${formatDrugMasterVintageLabel(masterVintage, priceSkippedAsUnorderable)}（名称・廃止フラグを据え置いた薬品 ${attributesKeptStored}件）, ファイルサイズ: ${sourceEvidence.fileSizeBytes} bytes, SHA-256: ${sourceEvidence.sha256}, 更新元URL: ${sourceEvidence.sourceUrl || '未入力'}）。差分CSV ${diffCsvFileName} とロールバックJSON ${rollbackFileName} を書き出しました。`
         ),
         rollback: async () => {
           await restoreDrugMasterFromRollback(db, artifacts.rollback);
@@ -516,14 +538,15 @@ export function useDrugMasterSettings({
       }
 
       toast.success(`更新完了（版 ${artifacts.versionId} / ${sourceExtractionLabel} / ${layoutLabel} / 列定義照合OK / 仕様PDF版OK / SHA-256記録済み）: 新規 ${newCount}件, 更新 ${updatedCount}件, 廃止 ${abolishedCount}件`);
-      if (masterVintage.isOlderThanStored) {
-        // 現在薬価が巻き戻る事故を、件数とともに必ず目に入れる
-        toast.warning(
-          `取り込んだマスターは取込済みより古いファイルです（ファイル最新 ${masterVintage.fileNewestChangeDate} < 取込済み最新 ${masterVintage.storedNewestRevisionDate}）。`
-          + `版を持たない薬品 ${priceSkippedAsUnorderable}件は、現在薬価との前後を決められないため薬価に触れていません。`
-          + `名称・YJコード・廃止フラグも、${attributesKeptStored}件で手元の値を残しています。`,
-          { duration: 20000 }
-        );
+      const vintageBanner = formatDrugMasterVintageBanner({
+        review: masterVintage,
+        skippedCount: priceSkippedAsUnorderable,
+        attributesKeptStored
+      });
+      if (vintageBanner) {
+        // 現在薬価が巻き戻る事故を、画面バナーとトースト双方で件数とともに必ず目に入れる
+        setLastMasterVintageWarning(vintageBanner);
+        toast.warning(vintageBanner, { duration: 20000 });
       }
       return true;
     } catch (error: unknown) {
@@ -1052,6 +1075,9 @@ export function useDrugMasterSettings({
     file,
     drugMasterSourceUrl,
     setDrugMasterSourceUrl,
+    priceRevisionEffectiveDateOverride,
+    setPriceRevisionEffectiveDateOverride,
+    lastMasterVintageWarning,
     handleFetchDrugMasterOfficialPage,
     isFetchingDrugMasterOfficialPage,
     drugMasterOfficialPageHtml,

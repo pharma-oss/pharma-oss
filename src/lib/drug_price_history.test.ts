@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DRUG_MASTER_CHANGE_DATE_POLICY,
   DRUG_PRICE_BEFORE_HISTORY_VALUE,
   appendDrugPriceRevision,
   applyDrugMasterPrice,
   drugPriceOverrideValue,
+  formatDrugMasterVintageBanner,
   formatDrugMasterVintageLabel,
   reviewDrugMasterVintage,
   formatDrugPriceRevisionLabel,
@@ -14,6 +16,8 @@ import {
   isDrugPriceOverridden,
   isDrugPriceRevisionNeeded,
   listDrugPriceRevisionChoices,
+  normalizeDrugPriceRevisionOverrideDate,
+  resolveDrugMasterRowPriceEffectiveFrom,
   resolveDrugPrice,
   resolveDrugPriceOn,
   resolveDrugPriceWithOverride,
@@ -658,4 +662,102 @@ test('the vintage label names the two dates that decided it', () => {
     storedRevisionDates: ['2026-04-01']
   });
   assert.equal(formatDrugMasterVintageLabel(current, 0), '取込済みより新しい');
+});
+
+test('DRUG_MASTER_CHANGE_DATE_POLICY codifies SSK Field #30 non-price update semantics', () => {
+  assert.equal(DRUG_MASTER_CHANGE_DATE_POLICY.itemNumber, 30);
+  assert.equal(DRUG_MASTER_CHANGE_DATE_POLICY.itemLabel, '変更年月日');
+  assert.match(DRUG_MASTER_CHANGE_DATE_POLICY.officialSemantics, /非公表項目変更/);
+  assert.match(DRUG_MASTER_CHANGE_DATE_POLICY.priceHistoryRule, /明示指定/);
+});
+
+test('normalizeDrugPriceRevisionOverrideDate accepts valid ISO dates, allows empty, and rejects impossible dates', () => {
+  assert.deepEqual(normalizeDrugPriceRevisionOverrideDate(''), { ok: true, value: undefined });
+  assert.deepEqual(normalizeDrugPriceRevisionOverrideDate('  '), { ok: true, value: undefined });
+  assert.deepEqual(normalizeDrugPriceRevisionOverrideDate('2026-06-01'), { ok: true, value: '2026-06-01' });
+
+  const invalidFeb = normalizeDrugPriceRevisionOverrideDate('2026-02-30');
+  assert.equal(invalidFeb.ok, false);
+  const invalidSlash = normalizeDrugPriceRevisionOverrideDate('2026/06/01');
+  assert.equal(invalidSlash.ok, false);
+  const invalidMonth = normalizeDrugPriceRevisionOverrideDate('2026-13-01');
+  assert.equal(invalidMonth.ok, false);
+});
+
+test('resolveDrugMasterRowPriceEffectiveFrom prefers explicit override over Field #30 changeDate and falls back to import date', () => {
+  // 名称変更等で項番30が 2025-07-01 に更新された行でも、明示上書き 2025-04-01 を優先する
+  assert.deepEqual(
+    resolveDrugMasterRowPriceEffectiveFrom({
+      rowChangeDate: '2025-07-01',
+      importedOn: '2026-11-22',
+      explicitOverrideDate: '2025-04-01'
+    }),
+    { effectiveFrom: '2025-04-01', source: 'explicit_override' }
+  );
+
+  assert.deepEqual(
+    resolveDrugMasterRowPriceEffectiveFrom({
+      rowChangeDate: '2026-04-01',
+      importedOn: '2026-11-22'
+    }),
+    { effectiveFrom: '2026-04-01', source: 'row_change_date' }
+  );
+
+  assert.deepEqual(
+    resolveDrugMasterRowPriceEffectiveFrom({
+      rowChangeDate: '',
+      importedOn: '2026-11-22'
+    }),
+    { effectiveFrom: '2026-11-22', source: 'import_date' }
+  );
+});
+
+test('non-price master change with a newer Field #30 changeDate does not pollute priceHistory', () => {
+  const existing = {
+    price: 10.9,
+    priceHistory: [
+      { price: 12.3, effectiveFrom: '2024-04-01' },
+      { price: 10.9, effectiveFrom: '2026-04-01' }
+    ]
+  };
+  // 薬価は同じ 10.9 のまま、名称・経過措置変更で changeDate だけ 2026-07-01 に更新されたケース
+  const update = applyDrugMasterPrice(existing, { price: 10.9, effectiveFrom: '2026-07-01' });
+  assert.equal(update.revisionRecorded, false);
+  assert.deepEqual(update.priceHistory, existing.priceHistory);
+  assert.equal(update.price, 10.9);
+});
+
+test('retroactive import with explicit override flags older vintage even when a row changeDate was bumped by a non-price update', () => {
+  // 2026-04-01 版が取込済みの状態で、2025-04-01 改定の遡り取込を明示指定する。
+  // 一部行の項番30が非薬価変更で 2026-05-01 になっていても、明示適用日が古いため過去版保護が働く。
+  const vintage = reviewDrugMasterVintage({
+    changeDates: ['2025-04-01', '2026-05-01'],
+    storedRevisionDates: ['2026-04-01'],
+    explicitOverrideDate: '2025-04-01'
+  });
+  assert.equal(vintage.isOlderThanStored, true);
+  assert.equal(vintage.explicitOverrideDate, '2025-04-01');
+
+  const label = formatDrugMasterVintageLabel(vintage, 4);
+  assert.match(label, /明示適用日 2025-04-01/);
+  assert.match(label, /薬価に触れなかった薬品 4件/);
+
+  const banner = formatDrugMasterVintageBanner({
+    review: vintage,
+    skippedCount: 4,
+    attributesKeptStored: 9
+  });
+  assert.ok(banner);
+  assert.match(banner, /明示適用日 2025-04-01/);
+  assert.match(banner, /4件/);
+  assert.match(banner, /9件/);
+
+  // 現行版以上では警告バナーは出ない
+  const newer = reviewDrugMasterVintage({
+    changeDates: ['2026-06-01'],
+    storedRevisionDates: ['2026-04-01'],
+    explicitOverrideDate: '2026-06-01'
+  });
+  assert.equal(newer.isOlderThanStored, false);
+  assert.equal(formatDrugMasterVintageBanner({ review: newer, skippedCount: 0, attributesKeptStored: 0 }), null);
 });

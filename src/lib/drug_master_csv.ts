@@ -25,7 +25,10 @@ export interface DrugMasterCsvRow {
   yjCode: string;
   abolishDate: string;
   /**
-   * 項番30 変更年月日 (YYYY-MM-DD)。薬価が変わった行では、その薬価の適用開始日として使う。
+   * 項番30 変更年月日 (YYYY-MM-DD)。
+   * 支払基金公式仕様上、基本マスターの名称変更・経過措置・非公表内部項目変更でも更新される
+   * 行変更日であり「薬価適用開始日専用列」ではない。
+   * 薬価変更が無い行は履歴を追加せず、薬価改定・遡り取込時は明示指定（override）を優先できる。
    * 列が無い / 空 / 9999... の行では空文字。
    */
   changeDate: string;
@@ -148,7 +151,7 @@ export const DRUG_MASTER_SPECIFICATION_COLUMNS: DrugMasterSpecificationColumn[] 
   { itemNumber: 27, index: 26, label: 'カナ名称変更区分', mode: '数字', digits: 1, bytes: 1 },
   { itemNumber: 28, index: 27, label: '剤形', mode: '数字', digits: 1, bytes: 1 },
   { itemNumber: 29, index: 28, label: '予備', mode: '英数', digits: 49, bytes: 49, note: '未使用' },
-  { itemNumber: 30, index: 29, label: '変更年月日', mode: '数字', digits: 8, bytes: 8 },
+  { itemNumber: 30, index: 29, label: '変更年月日', mode: '数字', digits: 8, bytes: 8, note: '基本マスター情報変更時の適用/変更日（名称・経過措置・非公表項目変更でも更新。薬価適用開始日専用ではない）' },
   { itemNumber: 31, index: 30, label: '廃止年月日', mode: '数字', digits: 8, bytes: 8 },
   { itemNumber: 32, index: 31, label: '薬価基準収載医薬品コード', mode: '英数', digits: 12, bytes: 12 },
   { itemNumber: 33, index: 32, label: '公表順序番号', mode: '数字', digits: 9, bytes: 9 },

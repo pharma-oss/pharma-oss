@@ -6,6 +6,88 @@
 // 「点数だけが変わっている」として現れる）。
 //
 // ここでは薬価を「適用開始日つきの版」で保持し、調剤日で引けるようにする。
+//
+// 支払基金「基本マスターファイルレイアウト（医薬品マスター）」項番30「変更年月日」は、
+// 基本マスターの情報変更時の適用/変更日であり、名称変更・経過措置・非公表項目変更でも
+// 更新される（薬価適用開始日専用列ではない）。そのため:
+// 1. 薬価が変わっていない行では履歴を積まない（非薬価変更による履歴汚染を防止）
+// 2. 薬価改定や過去マスター遡り取込で適用開始日を確定させたい場合は、明示的な
+//    priceRevisionEffectiveDateOverride（YYYY-MM-DD）を指定して項番30より優先できる。
+
+export const DRUG_MASTER_CHANGE_DATE_POLICY = {
+  itemNumber: 30,
+  itemLabel: '変更年月日',
+  officialSemantics: '基本マスターの情報変更時の適用/変更日（名称変更・経過措置・非公表項目変更でも更新され、薬価適用開始日専用列ではない）',
+  priceHistoryRule: '薬価変更時のみ版を追加し、非薬価変更時は履歴を追加しない。改定・遡り取込時は明示指定の薬価適用開始日（YYYY-MM-DD）を優先する。'
+} as const;
+
+export type DrugMasterPriceEffectiveDateSource =
+  | 'explicit_override'
+  | 'row_change_date'
+  | 'import_date';
+
+function toStrictIsoDate(value: string): string {
+  const trimmed = String(value || '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year
+    || candidate.getUTCMonth() !== month - 1
+    || candidate.getUTCDate() !== day
+  ) {
+    return '';
+  }
+  return trimmed;
+}
+
+/**
+ * 医薬品マスター取込時の「薬価適用開始日の明示指定」を厳密に検証する。
+ * 空文字は「未指定（行の変更年月日または取込日を使用）」として許容し、
+ * 実在しない日付（例: 2026-02-30）や不正書式は推測せずエラーを返す。
+ */
+export function normalizeDrugPriceRevisionOverrideDate(
+  raw?: string | null
+): { ok: true; value?: string } | { ok: false; reason: string } {
+  const trimmed = String(raw ?? '').trim();
+  if (!trimmed) {
+    return { ok: true, value: undefined };
+  }
+  const normalized = toStrictIsoDate(trimmed);
+  if (!normalized) {
+    return {
+      ok: false,
+      reason: `薬価適用開始日の明示指定「${trimmed}」が不正です。YYYY-MM-DD 形式の実在する日付を入力してください。`
+    };
+  }
+  return { ok: true, value: normalized };
+}
+
+/**
+ * マスター1行の薬価適用開始日と根拠種別を決定する。
+ * 優先順位: 明示上書き（explicitOverrideDate） > 行の項番30変更年月日（rowChangeDate） > 取込日（importedOn）。
+ */
+export function resolveDrugMasterRowPriceEffectiveFrom(params: {
+  rowChangeDate?: string;
+  importedOn: string;
+  explicitOverrideDate?: string;
+}): { effectiveFrom: string; source: DrugMasterPriceEffectiveDateSource } {
+  const overrideDate = toStrictIsoDate(params.explicitOverrideDate ?? '');
+  if (overrideDate) {
+    return { effectiveFrom: overrideDate, source: 'explicit_override' };
+  }
+  const rowDate = toStrictIsoDate(params.rowChangeDate ?? '');
+  if (rowDate) {
+    return { effectiveFrom: rowDate, source: 'row_change_date' };
+  }
+  return {
+    effectiveFrom: toDateOnly(params.importedOn),
+    source: 'import_date'
+  };
+}
 
 export interface DrugPriceRevision {
   price: number;
@@ -309,7 +391,14 @@ export function reviewDrugMasterVintage(input: {
   changeDates: (string | undefined)[];
   /** 取込済みの全薬品の版の適用開始日 */
   storedRevisionDates: (string | undefined)[];
-}): { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; isOlderThanStored: boolean } {
+  /** 改定・遡り取込時に明示指定された薬価適用開始日（任意） */
+  explicitOverrideDate?: string;
+}): {
+  fileNewestChangeDate?: string;
+  storedNewestRevisionDate?: string;
+  explicitOverrideDate?: string;
+  isOlderThanStored: boolean;
+} {
   const newest = (values: (string | undefined)[]) => values
     .map((value) => toDateOnly(value ?? ''))
     .filter((value) => value !== '')
@@ -318,25 +407,55 @@ export function reviewDrugMasterVintage(input: {
 
   const fileNewestChangeDate = newest(input?.changeDates ?? []);
   const storedNewestRevisionDate = newest(input?.storedRevisionDates ?? []);
+  const explicitOverrideDate = toStrictIsoDate(input?.explicitOverrideDate ?? '') || undefined;
+
+  const isFileOlder = fileNewestChangeDate !== undefined
+    && storedNewestRevisionDate !== undefined
+    && fileNewestChangeDate < storedNewestRevisionDate;
+  const isOverrideOlder = explicitOverrideDate !== undefined
+    && storedNewestRevisionDate !== undefined
+    && explicitOverrideDate < storedNewestRevisionDate;
 
   return {
     ...(fileNewestChangeDate === undefined ? {} : { fileNewestChangeDate }),
     ...(storedNewestRevisionDate === undefined ? {} : { storedNewestRevisionDate }),
-    // どちらかが分からないなら判定しない (判定できないことを「古い」にしない)
-    isOlderThanStored: fileNewestChangeDate !== undefined
-      && storedNewestRevisionDate !== undefined
-      && fileNewestChangeDate < storedNewestRevisionDate
+    ...(explicitOverrideDate === undefined ? {} : { explicitOverrideDate }),
+    // どちらかが分からないなら判定しない (判定できないことを「古い」にしない)。
+    // 一方、ファイル最新日または明示適用開始日のいずれかが取込済み最新より古ければ保護を発動する。
+    isOlderThanStored: isFileOlder || isOverrideOlder
   };
 }
 
 /** 画面と監査ログで同じ文言を使う */
 export function formatDrugMasterVintageLabel(
-  review: { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; isOlderThanStored: boolean },
+  review: { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; explicitOverrideDate?: string; isOlderThanStored: boolean },
   skippedCount: number
 ): string {
   if (!review?.isOlderThanStored) return '取込済みより新しい';
-  return `取込済みより古い（ファイル最新 ${review.fileNewestChangeDate} < 取込済み最新 ${review.storedNewestRevisionDate}）`
+  const sourceDateDesc = review.explicitOverrideDate && review.fileNewestChangeDate
+    ? `明示適用日 ${review.explicitOverrideDate} / ファイル最新 ${review.fileNewestChangeDate}`
+    : review.explicitOverrideDate
+      ? `明示適用日 ${review.explicitOverrideDate}`
+      : `ファイル最新 ${review.fileNewestChangeDate}`;
+  return `取込済みより古い（${sourceDateDesc} < 取込済み最新 ${review.storedNewestRevisionDate}）`
     + ` / 前後を決められず薬価に触れなかった薬品 ${skippedCount}件`;
+}
+
+/** 過去マスター取込時に設定画面へ常駐表示する警告バナー文言（現行版以上なら null） */
+export function formatDrugMasterVintageBanner(params: {
+  review: { fileNewestChangeDate?: string; storedNewestRevisionDate?: string; explicitOverrideDate?: string; isOlderThanStored: boolean };
+  skippedCount: number;
+  attributesKeptStored: number;
+}): string | null {
+  if (!params.review?.isOlderThanStored) return null;
+  const sourceDateDesc = params.review.explicitOverrideDate && params.review.fileNewestChangeDate
+    ? `明示適用日 ${params.review.explicitOverrideDate} / ファイル最新 ${params.review.fileNewestChangeDate}`
+    : params.review.explicitOverrideDate
+      ? `明示適用日 ${params.review.explicitOverrideDate}`
+      : `ファイル最新 ${params.review.fileNewestChangeDate}`;
+  return `取り込んだマスターは取込済みより古いファイルです（${sourceDateDesc} < 取込済み最新 ${params.review.storedNewestRevisionDate}）。`
+    + `版を持たない薬品 ${params.skippedCount}件は現在薬価との前後を決められないため薬価に触れていません。`
+    + `名称・YJコード・廃止フラグも ${params.attributesKeptStored}件で手元の値を維持しています。`;
 }
 
 /**
