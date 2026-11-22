@@ -24,6 +24,7 @@ import {
   UNAUTHENTICATED_USER,
   type PermissionAction
 } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 import TerminalSyncPanel from '@/components/TerminalSyncPanel';
 import FacilitySettingsTab from '@/components/settings/FacilitySettingsTab';
 import ExternalConnectorSettingsTab from '@/components/settings/ExternalConnectorSettingsTab';
@@ -244,10 +245,13 @@ export default function SettingsPage() {
 
     if (db && canUserPerform(getCurrentUser(), 'view_audit_logs')) {
       try {
-        await logAuditAction(
-          db,
-          'audit_export',
-          `初回セットアップチェックリストCSVエクスポート: ${fileName} を書き出しました（判定: ${checklist.statusLabel}, 完了: ${checklist.completedCount}/${checklist.steps.length}）。`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'audit_export',
+            `初回セットアップチェックリストCSVエクスポート: ${fileName} を書き出しました（判定: ${checklist.statusLabel}, 完了: ${checklist.completedCount}/${checklist.steps.length}）。`
+          ),
+          (message) => toast.warning(message)
         );
         await fetchAuditLogs();
       } catch (error) {
@@ -283,10 +287,13 @@ export default function SettingsPage() {
 
     if (db && canUserPerform(getCurrentUser(), 'view_audit_logs')) {
       try {
-        await logAuditAction(
-          db,
-          'audit_export',
-          `初回セットアップ引き継ぎメモコピー: 判定 ${checklist.statusLabel}, 次作業 ${checklist.nextStep?.title || 'なし'}, 完了 ${checklist.completedCount}/${checklist.steps.length}。`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'audit_export',
+            `初回セットアップ引き継ぎメモコピー: 判定 ${checklist.statusLabel}, 次作業 ${checklist.nextStep?.title || 'なし'}, 完了 ${checklist.completedCount}/${checklist.steps.length}。`
+          ),
+          (message) => toast.warning(message)
         );
         await fetchAuditLogs();
       } catch (error) {

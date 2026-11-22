@@ -182,22 +182,22 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ---
 
-# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `artifacts/improvement/20261122-1133-H2-final/` 実測。§4 の現地証跡ステータスは未変更）
+# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `artifacts/improvement/20261122-1958-day2-hardening/` 実測。§4 の現地証跡ステータスは未変更）
 
 ## 1. 品質ゲート
 
-2026-11-22 に Phase A・Phase B・Phase C 準備、および判断 4 項目（C-1 ステップ 5b 廃止判定チェッカー `dfe9872`・C-2 項番 30 仕様確定/適用開始日上書き `6aa3513`・C-3 令和 8 年公式ルール拡充/返戻フィクスチャ基盤 `9198c60`・H-2 ADR/1:1 整合防壁）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1133-H2-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-11-22 に Phase A・Phase B・Phase C 準備・判断 4 項目（C-1 ステップ 5b `dfe9872`・C-2 `6aa3513`・C-3 `9198c60`・H-2 ADR）、さらにバーチャル薬局実機運営で検出した臨床安全・UI/UX 不具合 15 件の是正（`29d870b`・`a2689dd`・`a13b07d`・`f76f387`）および EMR ピッキング I/O 抽出・SW-F 強化（`await-logAuditAction` 5→0・`colon-any` 10→7）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1958-day2-hardening/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,249 pass / 0 fail / 218 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,269 pass / 0 fail / 220 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
-| SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 10 / `as any` 3。残存 10 件はすべて除外対象の `src/db/index.ts`・`src/lib/electronic_prescription_client.ts` のみ） |
+| SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 0 / 0 / 0（`await-logAuditAction` 5→0 達成。`: any` 7 / `as any` 3。残存 `: any` 7 件はすべて除外対象の `src/db/index.ts` のみ） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
-| CI 相当 E2E 4 本 | `npm run test:e2e:sync`・`onboarding`・`return-correction`・`print-layout` | すべて通過（2026-11-22 `62fe33c` 実機 Chrome 検証：`sync` 全項通過、`onboarding` `skipped: []`〔設定6/ダッシュボード3/印刷8〕、`return-correction` 3 ターゲット通過、`print-layout` 11 帳票キャプチャ＋領収証バーコード `200009603`/`¥960` 確認） |
-| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 通過（2026-11-22 `62fe33c` 実機 Chrome 検証：`/ocr`・`/emr`・`/print/[visitId]`・`/inventory` 各 1280/768/375px オーバーフロー 0px、Tab 操作・公式 UKE モーダル起動＆Escape 閉鎖通過、`overflowErrors: 0`・`keyboardErrors: 0`） |
+| CI 相当 E2E 4 本 | `npm run test:e2e:sync`・`onboarding`・`return-correction`・`print-layout` | すべて通過（2026-11-22 `62fe33c` で 4 本全項通過、`a13b07d` で `onboarding`・`return-correction` 再通過確認） |
+| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 通過（2026-11-22 `a13b07d` 実機 Chrome 検証：`/ocr`・`/emr`・`/print/[visitId]`・`/inventory` 各 1280/768/375px オーバーフロー 0px、Tab 操作・公式 UKE モーダル起動＆Escape 閉鎖通過、`overflowErrors: 0`・`keyboardErrors: 0`） |
 
 以下の段落は 2026-10-02 の記録。`npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボード、薬歴画面（/emr）、処方受付画面（/ocr）、印刷・調剤録画面（/print/[visitId]）、在庫管理・発注画面（/inventory）は幅1280 / 768 / 375pxの実ブラウザ表示と主要操作を通しドリルで確認した。
 
@@ -205,9 +205,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 項目 | 実測 |
 |---|---|
-| `src/` の TS/TSX（テスト除く） | 392 ファイル |
-| テストファイル | 368 ファイル |
-| 主要 6 画面の行数 | 8,852 行（ocr 1,991 / emr 2,570 / print 2,125 / inventory 857 / settings 844 / dashboard〔`src/app/app/page.tsx`〕465。※ 上位 3 画面は P7 行数予算テストで固定） |
+| `src/` の TS/TSX（テスト除く） | 393 ファイル |
+| テストファイル | 370 ファイル |
+| 主要 6 画面の行数 | 8,644 行（ocr 1,986 / emr 2,360 / print 2,125 / inventory 857 / settings 851 / dashboard〔`src/app/app/page.tsx`〕465。※ 上位 3 画面は P7 行数予算テストで固定、`emr` は `emr_picking_io.ts` 抽出で上限 2,576 に対し +216 行の余裕を確保） |
 | `scripts/` | 80 ファイル（第 1 階層）、npm scripts 50 本 |
 | `PrintPickingFlow.test.ts` の `readFileSync` | **0 件**（2026-11-21 `abbf183` で残存 7 箇所を完全撤廃。さらに 2026-11-22 Phase A `7bb0c9e`/`b7d3d42`/`fb88e6a` で印刷・自費請求・受付の残存ソース文字列テストも実描画・実行テストへ移行完了） |
 | 非印刷 CSS 生 sub-1rem フォントサイズ | **0 箇所**（2026-11-22 `9d809dd` で残存 41 箇所を `--fs-*` トークンへ統一完了） |
@@ -258,6 +258,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **2026-11-22**: Phase A 品質強化 6 コミットおよび Phase B 承認済み 5 機能（B-1・F-1・F-3・G-1・H-1）＋ Q-5 トラック編入をすべて実装・検証完了。品質ゲート（`tsc` 0 / `lint` 0 / `npm test` 3,222 pass / 217 suites / `build` 32/32 / `swf` 3/4/5/0/0・`colon-any` 14→10）および実機 Chrome E2E 5 本（`sync`・`onboarding`・`return-correction`・`print-layout` 11 帳票・`accessibility` 1280/768/375px オーバーフロー 0px）全通過。
   - **Phase A**: 残存ソース文字列テストの実描画・実行テスト移行（`7bb0c9e`・`b7d3d42`・`fb88e6a`）、`registerPatient` 重複患者照合の鍵付きブラインドインデックス化（`dc95e0f`）、非印刷 CSS sub-1rem 生フォントサイズ 41→0 トークン統一（`9d809dd`）、非除外 `: any` 全撤廃（`05f713c`）。
   - **Phase B**: **B-1**（`930f442`）単位換算時の全帳票（調剤録・薬袋・軟膏ラベル・手帳シール・薬情＋既存水剤ラベル）への調剤実量併記；**F-1**（`a2a4917`）構造化フォロー定型 4 種・薬剤師ロール即時編集・全テンプレート SOAP 挿入の `aiStatus: 'unconfirmed'` 強制（第一条）・EMR フォロー予約カード（`EmrFollowUpCard`→ダッシュボード KPI 接続）；**F-3**（`f0df698`）腎機能（eGFR/Cr/CrCl）・妊娠/授乳・併用 OTC/サプリ安全チェック拡張、`PATIENT_SCHEMA` v5→v6（`5: keepDocument`、`clinicalProfile` 暗号化）、手動入力＋電子処方箋検査値 1 クリック取込、90 日超過 `参考値（90日超過・要再確認）`・未登録時 `判定不能` 明示（第四条）；**G-1**（`b3fc878`）GS1 ピッキング FEFO 逸脱監査、`AUDIT_LOG_SCHEMA` v20→v21（`20: keepDocument`・構造化在庫監査種別 6 件追加）、取消・返品・廃棄・棚卸差異の構造化記録と麻薬・向精神薬受払補助帳簿 CSV/印刷出力（`法定帳簿の補助記録` 明記・患者個人情報ゼロ）；**H-1**（`62fe33c`）ローカル/NAS 追記専用 WORM 監査ログ保全コネクタ（`wx` 排他追記 `EEXIST` 拒否、`chmod 0o444`、`audit_worm_manifest.jsonl` SHA-256 チェーン、書き戻し照合、`--verify-only`、`npm run audit:local-worm-retention` / `:scheduled`）。
+  - **バーチャル薬局実機運営・品質強化（`29d870b`・`a2689dd`・`a13b07d`・`f76f387`＋ハードニング）**: 実機 Chrome 通し運営で検出した臨床安全・受付・レイアウト不具合 15 件を是正（複公費バナー折り返し＆`.badge.teal` 定義・EMR `.emr-actions` スティッキーバー下端密着 `gapBelowSticky: 0`・2 行 `DbSecurityBanner` 下の `<Toaster offset={116}>` 回避・SOAP チップ・在庫テーブル・モバイルナビ・モーダル Escape 等）、さらに `src/lib/emr_picking_io.ts` 抽出（`emr/page.tsx` 2,571→2,360 行）・未ガード `await logAuditAction` 5→0・`electronic_prescription_client.ts` `catch (error: any)` 排除（`colon-any` 10→7）を完了。なお単票公式 UKE（`RECEIPTY.CYO`）が初回 `draft` 受付でブロックされる課題は第十条に基づき仕様判断事項として保留中。
 
 ## 6. 今回の照合で修正した前提
 

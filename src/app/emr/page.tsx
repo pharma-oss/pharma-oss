@@ -13,9 +13,8 @@ import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_a
 import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, detectFefoPickingDeviation, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
-import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { extractErrorMessage } from '@/lib/user_facing_error';
-import { downloadTextFile } from '@/lib/blob_download';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
 import { evaluateActiveVisitEditability, parseEmrLocationSearch } from './emr_route_guards';
 import {
@@ -46,6 +45,11 @@ import {
   consumeFromStockLot, executeManualVisualPicking, inquiryStatusLabel, applyReversiblePatches, rollbackAppliedPatches,
   safeStockQuantity, tracingStatusLabel, type EmrPickingItem, type EmrPrescribedDrugItem, type ReversiblePatch
 } from '@/lib/emr_helpers';
+import {
+  executeExportPickingInstruction,
+  executeImportPickingResultFile,
+  executePrintPickingReceipt
+} from '@/lib/emr_picking_io';
 import {
   INTERVENTION_CATEGORY_LABELS,
   suggestInterventionCategory
@@ -859,254 +863,35 @@ export default function EmrPage() {
 
   // ピッキング結果をレジロール紙(80mm)向けの専用ウィンドウで印刷する
   const handlePrintPickingReceipt = useCallback(async () => {
-    if (pickingItems.length === 0) {
-      toast.info('印刷するピッキング項目がありません。');
-      return;
-    }
-    if (!db) {
-      toast.error('データベースの準備ができていません。しばらく待ってから再実行してください。');
-      return;
-    }
-    try {
-      let patientName = '患者未選択';
-      let dispensingDate = '';
-      let patientId = '';
-      const visitDoc = await findActiveVisit();
-      if (visitDoc) {
-        const visit = (visitDoc.toJSON?.() ?? visitDoc) as Visit;
-        dispensingDate = visit.dispensingDate || visit.prescriptionDate || '';
-        patientId = visit.patientId;
-        const patientDoc = await db.patients.findOne(visit.patientId).exec();
-        if (patientDoc?.name) patientName = patientDoc.name;
-      }
-
-      let pharmacyName = '';
-      try {
-        const settings = await db.facility_settings.findOne('default').exec();
-        pharmacyName = settings?.pharmacyName || '';
-      } catch {
-        // 施設名が取れなくても印刷は続行する
-      }
-
-      const { openPickingReceiptPrintWindow } = await import('@/lib/picking_receipt');
-      const opened = openPickingReceiptPrintWindow({
-        pharmacyName,
-        patientName,
-        dispensingDate,
-        operatorName: getCurrentUser().name,
-        items: pickingItems.map((item) => ({
-          location: item.location,
-          drugName: item.drugName,
-          totalQuantity: item.totalQuantity,
-          usage: item.usage,
-          days: item.days,
-          isPicked: !!item.isPicked,
-          pickedLotNumber: item.pickedLotNumber,
-          pickedExpirationDate: item.pickedExpirationDate,
-          shortageQuantity: item.shortageQuantity,
-          shortageNote: item.shortageNote
-        }))
-      });
-      if (!opened) {
-        toast.error('印刷ウィンドウを開けませんでした。ポップアップを許可してください。');
-        return;
-      }
-      await recordAuditOrNotify(
-        () => logAuditAction(
-          db,
-          'print',
-          `ピッキングリスト印刷: 「${patientName}」のピッキングリストをレジロール用に印刷しました（${pickingItems.length}品目）。`,
-          patientId,
-          patientName
-        ),
-        (message) => toast.warning(message)
-      );
-    } catch (e) {
-      console.error('Failed to print picking receipt:', e);
-      toast.error('ピッキングリストの印刷に失敗しました');
-    }
+    await executePrintPickingReceipt({
+      db,
+      pickingItems,
+      findActiveVisit,
+      operatorName: getCurrentUser().name,
+      notify: toast
+    });
   }, [db, findActiveVisit, pickingItems]);
 
   // 既存(外部)ピッキングシステムへ渡す指示CSV(棚番地・JAN・必要数量・ロット候補入り)を書き出す
   const handleExportPickingInstruction = useCallback(async () => {
-    if (pickingItems.length === 0) {
-      toast.info('書き出すピッキング項目がありません。');
-      return;
-    }
-    if (!db) {
-      toast.error('データベースの準備ができていません。しばらく待ってから再実行してください。');
-      return;
-    }
-    try {
-      const visitDoc = await findActiveVisit();
-      if (!visitDoc) {
-        toast.error('対象の受付が見つかりません。');
-        return;
-      }
-      const visit = (visitDoc.toJSON?.() ?? visitDoc) as Visit;
-      const patientDoc = await db.patients.findOne(visit.patientId).exec();
-      const settings = await db.facility_settings.findOne('default').exec();
-
-      const {
-        buildPickingInstruction,
-        buildPickingInstructionCsv,
-        buildPickingInstructionFileName
-      } = await import('@/lib/picking_system');
-      const instruction = buildPickingInstruction({
-        visitId: visit.visitId,
-        patientName: patientDoc?.name || '患者名未登録',
-        patientKana: patientDoc?.kana || '',
-        dispensingDate: visit.dispensingDate || visit.prescriptionDate || '',
-        pharmacyName: settings?.pharmacyName || '',
-        items: pickingItems.map((item) => ({
-          itemId: item.itemId,
-          rpNumber: item.rpNumber,
-          drugCode: item.stockDrugId || item.drugId,
-          yjCode: item.yjCode,
-          janCodes: item.janCodes,
-          drugName: item.drugName,
-          totalQuantity: item.totalQuantity,
-          usage: item.usage,
-          days: item.days,
-          location: item.location,
-          isPicked: item.isPicked,
-          stockLots: (item.stockLots || []).map((lot: { lotNumber?: string; expirationDate?: string; quantity: number }) => ({
-            lotNumber: lot.lotNumber,
-            expirationDate: lot.expirationDate,
-            quantity: lot.quantity
-          }))
-        }))
-      });
-      const fileName = buildPickingInstructionFileName(visit.visitId);
-      const csv = buildPickingInstructionCsv(instruction);
-      // 患者名と処方内容を持ち出す書き出し。監査ログを先に残し、残らなければ書き出さない。
-      await exportWithAuditFirst({
-        logAudit: () => logAuditAction(
-          db,
-          'stock_update',
-          `ピッキング指示CSV書き出し: 「${fileName}」に${instruction.items.length}品目を出力しました（外部ピッキングシステム連携用・店舗内利用限定）。`,
-          visit.patientId,
-          patientDoc?.name
-        ),
-        download: () => downloadTextFile(fileName, `\ufeff${csv}`, 'text/csv;charset=utf-8')
-      });
-      toast.success(`ピッキング指示CSVを書き出しました（${instruction.items.length}品目）。`);
-    } catch (e) {
-      console.error('Failed to export picking instruction:', e);
-      toast.error(e instanceof ExportAuditFailedError ? e.message : 'ピッキング指示CSVの書き出しに失敗しました');
-    }
+    await executeExportPickingInstruction({
+      db,
+      pickingItems,
+      findActiveVisit,
+      notify: toast
+    });
   }, [db, findActiveVisit, pickingItems]);
 
   // 外部ピッキングシステムが出力した結果CSV/TSVを読み取り、GS1照合と同じ形へ反映する
   const handleImportPickingResultFile = useCallback(async (file: File) => {
-    if (!db) {
-      toast.error('データベースの準備ができていません。しばらく待ってから再実行してください。');
-      return;
-    }
-    try {
-      const editable = await ensureActiveVisitEditable('picking');
-      if (!editable.ok) {
-        toast.error(editable.message);
-        return;
-      }
-      const visitDoc = await findActiveVisit();
-      if (!visitDoc) {
-        toast.error('対象の受付が見つかりません。');
-        return;
-      }
-      const visit = (visitDoc.toJSON?.() ?? visitDoc) as Visit;
-
-      const text = await file.text();
-      const {
-        parsePickingSystemResult,
-        buildPickingResultApplyPlan,
-        buildPickingResultAuditDetail
-      } = await import('@/lib/picking_system');
-      const parsed = parsePickingSystemResult(text);
-      if (!parsed.ok) {
-        toast.error(parsed.message || 'ピッキング結果を読み取れませんでした。');
-        return;
-      }
-      const plan = buildPickingResultApplyPlan({
-        visitId: visit.visitId,
-        items: pickingItems.map((item) => ({
-          itemId: item.itemId,
-          drugId: item.drugId,
-          stockDrugId: item.stockDrugId,
-          yjCode: item.yjCode,
-          janCodes: item.janCodes,
-          drugName: item.drugName,
-          totalQuantity: item.totalQuantity,
-          isPicked: item.isPicked
-        })),
-        rows: [...parsed.rows]
-      });
-      const allIssues = [...parsed.issues, ...plan.issues];
-      if (!plan.canApply) {
-        const issueText = allIssues.slice(0, 5).map((issue) => `${issue.lineNumber}行目: ${issue.message}`).join('\n');
-        toast.error(`反映できる結果がありません。\n${issueText}`.trim());
-        return;
-      }
-
-      const detailLines = [
-        ...plan.updates.slice(0, 8).map((update) => (
-          update.action === 'picked'
-            ? `照合: ${update.drugName}${update.lotNumber ? ` (Lot ${update.lotNumber})` : ''}${update.warnings.length > 0 ? ` ※${update.warnings.join(' ')}` : ''}`
-            : `不足: ${update.drugName} (${update.shortageQuantity})`
-        )),
-        ...(plan.updates.length > 8 ? [`ほか${plan.updates.length - 8}件`] : []),
-        ...allIssues.slice(0, 3).map((issue) => `取込不可 ${issue.lineNumber}行目: ${issue.message}`)
-      ];
-      const shouldApply = window.confirm(
-        `外部ピッキング結果を反映します（${plan.summary}）。\n\n${detailLines.join('\n')}\n\nよろしいですか？`
-      );
-      if (!shouldApply) return;
-
-      const appliedAt = new Date().toISOString();
-      for (const update of plan.updates) {
-        const doc = await db.prescription_items.findOne(update.itemId).exec();
-        if (!doc) continue;
-        if (update.action === 'picked') {
-          await doc.modify((data: PrescriptionItem) => {
-            data.isPicked = true;
-            data.pickedAt = appliedAt;
-            delete data.pickedGs1Code;
-            delete data.pickedGtin;
-            delete data.pickedStockId;
-            delete data.pickedLotNumber;
-            delete data.pickedExpirationDate;
-            if (update.lotNumber) data.pickedLotNumber = update.lotNumber;
-            if (update.expirationDate) data.pickedExpirationDate = update.expirationDate;
-            return data;
-          });
-        } else {
-          await doc.modify((data: PrescriptionItem) => {
-            data.shortageQuantity = update.shortageQuantity as number;
-            if (update.note) {
-              data.shortageNote = update.note;
-            }
-            data.shortageRecordedAt = appliedAt;
-            return data;
-          });
-        }
-      }
-
-      const patientDoc = await db.patients.findOne(visit.patientId).exec();
-      await recordAuditOrNotify(
-        () => logAuditAction(
-          db,
-          'stock_update',
-          `${buildPickingResultAuditDetail(plan)}（結果ファイル: ${file.name}）。反映後は現物とロット・期限の一致を確認してください。`,
-          visit.patientId,
-          patientDoc?.name
-        ),
-        (message) => toast.warning(message)
-      );
-      toast.success(`外部ピッキング結果を反映しました（${plan.summary}）。`);
-    } catch (e) {
-      console.error('Failed to import picking system result:', e);
-      toast.error('ピッキング結果の取込に失敗しました');
-    }
+    await executeImportPickingResultFile({
+      db,
+      pickingItems,
+      file,
+      ensureActiveVisitEditable,
+      findActiveVisit,
+      notify: toast
+    });
   }, [db, ensureActiveVisitEditable, findActiveVisit, pickingItems]);
   useEffect(() => {
     let cancelled = false;

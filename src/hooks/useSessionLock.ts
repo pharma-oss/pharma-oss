@@ -8,6 +8,7 @@ import {
   setCurrentUser,
   UNAUTHENTICATED_USER
 } from '@/lib/audit';
+import { recordAuditOrNotify } from '@/lib/audit_guard';
 
 export const SESSION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 export const SESSION_ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'focus'] as const;
@@ -38,10 +39,13 @@ export function useSessionLock({
       const { getDatabase } = await import('@/db');
       const db = await getDatabase();
       if (db) {
-        await logAuditAction(
-          db,
-          'session_lock',
-          `無操作セッションロック: 操作者「${lockedUser.name} (${lockedUser.role})」を自動ログアウトしました。`
+        await recordAuditOrNotify(
+          () => logAuditAction(
+            db,
+            'session_lock',
+            `無操作セッションロック: 操作者「${lockedUser.name} (${lockedUser.role})」を自動ログアウトしました。`
+          ),
+          (message) => toast.warning(message)
         );
       }
     } catch (err) {

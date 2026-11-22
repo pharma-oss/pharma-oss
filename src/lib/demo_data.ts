@@ -520,13 +520,16 @@ export async function seedTutorialDemoData(
     throw new Error('デモ処方明細の投入に失敗しました。');
   }
 
-  await logAuditAction(
+  const seedAuditOk = await logAuditAction(
     db,
     'stock_update',
     `チュートリアルデモデータ投入: デモ患者10名(「デモ患者 みどり」の受付・処方3剤・在庫ロット(JAN/棚番地付き)・過去3回分の薬歴・副作用歴アラートに加え、患者検索練習用の軽量デモ患者9名)を登録しました。`,
     DEMO_PATIENT_ID,
     'デモ患者 みどり'
   );
+  if (!seedAuditOk) {
+    console.warn('Failed to record tutorial demo seed audit log.');
+  }
 
   return { visitId, alreadySeeded: false };
 }
@@ -660,13 +663,16 @@ export async function cleanupTutorialDemoData(
     removedPatients: await removeDocs(demoPatientDocs)
   };
 
-  await logAuditAction(
+  const cleanupAuditOk = await logAuditAction(
     db,
     'stock_update',
     `チュートリアルデモデータ削除: デモ患者${result.removedPatients}名・受付${result.removedVisits}件・処方${result.removedPrescriptionItems}件・薬歴${result.removedSoapRecords}件・アラート${result.removedAlerts}件・薬品${result.removedDrugs}件・在庫ロット${result.removedStocks}件を削除しました。`,
     DEMO_PATIENT_ID,
     'デモ患者 みどり'
   );
+  if (!cleanupAuditOk) {
+    console.warn('Failed to record tutorial demo cleanup audit log.');
+  }
 
   return result;
 }

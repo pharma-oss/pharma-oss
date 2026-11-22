@@ -1173,23 +1173,33 @@ export async function runElectronicPrescriptionConnectorPreflight(
       configuredCapabilities,
       missingCapabilities
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const timedOut = isAbortError(error);
     return buildPreflightResult({
       checkedAt,
       mode,
-      outcome: error?.name === 'AbortError' ? 'timeout' : 'network_error',
-      message: error?.name === 'AbortError'
+      outcome: timedOut ? 'timeout' : 'network_error',
+      message: timedOut
         ? '電子処方箋接続モジュールのpreflightがタイムアウトしました。'
         : '電子処方箋接続モジュールのpreflightへ接続できませんでした。',
       durationMs: Date.now() - startedAt,
       responseShape: 'unknown',
       connectorEndpointSha256,
       connectorArtifactSha256,
-      errorCode: error?.name === 'AbortError' ? 'timeout' : 'network_error'
+      errorCode: timedOut ? 'timeout' : 'network_error'
     });
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.name === 'AbortError';
+  }
+  return typeof error === 'object'
+    && error !== null
+    && (error as { name?: unknown }).name === 'AbortError';
 }
 
 export async function fetchElectronicPrescription(
@@ -1362,11 +1372,11 @@ export async function fetchElectronicPrescription(
       integrityHash: await buildElectronicPrescriptionIntegrityHash(prescription)
     };
     return result;
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       status: 'error',
       mode,
-      message: error?.name === 'AbortError'
+      message: isAbortError(error)
         ? '電子処方箋接続モジュールがタイムアウトしました。'
         : '電子処方箋接続モジュールへ接続できませんでした。',
       warnings: []
@@ -1664,12 +1674,12 @@ export async function submitElectronicPrescriptionOperation(
       dispensingInformationFile,
       duplicateCheck
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       status: 'error',
       mode,
       operation: validated.input.operation,
-      message: error?.name === 'AbortError'
+      message: isAbortError(error)
         ? '電子処方箋接続モジュールがタイムアウトしました。'
         : '電子処方箋接続モジュールへ接続できませんでした。',
       warnings: []
