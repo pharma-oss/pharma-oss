@@ -1305,7 +1305,31 @@ describe('Schema Validation', () => {
 
       const errors = getErrors(AUDIT_LOG_SCHEMA, validLog);
       assert.strictEqual(errors, null);
-      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 20);
+      assert.strictEqual(AUDIT_LOG_SCHEMA.version, 21);
+    });
+
+    test('should validate G-1 structured inventory and controlled-drug ledger audit actions on v21', () => {
+      const actions = [
+        'stock_fefo_deviation',
+        'stock_cancel',
+        'stock_return',
+        'stock_disposal',
+        'stock_take_variance',
+        'narcotic_ledger_export'
+      ] as const;
+
+      for (const actionType of actions) {
+        const validLog = {
+          logId: `log_${actionType}`,
+          timestamp: '2026-11-22T09:50:00Z',
+          userId: 'pharm_1',
+          userName: '薬剤師 一郎',
+          userRole: 'pharmacist',
+          actionType,
+          details: `構造化在庫監査ログテスト (${actionType})`
+        };
+        assert.strictEqual(getErrors(AUDIT_LOG_SCHEMA, validLog), null, `${actionType} should be valid`);
+      }
     });
 
     test('should validate per-terminal chained audit logs with terminalId', () => {

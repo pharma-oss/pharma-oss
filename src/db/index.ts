@@ -594,7 +594,10 @@ const create = async () => {
                 16: keepDocument,
                 // v19 -> v20: actionType に claim_points_review を追加。
                 // 既存のログは種別が変わらないのでそのまま持ち上げる。
-                19: keepDocument
+                19: keepDocument,
+                // v20 -> v21: G-1 在庫構造化監査ログ種別（FEFO逸脱・取消・返品・廃棄・棚卸差異・麻薬向精神薬補助帳簿出力）を追加。
+                // 既存のログは種別・署名対象ペイロードとも不変のためそのまま持ち上げる。
+                20: keepDocument
             })
         }
     };

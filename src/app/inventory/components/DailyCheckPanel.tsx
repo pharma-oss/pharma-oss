@@ -214,9 +214,10 @@ export function DailyCheckPanel({ db, drugs, pendingStockMap }: DailyCheckPanelP
               controlledDrugs.length
           );
 
+          const auditActionType = dailyCheckSummary.mismatchCount > 0 ? 'stock_take_variance' : 'stock_update';
           const auditOk = await logAuditAction(
               db,
-              'stock_update',
+              auditActionType,
               auditDetail
           );
 

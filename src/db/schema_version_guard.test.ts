@@ -36,7 +36,7 @@ function computeShapeHash(schema: Record<string, unknown>): string {
 
 const EXPECTED_SCHEMA_SNAPSHOTS: Record<string, SchemaSnapshot> = {
   ALERT_SCHEMA: { version: 1, shapeHash: '4f2d1991124382ff' },
-  AUDIT_LOG_SCHEMA: { version: 20, shapeHash: '5c3b9dd39a36b5ff' },
+  AUDIT_LOG_SCHEMA: { version: 21, shapeHash: 'cccdb81090804908' },
   DRUG_INFO_SCHEMA: { version: 2, shapeHash: '22c906f9a1e1a957' },
   DRUG_SCHEMA: { version: 10, shapeHash: '1cd1014a77a72139' },
   DRUG_STOCK_SCHEMA: { version: 5, shapeHash: '7d4f9b891d18dabd' },

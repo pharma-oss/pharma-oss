@@ -52,6 +52,7 @@ import { OrderWorkbench } from './components/OrderWorkbench';
 import { ImportMaster } from './components/ImportMaster';
 import { InventoryRow } from './components/InventoryRow';
 import { DailyCheckPanel } from './components/DailyCheckPanel';
+import { InventoryAuditToolsPanel } from './components/InventoryAuditToolsPanel';
 import { runWithAuditRollback } from '@/lib/audit_guard';
 import { DRUGS_WITH_RECORDED_STOCK_SELECTOR } from '@/lib/inventory_drug_query';
 import { deliveryWriteFailureMessage, writeDeliveryStock } from '@/lib/delivery_import';
@@ -723,6 +724,7 @@ export default function InventoryPage() {
       {activeTab === 'daily-check' && (
         <section className="tab-content" id="panel-daily-check" role="tabpanel" aria-labelledby="tab-daily-check">
             <DailyCheckPanel db={db} drugs={drugs} pendingStockMap={pendingStockMap} />
+            <InventoryAuditToolsPanel db={db} drugs={drugs} stockLots={stockLots} />
         </section>
       )}
 

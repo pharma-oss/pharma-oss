@@ -302,6 +302,74 @@ export function findMatchingStockLotForGs1Barcode(
   return [...candidates].sort(compareStockLotsByExpiration)[0];
 }
 
+export interface FefoPickingDeviationResult {
+  isDeviation: boolean;
+  pickedLot: StockLotGs1MatchCandidate;
+  earliestLot: StockLotGs1MatchCandidate;
+  warningMessage?: string;
+}
+
+function normalizeExpirationForComparison(expirationDate: string | undefined): string | null {
+  if (!expirationDate) return null;
+  const trimmed = expirationDate.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-99`;
+  return null;
+}
+
+/**
+ * GS1 スキャンで照合したロットが、有効在庫（数量 > 0）の中で最短使用期限のロットより
+ * 遅い使用期限である場合（FEFO: 先入先出逸脱）を検知する。
+ * 期限未設定・同一期限・同一ロット番号は逸脱とみなさない。
+ */
+export function detectFefoPickingDeviation(
+  pickedLot: StockLotGs1MatchCandidate | undefined,
+  availableLots: readonly StockLotGs1MatchCandidate[],
+  drugName?: string
+): FefoPickingDeviationResult | null {
+  if (!pickedLot) return null;
+  const pickedExp = normalizeExpirationForComparison(pickedLot.expirationDate);
+  if (!pickedExp) return null;
+
+  const positiveDatedLots = availableLots.filter(
+    (lot) => toSafeAmount(lot.quantity) > 0 && normalizeExpirationForComparison(lot.expirationDate) !== null
+  );
+  if (positiveDatedLots.length === 0) return null;
+
+  const sorted = [...positiveDatedLots].sort(compareStockLotsByExpiration);
+  const earliestLot = sorted[0];
+  const earliestExp = normalizeExpirationForComparison(earliestLot.expirationDate);
+  if (!earliestExp) return null;
+
+  const sameId = Boolean(pickedLot.id && earliestLot.id && pickedLot.id === earliestLot.id);
+  const sameLotNumber = Boolean(
+    pickedLot.lotNumber &&
+    earliestLot.lotNumber &&
+    normalizeLotComparable(pickedLot.lotNumber) === normalizeLotComparable(earliestLot.lotNumber)
+  );
+  const isDeviation = !sameId && !sameLotNumber && earliestExp < pickedExp;
+  if (!isDeviation) {
+    return {
+      isDeviation: false,
+      pickedLot,
+      earliestLot
+    };
+  }
+
+  const drugLabel = drugName ? `「${drugName}」に` : '';
+  const warningMessage =
+    `先入先出（FEFO）注意: ${drugLabel}より使用期限が近い在庫ロット` +
+    `（ロット ${earliestLot.lotNumber || '未設定'} / 期限 ${earliestLot.expirationDate} / 在庫 ${earliestLot.quantity}）があります。` +
+    `今回照合: ロット ${pickedLot.lotNumber || '未設定'} / 期限 ${pickedLot.expirationDate}。`;
+
+  return {
+    isDeviation: true,
+    pickedLot,
+    earliestLot,
+    warningMessage
+  };
+}
+
 export function aggregateStockRequirements(items: StockCalculationItem[]): Map<string, number> {
   const requirements = new Map<string, number>();
 

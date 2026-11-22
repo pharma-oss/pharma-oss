@@ -11,7 +11,8 @@ import {
   PRESCRIPTION_ITEM_ZERO_BASED_STRATEGIES,
   getPrescriptionItemMigrationStrategies
 } from './index';
-import { DRUG_SCHEMA, PATIENT_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from './schema';
+import { AUDIT_LOG_SCHEMA, DRUG_SCHEMA, PATIENT_SCHEMA, PRESCRIPTION_ITEM_SCHEMA, VISIT_SCHEMA } from './schema';
+import { buildAuditLogSignature, verifyAuditLogIntegrity } from '@/lib/audit_integrity';
 import type { PharmacyDatabase } from './types';
 import {
   attachPatientSearchIndexHooks,
@@ -335,6 +336,81 @@ describe('Database initialization contracts', () => {
     assert.deepStrictEqual(found.patients.map((p) => p.patientId), ['pt_v5_carry']);
 
     await db6.remove();
+  });
+
+  it('migrates v20 audit_logs to v21 preserving hash-chain integrity and accepting new G-1 inventory audit actions', async () => {
+    addRxPlugin(RxDBMigrationSchemaPlugin);
+    const dbName = `audit_v20_to_v21_${Date.now()}`;
+    const storage = wrappedValidateAjvStorage({
+      storage: wrappedKeyEncryptionCryptoJsStorage({ storage: getRxStorageMemory() })
+    });
+    const password = 'test-migration-password-v21-audit';
+
+    const v20AuditSchema = structuredClone(AUDIT_LOG_SCHEMA);
+    v20AuditSchema.version = 20;
+    const g1Actions = new Set([
+      'stock_fefo_deviation',
+      'stock_cancel',
+      'stock_return',
+      'stock_disposal',
+      'stock_take_variance',
+      'narcotic_ledger_export'
+    ]);
+    v20AuditSchema.properties.actionType.enum = (v20AuditSchema.properties.actionType.enum || []).filter(
+      (action) => !g1Actions.has(String(action))
+    );
+
+    const log1Base = {
+      logId: 'log_v20_1',
+      timestamp: '2026-11-21T10:00:00Z',
+      userId: 'pharm_1',
+      userName: '薬剤師 太郎',
+      userRole: 'pharmacist' as const,
+      actionType: 'stock_update' as const,
+      details: '既存 v20 在庫更新ログ',
+      terminalId: 'hub-local'
+    };
+    const sig1 = await buildAuditLogSignature(log1Base, '');
+
+    const db20 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db20.addCollections({
+      audit_logs: {
+        schema: v20AuditSchema,
+        migrationStrategies: legacyMigrationStrategies(v20AuditSchema, {})
+      }
+    });
+    await db20.audit_logs.insert({ ...log1Base, ...sig1 });
+    await db20.close();
+
+    const db21 = await createRxDatabase({ name: dbName, storage, password, multiInstance: false });
+    await db21.addCollections({
+      audit_logs: {
+        schema: AUDIT_LOG_SCHEMA,
+        migrationStrategies: legacyMigrationStrategies(AUDIT_LOG_SCHEMA, { 20: (doc) => doc })
+      }
+    });
+
+    const log2Base = {
+      logId: 'log_v21_2',
+      timestamp: '2026-11-22T10:05:00Z',
+      userId: 'pharm_1',
+      userName: '薬剤師 太郎',
+      userRole: 'pharmacist' as const,
+      actionType: 'stock_fefo_deviation' as const,
+      details: '先入先出（FEFO）注意テスト',
+      terminalId: 'hub-local'
+    };
+    const sig2 = await buildAuditLogSignature(log2Base, sig1.integrityHash);
+    await db21.audit_logs.insert({ ...log2Base, ...sig2 });
+
+    const allLogs = (await db21.audit_logs.find().exec()).map((doc: { toJSON: () => unknown }) => doc.toJSON());
+    assert.strictEqual(allLogs.length, 2);
+    const report = await verifyAuditLogIntegrity(allLogs as Parameters<typeof verifyAuditLogIntegrity>[0]);
+    assert.strictEqual(report.isValid, true);
+    assert.strictEqual(report.signed, 2);
+    assert.strictEqual(report.invalid, 0);
+
+    await db21.remove();
   });
 });
 

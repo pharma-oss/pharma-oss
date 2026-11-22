@@ -11,7 +11,7 @@ import { evaluateUsageWarning } from '@/lib/clinical_rules';
 import { calculatePatientAge } from '@/lib/patient_age';
 import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
 import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, isActivePatientAlert } from '@/lib/patient_alerts';
-import { aggregateStockRequirements, compareStockLotsByExpiration, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
+import { aggregateStockRequirements, compareStockLotsByExpiration, detectFefoPickingDeviation, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { extractErrorMessage } from '@/lib/user_facing_error';
@@ -724,6 +724,7 @@ export default function EmrPage() {
         }
 
         const matchedStockLot = findMatchingStockLotForGs1Barcode(result.parsed, item.stockLots || []);
+        const fefoCheck = detectFefoPickingDeviation(matchedStockLot, item.stockLots || [], item.drugName);
         await doc.modify((data: PrescriptionItem) => {
           data.isPicked = true;
           data.pickedAt = new Date().toISOString();
@@ -739,13 +740,11 @@ export default function EmrPage() {
           return data;
         });
         const stockLinkText = matchedStockLot?.id ? '（在庫ロット紐付け済み）' : '（在庫引落は期限順）';
-        toast.success(`${item.drugName} をGS1照合しました${stockLinkText}`);
-        return {
-          ok: true,
-          itemId: item.itemId,
-          drugName: item.drugName,
-          message: `${item.drugName} と照合しました。${stockLinkText}`
-        };
+        if (fefoCheck?.isDeviation && fefoCheck.warningMessage) {
+          toast.warning(fefoCheck.warningMessage);
+          await recordAuditOrNotify(() => logAuditAction(db, 'stock_fefo_deviation', fefoCheck.warningMessage!), (m) => toast.warning(m));
+        } else { toast.success(`${item.drugName} をGS1照合しました${stockLinkText}`); }
+        return { ok: true, itemId: item.itemId, drugName: item.drugName, message: fefoCheck?.warningMessage ? `${item.drugName} と照合しました。${fefoCheck.warningMessage}` : `${item.drugName} と照合しました。${stockLinkText}` };
       }
 
       if (alreadyVerifiedDrugName) {
