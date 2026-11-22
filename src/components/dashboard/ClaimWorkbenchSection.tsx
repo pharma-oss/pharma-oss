@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   CheckCircle2,
   Copy,
@@ -64,7 +64,10 @@ import { ClaimWorkbenchRow } from './DashboardRows';
 import {
   UKE_UI_GUIDANCE,
   formatMonthlyLegacyUkeExportAuditMessage,
-  formatMonthlyOfficialUkeExportAuditMessage
+  formatMonthlyOfficialUkeExportAuditMessage,
+  formatUkeRetirementStatusBadge,
+  summarizeUkeExportsFromAuditLogs,
+  type UkeExportAuditSummary
 } from '@/lib/receipt/uke_migration_policy';
 import type { DashboardClaimWorkItem, DashboardCounts } from '@/hooks/useDashboardTasks';
 import type { PharmacyDatabase, Visit, PrescriptionItem, Intervention, Patient, FacilitySettings, Drug } from '@/db/types';
@@ -226,6 +229,8 @@ export interface ClaimWorkbenchSectionProps {
   isLoading: boolean;
   onOpenTask: (visitId: string) => void;
   onRefresh: () => void;
+  /** テスト・SSR 向けに監査ログ集計結果を直接渡すための任意プロパティ */
+  legacyUkeAuditSummary?: UkeExportAuditSummary;
 }
 
 export function ClaimWorkbenchSection({
@@ -234,7 +239,8 @@ export function ClaimWorkbenchSection({
   counts,
   isLoading,
   onOpenTask,
-  onRefresh
+  onRefresh,
+  legacyUkeAuditSummary
 }: ClaimWorkbenchSectionProps) {
   const [isExportingUke, setIsExportingUke] = useState(false);
   const [isExportingOfficialUke, setIsExportingOfficialUke] = useState(false);
@@ -242,6 +248,35 @@ export function ClaimWorkbenchSection({
   const [isCheckingRules, setIsCheckingRules] = useState(false);
   const [isImportingAcceptance, setIsImportingAcceptance] = useState(false);
   const [isClosingAccepted, setIsClosingAccepted] = useState(false);
+  const [loadedUkeAuditSummary, setLoadedUkeAuditSummary] = useState<UkeExportAuditSummary | null>(null);
+
+  useEffect(() => {
+    if (!db || legacyUkeAuditSummary !== undefined) return;
+    let active = true;
+    db.audit_logs
+      .find({ selector: { actionType: 'uke_export' } })
+      .exec()
+      .then((docs) => {
+        if (!active) return;
+        const entries = docs.map((doc) => {
+          const plain = toPlain<{ timestamp: string; actionType?: string; details: string }>(doc);
+          return {
+            timestamp: plain.timestamp,
+            actionType: plain.actionType,
+            details: plain.details
+          };
+        });
+        setLoadedUkeAuditSummary(summarizeUkeExportsFromAuditLogs(entries));
+      })
+      .catch(() => {
+        // 監査ログ読込失敗時は未表示のまま業務継続
+      });
+    return () => {
+      active = false;
+    };
+  }, [db, legacyUkeAuditSummary, claimWorkItems.length, isExportingUke, isExportingOfficialUke]);
+
+  const effectiveUkeAuditSummary = legacyUkeAuditSummary ?? loadedUkeAuditSummary;
 
   const visibleClaimWorkItems = claimWorkItems.slice(0, 5);
   const hasExportableClaimWorkItems = claimWorkItems.some((item) => isClaimWorkbenchUkeExportable(item.status));
@@ -881,6 +916,15 @@ export function ClaimWorkbenchSection({
                 {isExportingUke ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Download size={14} aria-hidden="true" />}
                 <span>{isExportingUke ? '作成中' : '一括UKE'}</span>
               </button>
+              {effectiveUkeAuditSummary && (
+                <span
+                  className={`legacy-uke-retirement-status ${effectiveUkeAuditSummary.legacyExportCountInWindow === 0 ? 'ready' : 'blocked'}`}
+                  data-testid="legacy-uke-retirement-status"
+                  title={`条件B実測（直近${effectiveUkeAuditSummary.windowDays}日）: 旧形式 ${effectiveUkeAuditSummary.legacyExportCountInWindow}回 / 公式 ${effectiveUkeAuditSummary.officialExportCountInWindow}回`}
+                >
+                  {formatUkeRetirementStatusBadge(effectiveUkeAuditSummary)}
+                </span>
+              )}
             </div>
           </details>
           <button

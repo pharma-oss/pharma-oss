@@ -28,6 +28,7 @@
     "audit:local-worm-retention:scheduled": "node scripts/runScheduledAuditLogLocalWormRetention.mjs",
     "ops:schedule-drill": "node scripts/runScheduledOpsDrill.mjs",
     "ops:field-evidence-bundle": "tsx scripts/runFieldEvidenceBundle.ts",
+    "ops:uke-retirement-check": "tsx scripts/runUkeRetirementReadiness.ts",
     "s3-worm:preflight": "node scripts/runS3WormPreflight.mjs",
     "test:e2e:onboarding": "node scripts/runOnboardingE2E.mjs",
     "test:e2e:return-correction": "node scripts/runReturnCorrectionE2E.mjs",

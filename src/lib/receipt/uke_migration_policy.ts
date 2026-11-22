@@ -1,11 +1,15 @@
 /**
  * UKE生成経路の統合・本番切替および旧形式安全廃止ポリシー
- * 
+ *
  * 厚生労働省・支払基金・国保連公的電算処理仕様（RECEIPTY.CYO）への完全移行と、
  * 既存院内点検用独自UKE形式の安全な並行運用・完全廃止判定基準を定義する純粋モジュール。
  */
 
+import type { OpsReviewStatus } from '../ops_review_status';
+
 export type UkeExportCategory = 'official' | 'legacy_inspection' | 'unknown';
+
+export const DEFAULT_UKE_RETIREMENT_WINDOW_DAYS = 90;
 
 export interface UkeRetirementCriteria {
   pilotMonthsConfirmed: number;          // パイロット薬局での公式RECEIPTY.CYO運用実績月数（必須: 1ヶ月以上）
@@ -19,10 +23,44 @@ export interface UkeRetirementEvaluation {
   currentStatus: 'active_parallel' | 'ready_for_ui_nesting' | 'ready_for_full_retirement';
 }
 
+export interface UkeExportAuditLogEntry {
+  timestamp: string;
+  actionType?: string;
+  details: string;
+}
+
+export interface UkeExportAuditSummary {
+  windowDays: number;
+  evaluatedAt: string;
+  windowStartAt: string;
+  totalUkeExportLogsInWindow: number;
+  officialExportCountInWindow: number;
+  legacyExportCountInWindow: number;
+  unknownUkeExportCountInWindow: number;
+  lastLegacyExportAt?: string;
+  lastOfficialExportAt?: string;
+}
+
+export interface UkeRetirementAuditReport {
+  auditSummary: UkeExportAuditSummary;
+  criteria: UkeRetirementCriteria;
+  evaluation: UkeRetirementEvaluation;
+  opsStatus: OpsReviewStatus;
+  summaryLine: string;
+}
+
 /**
- * 監査ログメッセージから UKE 出力種別を厳密に分類する
+ * 監査ログメッセージから UKE 出力種別を厳密に分類する。
+ * 事前検証や算定ルール確認で停止したログ（作成停止・出力停止・確認停止）は実出力に含めない。
  */
 export function categorizeUkeExportAuditType(auditMessage: string): UkeExportCategory {
+  if (
+    auditMessage.includes('作成停止')
+    || auditMessage.includes('出力停止')
+    || auditMessage.includes('確認停止')
+  ) {
+    return 'unknown';
+  }
   if (auditMessage.includes('公式レセプト') || auditMessage.includes('月次公式UKE') || auditMessage.includes('RECEIPTY.CYO')) {
     return 'official';
   }
@@ -30,6 +68,213 @@ export function categorizeUkeExportAuditType(auditMessage: string): UkeExportCat
     return 'legacy_inspection';
   }
   return 'unknown';
+}
+
+/**
+ * 監査ログ配列（JSON / バックアップJSON / JSONL）から UKE 関連エントリを抽出する純粋パーサ。
+ */
+export function parseUkeAuditLogInput(rawText: string): UkeExportAuditLogEntry[] {
+  const trimmed = rawText.trim();
+  if (!trimmed) return [];
+
+  const toEntry = (item: unknown): UkeExportAuditLogEntry | null => {
+    if (!item || typeof item !== 'object') return null;
+    const record = item as Record<string, unknown>;
+    if (typeof record.timestamp !== 'string' || typeof record.details !== 'string') {
+      return null;
+    }
+    return {
+      timestamp: record.timestamp,
+      ...(typeof record.actionType === 'string' ? { actionType: record.actionType } : {}),
+      details: record.details
+    };
+  };
+
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map(toEntry).filter((entry): entry is UkeExportAuditLogEntry => entry !== null);
+      }
+      if (parsed && typeof parsed === 'object') {
+        const obj = parsed as Record<string, unknown>;
+        const collections = obj.collections as Record<string, unknown> | undefined;
+        const candidateList = Array.isArray(obj.audit_logs)
+          ? obj.audit_logs
+          : Array.isArray(collections?.audit_logs)
+            ? collections.audit_logs
+            : Array.isArray(obj.logs)
+              ? obj.logs
+              : null;
+        if (candidateList) {
+          return candidateList.map(toEntry).filter((entry): entry is UkeExportAuditLogEntry => entry !== null);
+        }
+        const single = toEntry(obj);
+        if (single) return [single];
+      }
+      throw new Error('監査ログ配列（JSON配列・バックアップJSON・JSONL）が見つかりません。');
+    } catch (jsonError) {
+      // JSONL（複数行の先頭が '{'）へフォールバックする
+      if (!trimmed.includes('\n')) {
+        throw jsonError instanceof Error
+          ? jsonError
+          : new Error('監査ログ入力のJSON解析に失敗しました。');
+      }
+    }
+  }
+
+  const entries: UkeExportAuditLogEntry[] = [];
+  const lines = trimmed.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let parsedLine: unknown;
+    try {
+      parsedLine = JSON.parse(line);
+    } catch {
+      throw new Error(`監査ログJSONLの ${i + 1} 行目の解析に失敗しました。`);
+    }
+    const entry = toEntry(parsedLine);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+
+/**
+ * 監査ログから直近 windowDays 日（既定90日）の公式UKE・旧形式UKE出力回数を実測集計する。
+ */
+export function summarizeUkeExportsFromAuditLogs(
+  logs: ReadonlyArray<UkeExportAuditLogEntry>,
+  options: { now?: Date; windowDays?: number } = {}
+): UkeExportAuditSummary {
+  const now = options.now ?? new Date();
+  const windowDays = Math.max(1, Math.floor(options.windowDays ?? DEFAULT_UKE_RETIREMENT_WINDOW_DAYS));
+  const nowMs = now.getTime();
+  const windowStartMs = nowMs - windowDays * 24 * 60 * 60 * 1000;
+
+  let totalUkeExportLogsInWindow = 0;
+  let officialExportCountInWindow = 0;
+  let legacyExportCountInWindow = 0;
+  let unknownUkeExportCountInWindow = 0;
+  let lastLegacyMs = -Infinity;
+  let lastLegacyExportAt: string | undefined;
+  let lastOfficialMs = -Infinity;
+  let lastOfficialExportAt: string | undefined;
+
+  for (const log of logs) {
+    if (log.actionType !== undefined && log.actionType !== 'uke_export') {
+      continue;
+    }
+    const tsMs = Date.parse(log.timestamp);
+    if (!Number.isFinite(tsMs) || tsMs < windowStartMs || tsMs > nowMs) {
+      continue;
+    }
+
+    const category = categorizeUkeExportAuditType(log.details);
+    if (category === 'official') {
+      totalUkeExportLogsInWindow += 1;
+      officialExportCountInWindow += 1;
+      if (tsMs > lastOfficialMs) {
+        lastOfficialMs = tsMs;
+        lastOfficialExportAt = new Date(tsMs).toISOString();
+      }
+    } else if (category === 'legacy_inspection') {
+      totalUkeExportLogsInWindow += 1;
+      legacyExportCountInWindow += 1;
+      if (tsMs > lastLegacyMs) {
+        lastLegacyMs = tsMs;
+        lastLegacyExportAt = new Date(tsMs).toISOString();
+      }
+    } else if (log.actionType === 'uke_export') {
+      totalUkeExportLogsInWindow += 1;
+      unknownUkeExportCountInWindow += 1;
+    }
+  }
+
+  return {
+    windowDays,
+    evaluatedAt: now.toISOString(),
+    windowStartAt: new Date(windowStartMs).toISOString(),
+    totalUkeExportLogsInWindow,
+    officialExportCountInWindow,
+    legacyExportCountInWindow,
+    unknownUkeExportCountInWindow,
+    ...(lastLegacyExportAt ? { lastLegacyExportAt } : {}),
+    ...(lastOfficialExportAt ? { lastOfficialExportAt } : {})
+  };
+}
+
+/**
+ * 監査ログ実測値と現場確認条件（A/C）から、旧形式UKE完全廃止（ステップ5b）の可否レポートを生成する。
+ */
+export function evaluateUkeRetirementFromAuditLogs(params: {
+  logs: ReadonlyArray<UkeExportAuditLogEntry>;
+  pilotMonthsConfirmed: number;
+  stakeholderConsentObtained: boolean;
+  now?: Date;
+  windowDays?: number;
+}): UkeRetirementAuditReport {
+  const auditSummary = summarizeUkeExportsFromAuditLogs(params.logs, {
+    now: params.now,
+    windowDays: params.windowDays
+  });
+  const criteria: UkeRetirementCriteria = {
+    pilotMonthsConfirmed: Math.max(0, Math.floor(params.pilotMonthsConfirmed)),
+    legacyExportCountLast3Months: auditSummary.legacyExportCountInWindow,
+    stakeholderConsentObtained: params.stakeholderConsentObtained
+  };
+  const evaluation = evaluateUkeRetirementReadiness(criteria);
+  const opsStatus: OpsReviewStatus = evaluation.canRetireLegacy
+    ? 'pass'
+    : evaluation.currentStatus === 'ready_for_ui_nesting'
+      ? 'attention'
+      : 'blocked';
+  const statusLabel = opsStatus === 'pass'
+    ? '完全廃止可（条件A/B/C達成）'
+    : opsStatus === 'attention'
+      ? '合意待ち（条件A・B達成）'
+      : `廃止ブロック中（未達 ${evaluation.blockers.length}件）`;
+
+  return {
+    auditSummary,
+    criteria,
+    evaluation,
+    opsStatus,
+    summaryLine: `${statusLabel} / 直近${auditSummary.windowDays}日: 旧形式 ${auditSummary.legacyExportCountInWindow}回・公式 ${auditSummary.officialExportCountInWindow}回 / 公式運用 ${criteria.pilotMonthsConfirmed}ヶ月`
+  };
+}
+
+export function formatUkeRetirementStatusBadge(summary: UkeExportAuditSummary): string {
+  if (summary.legacyExportCountInWindow === 0) {
+    return `直近${summary.windowDays}日 旧形式0回（公式${summary.officialExportCountInWindow}回 / 条件A・C確認待ち）`;
+  }
+  return `直近${summary.windowDays}日 旧形式${summary.legacyExportCountInWindow}回（公式${summary.officialExportCountInWindow}回 / 廃止ブロック中）`;
+}
+
+export function buildUkeRetirementChecklist(report: UkeRetirementAuditReport): string {
+  const lines = [
+    '# 旧形式UKE 完全廃止ゲート（ステップ 5b）判定チェックリスト',
+    `判定日時: ${report.auditSummary.evaluatedAt}`,
+    `集計期間: ${report.auditSummary.windowStartAt} 〜 ${report.auditSummary.evaluatedAt}（直近${report.auditSummary.windowDays}日）`,
+    `総合判定: ${report.opsStatus} (${report.evaluation.currentStatus})`,
+    `要約: ${report.summaryLine}`,
+    '',
+    '## 条件チェック',
+    `- [${report.criteria.pilotMonthsConfirmed >= 1 ? 'x' : ' '}] 条件A: 公式RECEIPTY.CYO 受付確認実績 >= 1ヶ月（現在: ${report.criteria.pilotMonthsConfirmed}ヶ月）`,
+    `- [${report.criteria.legacyExportCountLast3Months === 0 ? 'x' : ' '}] 条件B: 直近${report.auditSummary.windowDays}日の旧形式UKE出力 0回（実測: ${report.auditSummary.legacyExportCountInWindow}回 / 公式: ${report.auditSummary.officialExportCountInWindow}回）`,
+    `- [${report.criteria.stakeholderConsentObtained ? 'x' : ' '}] 条件C: 現場スタッフ・独自連携システムの廃止合意取得（現在: ${report.criteria.stakeholderConsentObtained ? '取得済み' : '未取得'}）`,
+    ''
+  ];
+  if (report.evaluation.blockers.length > 0) {
+    lines.push('## 未達ブロッカー');
+    for (const blocker of report.evaluation.blockers) {
+      lines.push(`- ${blocker}`);
+    }
+  } else {
+    lines.push('## 次のアクション');
+    lines.push('- 全条件（A/B/C）を満たしています。承認のうえ <details> 内旧形式UKE削除（ステップ5b）を実施できます。');
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 /**
