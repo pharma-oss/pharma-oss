@@ -129,6 +129,7 @@ Tier 4  複数 Tier の成果物を統合する
 | `backup:external-transfer` / `:scheduled` | NAS / 外部ストレージへの転送 |
 | `backup:s3-worm-transfer` | AWS S3 Object Lock |
 | `audit:s3-worm-retention` / `:scheduled` | AWS S3 Object Lock |
+| `audit:local-worm-retention` / `:scheduled` | ローカル / NAS 追記専用 WORM 領域 |
 | `ops:schedule-drill` | 監視 Webhook への通知 |
 | `s3-worm:preflight` | AWS 認証情報の事前確認 |
 | `drug-label:fetch` | PMDA / 公式サイトからの取得 |
