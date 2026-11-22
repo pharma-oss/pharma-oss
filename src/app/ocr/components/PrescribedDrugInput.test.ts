@@ -105,6 +105,7 @@ interface PrescribedDrugInputHookOverrides {
   typedQuery?: string;
   recentDrugs?: RecentDrug[];
   showRecents?: boolean;
+  isSearching?: boolean;
 }
 
 const basePrescription: Prescription = {
@@ -157,8 +158,8 @@ function renderPrescribedDrugInput(
       ),
     {
       componentName: 'PrescribedDrugInput',
-      restoreAtCallIndex: 5,
-      expectedCalls: 6,
+      restoreAtCallIndex: 6,
+      expectedCalls: 7,
       overrides: {
         0: {
           assertInitial: (v) =>
@@ -195,6 +196,11 @@ function renderPrescribedDrugInput(
           assertInitial: (v) =>
             assert.equal(v, false, 'Hook #5 (showRecents) must initialize as false'),
           ...(hooks.showRecents !== undefined ? { value: hooks.showRecents } : {})
+        },
+        6: {
+          assertInitial: (v) =>
+            assert.equal(v, false, 'Hook #6 (isSearching) must initialize as false'),
+          ...(hooks.isSearching !== undefined ? { value: hooks.isSearching } : {})
         }
       }
     }
@@ -203,6 +209,26 @@ function renderPrescribedDrugInput(
 }
 
 describe('PrescribedDrugInput SSR UI rendering', () => {
+  test('renders loading status dropdown while isSearching is true for a 2+ character query', () => {
+    const searchingHtml = renderPrescribedDrugInput({
+      hooks: {
+        typedQuery: 'アム',
+        isSearching: true,
+        showDropdown: false
+      }
+    });
+    assert.ok(searchingHtml.includes('data-testid="prescribed-drug-searching"'));
+    assert.ok(searchingHtml.includes('候補を検索中...'));
+
+    const idleHtml = renderPrescribedDrugInput({
+      hooks: {
+        typedQuery: 'アム',
+        isSearching: false,
+        showDropdown: false
+      }
+    });
+    assert.ok(!idleHtml.includes('data-testid="prescribed-drug-searching"'));
+  });
   test('renders closed input and detail search button with 1-based aria-labels and suppresses dropdowns', () => {
     const html = renderPrescribedDrugInput({
       index: 1,

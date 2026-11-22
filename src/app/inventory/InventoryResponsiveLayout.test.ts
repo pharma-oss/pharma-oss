@@ -54,3 +54,14 @@ test('verifies that inventory.css defines smooth touch scrolling on tabs and 640
   // mobile tab size
   assert.match(mediaContent, /\.tab\s*{[\s\S]*?min-height:\s*40px/);
 });
+
+test('verifies that daily-check-table overrides 260px first-child rule and desktop tabs wrap cleanly', () => {
+  assert.match(
+    inventoryCssSource,
+    /\.data-table\.daily-check-table\s+th:first-child,\s*\.data-table\.daily-check-table\s+td:first-child\s*{[\s\S]*?min-width:\s*84px/
+  );
+  assert.match(
+    inventoryCssSource,
+    /@media\s*\(min-width:\s*769px\)\s*{[\s\S]*?\.tabs\s*{[\s\S]*?flex-wrap:\s*wrap/
+  );
+});

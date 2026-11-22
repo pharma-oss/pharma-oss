@@ -623,82 +623,81 @@ export const SoapHistoryPanel = React.memo(function SoapHistoryPanel({
   );
 });
 
-function renderStructuredAssessmentControl<K extends keyof SoapStructuredAssessment>(
+export function computeNextStructuredAssessmentValue<K extends keyof SoapStructuredAssessment>(
   control: SoapStructuredAssessmentControl<K>,
-  normalized: NormalizedSoapStructuredAssessment,
-  onChange: <F extends keyof SoapStructuredAssessment>(
-    field: F,
-    value: NonNullable<SoapStructuredAssessment[F]>
-  ) => void
-) {
-  const currentValue = normalized[control.field] || 'unknown';
+  currentValue: NonNullable<SoapStructuredAssessment[K]>,
+  direction: 1 | -1
+): NonNullable<SoapStructuredAssessment[K]> {
   const optionValues = control.options.map(([value]) => value);
-  const handleChipKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
-    const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
-    const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
-    if (!forward && !backward) return;
-    event.preventDefault();
-    const currentIndex = Math.max(
-      optionValues.findIndex((value) => value === currentValue),
-      0
-    );
-    const nextIndex =
-      (currentIndex + (forward ? 1 : -1) + optionValues.length) % optionValues.length;
-    onChange(control.field, optionValues[nextIndex]);
-    const chipRow = event.currentTarget.closest('.chip-row');
-    window.setTimeout(() => {
-      (
-        chipRow?.querySelector('[aria-checked="true"]') as HTMLButtonElement | null
-      )?.focus();
-    }, 0);
-  };
-  return (
-    <div
-      key={control.field}
-      className={`soap-structured-field ${currentValue === 'unknown' ? 'unconfirmed' : 'confirmed'}`}
-      role="radiogroup"
-      aria-label={control.label}
-    >
-      <span className="field-label">{control.label}</span>
-      <div className="chip-row">
-        {control.options.map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={currentValue === value}
-            tabIndex={currentValue === value ? 0 : -1}
-            className={`assessment-chip ${currentValue === value ? 'selected' : ''} ${value === 'unknown' ? 'is-unknown' : ''}`}
-            onClick={() => onChange(control.field, value)}
-            onKeyDown={handleChipKeyDown}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
+  const currentIndex = Math.max(
+    optionValues.findIndex((value) => value === currentValue),
+    0
   );
+  const nextIndex = (currentIndex + direction + optionValues.length) % optionValues.length;
+  return optionValues[nextIndex];
 }
 
-function renderAnyStructuredAssessmentControl(
+function getStructuredAssessmentFieldEntries(
   control: AnySoapStructuredAssessmentControl,
-  normalized: NormalizedSoapStructuredAssessment,
-  onChange: <F extends keyof SoapStructuredAssessment>(
-    field: F,
-    value: NonNullable<SoapStructuredAssessment[F]>
-  ) => void
-) {
+  normalized: NormalizedSoapStructuredAssessment
+): {
+  field: keyof SoapStructuredAssessment;
+  label: string;
+  currentValue: string;
+  options: ReadonlyArray<readonly [string, string]>;
+  computeNext: (direction: 1 | -1) => NonNullable<SoapStructuredAssessment[keyof SoapStructuredAssessment]>;
+} {
   switch (control.field) {
-    case 'adherence':
-      return renderStructuredAssessmentControl(control, normalized, onChange);
-    case 'leftoverMedicine':
-      return renderStructuredAssessmentControl(control, normalized, onChange);
-    case 'adverseEvent':
-      return renderStructuredAssessmentControl(control, normalized, onChange);
-    case 'genericChangePreference':
-      return renderStructuredAssessmentControl(control, normalized, onChange);
-    case 'medicationNotebook':
-      return renderStructuredAssessmentControl(control, normalized, onChange);
+    case 'adherence': {
+      const currentValue = normalized.adherence || 'unknown';
+      return {
+        field: control.field,
+        label: control.label,
+        currentValue,
+        options: control.options,
+        computeNext: (dir) => computeNextStructuredAssessmentValue(control, currentValue, dir)
+      };
+    }
+    case 'leftoverMedicine': {
+      const currentValue = normalized.leftoverMedicine || 'unknown';
+      return {
+        field: control.field,
+        label: control.label,
+        currentValue,
+        options: control.options,
+        computeNext: (dir) => computeNextStructuredAssessmentValue(control, currentValue, dir)
+      };
+    }
+    case 'adverseEvent': {
+      const currentValue = normalized.adverseEvent || 'unknown';
+      return {
+        field: control.field,
+        label: control.label,
+        currentValue,
+        options: control.options,
+        computeNext: (dir) => computeNextStructuredAssessmentValue(control, currentValue, dir)
+      };
+    }
+    case 'genericChangePreference': {
+      const currentValue = normalized.genericChangePreference || 'unknown';
+      return {
+        field: control.field,
+        label: control.label,
+        currentValue,
+        options: control.options,
+        computeNext: (dir) => computeNextStructuredAssessmentValue(control, currentValue, dir)
+      };
+    }
+    case 'medicationNotebook': {
+      const currentValue = normalized.medicationNotebook || 'unknown';
+      return {
+        field: control.field,
+        label: control.label,
+        currentValue,
+        options: control.options,
+        computeNext: (dir) => computeNextStructuredAssessmentValue(control, currentValue, dir)
+      };
+    }
   }
 }
 
@@ -718,6 +717,29 @@ export const SoapStructuredAssessmentPanel = React.memo(
       (control) => (normalized[control.field as keyof SoapStructuredAssessment] || 'unknown') === 'unknown'
     ).length;
 
+    const emitChange = (
+      field: keyof SoapStructuredAssessment,
+      value: string
+    ) => {
+      switch (field) {
+        case 'adherence':
+          onChange('adherence', value as NonNullable<SoapStructuredAssessment['adherence']>);
+          break;
+        case 'leftoverMedicine':
+          onChange('leftoverMedicine', value as NonNullable<SoapStructuredAssessment['leftoverMedicine']>);
+          break;
+        case 'adverseEvent':
+          onChange('adverseEvent', value as NonNullable<SoapStructuredAssessment['adverseEvent']>);
+          break;
+        case 'genericChangePreference':
+          onChange('genericChangePreference', value as NonNullable<SoapStructuredAssessment['genericChangePreference']>);
+          break;
+        case 'medicationNotebook':
+          onChange('medicationNotebook', value as NonNullable<SoapStructuredAssessment['medicationNotebook']>);
+          break;
+      }
+    };
+
     return (
       <section className="soap-structured-panel" aria-label="薬歴構造化チェック">
         <div className="soap-structured-header">
@@ -730,9 +752,48 @@ export const SoapStructuredAssessmentPanel = React.memo(
           </span>
         </div>
         <div className="soap-structured-grid">
-          {soapStructuredAssessmentControls.map((control) =>
-            renderAnyStructuredAssessmentControl(control, normalized, onChange)
-          )}
+          {soapStructuredAssessmentControls.map((control) => {
+            const entry = getStructuredAssessmentFieldEntries(control, normalized);
+            const handleChipKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+              const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+              const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+              if (!forward && !backward) return;
+              event.preventDefault();
+              emitChange(entry.field, entry.computeNext(forward ? 1 : -1));
+              const chipRow = event.currentTarget.closest('.chip-row');
+              window.setTimeout(() => {
+                (
+                  chipRow?.querySelector('[aria-checked="true"]') as HTMLButtonElement | null
+                )?.focus();
+              }, 0);
+            };
+            return (
+              <div
+                key={entry.field}
+                className={`soap-structured-field ${entry.currentValue === 'unknown' ? 'unconfirmed' : 'confirmed'}`}
+                role="radiogroup"
+                aria-label={entry.label}
+              >
+                <span className="field-label">{entry.label}</span>
+                <div className="chip-row">
+                  {entry.options.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={entry.currentValue === value}
+                      tabIndex={entry.currentValue === value ? 0 : -1}
+                      className={`assessment-chip ${entry.currentValue === value ? 'selected' : ''} ${value === 'unknown' ? 'is-unknown' : ''}`}
+                      onClick={() => emitChange(entry.field, value)}
+                      onKeyDown={handleChipKeyDown}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <style jsx>{`

@@ -132,17 +132,15 @@ export default function OcrPage() {
   const onlineEligibilityImplemented = isFeatureImplemented('onlineEligibility');
 
   useEffect(() => {
-    // ⚡ Bolt: Defer heavy OCR engine initialization to idle time.
-    // Eagerly loading tesseract.js and its worker can block the main thread and delay Time to Interactive (TTI).
-    // By wrapping it in requestIdleCallback, we ensure it only loads when the browser has free resources,
-    // maintaining the benefit of no cold start without penalizing initial page load.
+    // 処方箋受付では初回薬品検索の待ち時間を減らすため、アイドル時に医薬品マスタのみ先読みする。
+    // OCRエンジン (tesseract.js) は実際に画像を解析するときに遅延初期化する。
     const idleCallback = ('requestIdleCallback' in window)
       ? window.requestIdleCallback.bind(window)
-      : (cb: () => void) => window.setTimeout(cb, 1000);
+      : (cb: () => void) => window.setTimeout(cb, 600);
 
     const handle = idleCallback(() => {
-      import('@/lib/ocr/processor').then(({ preloadOcr }) => {
-        preloadOcr();
+      import('@/lib/master-data/drug_master').then(({ getDrugMasterRecords }) => {
+        void getDrugMasterRecords();
       }).catch(() => { });
     });
 

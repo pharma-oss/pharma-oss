@@ -86,6 +86,7 @@ export const PrescribedDrugInput = React.memo(({
   // 薬品欄が空のまま開いたときに出す「最近選んだ薬品」。マウント後に端末の保存分を読む。
   const [recentDrugs, setRecentDrugs] = useState<RecentDrug[]>([]);
   const [showRecents, setShowRecents] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -109,6 +110,7 @@ export const PrescribedDrugInput = React.memo(({
     }
     setTypedQuery('');
     setSuggestions([]);
+    setIsSearching(false);
     setShowDropdown(false);
     // 薬品を選んだら、続けて1日量を打てるように入力欄へ進める(スマホでは候補を選ぶたびに入力欄を探させない)
     window.setTimeout(() => {
@@ -122,9 +124,11 @@ export const PrescribedDrugInput = React.memo(({
 
     if (query.length < MIN_SUGGEST_QUERY_LENGTH) {
       setSuggestions([]);
+      setIsSearching(false);
       return;
     }
 
+    setIsSearching(true);
     searchDrugMaster(query, 200).then((nextSuggestions) => attachStockQuantities(db, nextSuggestions)).then((nextSuggestions) => {
       if (!isMounted) return;
       setSuggestions(sortDrugSuggestions(nextSuggestions, typedQuery, readDrugRecents().map((recent) => recent.code)).slice(0, 8));
@@ -133,6 +137,8 @@ export const PrescribedDrugInput = React.memo(({
     }).catch((error) => {
       console.error('Failed to search drug master:', error);
       if (isMounted) setSuggestions([]);
+    }).finally(() => {
+      if (isMounted) setIsSearching(false);
     });
 
     return () => { isMounted = false; };
@@ -247,6 +253,16 @@ export const PrescribedDrugInput = React.memo(({
           ))}
         </ul>
       )}
+      {isSearching && typedQuery.trim().length >= MIN_SUGGEST_QUERY_LENGTH && !showDropdown && (
+        <ul
+          className="drug-dropdown prescribed-dropdown"
+          role="status"
+          aria-live="polite"
+          data-testid="prescribed-drug-searching"
+        >
+          <li className="dropdown-loading">候補を検索中...</li>
+        </ul>
+      )}
       {showDropdown && suggestions.length > 0 && (
         <ul className="drug-dropdown prescribed-dropdown">
           {suggestions.map((drug, i) => (
@@ -345,7 +361,7 @@ export const PrescribedDrugInput = React.memo(({
           top: calc(100% + 4px);
           left: 0;
           right: 0;
-          z-index: 40;
+          z-index: 60;
           max-height: 240px;
           overflow-y: auto;
           margin: 0;
@@ -355,6 +371,18 @@ export const PrescribedDrugInput = React.memo(({
           border-radius: 8px;
           background: #ffffff;
           box-shadow: 0 16px 36px rgb(15 23 42 / 0.14);
+        }
+
+        .drug-dropdown li.dropdown-loading {
+          padding: 0.65rem 0.75rem;
+          color: var(--text-muted);
+          font-size: var(--fs-sm);
+          font-weight: 700;
+          cursor: default;
+        }
+
+        .drug-dropdown li.dropdown-loading:hover {
+          background: transparent;
         }
 
         .drug-dropdown li {

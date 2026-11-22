@@ -27,6 +27,13 @@
     padding-bottom: 0.65rem;
 }
 
+@media (min-width: 769px) {
+    .tabs {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+}
+
 .tab {
     flex: 0 0 auto;
     min-height: 44px;
@@ -304,7 +311,14 @@
 }
 
 .daily-check-table {
-    min-width: 1040px;
+    min-width: 820px;
+}
+
+.data-table.daily-check-table th:first-child,
+.data-table.daily-check-table td:first-child {
+    min-width: 84px;
+    width: 92px;
+    white-space: nowrap;
 }
 
 .daily-check-table th,
@@ -320,20 +334,20 @@
 .daily-check-table th:nth-child(2),
 .daily-check-table td:nth-child(2) {
     width: 24%;
-    min-width: 210px;
+    min-width: 185px;
     white-space: normal;
 }
 
 .daily-check-table th:nth-child(5),
 .daily-check-table td:nth-child(5) {
     width: auto;
-    min-width: 120px;
+    min-width: 110px;
     white-space: nowrap;
 }
 
 .daily-check-table th:nth-child(6),
 .daily-check-table td:nth-child(6) {
-    min-width: 230px;
+    min-width: 195px;
 }
 
 .daily-drug-name {

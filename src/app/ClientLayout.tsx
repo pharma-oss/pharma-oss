@@ -807,24 +807,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-
-    const idleCallback = 'requestIdleCallback' in window
-      ? window.requestIdleCallback.bind(window)
-      : (cb: () => void) => window.setTimeout(cb, 1000);
-
-    const handle = idleCallback(() => {
-      import('@/lib/ocr/processor').then(({ preloadOcr }) => {
-        preloadOcr();
-      }).catch(() => {});
-    });
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      if ('cancelIdleCallback' in window) {
-        window.cancelIdleCallback(handle as number);
-      } else {
-        clearTimeout(handle as number);
-      }
     };
   }, []);
 

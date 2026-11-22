@@ -4,11 +4,14 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SoapHistoryTimelineEntry } from '@/lib/emr_patient_history';
 import {
+  computeNextStructuredAssessmentValue,
   isSoapEntryType,
   SoapEntryBox,
   SoapHistoryPanel,
-  SoapHistoryQuickCard
+  SoapHistoryQuickCard,
+  SoapStructuredAssessmentPanel
 } from './components/SoapComponents';
+import { soapStructuredAssessmentControls } from '@/lib/soap_structured_assessment';
 
 const SAMPLE_HISTORY: SoapHistoryTimelineEntry[] = [
   {
@@ -234,4 +237,47 @@ test('SoapHistoryPanel renders tabpanel attributes, hidden flag, and full histor
     /<div\b[^>]*class="soap-history-panel"[^>]*\shidden=""(?=[\s/>]|$)/
   );
   assert.ok(hiddenLoadingHtml.includes('class="soap-history-empty"'));
+});
+
+test('SoapStructuredAssessmentPanel renders radiogroup chips inside component scope and cycles options cleanly', () => {
+  const unconfirmedHtml = renderToStaticMarkup(
+    React.createElement(SoapStructuredAssessmentPanel, {
+      assessment: {},
+      onChange: () => {}
+    })
+  );
+  const unconfirmedBody = stripStyles(unconfirmedHtml);
+  assert.ok(unconfirmedBody.includes('薬歴構造化チェック'));
+  assert.ok(unconfirmedBody.includes('未確認 5項目'));
+  assert.ok(unconfirmedBody.includes('class="soap-structured-field unconfirmed"'));
+  assert.ok(unconfirmedBody.includes('role="radiogroup"'));
+  assert.ok(unconfirmedBody.includes('role="radio"'));
+  assert.ok(unconfirmedBody.includes('assessment-chip selected is-unknown'));
+
+  const confirmedHtml = renderToStaticMarkup(
+    React.createElement(SoapStructuredAssessmentPanel, {
+      assessment: {
+        adherence: 'good',
+        leftoverMedicine: 'none',
+        adverseEvent: 'none',
+        genericChangePreference: 'accepted',
+        medicationNotebook: 'issued'
+      },
+      onChange: () => {}
+    })
+  );
+  const confirmedBody = stripStyles(confirmedHtml);
+  assert.ok(confirmedBody.includes('全項目確認済み'));
+  assert.ok(confirmedBody.includes('class="soap-structured-field confirmed"'));
+  assert.ok(!confirmedBody.includes('class="soap-structured-field unconfirmed"'));
+
+  const adherenceControl = soapStructuredAssessmentControls[0];
+  assert.strictEqual(adherenceControl.field, 'adherence');
+  if (adherenceControl.field === 'adherence') {
+    const firstOpt = adherenceControl.options[0][0];
+    const secondOpt = adherenceControl.options[1][0];
+    const lastOpt = adherenceControl.options[adherenceControl.options.length - 1][0];
+    assert.strictEqual(computeNextStructuredAssessmentValue(adherenceControl, firstOpt, 1), secondOpt);
+    assert.strictEqual(computeNextStructuredAssessmentValue(adherenceControl, firstOpt, -1), lastOpt);
+  }
 });
