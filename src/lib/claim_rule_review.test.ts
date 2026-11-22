@@ -125,14 +125,14 @@ test('insurance and public expense dates become one effective-period review', ()
   assert.match(item.title, /保険・公費の有効期間内/);
 });
 
-test('clear claims produce four passing checks and a compact status', () => {
+test('clear claims produce seven passing checks and a compact status', () => {
   const report = buildClaimOfficialRuleReview({ currentCase: makeCase() });
 
   assert.strictEqual(report.ok, true);
-  assert.strictEqual(report.ruleCount, 4);
+  assert.strictEqual(report.ruleCount, 7);
   assert.strictEqual(report.attentionCount, 0);
   assert.ok(report.items.every((item) => item.status === 'pass'));
-  assert.strictEqual(formatClaimOfficialRuleReview(report), '算定ルール確認OK（4項目）');
+  assert.strictEqual(formatClaimOfficialRuleReview(report), '算定ルール確認OK（7項目）');
 });
 
 test('CSV protects formula-like case IDs including leading whitespace and file name is stable', () => {
@@ -154,11 +154,100 @@ test('batch review aggregates patient-free checks across monthly cases', () => {
 
   assert.strictEqual(report.ok, false);
   assert.strictEqual(report.caseCount, 2);
-  assert.strictEqual(report.ruleCount, 8);
+  assert.strictEqual(report.ruleCount, 14);
   assert.strictEqual(report.attentionCount, 2);
   assert.match(formatClaimOfficialRuleBatchReview(report), /同じ患者で月1回まで/);
 
   const csv = buildClaimOfficialRuleBatchReviewCsv(report);
-  assert.match(csv, /2件・8項目を確認/);
+  assert.match(csv, /2件・14項目を確認/);
   assert.doesNotMatch(csv, /patient-secret-1/);
+});
+
+test('regional support addition is prohibited for special base fee B if it appears in calculated fees', () => {
+  const report = buildClaimOfficialRuleReview({
+    currentCase: makeCase({
+      baseFeeCategory: 'special_b',
+      calculatedFees: [
+        {
+          code: 'base_additions',
+          feeKey: 'regional_support_addition_2',
+          name: '地域支援・医薬品供給対応体制加算2',
+          points: 59,
+          rationale: 'テスト'
+        }
+      ]
+    })
+  });
+
+  const item = report.items.find((entry) => entry.ruleId === 'regional_support_special_b_prohibited');
+  assert.ok(item);
+  assert.strictEqual(item.status, 'attention');
+  assert.strictEqual(item.severity, 'error');
+  assert.deepStrictEqual(item.relatedIssueCodes, ['regional_support_special_b_prohibited']);
+});
+
+test('special management rule allows tokkan 1 + 3(i) co-calculation with guidance, but blocks orphan or same-subtype duplicates', () => {
+  const guidance: CalculationResultItem = {
+    code: 'medication_guidance',
+    name: '服薬管理指導料1',
+    points: 45,
+    rationale: '基本'
+  };
+  const tokkan1: CalculationResultItem = {
+    code: 'special_management',
+    name: '特定薬剤管理指導加算1',
+    points: 10,
+    rationale: 'ハイリスク'
+  };
+  const tokkan3i: CalculationResultItem = {
+    code: 'special_management',
+    name: '特定薬剤管理指導加算3(イ)',
+    points: 5,
+    rationale: 'RMP等'
+  };
+
+  // 別要件による1と3(イ)の併算定（服薬管理指導料あり）はOK
+  const coCalc = buildClaimOfficialRuleReview({
+    currentCase: makeCase({ calculatedFees: [guidance, tokkan1, tokkan3i] })
+  });
+  assert.strictEqual(
+    coCalc.items.find((entry) => entry.ruleId === 'special_management_guidance_and_limit')?.status,
+    'pass'
+  );
+
+  // 服薬管理指導料なしの単独算定はエラー
+  const orphan = buildClaimOfficialRuleReview({
+    currentCase: makeCase({ calculatedFees: [tokkan1] })
+  });
+  const orphanItem = orphan.items.find((entry) => entry.ruleId === 'special_management_guidance_and_limit');
+  assert.strictEqual(orphanItem?.status, 'attention');
+  assert.deepStrictEqual(orphanItem?.relatedIssueCodes, ['special_management_without_medication_guidance']);
+
+  // 同一区分の重複算定（加算1×2）はエラー
+  const dup = buildClaimOfficialRuleReview({
+    currentCase: makeCase({ calculatedFees: [guidance, tokkan1, tokkan1] })
+  });
+  const dupItem = dup.items.find((entry) => entry.ruleId === 'special_management_guidance_and_limit');
+  assert.strictEqual(dupItem?.status, 'attention');
+  assert.deepStrictEqual(dupItem?.relatedIssueCodes, ['special_management_duplicate_in_reception']);
+});
+
+test('drug master claim eligibility flags abolished drug and missing receipt code without leaking drug names', () => {
+  const report = buildClaimOfficialRuleReview({
+    currentCase: makeCase({
+      validationIssues: [
+        issue({ code: 'abolished_drug_claimed', title: '秘密の廃止薬品X は廃止薬品です' }),
+        issue({ code: 'receipt_drug_code_missing', title: '秘密薬品Y のレセ電コードが未設定です' })
+      ]
+    })
+  });
+
+  const item = report.items.find((entry) => entry.ruleId === 'drug_master_claim_eligibility');
+  assert.ok(item);
+  assert.strictEqual(item.status, 'attention');
+  assert.deepStrictEqual(item.relatedIssueCodes, ['abolished_drug_claimed', 'receipt_drug_code_missing']);
+
+  const csv = buildClaimOfficialRuleReviewCsv(report);
+  assert.doesNotMatch(csv, /秘密の廃止薬品X|秘密薬品Y/);
+  assert.match(csv, /abolished_drug_claimed/);
 });

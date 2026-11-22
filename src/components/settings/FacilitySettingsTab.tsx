@@ -158,6 +158,11 @@ export default function FacilitySettingsTab({
           <option value="5">加算5 (59点)</option>
         </select>
         <small className="help-text">地域の医薬品供給拠点としての体制を整備している場合</small>
+        {settings.baseFeeCategory === 'special_b' && settings.regionalSupportAddition !== 'none' && (
+          <div className="status-message warning" role="alert" data-testid="special-b-regional-support-warning">
+            特別調剤基本料Bでは地域支援・医薬品供給対応体制加算を算定できません（令和8年度調剤報酬改定通知）。請求計算では自動で除外されます。
+          </div>
+        )}
       </div>
 
       <div className="form-group checkbox-group">

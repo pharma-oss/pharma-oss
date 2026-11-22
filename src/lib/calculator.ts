@@ -163,6 +163,17 @@ export interface ItemWithPrice extends PrescriptionItem {
 const MEDICAL_DX_ADDITION_KEY = 'medical_dx_addition';
 const MEDICAL_DX_ADDITION_NAME = '電子的調剤情報連携体制整備加算';
 
+const REGIONAL_SUPPORT_ADDITION_INFO: Record<
+  Exclude<FacilitySettings['regionalSupportAddition'], 'none'>,
+  { feeKey: OfficialFeeCodeOverrideKey; name: string; points: number }
+> = {
+  '1': { feeKey: 'regional_support_addition_1', name: '地域支援・医薬品供給対応体制加算1', points: 27 },
+  '2': { feeKey: 'regional_support_addition_2', name: '地域支援・医薬品供給対応体制加算2', points: 59 },
+  '3': { feeKey: 'regional_support_addition_3', name: '地域支援・医薬品供給対応体制加算3', points: 67 },
+  '4': { feeKey: 'regional_support_addition_4', name: '地域支援・医薬品供給対応体制加算4', points: 37 },
+  '5': { feeKey: 'regional_support_addition_5', name: '地域支援・医薬品供給対応体制加算5', points: 59 }
+};
+
 interface MonthlyOnceBaseAdditionRule {
   feeKey: string;
   feeCode: FeeCode;
@@ -271,6 +282,22 @@ function evaluateFeeOffReasons(
       relatedVisitId: historyEntry.visitId,
       relatedServiceDate: historyEntry.serviceDate
     });
+  }
+
+  // 令和8年度調剤報酬改定通知: 特別調剤基本料Bを算定している保険薬局は地域支援・医薬品供給対応体制加算を算定できない
+  if (settings.baseFeeCategory === 'special_b' && settings.regionalSupportAddition !== 'none') {
+    const rsInfo = REGIONAL_SUPPORT_ADDITION_INFO[settings.regionalSupportAddition];
+    if (rsInfo) {
+      reasons.push({
+        feeKey: rsInfo.feeKey,
+        feeCode: 'base_additions',
+        feeName: rsInfo.name,
+        category: 'prohibited',
+        issueCode: 'regional_support_special_b_prohibited',
+        reason: `特別調剤基本料Bの薬局では${rsInfo.name}の算定対象外です（令和8年度調剤報酬改定通知）`,
+        serviceMonth
+      });
+    }
   }
 
   return reasons;
@@ -725,41 +752,16 @@ export function calculateDispensingFees(
     });
   }
 
-  // 2. 地域支援・医薬品供給対応体制加算
+  // 2. 地域支援・医薬品供給対応体制加算（特別調剤基本料Bでは令和8年度通知により算定不可）
   if (isFeeEnabled('base_additions', options) && settings.regionalSupportAddition !== 'none') {
-    let rsPoints = 0;
-    let rsName = '';
-
-    switch(settings.regionalSupportAddition) {
-      case '1':
-        rsPoints = 27;
-        rsName = '地域支援・医薬品供給対応体制加算1';
-        break;
-      case '2':
-        rsPoints = 59;
-        rsName = '地域支援・医薬品供給対応体制加算2';
-        break;
-      case '3':
-        rsPoints = 67;
-        rsName = '地域支援・医薬品供給対応体制加算3';
-        break;
-      case '4':
-        rsPoints = 37;
-        rsName = '地域支援・医薬品供給対応体制加算4';
-        break;
-      case '5':
-        rsPoints = 59;
-        rsName = '地域支援・医薬品供給対応体制加算5';
-        break;
-    }
-
-    if (rsPoints > 0) {
+    const rsInfo = REGIONAL_SUPPORT_ADDITION_INFO[settings.regionalSupportAddition];
+    if (rsInfo && !feeOffReasonByKey.has(rsInfo.feeKey)) {
       results.push({
         code: 'base_additions',
-        feeKey: `regional_support_addition_${settings.regionalSupportAddition}`,
-        receiptFeeCode: getReceiptFeeCode(settings, `regional_support_addition_${settings.regionalSupportAddition}` as OfficialFeeCodeOverrideKey),
-        name: rsName,
-        points: rsPoints,
+        feeKey: rsInfo.feeKey,
+        receiptFeeCode: getReceiptFeeCode(settings, rsInfo.feeKey),
+        name: rsInfo.name,
+        points: rsInfo.points,
         rationale: '地域の医薬品供給拠点としての体制を整備し、該当する施設基準を届け出ているため'
       });
     }

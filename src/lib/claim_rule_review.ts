@@ -28,7 +28,10 @@ export interface ClaimOfficialRuleReviewItem {
   ruleId:
     | 'diagnostic_drug_fee_only'
     | 'medical_dx_special_b_prohibited'
+    | 'regional_support_special_b_prohibited'
     | 'medical_dx_monthly_once'
+    | 'special_management_guidance_and_limit'
+    | 'drug_master_claim_eligibility'
     | 'insurance_effective_period';
   category: ClaimOfficialRuleCategory;
   categoryLabel: string;
@@ -85,6 +88,9 @@ export const CLAIM_OFFICIAL_RULE_SOURCE = {
 } as const;
 
 const MEDICAL_DX_ADDITION_NAME = '電子的調剤情報連携体制整備加算';
+const REGIONAL_SUPPORT_ADDITION_PREFIX = '地域支援・医薬品供給対応体制加算';
+const SPECIAL_MANAGEMENT_FEE_PREFIX = '特定薬剤管理指導加算';
+const MEDICATION_GUIDANCE_FEE_PREFIX = '服薬管理指導料';
 const DIAGNOSTIC_ISSUE_CODES = new Set([
   'diagnostic_drug_fee_disabled',
   'diagnostic_preparation_enabled',
@@ -97,6 +103,11 @@ const EFFECTIVE_PERIOD_ISSUE_CODES = new Set([
   'public_insurance_start_future',
   'public_insurance_expired'
 ]);
+const DRUG_ELIGIBILITY_ISSUE_CODES = new Set([
+  'abolished_drug_claimed',
+  'receipt_drug_code_missing',
+  'drug_price_missing'
+]);
 const SEVERITY_ORDER: Record<ClaimValidationSeverity, number> = {
   info: 0,
   warning: 1,
@@ -108,6 +119,7 @@ const SOURCE_KIND_LABELS: Record<ClaimOfficialRuleSourceKind, string> = {
   return_case: '返戻事例'
 };
 const DIAGNOSTIC_SOURCE_KINDS: ClaimOfficialRuleSourceKind[] = ['qa', 'return_case'];
+const SPECIAL_MANAGEMENT_SOURCE_KINDS: ClaimOfficialRuleSourceKind[] = ['notification', 'qa'];
 
 function serviceMonth(serviceDate: string): string {
   const matched = /^(\d{4})-(\d{2})-\d{2}/.exec(serviceDate.trim());
@@ -127,6 +139,58 @@ function highestSeverity(issues: ClaimValidationIssue[]): ClaimValidationSeverit
 
 function hasPositiveFee(claim: ClaimOfficialRuleCase, feeName: string): boolean {
   return claim.calculatedFees.some((fee) => fee.name === feeName && fee.points > 0);
+}
+
+function hasPositiveRegionalSupportFee(claim: ClaimOfficialRuleCase): boolean {
+  return claim.calculatedFees.some((fee) => (
+    fee.points > 0
+    && (
+      Boolean(fee.feeKey?.startsWith('regional_support_addition_'))
+      || fee.name.startsWith(REGIONAL_SUPPORT_ADDITION_PREFIX)
+    )
+  ));
+}
+
+function hasPositiveMedicationGuidanceFee(claim: ClaimOfficialRuleCase): boolean {
+  return claim.calculatedFees.some((fee) => (
+    fee.points > 0
+    && (fee.code === 'medication_guidance' || fee.name.startsWith(MEDICATION_GUIDANCE_FEE_PREFIX))
+  ));
+}
+
+function evaluateSpecialManagementIssues(claim: ClaimOfficialRuleCase): {
+  issueCodes: string[];
+  observedCount: number;
+} {
+  const specialFees = claim.calculatedFees.filter((fee) => (
+    fee.points > 0
+    && (fee.code === 'special_management' || fee.name.startsWith(SPECIAL_MANAGEMENT_FEE_PREFIX))
+  ));
+  if (specialFees.length === 0) {
+    return { issueCodes: [], observedCount: 0 };
+  }
+
+  const issueCodes: string[] = [];
+  if (!hasPositiveMedicationGuidanceFee(claim)) {
+    issueCodes.push('special_management_without_medication_guidance');
+  }
+
+  // 厚労省疑義解釈: 特定薬剤管理指導加算1と加算3(イ)は別要件を満たす場合は併算定可能。
+  // 一方で同一区分（例: 加算1を1回の受付で2回、加算3(イ)を2回）の重複算定は不可。
+  const countsBySubtype = new Map<string, number>();
+  for (const fee of specialFees) {
+    const key = fee.feeKey || fee.name;
+    countsBySubtype.set(key, (countsBySubtype.get(key) ?? 0) + 1);
+  }
+  const hasSameSubtypeDuplicate = [...countsBySubtype.values()].some((count) => count > 1);
+  if (hasSameSubtypeDuplicate) {
+    issueCodes.push('special_management_duplicate_in_reception');
+  }
+
+  return {
+    issueCodes: issueCodes.sort(),
+    observedCount: specialFees.length
+  };
 }
 
 function countMonthlyMedicalDxClaims(
@@ -159,10 +223,14 @@ export function buildClaimOfficialRuleReview(
   const month = serviceMonth(currentCase.serviceDate);
   const diagnosticIssues = issues.filter((issue) => DIAGNOSTIC_ISSUE_CODES.has(issue.code));
   const effectivePeriodIssues = issues.filter((issue) => EFFECTIVE_PERIOD_ISSUE_CODES.has(issue.code));
+  const drugEligibilityIssues = issues.filter((issue) => DRUG_ELIGIBILITY_ISSUE_CODES.has(issue.code));
   const medicalDxInCurrentCase = hasPositiveFee(currentCase, MEDICAL_DX_ADDITION_NAME);
   const medicalDxSpecialBProhibited = currentCase.baseFeeCategory === 'special_b' && medicalDxInCurrentCase;
+  const regionalSupportSpecialBProhibited = currentCase.baseFeeCategory === 'special_b' && hasPositiveRegionalSupportFee(currentCase);
   const medicalDxClaimCount = countMonthlyMedicalDxClaims(currentCase, monthCases);
   const medicalDxOverLimit = medicalDxClaimCount > 1;
+  const specialManagementCheck = evaluateSpecialManagementIssues(currentCase);
+  const specialManagementAttention = specialManagementCheck.issueCodes.length > 0;
 
   const items: ClaimOfficialRuleReviewItem[] = [
     {
@@ -198,6 +266,22 @@ export function buildClaimOfficialRuleReview(
       relatedIssueCodes: medicalDxSpecialBProhibited ? ['medical_dx_special_b_prohibited'] : []
     },
     {
+      ruleId: 'regional_support_special_b_prohibited',
+      category: 'prohibited',
+      categoryLabel: '算定しない項目',
+      sourceKinds: ['notification'],
+      sourceKindLabels: [SOURCE_KIND_LABELS.notification],
+      title: '特別調剤基本料Bでは地域支援・医薬品供給対応体制加算を付けない',
+      plainExplanation: '薬局の基本料区分が特別調剤基本料Bの場合、地域支援・医薬品供給対応体制加算（1〜5）が請求に混ざっていないか確認します。',
+      returnRisk: '特別調剤基本料Bは同加算の算定対象外のため、請求に含めると返戻や査定になります（令和8年度調剤報酬改定通知）。',
+      actionLabel: regionalSupportSpecialBProhibited ? '特別調剤基本料Bの地域支援加算を外す' : '対応不要',
+      ...makeStatus(regionalSupportSpecialBProhibited),
+      severity: regionalSupportSpecialBProhibited ? 'error' : 'info',
+      caseId: currentCase.caseId,
+      serviceMonth: month,
+      relatedIssueCodes: regionalSupportSpecialBProhibited ? ['regional_support_special_b_prohibited'] : []
+    },
+    {
       ruleId: 'medical_dx_monthly_once',
       category: 'monthly_count',
       categoryLabel: '同じ月の回数',
@@ -214,6 +298,40 @@ export function buildClaimOfficialRuleReview(
       relatedIssueCodes: medicalDxOverLimit ? ['medical_dx_monthly_limit_exceeded'] : [],
       observedCount: medicalDxClaimCount,
       allowedCount: 1
+    },
+    {
+      ruleId: 'special_management_guidance_and_limit',
+      category: 'prohibited',
+      categoryLabel: '算定しない項目',
+      sourceKinds: SPECIAL_MANAGEMENT_SOURCE_KINDS,
+      sourceKindLabels: SPECIAL_MANAGEMENT_SOURCE_KINDS.map((kind) => SOURCE_KIND_LABELS[kind]),
+      title: '特定薬剤管理指導加算は服薬管理指導料とセットかつ同一区分1回まで',
+      plainExplanation: '服薬管理指導料がない単独算定や、1回の受付での同一区分（加算1や加算3(イ)）の重複算定がないか確認します。',
+      returnRisk: '主たる指導料なしの加算単独請求や同一区分の重複請求は、算定要件不備として返戻・査定になります。',
+      actionLabel: specialManagementAttention ? '特定薬剤管理指導加算の算定を見直す' : '対応不要',
+      ...makeStatus(specialManagementAttention),
+      severity: specialManagementAttention ? 'error' : 'info',
+      caseId: currentCase.caseId,
+      serviceMonth: month,
+      relatedIssueCodes: specialManagementCheck.issueCodes,
+      observedCount: specialManagementCheck.observedCount,
+      allowedCount: 1
+    },
+    {
+      ruleId: 'drug_master_claim_eligibility',
+      category: 'prohibited',
+      categoryLabel: '算定しない項目',
+      sourceKinds: ['return_case'],
+      sourceKindLabels: [SOURCE_KIND_LABELS.return_case],
+      title: '廃止薬品・レセ電コード欠落・薬価未設定を含めない',
+      plainExplanation: '経過措置切れ等の廃止薬品、レセ電コード未設定、薬価未設定の明細が請求対象に混ざっていないか確認します。',
+      returnRisk: '廃止医薬品やコード・薬価欠落のまま請求すると、審査支払機関の受付チェックで返戻になります。',
+      actionLabel: drugEligibilityIssues.length > 0 ? '薬品マスタ・処方薬の置換を確認する' : '対応不要',
+      ...makeStatus(drugEligibilityIssues.length > 0),
+      severity: highestSeverity(drugEligibilityIssues),
+      caseId: currentCase.caseId,
+      serviceMonth: month,
+      relatedIssueCodes: uniqueIssueCodes(drugEligibilityIssues)
     },
     {
       ruleId: 'insurance_effective_period',
