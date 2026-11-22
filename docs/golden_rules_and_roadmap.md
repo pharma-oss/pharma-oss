@@ -1,8 +1,8 @@
 # pharma-oss 金科玉条と実装ロードマップ
 
 - **作成**: 2026-09-17
-- **最終改訂**: 2026-11-21
-- **照合対象**: `a650206`（`main`）を基準に、合意済みの設計・仕様 5 領域（Q-4 コネクタホスト検証一元化、`PATIENT_SCHEMA` v5 鍵付き HMAC ブラインドインデックス検索および Dexie.js `DXE1`/同期整合、請求・UKE 出力変更 A-1〜A-4・F-2 公式 `CO` 配線・C-1 ステップ 5a、同期・競合解決仕様確定、I-1 `PrintPickingFlow.test.ts` の `readFileSync` 全撤廃）と全品質ゲート＋実機 Chrome E2E 5 本の通過を確認。
+- **最終改訂**: 2026-11-22
+- **照合対象**: `62fe33c`（`main`）を基準に、Phase A 品質強化（残存 `readFileSync` 移行 `7bb0c9e`/`b7d3d42`/`fb88e6a`、`registerPatient` ブラインドインデックス重複照合 `dc95e0f`、非印刷 CSS sub-1rem トークン化 41→0 `9d809dd`、非除外 `: any` 全撤廃 `colon-any` 14→10 `05f713c`）、Phase B 承認済み 5 機能（B-1 全帳票調剤単位併記 `930f442`、F-1 フォロー定型・未確認 SOAP 挿入・EMR フォロー予約 `a2a4917`、F-3 腎機能/妊娠授乳/OTC 安全チェック・`PATIENT_SCHEMA` v6 `f0df698`、G-1 FEFO 逸脱監査・構造化在庫ログ `AUDIT_LOG_SCHEMA` v21・麻薬/向精神薬補助帳簿 `b3fc878`、H-1 ローカル/NAS 追記専用 WORM コネクタ `62fe33c`）、Q-5 トラック正式編入、全品質ゲートおよび実機 Chrome E2E 5 本の通過を確認。
 - **位置づけ**: 本書は「この製品が完成したときに何が守られているか」を定める最上位の文書である。
   `.agents/AGENTS.md` と `honest-verification` スキルが **開発者の行動規範** を定めるのに対し、本書は **製品そのものの不可侵の原則（第Ⅰ部）** と、そこへ至るための **実装予定（第Ⅲ部）・実装方針（第Ⅳ部）** を定める。
 - **効力**: 第Ⅰ部と矛盾する実装計画・PR・要望は、第Ⅰ部が優先する。第Ⅰ部を変えるには本書の改訂そのものを提案し、合意を得てから実装する。
@@ -182,22 +182,22 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ---
 
-# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-21 `a650206` 実測。§4 の現地証跡ステータスは未変更）
+# 第Ⅱ部 現在地（§1 品質ゲート・§2 規模・§3 スキーマの版は 2026-11-22 `62fe33c` 実測。§4 の現地証跡ステータスは未変更）
 
 ## 1. 品質ゲート
 
-2026-11-21 に合意済み 5 領域（Q-4・`PATIENT_SCHEMA` v5 ブラインドインデックス＋`DXE1`/同期整合・A-1〜A-4・F-2 公式 `CO`・C-1 ステップ 5a・I-1 `PrintPickingFlow.test.ts` 移行完了）実施後に再計測した結果（証跡: `artifacts/improvement/20261121-2022-all-agreed-specs-final-v2/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
+2026-11-22 に Phase A 品質強化（`7bb0c9e`〜`05f713c`）および Phase B 機能実装（B-1 `930f442`・F-1 `a2a4917`・F-3 `f0df698`・G-1 `b3fc878`・H-1 `62fe33c`）完了後に再計測した結果（証跡: `artifacts/improvement/20261122-1005-H-1-final/`）。**次に本書を更新する人は、自分で再取得して一致を確認すること。**
 
 | 検証 | コマンド | 実測 |
 |---|---|---|
 | 型検査 | `npx tsc --noEmit` | エラー 0 件（exit 0） |
 | Lint | `npm run lint` | error 0 / warning 0（exit 0） |
-| ユニット/契約テスト | `npm test` | 3,197 pass / 0 fail / 212 suites、skip 0（exit 0） |
+| ユニット/契約テスト | `npm test` | 3,222 pass / 0 fail / 217 suites、skip 0（exit 0） |
 | 本番ビルド | `npm run build` | 成功（Next.js 16.4.6 Turbopack、32/32 ページ、exit 0）。Node.js SQLite 実験機能の警告あり |
-| SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 14 / `as any` 3） |
+| SW-F 回帰ガード | `bash scripts/improvement_swf.sh` | 3 / 4 / 5 / 0 / 0（`: any` 10 / `as any` 3。残存 10 件はすべて除外対象の `src/db/index.ts`・`src/lib/electronic_prescription_client.ts` のみ） |
 | 依存脆弱性監査 | `npm audit --omit=dev` | critical 0 件（high 1 件・moderate 1 件）。`nightly-ops-review.yml` へ非ブロッキング監査追加 |
-| CI 相当 E2E 4 本 | `npm run test:e2e:sync`・`onboarding`・`return-correction`・`print-layout` | すべて通過（2026-11-21 `a650206` 実機 Chrome 検証：`sync` 全項通過、`onboarding` `skipped: []`〔設定6/ダッシュボード3/印刷8〕、`return-correction` 3 ターゲット通過、`print-layout` 11 帳票キャプチャ＋領収証バーコード `200009603`/`¥960` 確認） |
-| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 通過（2026-11-21 `a650206` 実機 Chrome 検証：`/ocr`・`/emr`・`/print/[visitId]`・`/inventory` 各 1280/768/375px オーバーフロー 0px、Tab 操作・公式 UKE モーダル起動＆Escape 閉鎖通過、`pageErrors: []`、14 枚保存） |
+| CI 相当 E2E 4 本 | `npm run test:e2e:sync`・`onboarding`・`return-correction`・`print-layout` | すべて通過（2026-11-22 `62fe33c` 実機 Chrome 検証：`sync` 全項通過、`onboarding` `skipped: []`〔設定6/ダッシュボード3/印刷8〕、`return-correction` 3 ターゲット通過、`print-layout` 11 帳票キャプチャ＋領収証バーコード `200009603`/`¥960` 確認） |
+| E2E アクセシビリティ・通しドリル | `node scripts/run_e2e_accessibility_drill.mjs` | 通過（2026-11-22 `62fe33c` 実機 Chrome 検証：`/ocr`・`/emr`・`/print/[visitId]`・`/inventory` 各 1280/768/375px オーバーフロー 0px、Tab 操作・公式 UKE モーダル起動＆Escape 閉鎖通過、`overflowErrors: 0`・`keyboardErrors: 0`） |
 
 以下の段落は 2026-10-02 の記録。`npm test` はローカル通信を必要とするため、サンドボックスの制限外で実行した。ダッシュボード、薬歴画面（/emr）、処方受付画面（/ocr）、印刷・調剤録画面（/print/[visitId]）、在庫管理・発注画面（/inventory）は幅1280 / 768 / 375pxの実ブラウザ表示と主要操作を通しドリルで確認した。
 
@@ -205,11 +205,12 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 項目 | 実測 |
 |---|---|
-| `src/` の TS/TSX（テスト除く） | 378 ファイル |
-| テストファイル | 360 ファイル |
-| 主要 6 画面の行数 | 9,098 行（ocr 2,194 / emr 2,561 / print 2,144 / inventory 855 / settings 844 / dashboard〔`src/app/app/page.tsx`〕500。※ 上位 3 画面は P7 行数予算テストで固定） |
-| `scripts/` | 76 ファイル（第 1 階層）、npm scripts 46 本 |
-| `PrintPickingFlow.test.ts` の `readFileSync` | **0 件**（2026-11-21 `abbf183` で残存 7 箇所を完全撤廃し、抽出モジュール・純粋ヘルパー・React `renderToStaticMarkup` 実描画テストへ全面移行。`DrugInfoItemCard`・`PrintLayoutRegression`・`DrugInfoClaimTools` 等の一部レスポンシブ／構造テストは引き続き段階的に整理） |
+| `src/` の TS/TSX（テスト除く） | 391 ファイル |
+| テストファイル | 364 ファイル |
+| 主要 6 画面の行数 | 8,852 行（ocr 1,991 / emr 2,570 / print 2,125 / inventory 857 / settings 844 / dashboard〔`src/app/app/page.tsx`〕465。※ 上位 3 画面は P7 行数予算テストで固定） |
+| `scripts/` | 78 ファイル（第 1 階層）、npm scripts 48 本 |
+| `PrintPickingFlow.test.ts` の `readFileSync` | **0 件**（2026-11-21 `abbf183` で残存 7 箇所を完全撤廃。さらに 2026-11-22 Phase A `7bb0c9e`/`b7d3d42`/`fb88e6a` で印刷・自費請求・受付の残存ソース文字列テストも実描画・実行テストへ移行完了） |
+| 非印刷 CSS 生 sub-1rem フォントサイズ | **0 箇所**（2026-11-22 `9d809dd` で残存 41 箇所を `--fs-*` トークンへ統一完了） |
 | インライン `style={{}}` | **3 箇所**（`AuditSettingsTab` 2、印刷ページ 1）。すべて動的 CSS 変数（`--bar-height` / `--print-*`）の正当な受け渡しのみ。`TerminalSyncPanel` 18 箇所と `ClientLayout` 6 箇所は CSS クラスへ移行完了し、予算上限 3 を `TerminalSyncPanel.test.ts` で自動防壁化 |
 | `process.env` 直接参照（`env.ts` 以外・非テスト） | 4 ファイル（`backup.ts`、`pharmacy_device_connector_simulator.ts`、`BackupSettingsTab.tsx`、印刷ページ） |
 | コード内 TODO / FIXME | 0 件 |
@@ -219,13 +220,13 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 | コレクション | 版 | | コレクション | 版 |
 |---|---|---|---|---|
 | `visits` | 26 | | `drugs` | 10 |
-| `audit_logs` | 20 | | `drug_stocks` | 5 |
+| `audit_logs` | 21 | | `drug_stocks` | 5 |
 | `prescription_items` | 18 | | `facility_settings` | 6 |
-| `patients` | 5 | | `interventions` | 3 |
+| `patients` | 6 | | `interventions` | 3 |
 | `soap_records` | 4 | | `users` | 2 |
 | `drug_infos`（SQLite WASM 側へ退避済み） | 2 | | `locations` / `alerts` / `medication_guidances` / `patient_medication_info_templates` | 1 |
 
-アクティブコレクションは上限 14 で満杯である。新しい記録種別を足す場合の手順は第Ⅳ部 §2 を参照。`patients` v5（`5454628`・`a650206`）では、平文 PII を IndexedDB に露出させない鍵付き HMAC-SHA256 ブラインドインデックス 6 項目を `default: ''`・`required` 付き（Dexie.js `DXE1` 準拠、`schema_version_guard.test.ts` で全スキーマ自動防壁化）で追加し、マイグレーション `4: migratePatientV4ToV5`、起動後バックフィル、同期 push 時除去・pull/競合時ローカル再索引を実装している。
+アクティブコレクションは上限 14 で満杯である。新しい記録種別を足す場合の手順は第Ⅳ部 §2 を参照。`patients` v5（`5454628`・`a650206`）では鍵付き HMAC-SHA256 ブラインドインデックス 6 項目を導入し、v6（`f0df698`、`5: keepDocument`）では暗号化対象フィールド `clinicalProfile`（腎機能検査値・妊娠/授乳・併用 OTC/サプリ）を追加した。`audit_logs` v21（`b3fc878`、`20: keepDocument`）では G-1 構造化在庫監査ログ種別 6 件（`stock_fefo_deviation`・`stock_cancel`・`stock_return`・`stock_disposal`・`stock_take_variance`・`narcotic_ledger_export`）を追加し、既存ハッシュチェーン整合性を維持している。
 
 ## 4. 領域別の到達状況
 
@@ -254,19 +255,17 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **2026-10-02**: トラック I-3（アクセシビリティとレスポンシブの通し確認）および トラック I-1（PrintPickingFlow.test.ts の実描画テスト化）を完了。自動化スクリプト（`scripts/run_e2e_accessibility_drill.mjs`）を抜本改修し、実在するデモ受付 `visitId` を追跡した上で処方受付（`/ocr`）→ 薬歴（`/emr`）→ 印刷・調剤録（`/print/[visitId]`）→ 在庫管理（`/inventory`）の一連通しフローを 1280px / 768px / 375px の 3 ビューポートおよびキーボード操作で Puppeteer 実機検証。全画面・全幅で横スクロールはみ出し 0px、公式UKEモーダルの起動および Escape 閉鎖（`SingleOfficialUkeModal.tsx` にリスナー実装）、不適合時の安全なダウンロード保護、正真正銘計 14 枚のスクリーンショット保全を実証。リポジトリ最大のソース文字列テストであった `PrintPickingFlow.test.ts` において、調剤録（`DispensingRecordPrint`: 薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号の法定記載）、公式UKE点検モーダル（`SingleOfficialUkeModal`）、電子処方箋操作パネル（`ElectronicPrescriptionPrintPanel`）を React `renderToStaticMarkup` による実描画テストへ昇格（26 assert）。`DispensingRecordPrint.tsx` の個別 readFileSync を撤廃したが、ファイル先頭の 7 箇所の readFileSync と 202 assert のソース由来検査が依然残存（全 234 assert 中、ソース検査 202 / 実描画 26）。続いて追加検証で判明した各点（当日期限判定の `<=` 統一、見込み残在庫ベース推奨発注量算出とワークベンチ完全一致、在庫120警告維持・補充10判定、棚不足追記時の件数・ID更新、および目標在庫量 targetStock の推奨量計算・リスク抽出条件への統合）を是正。Fail-First 変異テストで全件のバグ検知を実証。型チェック・リント・スタイル予算（上限3）・テスト全 1,824 件 PASS（78スイート）、本番ビルド全 28 ページ成功。詳細は [総合報告書改訂版](comprehensive_implementation_report_20261002.md)。
 - **2026-10-06**: トラック A-3（処方入力監査への手動指定調剤区分・算定判定食い違い警告接続）および トラック I-1（印刷・帳票・連携コンポーネント全種の実描画テスト化）を実施。トラック A-3 では、点数算定ロジックを独断で書き換えることなく（第十条遵守）、薬剤師が手動指定した調剤区分（内服等）と用法の自動判定（外用等）が食い違う場合に、処方入力監査（`src/lib/prescription_input_audit.ts`）で `dosage_category_calculation_conflict`（severity: 'warning'）として検知し、調剤・請求前に食い違いを水際で表面化する安全保護ロジックを実装。Fail-First 変異テストで検出実証完了。トラック I-1 では、ソース文字列テスト（`readFileSync`）からの脱却を決定的に推進し、印刷・帳票画面（`/print/[visitId]`）を構成する全 11 コンポーネント（薬情3種: `DrugInfoItemCard`, `DrugInfoClaimTools`, `DrugInfoPrint`、薬袋: `MedicineBagPrint`、調剤明細書: `ReceiptStatementPrint`、領収証: `ReceiptPrint`、手帳シール: `MedicineNotebookStickerPrint`、水剤ラベル: `LiquidLabelSheetPrint`、軟膏ラベル: `OintmentLabelSheetPrint`、非常時復旧鍵シート: `EmergencyRecoveryKeySheetPrint`、調剤機器連携: `PharmacyDeviceHandoffPanel`）において React `renderToStaticMarkup` による本物の HTML 実描画テストを独立新設および `PrintPickingFlow.test.ts` に完全統合。Fail-First 変異テストにより全コンポーネントで破壊検出能力を実証。型チェック 0 件（`npx tsc --noEmit` exit 0）、インライン style 予算 3 箇所厳守、全ユニット/契約テスト 1,851 件 PASS（+27 件純増、全 78 スイート、約 54 秒）、本番ビルド全 28 ページ成功。
 - **2026-11-21**: 合意済みの設計・仕様 5 領域を一括実装し、品質ゲート（`tsc` 0 / `lint` 0 / `npm test` 3,197 pass / `build` 32/32 / `swf` 3/4/5/0/0）および実機 Chrome E2E 5 本すべてを通過。① **Q-4**（`a59f367`）: `src/lib/network_host_policy.ts` にループバック・プライベート LAN IP 判定を集約し、同期・調剤機器・電子処方箋・外部連携診断の全コネクタ検証を統一強化。② **暗号化患者検索ブラインドインデックス**（`5454628`・`a650206`）: `PATIENT_SCHEMA` v4→v5 で平文 PII を出さない鍵付き HMAC-SHA256 索引 6 項目を導入（Dexie.js `DXE1` 準拠の `default: ''`・`required` 化と全スキーマ自動防壁テスト追加、自動フック・起動時バックフィル・安全フォールバック、同期 push 時除去・pull/競合時ローカル再索引による端末鍵差の誤競合防止）。③ **請求・UKE 出力変更**: A-3 算定側の既定を手動指定尊重へ統一（`a02c2e1`）、A-1 手入力処方での公式 16 桁 `electronicUsageCode` 保存と送信ペイロード差分実測（`9994ac7`）、A-2 監査付き冪等データ移行ヘルパー（`bccd714`）、A-4 単票・月次公式 UKE の SH 用法コード配線と未設定件数事前点検（`8dd5b3b`）、F-2 構造化 `interventionEvents` からの公式 `CO`（`810000001`）自動出力（`0c6f36e`）、C-1 ステップ 5a として単票・月次画面の旧形式点検用 UKE ボタンをネイティブ `<details>`/`<summary>` 詳細メニューへ段階格納（`49c590d`）。④ **同期・競合解決仕様**: ハブ正本優先＋薬剤師手動レビュー（`TerminalSyncPanel`、暗黙の上書き LWW 禁止）を正式仕様として確定。⑤ **I-1**（`abbf183`）: `PrintPickingFlow.test.ts` の残り全 7 箇所の `readFileSync` を 0 件へ撤廃し、抽出した画面部品・ルートガード・純粋ヘルパーに対する実実行・`renderToStaticMarkup` 契約テストへ全面移行（印刷画面も 2,434→2,144 行へ軽量化）。
+- **2026-11-22**: Phase A 品質強化 6 コミットおよび Phase B 承認済み 5 機能（B-1・F-1・F-3・G-1・H-1）＋ Q-5 トラック編入をすべて実装・検証完了。品質ゲート（`tsc` 0 / `lint` 0 / `npm test` 3,222 pass / 217 suites / `build` 32/32 / `swf` 3/4/5/0/0・`colon-any` 14→10）および実機 Chrome E2E 5 本（`sync`・`onboarding`・`return-correction`・`print-layout` 11 帳票・`accessibility` 1280/768/375px オーバーフロー 0px）全通過。
+  - **Phase A**: 残存ソース文字列テストの実描画・実行テスト移行（`7bb0c9e`・`b7d3d42`・`fb88e6a`）、`registerPatient` 重複患者照合の鍵付きブラインドインデックス化（`dc95e0f`）、非印刷 CSS sub-1rem 生フォントサイズ 41→0 トークン統一（`9d809dd`）、非除外 `: any` 全撤廃（`05f713c`）。
+  - **Phase B**: **B-1**（`930f442`）単位換算時の全帳票（調剤録・薬袋・軟膏ラベル・手帳シール・薬情＋既存水剤ラベル）への調剤実量併記；**F-1**（`a2a4917`）構造化フォロー定型 4 種・薬剤師ロール即時編集・全テンプレート SOAP 挿入の `aiStatus: 'unconfirmed'` 強制（第一条）・EMR フォロー予約カード（`EmrFollowUpCard`→ダッシュボード KPI 接続）；**F-3**（`f0df698`）腎機能（eGFR/Cr/CrCl）・妊娠/授乳・併用 OTC/サプリ安全チェック拡張、`PATIENT_SCHEMA` v5→v6（`5: keepDocument`、`clinicalProfile` 暗号化）、手動入力＋電子処方箋検査値 1 クリック取込、90 日超過 `参考値（90日超過・要再確認）`・未登録時 `判定不能` 明示（第四条）；**G-1**（`b3fc878`）GS1 ピッキング FEFO 逸脱監査、`AUDIT_LOG_SCHEMA` v20→v21（`20: keepDocument`・構造化在庫監査種別 6 件追加）、取消・返品・廃棄・棚卸差異の構造化記録と麻薬・向精神薬受払補助帳簿 CSV/印刷出力（`法定帳簿の補助記録` 明記・患者個人情報ゼロ）；**H-1**（`62fe33c`）ローカル/NAS 追記専用 WORM 監査ログ保全コネクタ（`wx` 排他追記 `EEXIST` 拒否、`chmod 0o444`、`audit_worm_manifest.jsonl` SHA-256 チェーン、書き戻し照合、`--verify-only`、`npm run audit:local-worm-retention` / `:scheduled`）。
 
 ## 6. 今回の照合で修正した前提
 
-- **C-1**: ステップ 1（対照表・差分テスト）、ステップ 2（SN/JD/MF/ST 共通化・単票公式ビルダー確立）、ステップ 3（単票画面への公式提出用 UKE プレビュー・ダウンロード併設）、およびステップ 4（本番切替準備・安全な移行設計・完全廃止判定基準策定）を完了。通常出力を独断で塞がず「点検用旧形式」として並行運用を維持しつつ、客観的廃止判定基準（条件A・B・C）を満たした段階で UI 集約・完全廃止へ進むロードマップを確立。点検モーダルを開くボタンの `disabled` 条件を整理し、ダウンロードボタンを不適合時に安全保護。
-- **C-4**: 高額療養費（限度額適用認定証・多数回・別表8）および一部負担金減免（別表10）の対応点検、構造化編集フォーム配備、データ消失バグ解消、バッジ表示、印刷ガイダンス、公式事前点検への統合を完了。
-- **D-2**: 複数公費消失バグ解消、薬歴バナー表示、処方受付画面（`/ocr`）での公費タグ・選択中患者公費バッジ・期限切れアラート表示、および月次ワークベンチ（`ClaimWorkbenchRow`）での公費サマリー・期限警告バッジ・至急優先度昇格の全導線を接続完了。
-- **F-2**: 疑義照会・処方変更履歴の構造化、調剤録（薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号）法定記載欄配備、EMR照会区分・バッジ表示、未回答疑義の公式事前点検統合、およびレセプト摘要要約テキスト生成関数の追加を完了（公式UKE電算摘要レコードへの自動印字配線は判断待ち）。
-- **G-2**: 発注点・リードタイム・期限切迫・院内代替薬候補の統合、発注ワークベンチ（理由別フィルタ・バッジ・代替薬アコーディオン）、在庫一覧テーブルでの発注点インライン編集・監査ログ記録、欠品予測エンジン（`operational_ai_prediction.ts`）へのデータパイプライン接続、患者個人情報ゼロ発注CSV/メモ出力を完了。
-- **I-1 / I-3**: 処方受付（`/ocr`）→ 薬歴（`/emr`）→ 印刷・調剤録（`/print/[visitId]`）→ 在庫（`/inventory`）の一連通しフローにおける 1280px / 768px / 375px 横オーバーフロー 0px 実証、公式UKEモーダルの起動・Escape閉鎖、全14枚画像保全、および `PrintPickingFlow.test.ts` の一部実描画テスト化（26 assert 実描画化、7箇所 readFileSync と 202 assert のソース検査残存）を完了。
-- **実施順序**: 完了済みの A-5 / B-2 / C-4 / D-2 / G-2 / I-3 を待ち行列から外し、一部完了・残存作業ありの C-1（旧形式完全廃止条件判定待ち）/ F-2（公式UKE摘要自動印字配線判断待ち）/ I-1（残り7箇所 readFileSync 移行）、および A-1〜A-4 / B-1 / C-2 / C-3 / D-1 / E-1 / E-2 / F-1 / F-3 / F-4 / G-1 / H-1〜H-4 / I-2 / I-4 / I-5 の判断待ち・現地証跡待ちを明示した。判断が不要な調査・再現確認は先行できる。
-- **デザイン改善**: ダッシュボード（第1段）、薬歴画面（第2段）、処方受付画面（第3段）、印刷・調剤録画面（第4段）、在庫管理・発注画面（第5段）、設定画面（第6段）のデザイン・日常操作・レスポンシブ改善を実施した。
-- 今回は公式資料の再取得、実プリンタ・現地機器・実症例での確認を実施していない。実ブラウザ確認と領域別の本番証跡は区別し、領域別 status の引き上げは行わない。
-- **2026-10-30〜11-17 の追補（第Ⅲ部トラック位置づけはユーザー判断待ち）**: 算定条件（手帳有無・時間外等区分・特管、`claim_conditions.ts`、`facility_settings` v6）、領収証検証用バーコード（`receipt_barcode.ts`）、自費患者の請求除外（`b73d7f3`）、およびマイナ読取の実機仕様突合について、第Ⅲ部トラックへの編入位置づけをユーザーと確認する（Q-5）。
+- **C-1**: ステップ 1〜4 およびステップ 5a（旧形式点検用 UKE ボタンの `<details>` 詳細メニュー格納、`49c590d`）を完了。ステップ 5b（旧形式コードの完全削除）は条件 A（公式運用実績 1 ヶ月以上）・条件 B（直近 3 ヶ月旧形式出力 0 件）・条件 C（ステークホルダー合意）の充足まで並行維持する方針を確定。
+- **Phase B 承認済み 5 機能（B-1・F-1・F-3・G-1・H-1）**: 要判断事項の合意を受けすべて実装・fail-first 変異テスト・全品質ゲート・実機 Chrome E2E 検証まで完了。
+- **Q-5（2026-10-30〜11-17 追補）**: 算定条件（`claim_conditions.ts`・`facility_settings` v6）、領収証照合バーコード（`receipt_barcode.ts`）、自費患者の請求除外（`b73d7f3`・`b7d3d42`）を第Ⅲ部トラック C（C-5）へ、マイナ読取連携フォルダ XML の公式仕様突合・実機検証をトラック D（D-1）へ正式編入完了。
+- **実施順序**: 実装可能な Phase A・Phase B 項目（A-1〜A-5 / B-1・B-2 / C-4・C-5 / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-3・I-6）を完了済みへ整理し、残存タスクを条件待ち（C-1 ステップ 5b）、要判断・公式資料待ち（C-2 / C-3 / H-2 / I-2 保管ルール）、現地証跡・実データ待ち（D-1 / E-1 / E-2 / F-4 / H-3 / H-4 / I-4）、およびリモート同期（I-5）へ集約した。
+- 今回も実プリンタ・現地機器・実症例での本番証跡収集は未実施であるため、実ブラウザ E2E 確認と領域別の本番証跡は厳格に区別し、第Ⅱ部 §4 の領域別 `status` は引き上げない。
 
 ---
 
@@ -309,12 +308,11 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **前提**: 内滴に日数が入っている、外用に日数があるといった入力を、現在は監査で警告していない。PR-G5 で剤形不一致監査は入ったが、日数は対象外。
 - **進捗**: PR-H2（`42ce918`）により、入力監査（`src/lib/prescription_input_audit.ts`）に警告 `INVALID_DAYS_FOR_DOSAGE_CATEGORY` を実装完了。内滴・外用・注射・頓服で日数が 0 より大きい場合に「1回量・総量で処方する剤形ですが、日数が入力されています」と警告し、強制ブロックはせず（第四条遵守）、修正案内を提示する。
 
-## トラック B: 単位・数量セマンティクスの完了（PR-D 系の残り）
+## トラック B: 単位・数量セマンティクスの完了（PR-D 系の残り — B-1・B-2 完了）
 
-### B-1 薬袋・ラベルへの処方単位の併記
-- **前提**: 電子処方箋取込で薬価単位（例 750 mL）をフォームに投入し、処方側（3 缶）は `electronicUnitConversion` に参照用として保持している（PR-D2）。薬袋・ラベルが薬価単位のみだと、医師の処方箋指示との整合が患者説明で問われる。
-- **方針**: 帳票側で `prescribedAmount` / `prescribedUnitText` を「処方: 3 缶」として併記する案を、実描画テスト（`PrintUnitDisplay.test.ts`）と 11 帳票の実描画回帰で確認する。
-- **要判断**: 併記するか、どの帳票に出すか。
+### B-1 薬袋・ラベルへの処方単位・調剤実量の併記（実装完了 `930f442`）
+- **前提**: 電子処方箋取込で処方単位と調剤（薬価）単位を換算した際、`electronicUnitConversion` に換算元の処方量・調剤量を保持している（PR-D2）。従来は水剤ラベルのみ換算後調剤量を併記しており、他帳票との整合が不足していた。
+- **実装内容（2026-11-22）**: `src/app/print/helpers.ts` に `getDispensingAmountText` を新設し（`getDispensingTotalAmountText` にも `masterUnitText` フォールバックを追加）、`electronicUnitConversion` が存在する場合に全帳票（調剤録 `DispensingRecordPrint.tsx`・薬袋 `MedicineBagPrint.tsx`・軟膏ラベル `OintmentLabelSheetPrint.tsx`・お薬手帳シール `MedicineNotebookStickerPrint.tsx`・薬情 `DrugInfoItemCard.tsx`、および既存の水剤ラベル）で調剤実量・調剤換算量を併記するよう統一。`PrintUnitDisplay.test.ts` で全 5 帳票の正例・負例実描画テスト、fail-first 変異テスト 5/5 件、および実機 Chrome `test:e2e:print-layout`（11 帳票キャプチャ）を実証。
 
 ### B-2 帳票・算定ヘルパーの `any` 排除（実装完了）
 - **前提**: `helpers.ts` の `getElectronicPrescriptionDocumentKinds` と `claim_actions.ts` の `buildItemClaimFlagPatches(item: any)` に `any` が残る（`919ba74` で前者は一部型付け済み）。
@@ -373,12 +371,17 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
   - 月次ワークベンチ公式事前点検（`monthly_claim_uke.ts`）に `validateCopaymentSupportReadiness` を統合し、不正コードや減額割合欠落、証明書番号桁数不正を事前検知。
   - 契約テスト（`src/lib/receipt/patient_copayment_support.test.ts` 7件、fail-first mutation 実証済み）、および [点検報告書](copayment_and_reduction_audit_20261001.md) を作成。額の算出は行わない（第四条遵守）。
 
+### C-5 算定条件・自費患者請求除外・領収証検証バーコード（Q-5 正式編入・実装完了）
+- **算定条件（`claim_conditions.ts`・`facility_settings` v6）**: お薬手帳の有無・時間外/休日/深夜区分（営業時間 `businessHours` による判定）・特定薬剤管理指導加算（トッカン）の来局単位指定を `visit.claimOptions` へ統一し、画面・領収証・明細書・UKE が単一の `calculateDispensingFees` 結果を参照する構成を確立（点数未設定の項目は勘補完せず「点数未設定」として停止、第四条遵守）。
+- **自費患者の請求除外（`b73d7f3`・`b7d3d42`）**: `self_pay_claim.ts` で明示的な自費患者を単票・月次 UKE および月次ワークベンチ請求対象から除外し、`ClaimWorkbenchSelfPay.test.ts` にて実描画・実行テスト化完了。
+- **領収証照合バーコード（`receipt_barcode.ts`）**: 保険区分 1 桁（1=国保 / 2=社保 / 3=自費）＋領収金額 7 桁＋Luhn チェックデジット 1 桁の 9 桁固定長 Code128 を印字（判定不能時は `assumed` として自費扱い理由を明示）。実機 Chrome `test:e2e:print-layout` で `200009603` / `¥960` の印字・チェックデジット一致を自動回帰検証。
+
 ## トラック D: 保険・資格確認（critical）
 
-### D-1 オンライン資格確認・マイナ資格確認の本番接続
-- **前提**: コネクタ（`online_eligibility_live_connector.ts`）、応答差分（`online_eligibility_response_diff.ts`）、現地準備 CLI（`eligibility:field-readiness`）は実装済み。公式認証方式の照合結果と、現地機器での成功試行の現物証跡が無い。
-- **方針**: 現地証跡が無い限り本番可としない（`docs/electronic_prescription_rollout_plan.md` §6 と同じ判定規則）。実レスポンスの現物サンプルを `YAKUREKI_ELIGIBILITY_RESPONSE_DIFF` へ投入して差分ゼロを確認する。
-- **受入基準**: `eligibility:field-readiness` が `pass`。
+### D-1 オンライン資格確認・マイナ資格確認の本番接続およびマイナ読取実機仕様突合（Q-5 正式編入）
+- **前提**: コネクタ（`online_eligibility_live_connector.ts`）、応答差分（`online_eligibility_response_diff.ts`）、現地準備 CLI（`eligibility:field-readiness`）、および資格確認端末連携フォルダ XML 読取は実装済み。公式認証方式・連携フォルダ XML 形式の公式仕様書突合と、現地機器での成功試行の現物証跡が無い。
+- **方針**: 現地証跡が無い限り本番可としない（`docs/electronic_prescription_rollout_plan.md` §6 と同じ判定規則）。実レスポンスおよび連携フォルダ XML の現物サンプルを `YAKUREKI_ELIGIBILITY_RESPONSE_DIFF` 等へ投入して仕様突合・差分ゼロを確認する。
+- **受入基準**: `eligibility:field-readiness` が `pass` かつマイナ読取連携フォルダ XML の実機仕様突合が完了していること。
 
 ### D-2 公費期限警告・負担上限・資格確認日の運用管理
 - **実装済み**: `PatientBanner.tsx` に保険の有効期間・資格確認日・状態、複数公費（最大4件）の開始日・期限・負担上限・負担割合の構造化入力がある。`evaluateInsuranceEligibility` に期限切れ・期限間近・負担上限未設定・資格確認日の警告があり、請求前チェックとダッシュボードの請求リスク、および薬歴バナーの公費警告バッジへ接続されている。
@@ -405,10 +408,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ## トラック F: 薬歴・臨床安全
 
-### F-1 服薬フォローアップと薬剤別指導テンプレート
-- **前提**: SOAP 4 パネル、構造化チェック、前回 Do、処方差分、タイムライン、薬情テンプレ承認制は実装済み。継続フォロー・次回確認事項・残薬/副作用/アドヒアランスのテンプレ化は未完（`operational_issues.md`）。
-- **方針**: `medication_guidances`（参照データ）に薬剤別テンプレを持たせ、フォロー候補はダッシュボード KPI の「フォロー候補」に接続する。AI 下書きと同じ `unconfirmed` ライフサイクルを通す（第一条）。
-- **要判断**: テンプレの承認フローを薬情テンプレと共通化するか。
+### F-1 服薬フォローアップと薬剤別指導テンプレート（実装完了 `a2a4917`）
+- **前提**: SOAP 4 パネル、構造化チェック、前回 Do、処方差分、タイムライン、薬情テンプレ承認制は実装済み。継続フォロー・次回確認事項・残薬/副作用/アドヒアランスのテンプレ化が未完だった。
+- **実装内容（2026-11-22）**: 純粋モジュール `src/lib/follow_up_templates.ts` と EMR フォロー予約カード `src/app/emr/components/EmrFollowUpCard.tsx` を新設。`medication_guidances` の薬剤別指導テンプレートを薬剤師ロールで承認待ちなしに即時編集可能とし、`MedicationGuidanceModal.tsx` に構造化フォロー定型 4 種（残薬確認・副作用確認・アドヒアランス・次回確認事項）を追加。すべてのテンプレート SOAP 挿入は必ず `origin: 'ai_draft'`・`aiStatus: 'unconfirmed'` として発行し（第一条遵守・未確認のままトレーシングレポートへ流出しないことを検証済み）、`EmrFollowUpCard` から保存したフォロー予定（`visit.followUp`）がダッシュボード KPI「フォロー候補」へ直結する。`follow_up_templates.test.ts` および fail-first 変異テスト 3/3 件で実証。
 
 ### F-2 疑義照会・処方変更履歴の構造化（調剤録・EMR・事前点検・公式 UKE `CO` 配線完了 `0c6f36e`）
 - **前提**: `interventions`（v3）に疑義照会は入るが、後発変更・残薬調整・患者同意・医師回答を薬歴・調剤録・レセプト摘要へ連動させる構造化が未完であった。
@@ -416,21 +418,22 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
   - **2026-10-01（構造化・調剤録・EMR・事前点検）**: 新規コレクションを増やさず、訪問データ（`visits`）内の入れ子プロパティ `interventionEvents` として構造化保存（RxDB スキーマ v23、暗号化指定、`22: keepDocument`）。調剤録（`DispensingRecordPrint.tsx`）に薬剤師法第24条・第28条第2項・施行規則第16条第1項第10号（第15条第2号・第3号準用）に基づく法定記載欄（`data-testid="record-intervention-box"`）を新設。EMR 画面（`EmrInterventionModal.tsx`）に照会区分（後発変更・残薬調整・用法用量・重複禁忌・中止・その他）の選択・自動サジェスト・バッジ表示を配備。純粋関数モジュール（`prescription_intervention_support.ts`）によりレセプト摘要要約テキスト生成および未回答疑義の公式事前点検（`official_uke_intervention_inquiry_pending` / `official_uke_intervention_reason_missing`）を統合（[報告書](intervention_structuring_20261001.md)）。
   - **2026-11-21（公式 UKE `CO` 摘要自動印字配線 `0c6f36e`）**: `src/lib/receipt/dispensing_uke_official_supplemental.ts` に `OFFICIAL_FREE_TEXT_COMMENT_CODE = '810000001'`・`sanitizeAndChunkOfficialCommentText`（Shift-JIS 76 バイト以内分割・改行/カンマ無害化）・`buildOfficialInterventionComments`（`cancelled` 除外・重複除外）を実装し、`src/lib/monthly_claim_uke.ts`（単票・月次共通）へ接続。RP1 直下に公式 `CO`（KI 単独時は `TK`）を自動出力し、`dispensing_uke_official_intervention_co.test.ts`（公式提出モード検証エラー 0 件）および fail-first mutation 3 件で実証。
 
-### F-3 安全チェックの判定軸拡張
-- **前提**: アレルギー/副作用歴のファジー一致、PMDA 添付文書由来の相互作用・禁忌、同効薬重複（YJ 上 4 桁）、禁忌疾患は実装済み。腎機能・年齢・妊娠授乳・OTC/サプリは未対応。
-- **方針**: 年齢は `calculatePatientAge` を唯一の入力とし、「判定不能」を明示する（第四条）。腎機能等は患者マスタに検査値の入れ子フィールドを足す方式で、`patient_records` 多重化コレクション（H-2）を待たない。
-- **要判断**: 検査値の保持期間と入力主体（薬局で入力するか、電子処方箋の検査値連携から取るか）。
+### F-3 安全チェックの判定軸拡張（実装完了 `f0df698`）
+- **前提**: アレルギー/副作用歴のファジー一致、PMDA 添付文書由来の相互作用・禁忌、同効薬重複（YJ 上 4 桁）、禁忌疾患は実装済み。腎機能・妊娠授乳・併用 OTC/サプリが未対応だった。
+- **実装内容（2026-11-22）**: `PATIENT_SCHEMA` v5→v6（`5: keepDocument`、`clinicalProfile` を `encrypted` 指定）へ拡張し、純粋評価エンジン `src/lib/clinical_safety_axes.ts` と EMR 臨床検査値カード `src/app/emr/components/VitalInsightCard.tsx` を実装。腎機能（eGFR/Cr/CrCl）・妊娠/授乳状況・併用 OTC/サプリの 3 軸を手動入力および電子処方箋検査値 1 クリック取込の双方から受け取り、EMR 警告パネルへリアルタイム反映する。90 日超過の検査値は `参考値（90日超過・要再確認）` として明示し、腎排泄/腎注意薬が処方されているのに腎機能検査値が未登録の場合は `判定不能` 警告を明示する（第四条遵守）。暗号化 RxDB v5→v6 マイグレーション、`clinical_safety_axes.test.ts`、および fail-first 変異テスト 4/4 件で実証。
 
 ### F-4 AI 症例レビューへの実症例投入
 - **前提**: `ai:clinical-review` CLI は有用性・誤提案・高信頼度の誤提案・店舗/提案種別の偏りを判定できるが、複数パイロット店舗の実症例が無い。
 - **方針**: パイロット 4 週間 KPI（I-4）と同時に投入する。外部 LLM を導入する場合は `docs/ai_architecture_policy.md` の「将来 LLM を導入する際の必須見直し事項」（プロンプト境界・サニタイズ層）を先に実装し、本書第一条・第二条の改訂として提案する。
 
-## トラック G: 在庫・店舗運用
+## トラック G: 在庫・店舗運用（G-1・G-2 完了）
 
-### G-1 ロット/期限順の実引落と監査、取消・返品・廃棄・棚卸差異ログ
-- **前提**: ロット・期限単位の在庫、入庫、分譲、デッドストック検知、棚番地は実装済み。実引落の順序監査と差異ログが未完。
-- **方針**: 引落は純粋関数（`stock.ts`）に集約し、監査ログの種別を追加する（`audit_logs` の version bump を伴うため計画書で事前承認）。
-- **要判断**: 麻薬・向精神薬の帳簿要件をどこまで本アプリで担うか。
+### G-1 ロット/期限順の実引落と監査、取消・返品・廃棄・棚卸差異ログ（実装完了 `b3fc878`）
+- **前提**: ロット・期限単位の在庫、入庫、分譲、デッドストック検知、棚番地は実装済み。実引落時の FEFO 逸脱監査、取消・返品・廃棄・棚卸差異の構造化ログ、および麻薬・向精神薬の受払補助帳簿が未完だった。
+- **実装内容（2026-11-22）**:
+  - `src/lib/stock.ts` に `detectFefoPickingDeviation` を新設し、EMR の GS1 ピッキング照合時（`handleVerifyPickingScan`）に最短期限の有効在庫ロット以外を照合した場合、非ブロッキング警告＋監査ログ `stock_fefo_deviation` を自動記録。
+  - `AUDIT_LOG_SCHEMA` v20→v21（`20: keepDocument`・ハッシュチェーン継続検証済み）へ構造化在庫監査ログ種別 6 件（`stock_fefo_deviation`・`stock_cancel`・`stock_return`・`stock_disposal`・`stock_take_variance`・`narcotic_ledger_export`）を追加し、`DailyCheckPanel.tsx` の棚卸差異保存を `stock_take_variance` へ接続。
+  - `src/lib/inventory_audit_log.ts` および `src/app/inventory/components/InventoryAuditToolsPanel.tsx` を新設し、取消・返品・廃棄・棚卸差異のロールバック付き構造化記録と、麻薬・向精神薬受払・残高補助帳簿の CSV（数式無害化・患者個人情報ゼロ、第二条遵守）および印刷 HTML（XSS エスケープ済み・`法定帳簿の補助記録` 明記）出力を実装。`inventory_audit_log.test.ts`・RxDB v20→v21 移行テスト・fail-first 変異テスト 4/4 件で実証。
 
 ### G-2 発注点・リードタイム・期限切迫・代替薬候補（実装完了）
 - **前提**: 処理中処方を考慮した利用可能在庫と発注ワークベンチは実装済み。
@@ -439,10 +442,9 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 ## トラック H: データ保全・複数端末
 
-### H-1 S3 以外の WORM 保存先コネクタ
-- **前提**: S3 Object Lock のみ対応。クラウドを使えない店舗向けの選択肢が無い。
-- **方針**: `audit_integrity_s3_worm_job` のインターフェースを保存先非依存にし、NAS 上の追記専用領域（書き戻し照合付き）を第 2 の保存先として実装する。
-- **要判断**: 対象とする保存先（NAS の WORM 相当機能の有無で変わる）。
+### H-1 S3 以外の WORM 保存先コネクタ（実装完了 `62fe33c`）
+- **前提**: 従来は AWS S3 Object Lock のみ対応で、クラウドを使えない店舗向けのローカル/NAS 保全コネクタが無かった。
+- **実装内容（2026-11-22）**: 単一正本コア `scripts/lib/audit_local_worm_core.mjs`（型定義 `.d.mts`＋公開窓口 `src/lib/audit_integrity_local_worm.ts`）、CLI `scripts/runAuditLogLocalWormRetention.mjs`、および定期実行ラッパー `scripts/runScheduledAuditLogLocalWormRetention.mjs`（`npm run audit:local-worm-retention` / `:scheduled`、`docs/ops_review_ledger.md` 登録済み）を実装。排他追記（`flag: 'wx'` による `EEXIST` 上書き拒否）、読取専用ロック（`chmod 0o444`）、ディスク書き戻し SHA-256／`integrity.latestHash` 照合、`audit_worm_manifest.jsonl` ハッシュチェーン追記・`--verify-only` 改ざん検知、受領書 JSON 発行、および失敗通知 JSON／Webhook 送信を完備。NAS 側 WORM 設定の運用者確認（`--immutable-verified`）が無い場合は正直に `status: 'attention'` を返す（第四条遵守）。`audit_integrity_local_worm.test.ts` および fail-first 変異テスト 3/3 件で実証。
 
 ### H-2 患者系記録の多重化コレクション `patient_records`
 - **前提**: RxDB open-core の上限 14 に満杯。新しい記録種別（検査値、在宅訪問記録等）をコレクションとして足せない。
@@ -464,6 +466,7 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 - **進捗**:
   - 2026-10-02 に調剤録（`DispensingRecordPrint`）・公式UKEプレビューモーダル（`SingleOfficialUkeModal`）・電子処方箋操作パネル（`ElectronicPrescriptionPrintPanel`）の 3 コンポーネントを実描画テストへ移行（残り 7 箇所の `readFileSync` が残存していた）。
   - **2026-11-21（`abbf183`）に残り全 7 箇所の `readFileSync` を完全撤廃（0 件）**。`src/app/emr/emr_route_guards.ts`・`src/app/print/components/ClaimLifecyclePanel.tsx`・`PharmacistCheckPanel.tsx`・`ClaimCheckPanel.tsx` および `src/app/print/helpers.ts` の純粋ヘルパー 4 関数（`buildPrintPickingSupportUrl`・`buildPrintInterventionUrl`・`buildPrintReceiptBarcodeState`・`runPrintWithBodyClass`）へ抽出し、実実行・React `renderToStaticMarkup` 契約テスト（17 テスト・fail-first mutation 4 件実証済み）へ全面移行完了。併せて印刷画面も 2,434→2,144 行（-290 行）へ軽量化。
+  - **2026-11-22（Phase A `7bb0c9e`・`b7d3d42`・`fb88e6a`・`dc95e0f`・`9d809dd`・`05f713c`）**: 印刷・自費請求・受付の残存ソース文字列テストを実描画・実行テストへ移行完了。併せて `registerPatient` 重複患者照合の鍵付きブラインドインデックス化、非印刷 CSS sub-1rem 生フォントサイズ 41→0 の `--fs-*` トークン統一、および除外 2 ファイル以外の `: any` 全撤廃（`colon-any` 14→10）を完了。
 
 ### I-2 運用レビュー CLI の `status` 定義統一と証跡保管ルール（status定義統一完了）
 - **前提**: `pass` / `attention` / `blocked` の共通定義と終了コード規約は `ops_review_status.ts` と運用レビュー台帳にある。残課題は証跡 JSON の保管場所（リポジトリ外）・運用ルールの確定と、Nightly へ必要な入力を渡す運用である。
@@ -513,12 +516,12 @@ pharma-oss の完成形とは、次の 6 条件をすべて満たす状態を指
 
 | 状態 | 対象 | 再開条件 |
 |---|---|---|
-| 実装完了 | A-1 / A-2 / A-3 / A-4 / A-5 / B-2 / C-4 / D-2 / F-2 / G-2 / I-1（`PrintPickingFlow.test.ts`）/ I-3 / I-6 | 回帰を維持。通常の実装待ちには戻さない |
+| 実装完了 | A-1〜A-5 / B-1・B-2 / C-4・C-5（Q-5） / D-2 / F-1〜F-3 / G-1・G-2 / H-1 / I-1・I-3・I-6 | 回帰を維持。通常の実装待ちには戻さない |
 | 一部完了・残りは判断待ちまたは条件待ち | C-1（ステップ1〜4・ステップ5a 完了、旧形式完全削除は条件A/B/C待ち）/ I-2（status統一済み） | UKE旧形式廃止条件（A:実績1ヶ月、B:出力0件、C:合意）の達成確認／証跡の保管場所と期間を決める |
-| 挙動・対象の判断待ち | B-1 / C-2 / F-1 / F-3 / G-1 / H-1 / H-2 | 各項目の「要判断」を解消。G-1 はスキーマ計画の承認も必要 |
-| 切替判断待ち | C-1 の旧形式完全削除（ステップ 5b） | 条件A・B・C（実機受付確認・出力0件継続・現場合意）の充足を確認し、旧形式コードを完全削除 |
+| 挙動・対象の判断待ち | C-2 / H-2 | 各項目の「要判断」（薬価改定「変更年月日」の解釈、RxDB コレクション統合枠または恒久策）を解消 |
+| 切替判断待ち | C-1 の旧形式完全削除（ステップ 5b） | 条件A・B・C（実機受付確認・出力0件継続・現場合意）の充足を確認し、`<details>` 内旧形式と旧生成コードを完全削除 |
 | 公式資料・症例待ち | C-3 | 出典と具体的な未対応ケースを入手し、点数影響を確認する |
-| 現地証跡・実データ待ち | D-1 / E-1 / E-2 / F-4 / H-3 / H-4 / I-4 | 対象機器・店舗・実施担当を決め、実施記録を投入する。E-2 は対象機器の順序も判断する |
+| 現地証跡・実データ待ち | D-1（Q-5 マイナ読取実機仕様突合含む） / E-1 / E-2 / F-4 / H-3 / H-4 / I-4 | 対象機器・店舗・実施担当を決め、実施記録を投入する。E-2 は対象機器の順序も判断する |
 | リモート状態・権限の確認が必要 | I-5 | 利用者からの push 指示とリモート差分を確認してから同期する |
 
 全トラックの完了を、ローカルの自動テスト通過だけでは判定しない。現地証跡が必要な項目は引き続き未完とする。
