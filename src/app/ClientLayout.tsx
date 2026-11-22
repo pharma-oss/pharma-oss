@@ -989,7 +989,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   {isAuthenticated && (
                     <FirstRunTutorial
                       userId={currentUser.userId}
-                      autoOpen={true}
+                      autoOpen={pathname === '/app'}
                       onStartReception={() => router.push('/ocr')}
                       onStartDemo={handleStartTutorialDemo}
                       onCleanupDemo={handleCleanupTutorialDemo}

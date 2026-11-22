@@ -14,6 +14,20 @@ export function formatInsuranceBurdenRatio(burdenRatio?: number): string | undef
   return `${Number(burdenRatio) / 10}割`;
 }
 
+/**
+ * 受付担当者向けのマイナ読取不可理由テキストを整える。
+ * 環境変数名（MYNA_CARD_READER_FOLDER 等）を画面本文に露出させず、
+ * 括弧内で句点が二重になる（「。）。」）のを防ぐため末尾句点を除去する。
+ */
+export function formatClerkMynaUnavailableReason(reason?: string): string {
+  const cleaned = (reason || '接続先が未設定です')
+    .replace(/\s*[（(]\s*MYNA_CARD_READER_[A-Z0-9_]+\s*[）)]/g, '')
+    .replace(/\bMYNA_CARD_READER_[A-Z0-9_]+\b/g, '連携設定')
+    .trim()
+    .replace(/[。\.]+$/u, '');
+  return cleaned || '接続先が未設定です';
+}
+
 export function formatPatientInsuranceInfo(insuranceInfo?: Patient['insuranceInfo']): string {
   const insuranceType = insuranceInfo?.insuranceType?.trim();
   const burdenRatio = formatInsuranceBurdenRatio(insuranceInfo?.burdenRatio);

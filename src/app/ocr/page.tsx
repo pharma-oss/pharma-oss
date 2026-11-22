@@ -1136,7 +1136,7 @@ export default function OcrPage() {
           <WorkflowMiniTutorial
             kind="input"
             userId={getCurrentUser().userId}
-            autoOpen
+            autoOpen={isEditorOpen}
           />
         </div>
       </div>

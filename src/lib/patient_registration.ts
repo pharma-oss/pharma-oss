@@ -16,6 +16,8 @@ import {
 
 export type PatientGender = NonNullable<Patient['gender']>;
 export type RegistrationBurdenRatio = '10' | '20' | '30';
+export const PATIENT_REGISTRATION_INSURANCE_TYPES = ['社保', '国保', '後期高齢', '自費', '公費単独'] as const;
+export type RegistrationInsuranceType = '' | typeof PATIENT_REGISTRATION_INSURANCE_TYPES[number];
 
 export interface PatientRegistrationForm {
   name: string;
@@ -23,6 +25,8 @@ export interface PatientRegistrationForm {
   /** 入力のまま(半角8桁・区切り付きなど)。検証で YYYY-MM-DD にそろえる。 */
   birthDate: string;
   gender: '' | PatientGender;
+  /** 保険種別(任意: 社保・国保・後期高齢・自費・公費単独) */
+  insuranceType?: RegistrationInsuranceType;
   /** 保険者番号 */
   insurerNumber: string;
   /** 記号・番号 */
@@ -47,6 +51,7 @@ export interface ValidatedPatientRegistration {
   kana: string;
   birthDate: string;
   gender: PatientGender;
+  insuranceType?: Exclude<RegistrationInsuranceType, ''>;
   insurerNumber: string;
   insuredNumber: string;
   burdenRatio: number;
@@ -74,6 +79,13 @@ function isGender(value: string): value is PatientGender {
   return value === 'male' || value === 'female' || value === 'other';
 }
 
+function normalizeRegistrationInsuranceType(value: string | undefined): Exclude<RegistrationInsuranceType, ''> | undefined {
+  const trimmed = (value || '').trim();
+  return (PATIENT_REGISTRATION_INSURANCE_TYPES as readonly string[]).includes(trimmed)
+    ? trimmed as Exclude<RegistrationInsuranceType, ''>
+    : undefined;
+}
+
 export function validatePatientRegistration(
   form: PatientRegistrationForm,
   now: Date = new Date()
@@ -99,6 +111,12 @@ export function validatePatientRegistration(
 
   if (!isGender(form.gender)) errors.gender = '性別を選んでください。';
 
+  const insuranceTypeRaw = (form.insuranceType || '').trim();
+  const insuranceType = normalizeRegistrationInsuranceType(insuranceTypeRaw);
+  if (insuranceTypeRaw && !insuranceType) {
+    errors.insuranceType = '保険種別を正しく選んでください。';
+  }
+
   const insurerNumber = form.insurerNumber.normalize('NFKC').replace(/[\s-]/g, '');
   if (insurerNumber && !INSURER_NUMBER_PATTERN.test(insurerNumber)) {
     errors.insurerNumber = '保険者番号は半角数字の6桁または8桁で入力してください。';
@@ -119,6 +137,7 @@ export function validatePatientRegistration(
       kana,
       birthDate,
       gender: form.gender,
+      ...(insuranceType ? { insuranceType } : {}),
       insurerNumber,
       insuredNumber,
       burdenRatio: Number(form.burdenRatio)
@@ -140,6 +159,7 @@ export function buildPatientRecord(value: ValidatedPatientRegistration, patientI
     birthDate: value.birthDate,
     gender: value.gender,
     insuranceInfo: {
+      ...(value.insuranceType ? { insuranceType: value.insuranceType } : {}),
       ...(value.insurerNumber ? { provider: value.insurerNumber } : {}),
       ...(value.insuredNumber ? { number: value.insuredNumber } : {}),
       burdenRatio: value.burdenRatio
@@ -179,11 +199,13 @@ export function applyMynaToRegistrationForm(
   result: Pick<MynaCardReaderResult, 'name' | 'kana' | 'birthDate' | 'gender' | 'insuranceInfo'>
 ): PatientRegistrationForm {
   const fromMyna = buildPatientRegistrationFormFromMyna(result, current.burdenRatio);
+  const mergedInsuranceType = fromMyna.insuranceType || current.insuranceType;
   return {
     name: fromMyna.name || current.name,
     kana: fromMyna.kana || current.kana,
     birthDate: fromMyna.birthDate || current.birthDate,
     gender: fromMyna.gender || current.gender,
+    ...(mergedInsuranceType ? { insuranceType: mergedInsuranceType } : {}),
     insurerNumber: fromMyna.insurerNumber || current.insurerNumber,
     insuredNumber: fromMyna.insuredNumber || current.insuredNumber,
     burdenRatio: fromMyna.burdenRatio

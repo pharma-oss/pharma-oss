@@ -456,24 +456,26 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
 
         .qr-manual-entry {
           display: grid;
-          grid-template-columns: minmax(150px, 0.32fr) minmax(0, 1fr) auto;
-          gap: 0.55rem;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 0.45rem 0.55rem;
           align-items: start;
         }
 
         .qr-manual-entry label {
+          grid-column: 1 / -1;
           display: inline-flex;
           align-items: center;
           gap: 0.35rem;
           color: #166534;
           font-size: var(--fs-sm);
           font-weight: 900;
-          padding-top: 0.6rem;
+          padding-top: 0;
         }
 
         .qr-manual-entry textarea {
-          min-height: 42px;
-          max-height: 96px;
+          width: 100%;
+          min-height: 54px;
+          max-height: 112px;
           resize: vertical;
           min-width: 0;
           border: 1px solid #86efac;
@@ -482,7 +484,7 @@ export default function PrescriptionQrReader({ disabled = false, onApplyQrData }
           padding: 0.55rem 0.65rem;
           font-family: inherit;
           font-size: var(--fs-md);
-          line-height: 1.35;
+          line-height: 1.4;
         }
 
         .qr-manual-entry textarea:focus {

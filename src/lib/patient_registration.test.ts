@@ -137,6 +137,10 @@ describe('buildPatientRecord', () => {
 
     const minimal = buildPatientRecord(expectOk({ ...validForm, insurerNumber: '', insuredNumber: '', burdenRatio: '10' }), 'pt_2');
     assert.deepEqual(minimal.insuranceInfo, { burdenRatio: 10 });
+
+    const withType = buildPatientRecord(expectOk({ ...validForm, insuranceType: '国保' }), 'pt_3');
+    assert.equal(withType.insuranceInfo?.insuranceType, '国保');
+    assert.ok(expectErrors({ ...validForm, insuranceType: '不正種別' as never }).insuranceType);
   });
 });
 

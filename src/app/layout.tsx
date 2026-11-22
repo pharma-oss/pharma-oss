@@ -41,8 +41,8 @@ export default function RootLayout({
         <ClientLayout>{children}</ClientLayout>
         {/* 右上はスタッフ選択・通知ベル、右下は受付フォームの送信ボタン・EMRの
             完了/保存バーと重なる(エラートーストが再送信クリックを吸ってしまう)ため、
-            クリック対象のない上部中央に表示する */}
-        <Toaster position="top-center" richColors />
+            上部中央かつセキュリティ警告バナーの下に配置する */}
+        <Toaster position="top-center" offset={56} mobileOffset={60} richColors />
       </body>
     </html>
   );

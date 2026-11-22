@@ -67,13 +67,14 @@ describe('PatientRegistrationModal: 構造', () => {
     assert.match(html, /<h3 id="patient-registration-title">新規患者の登録<\/h3>/);
   });
 
-  it('氏名・フリガナ・生年月日・性別・保険者番号・記号・番号・負担割合の欄が、ラベルに結び付いて並ぶ', () => {
+  it('氏名・フリガナ・生年月日・性別・保険種別・保険者番号・記号・番号・負担割合の欄が、ラベルに結び付いて並ぶ', () => {
     const html = render();
     for (const [id, label] of [
       ['reg-name', '氏名'],
       ['reg-kana', 'フリガナ'],
       ['reg-birthDate', '生年月日'],
       ['reg-gender', '性別'],
+      ['reg-insuranceType', '保険種別'],
       ['reg-insurerNumber', '保険者番号'],
       ['reg-insuredNumber', '記号・番号'],
       ['reg-burdenRatio', '負担割合']
@@ -81,6 +82,7 @@ describe('PatientRegistrationModal: 構造', () => {
       assert.match(html, new RegExp(`<label for="${id}">${label}`), `${label} のラベルが ${id} に結び付くこと`);
       assert.match(html, new RegExp(`id="${id}"`), `${id} の入力欄があること`);
     }
+    assert.doesNotMatch(findOpeningTag(html, 'id="reg-insuranceType"', 'select'), /aria-required/, '保険種別は必須にしない');
   });
 
   it('氏名・生年月日・性別だけが必須(aria-required)。保険情報とフリガナは必須にしない', () => {
@@ -156,15 +158,23 @@ describe('PatientRegistrationModal: マイナ読み込みボタン', () => {
     assert.deepEqual(listDisabledOpeningTags(html), [button]);
   });
 
-  it('接続先が未設定なら押せず、理由と「手入力してください」を出す', () => {
-    const html = render({ mynaReaderState: { status: 'ready', available: false, reason: '連携フォルダが未設定です。' } });
+  it('接続先が未設定なら押せず、理由と「手入力してください」を二重句点や環境変数名なしで出す', () => {
+    const html = render({
+      mynaReaderState: {
+        status: 'ready',
+        available: false,
+        reason: '連携フォルダ(MYNA_CARD_READER_FOLDER)が未設定です。'
+      }
+    });
     const button = findOpeningTag(html, MYNA_BUTTON_MARKER, 'button');
     assert.match(button, /\sdisabled=""/);
-    assert.match(button, /title="連携フォルダが未設定です。"/);
+    assert.match(button, /title="連携フォルダ\(MYNA_CARD_READER_FOLDER\)が未設定です。"/);
     assert.match(html, /マイナ保険証から読み込む（未設定）/);
     assert.deepEqual(listDisabledOpeningTags(html), [button]);
     const note = html.slice(html.indexOf('registration-myna-unavailable-note'));
-    assert.match(note, /マイナ読取は使えません（連携フォルダが未設定です。）。手入力してください。/);
+    assert.match(note, /マイナ読取は使えません（連携フォルダが未設定です）。手入力してください。/);
+    assert.doesNotMatch(note, /。）。/);
+    assert.doesNotMatch(note, /MYNA_CARD_READER_FOLDER/);
   });
 
   it('登録ボタンは、開いた直後は押せる送信ボタン', () => {

@@ -177,3 +177,39 @@ test('claim test guidance steers staff away from the tutorial demo patient', () 
     'チュートリアルのデモ患者はUKE出力できないため、導入確認用テストデータで実施する'
   );
 });
+
+test('buildInitialSetupChecklist recognizes solo managing-pharmacist store as staff-complete while requiring pharmacist in multi-staff stores', () => {
+  const configuredSettings: FacilitySettings = {
+    ...defaultSettings,
+    pharmacyName: '青空薬局 一人店',
+    pharmacyCode: '1312345',
+    pharmacyAddress: '東京都渋谷区1-2-3',
+    pharmacyPhone: '03-0000-0000',
+    defaultPharmacistName: '佐藤 管理薬剤師'
+  };
+
+  // 一人薬局（管理者兼管理薬剤師 1名 + 既定担当薬剤師設定済み）はスタッフ認証完了扱い
+  const soloChecklist = buildInitialSetupChecklist({
+    settings: configuredSettings,
+    staff: [staff({ userId: 'admin', name: '佐藤 管理薬剤師', role: 'admin', passwordHash: 'hash', salt: 'salt' })],
+    auditLogs: [],
+    generatedAt: new Date('2026-06-18T00:00:00.000Z')
+  });
+  const soloStaffStep = soloChecklist.steps.find((step) => step.id === 'staff');
+  assert.strictEqual(soloStaffStep?.status, 'complete');
+  assert.match(soloStaffStep?.evidence || '', /管理薬剤師兼任/);
+
+  // 複数スタッフ構成（管理者 + 事務）で薬剤師0名の場合は引き続き要確認
+  const multiChecklist = buildInitialSetupChecklist({
+    settings: configuredSettings,
+    staff: [
+      staff({ userId: 'admin', name: '管理者', role: 'admin', passwordHash: 'hash', salt: 'salt' }),
+      staff({ userId: 'clerk_1', name: '事務員', role: 'clerk', passwordHash: 'hash', salt: 'salt' })
+    ],
+    auditLogs: [],
+    generatedAt: new Date('2026-06-18T00:00:00.000Z')
+  });
+  const multiStaffStep = multiChecklist.steps.find((step) => step.id === 'staff');
+  assert.strictEqual(multiStaffStep?.status, 'attention');
+  assert.ok(multiStaffStep?.requiredActions.includes('薬剤師スタッフを追加し認証情報を登録する'));
+});

@@ -6,15 +6,22 @@ import { generateUUID } from '@/lib/crypto';
 import { logAuditAction } from '@/lib/audit';
 import { AuditLogFailedError } from '@/lib/audit_guard';
 import { parseFlexibleDateInput } from '@/lib/date_input';
-import { buildMynaReadConfirmationMessage, getMynaReaderButtonView, type MynaReaderAvailabilityState } from '@/lib/myna_read_display';
+import {
+  buildMynaReadConfirmationMessage,
+  formatClerkMynaUnavailableReason,
+  getMynaReaderButtonView,
+  type MynaReaderAvailabilityState
+} from '@/lib/myna_read_display';
 import { fetchMynaCardRead } from '@/lib/myna_read_client';
 import {
   applyMynaToRegistrationForm,
+  PATIENT_REGISTRATION_INSURANCE_TYPES,
   registerPatient,
   validatePatientRegistration,
   type PatientRegistrationField,
   type PatientRegistrationForm,
-  type PatientRegistrationOutcome
+  type PatientRegistrationOutcome,
+  type RegistrationInsuranceType
 } from '@/lib/patient_registration';
 
 export interface PatientRegistrationModalProps {
@@ -179,7 +186,7 @@ export function PatientRegistrationModal({
               </button>
               {mynaReaderState.status === 'ready' && !mynaReaderState.available && (
                 <span className="registration-hint" data-testid="registration-myna-unavailable-note">
-                  マイナ読取は使えません（{mynaReaderState.reason || '接続先が未設定です'}）。手入力してください。
+                  マイナ読取は使えません（{formatClerkMynaUnavailableReason(mynaReaderState.reason)}）。手入力してください。
                 </span>
               )}
               {mynaMessage && <span className="status-chip confirmed" role="status">{mynaMessage}</span>}
@@ -268,6 +275,23 @@ export function PatientRegistrationModal({
                   <option value="other">その他</option>
                 </select>
                 {errors.gender && <span id="reg-gender-error" className="registration-error" role="alert">{errors.gender}</span>}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="reg-insuranceType">保険種別</label>
+                <select
+                  id="reg-insuranceType"
+                  value={form.insuranceType || ''}
+                  onChange={(event) => updateField('insuranceType', event.target.value as RegistrationInsuranceType)}
+                  aria-invalid={!!errors.insuranceType}
+                  aria-describedby={describedBy('insuranceType')}
+                >
+                  <option value="">未設定</option>
+                  {PATIENT_REGISTRATION_INSURANCE_TYPES.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                {errors.insuranceType && <span id="reg-insuranceType-error" className="registration-error" role="alert">{errors.insuranceType}</span>}
               </div>
 
               <div className="form-group">

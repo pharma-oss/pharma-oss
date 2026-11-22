@@ -336,6 +336,18 @@ export const PatientBanner = React.memo(function PatientBanner({
   const [isQuestionnaireProcessing, setIsQuestionnaireProcessing] = useState(false);
   const [isSavingInsurance, setIsSavingInsurance] = useState(false);
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSavingInsurance && !isQuestionnaireProcessing) {
+        event.stopPropagation();
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isSavingInsurance, isQuestionnaireProcessing]);
+
   const findBannerVisit = useCallback(async () => {
     if (!db) return null;
     if (targetVisitId) {
@@ -755,11 +767,16 @@ export const PatientBanner = React.memo(function PatientBanner({
       {/* Premium Insurance/Public Support Editor Modal */}
       {isModalOpen && (
         <div className="insurance-modal-overlay">
-          <div className="insurance-modal card glass animate-scale">
+          <div
+            className="insurance-modal card glass animate-scale"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="patient-banner-modal-title"
+          >
             <div className="modal-header">
               <div className="modal-title-row">
                 <CreditCard className="icon-primary" size={20} />
-                <h3>患者・保険・公費情報の構造化登録</h3>
+                <h3 id="patient-banner-modal-title">患者・保険・公費情報の構造化登録</h3>
               </div>
               <p className="modal-subtitle">{patientName} 様の請求保険者・公費負担情報を設定します。</p>
             </div>

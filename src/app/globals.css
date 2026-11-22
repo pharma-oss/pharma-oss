@@ -3200,6 +3200,7 @@ input[type="search"]::-webkit-search-cancel-button {
 @media (max-width: 920px) {
   .layout-wrapper {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     height: auto;
     min-height: 100vh;
     min-height: 100dvh;

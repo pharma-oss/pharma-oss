@@ -117,18 +117,24 @@ function buildFacilityStep(settings: FacilitySettings): InitialSetupStep {
   });
 }
 
-function buildStaffStep(staff: User[]): InitialSetupStep {
+function buildStaffStep(staff: User[], settings: FacilitySettings): InitialSetupStep {
   const rows = activeStaff(staff);
   const credentialedRows = rows.filter(hasLoginCredential);
   const credentialedAdminCount = credentialedRows.filter((user) => user.role === 'admin').length;
   const credentialedPharmacistCount = credentialedRows.filter((user) => user.role === 'pharmacist').length;
   const missingCredentialCount = rows.filter((user) => !hasLoginCredential(user)).length;
+  const isSoloManagingPharmacistStore =
+    rows.length === 1 &&
+    credentialedAdminCount === 1 &&
+    credentialedPharmacistCount === 0 &&
+    missingCredentialCount === 0 &&
+    isConfigured(settings.defaultPharmacistName);
   const requiredActions: string[] = [];
 
   if (credentialedAdminCount === 0) {
     requiredActions.push('管理者のパスワードまたはパスキーを登録する');
   }
-  if (credentialedPharmacistCount === 0) {
+  if (credentialedPharmacistCount === 0 && !isSoloManagingPharmacistStore) {
     requiredActions.push('薬剤師スタッフを追加し認証情報を登録する');
   }
   if (missingCredentialCount > 0) {
@@ -141,6 +147,10 @@ function buildStaffStep(staff: User[]): InitialSetupStep {
       ? 'attention'
       : 'complete';
 
+  const evidence = isSoloManagingPharmacistStore
+    ? `スタッフ 1名 / 認証済み 1名 / 管理者（管理薬剤師兼任） 1名`
+    : `スタッフ ${rows.length}名 / 認証済み ${credentialedRows.length}名 / 管理者 ${credentialedAdminCount}名 / 薬剤師 ${credentialedPharmacistCount}名`;
+
   return makeStep({
     id: 'staff',
     title: 'スタッフ認証',
@@ -148,8 +158,12 @@ function buildStaffStep(staff: User[]): InitialSetupStep {
     status,
     actionLabel: status === 'complete' ? 'スタッフ管理' : '認証を整える',
     tab: 'staff',
-    evidence: `スタッフ ${rows.length}名 / 認証済み ${credentialedRows.length}名 / 管理者 ${credentialedAdminCount}名 / 薬剤師 ${credentialedPharmacistCount}名`,
-    requiredActions: requiredActions.length > 0 ? requiredActions : ['スタッフ認証は設定済みです']
+    evidence,
+    requiredActions: requiredActions.length > 0
+      ? requiredActions
+      : isSoloManagingPharmacistStore
+        ? ['一人薬局（管理薬剤師兼任）構成で認証済みです。複数名運用時は薬剤師スタッフを追加してください']
+        : ['スタッフ認証は設定済みです']
   });
 }
 
@@ -282,7 +296,7 @@ export function buildInitialSetupChecklist(input: InitialSetupChecklistInput): I
   const generatedAt = input.generatedAt || new Date();
   const steps = [
     buildFacilityStep(input.settings),
-    buildStaffStep(input.staff),
+    buildStaffStep(input.staff, input.settings),
     buildDrugMasterStep(input.auditLogs),
     buildMigrationStep(input.auditLogs),
     buildClaimTestStep(input.auditLogs),
