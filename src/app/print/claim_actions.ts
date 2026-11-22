@@ -1,5 +1,5 @@
 import { logAuditAction } from '@/lib/audit';
-import { getClaimItemFlagValue } from './helpers';
+import { DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE, getClaimItemFlagValue } from './helpers';
 import {
   formatDrugPriceOverrideWarning,
   resolveDrugPriceWithOverride,
@@ -9,8 +9,16 @@ import {
 import type { FeeCalculationOptions } from '@/lib/calculator';
 import { buildClaimConditionAuditDetail, type ClaimConditionOptions } from '@/lib/claim_conditions';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
-import type { ClaimLifecycleState } from '@/lib/claim_lifecycle';
-import type { AuditActionType, PharmacyDatabase, Visit } from '@/db/types';
+import {
+  getClaimLifecycleStatus,
+  markClaimExported,
+  type ClaimLifecycleState
+} from '@/lib/claim_lifecycle';
+import { buildClaimExportSnapshot } from '@/lib/claim_snapshot';
+import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
+import { formatSingleOfficialUkeExportAuditMessage } from '@/lib/receipt/uke_migration_policy';
+import { SELF_PAY_UKE_BLOCKED_MESSAGE } from '@/lib/self_pay_claim';
+import type { AuditActionType, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
 import { restoreFields, restoreWith } from '@/lib/rxdb_restore';
 
 // 印刷画面の「監査ログが残らなければ操作を確定させない」契約をまとめた層。
@@ -539,4 +547,126 @@ export async function applyDrugPriceOverrideWithAudit<
   }
 
   return outcome;
+}
+
+export const SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES = {
+  locked: '公式UKEを再出力する場合は、返戻登録または再請求/月遅れ準備に切り替えてから出力してください。',
+  auditRolledBack: '公式UKE出力の監査ログ記録に失敗したため、出力を中止しました。'
+} as const;
+
+export interface ExecuteSingleOfficialUkeExportParams {
+  db: MaybeDatabase;
+  visitData: Visit;
+  patientData: Patient;
+  prescriptionItems: PrescriptionItem[];
+  result: SingleDispensingUkeOfficialResult;
+  operatorName?: string;
+  canExportUke: boolean;
+  permissionDeniedMessage: string;
+  isSelfPayClaimExcluded: boolean;
+  isDemo: boolean;
+  applyLifecycle: (lifecycle: ClaimLifecycleState) => void;
+  exportedAt?: string;
+  logAudit?: LogAuditActionFn;
+}
+
+/**
+ * 単票公式 UKE（RECEIPTY.CYO）のダウンロード前処理。
+ *
+ * 権限・自費・デモ・請求状態（draft / rebilling のみ許可）を検証したうえで、
+ * 請求ロック（markClaimExported）と 2 種の監査ログ（claim_lifecycle / uke_export）を
+ * ファイルダウンロードより先に確定させる。いずれかの監査ログ記録に失敗した場合は
+ * claimLifecycle を直前の状態へ巻き戻して例外を投げ、ファイルを出力させない。
+ */
+export async function executeSingleOfficialUkeExport(
+  params: ExecuteSingleOfficialUkeExportParams
+): Promise<{ nextLifecycle: ClaimLifecycleState }> {
+  const {
+    db,
+    visitData,
+    patientData,
+    prescriptionItems,
+    result,
+    operatorName,
+    canExportUke,
+    permissionDeniedMessage,
+    isSelfPayClaimExcluded,
+    isDemo,
+    applyLifecycle,
+    exportedAt = new Date().toISOString(),
+    logAudit = logAuditAction
+  } = params;
+
+  if (!canExportUke) {
+    throw new Error(permissionDeniedMessage);
+  }
+  if (isSelfPayClaimExcluded) {
+    throw new Error(SELF_PAY_UKE_BLOCKED_MESSAGE);
+  }
+  if (isDemo) {
+    throw new Error(DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE);
+  }
+
+  const currentStatus = getClaimLifecycleStatus(visitData.claimLifecycle as ClaimLifecycleState | undefined);
+  if (currentStatus !== 'draft' && currentStatus !== 'rebilling') {
+    throw new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.locked);
+  }
+
+  if (!db) {
+    throw new Error(CLAIM_ACTION_MESSAGES.databaseNotReady);
+  }
+
+  const visitDoc = await db.visits.findOne(visitData.visitId).exec();
+  if (!visitDoc) {
+    throw new Error(CLAIM_ACTION_MESSAGES.claimLifecycleVisitNotFound);
+  }
+  const previousLifecycle = visitDoc.toJSON().claimLifecycle as ClaimLifecycleState | undefined;
+
+  const exportSnapshot = buildClaimExportSnapshot({
+    visit: visitData,
+    patient: patientData,
+    items: prescriptionItems,
+    totalPoints: result.totalPoints,
+    createdAt: exportedAt,
+    exportedFileName: result.fileName
+  });
+  const nextLifecycle = markClaimExported({
+    current: previousLifecycle ?? (visitData.claimLifecycle as ClaimLifecycleState | undefined),
+    at: exportedAt,
+    by: operatorName,
+    fileName: result.fileName,
+    totalPoints: result.totalPoints,
+    exportSnapshot
+  });
+
+  await persistClaimLifecycleWithAudit({
+    db,
+    visitId: visitData.visitId,
+    nextLifecycle,
+    detail: `請求状態変更: 公式UKE「${result.fileName}」を出力し、請求をロックしました（点数: ${result.totalPoints}点）。`,
+    patientId: visitData.patientId,
+    patientName: patientData.name,
+    applyLifecycle,
+    logAudit
+  });
+
+  const ukeAuditOk = await logAudit(
+    db,
+    'uke_export',
+    formatSingleOfficialUkeExportAuditMessage({
+      patientName: patientData.name,
+      totalPoints: result.totalPoints,
+      recordCount: result.records.length
+    }),
+    visitData.patientId,
+    patientData.name
+  );
+  if (!ukeAuditOk) {
+    const rollbackLifecycle: ClaimLifecycleState = previousLifecycle || { status: 'draft' };
+    await restoreFields(visitDoc, { claimLifecycle: rollbackLifecycle });
+    applyLifecycle(rollbackLifecycle);
+    throw new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack);
+  }
+
+  return { nextLifecycle };
 }

@@ -3074,12 +3074,21 @@ export function formatMonthlyClaimUkeOfficialSampleScopeReport(
   return `公式サンプルだけで見る種別: ${status} / 通常請求UKE外 ${report.suppressedRecordTypes.length}種別${mixedText}${targetText}`;
 }
 
+export interface MonthlyClaimUkeBatchValidationOptions {
+  /**
+   * 単票の公式提出用 UKE（初回出力）では請求前（draft）の受付を許可する。
+   * 月次一括 UKE では既定の false を維持し、再請求準備前の受付混入を引き続きブロックする。
+   */
+  allowDraft?: boolean;
+}
+
 export function buildMonthlyClaimUkePreflightReport(
-  results: MonthlyClaimUkeBuildResult[]
+  results: MonthlyClaimUkeBuildResult[],
+  options?: MonthlyClaimUkeBatchValidationOptions
 ): MonthlyClaimUkePreflightReport {
   const errorResults = getMonthlyClaimUkeIssues(results, 'error');
   const warningResults = getMonthlyClaimUkeIssues(results, 'warning');
-  const batchIssues = validateMonthlyClaimUkeBatch(results);
+  const batchIssues = validateMonthlyClaimUkeBatch(results, options);
   const batchErrorIssues = getMonthlyClaimUkeBatchIssues(batchIssues, 'error');
   const batchWarningIssues = getMonthlyClaimUkeBatchIssues(batchIssues, 'warning');
   const officialSampleScopeReport = buildMonthlyClaimUkeOfficialSampleScopeReport(results);
@@ -3192,7 +3201,10 @@ function addBatchIssue(
   issues.push(issue);
 }
 
-export function validateMonthlyClaimUkeBatch(results: MonthlyClaimUkeBuildResult[]): MonthlyClaimUkeBatchCheckIssue[] {
+export function validateMonthlyClaimUkeBatch(
+  results: MonthlyClaimUkeBuildResult[],
+  options?: MonthlyClaimUkeBatchValidationOptions
+): MonthlyClaimUkeBatchCheckIssue[] {
   const issues: MonthlyClaimUkeBatchCheckIssue[] = [];
   if (results.length === 0) {
     addBatchIssue(issues, {
@@ -3259,7 +3271,7 @@ export function validateMonthlyClaimUkeBatch(results: MonthlyClaimUkeBuildResult
       });
     }
 
-    if (claimStatus === 'draft') {
+    if (claimStatus === 'draft' && !options?.allowDraft) {
       addBatchIssue(issues, {
         severity: 'error',
         code: 'monthly_uke_unprepared_claim_mixed',
@@ -3482,13 +3494,14 @@ export function buildMonthlyClaimUkeBundle(
 
 export function buildMonthlyClaimOfficialUkeBundle(
   claims: MonthlyClaimUkeCase[],
-  results: MonthlyClaimUkeBuildResult[]
+  results: MonthlyClaimUkeBuildResult[],
+  options?: MonthlyClaimUkeBatchValidationOptions
 ): MonthlyClaimOfficialUkeBundle {
   if (claims.length === 0 || results.length === 0 || claims.length !== results.length) {
     throw new Error('公式提出用UKEの受付と事前チェック結果が一致していません。');
   }
 
-  const preflightReport = buildMonthlyClaimUkePreflightReport(results);
+  const preflightReport = buildMonthlyClaimUkePreflightReport(results, options);
   if (preflightReport.errorResults.length > 0 || preflightReport.batchErrorIssues.length > 0) {
     throw new Error('公式提出用UKEを作成する前に、UKE出力前チェックの要修正項目を解消してください。');
   }

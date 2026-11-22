@@ -302,4 +302,59 @@ test('SingleOfficialUkeModal disables close, cancel, and download controls while
   );
 });
 
+test('SingleOfficialUkeModal enables official RECEIPTY.CYO preview and download for a first-time draft visit', () => {
+  const data = createModalTestData();
+  data.visit.claimLifecycle = undefined;
+
+  const html = renderToStaticMarkup(
+    React.createElement(SingleOfficialUkeModal, {
+      isOpen: true,
+      onClose: () => {},
+      visitData: data.visit,
+      patientData: data.patient,
+      settingsData: data.settings,
+      prescriptionItems: data.items,
+      calculatedFees: data.calculatedFees
+    })
+  );
+
+  assert.match(html, /公式提出仕様 適合確認済み/);
+  assert.match(html, /RECEIPTY\.CYO/);
+  assert.match(html, /GO,1,83,99/);
+  assert.doesNotMatch(html, /再請求準備前の受付が含まれています/);
+  assert.ok(
+    !DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(html, 'data-testid="download-official-cyo-button"', 'button')),
+    'Download button must be enabled for a ready first-time draft visit'
+  );
+});
+
+test('SingleOfficialUkeModal still blocks already-exported visits to prevent accidental duplicate submission', () => {
+  const data = createModalTestData();
+  data.visit.claimLifecycle = {
+    status: 'exported',
+    exportedAt: '2026-06-10T11:00:00.000Z',
+    exportedFileName: 'RECEIPTY.CYO'
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(SingleOfficialUkeModal, {
+      isOpen: true,
+      onClose: () => {},
+      visitData: data.visit,
+      patientData: data.patient,
+      settingsData: data.settings,
+      prescriptionItems: data.items,
+      calculatedFees: data.calculatedFees
+    })
+  );
+
+  assert.match(html, /公式仕様未充足による出力制限/);
+  assert.match(html, /再出力できない請求状態の受付が含まれています/);
+  assert.ok(
+    DISABLED_ATTRIBUTE_PATTERN.test(findOpeningTag(html, 'data-testid="download-official-cyo-button"', 'button')),
+    'Download button must stay disabled for already-exported visits'
+  );
+});
+
+
 

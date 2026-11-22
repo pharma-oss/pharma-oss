@@ -16,8 +16,17 @@ import {
   buildDrugPriceOverrideAuditDetail,
   buildReceiptReissueAuditDetail,
   changeClaimConditions,
+  executeSingleOfficialUkeExport,
+  SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES,
   type LogAuditActionFn
 } from './claim_actions.ts';
+import {
+  buildSingleOfficialUkeModalClaimState,
+  DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE
+} from './helpers.ts';
+import { SELF_PAY_UKE_BLOCKED_MESSAGE } from '../../lib/self_pay_claim.ts';
+import type { SingleDispensingUkeOfficialResult } from '../../lib/receipt/dispensing_uke_official_single.ts';
+import type { Patient, PrescriptionItem, Visit } from '../../db/types.ts';
 import type { ClaimLifecycleState } from '../../lib/claim_lifecycle.ts';
 import type { FeeCalculationOptions } from '../../lib/calculator.ts';
 
@@ -963,3 +972,218 @@ test('a receipt reissue is not printed when its audit entry cannot be recorded',
   });
   assert.deepEqual(outcome, { status: 'blocked', message: CLAIM_ACTION_MESSAGES.printAuditFailed });
 });
+
+// ---------------------------------------------------------------------------
+// 単票公式 UKE（RECEIPTY.CYO）出力時の請求ロック・監査ログ先行・ロールバック
+// ---------------------------------------------------------------------------
+
+const SAMPLE_OFFICIAL_RESULT = {
+  fileName: 'RECEIPTY.CYO',
+  content: new Uint8Array([0x59, 0x4b, 0x1a]),
+  text: 'YK,...\r\nGO,1,83,99\r\n',
+  records: [
+    { type: 'YK', fields: [] },
+    { type: 'RE', fields: [] },
+    { type: 'GO', fields: ['1', '83', '99'] }
+  ],
+  totalClaims: 1 as const,
+  totalPoints: 83
+} as unknown as SingleDispensingUkeOfficialResult;
+
+const SAMPLE_VISIT_FOR_OFFICIAL: Visit = {
+  visitId: 'v_0001',
+  patientId: 'pt_0001',
+  issueDate: '2026-06-10T10:00:00.000Z',
+  prescriptionDate: '2026-06-10',
+  dispensingDate: '2026-06-10',
+  status: 'completed'
+};
+
+const SAMPLE_PATIENT_FOR_OFFICIAL: Patient = {
+  patientId: 'pt_0001',
+  name: '社保 太郎',
+  kana: 'シャホ タロウ',
+  birthDate: '1985-05-15',
+  gender: 'male',
+  insuranceInfo: {
+    provider: '06130012',
+    number: '123456',
+    burdenRatio: 30,
+    relationship: '本人'
+  }
+};
+
+const SAMPLE_ITEMS_FOR_OFFICIAL: PrescriptionItem[] = [
+  {
+    itemId: 'item_01',
+    visitId: 'v_0001',
+    drugId: '620000001',
+    dispensedDrug: 'アムロジピンOD錠5mg',
+    amount: 1,
+    days: 14,
+    usage: '1日1回 朝食後'
+  }
+];
+
+test('executeSingleOfficialUkeExport locks a first-time draft visit via markClaimExported and writes both lifecycle and uke_export audits', async () => {
+  const harness = createHarness({ visit: { ...SAMPLE_VISIT_FOR_OFFICIAL } });
+  const appliedStates: ClaimLifecycleState[] = [];
+
+  const { nextLifecycle } = await executeSingleOfficialUkeExport({
+    db: harness.db,
+    visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+    patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+    prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+    result: SAMPLE_OFFICIAL_RESULT,
+    operatorName: '管理薬剤師 佐藤',
+    canExportUke: true,
+    permissionDeniedMessage: '権限がありません',
+    isSelfPayClaimExcluded: false,
+    isDemo: false,
+    applyLifecycle: (l) => appliedStates.push(l),
+    exportedAt: '2026-06-10T12:00:00.000Z',
+    logAudit: harness.logAudit
+  });
+
+  assert.equal(nextLifecycle.status, 'exported');
+  assert.equal(nextLifecycle.exportedFileName, 'RECEIPTY.CYO');
+  assert.equal(nextLifecycle.totalPoints, 83);
+  assert.equal(nextLifecycle.exportedBy, '管理薬剤師 佐藤');
+  assert.ok(nextLifecycle.exportSnapshot);
+  assert.equal(harness.currentVisit().claimLifecycle?.status, 'exported');
+  assert.equal(appliedStates.length, 1);
+  assert.equal(appliedStates[0].status, 'exported');
+  assert.equal(harness.auditEntries.length, 2);
+  assert.equal(harness.auditEntries[0].actionType, 'claim_lifecycle');
+  assert.equal(harness.auditEntries[1].actionType, 'uke_export');
+  assert.ok(harness.auditEntries[1].details.includes('公式レセプト（UKE / RECEIPTY.CYO）エクスポート'));
+});
+
+test('executeSingleOfficialUkeExport rolls back claimLifecycle when uke_export audit fails', async () => {
+  const previousRebilling: ClaimLifecycleState = {
+    status: 'rebilling',
+    rebillingReason: '返戻修正後再請求'
+  };
+  const visitWithRebilling: Visit = {
+    ...SAMPLE_VISIT_FOR_OFFICIAL,
+    claimLifecycle: previousRebilling
+  };
+  const harness = createHarness({ visit: { ...visitWithRebilling } });
+  const appliedStates: ClaimLifecycleState[] = [];
+  let auditCall = 0;
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: visitWithRebilling,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      operatorName: '管理薬剤師 佐藤',
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: (l) => appliedStates.push(l),
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      logAudit: async (db, actionType, details, patientId, patientName) => {
+        auditCall++;
+        if (actionType === 'uke_export') return false;
+        return harness.logAudit(db, actionType, details, patientId, patientName);
+      }
+    }),
+    new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack)
+  );
+
+  assert.equal(auditCall, 2);
+  assert.deepEqual(harness.currentVisit().claimLifecycle, previousRebilling);
+  assert.equal(appliedStates.length, 2);
+  assert.deepEqual(appliedStates[1], previousRebilling);
+});
+
+test('executeSingleOfficialUkeExport rejects permission denied, self-pay, demo, and already-locked visits before DB write', async () => {
+  const harness = createHarness({ visit: { ...SAMPLE_VISIT_FOR_OFFICIAL } });
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: false,
+      permissionDeniedMessage: 'UKE出力権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: () => {},
+      logAudit: harness.logAudit
+    }),
+    /UKE出力権限がありません/
+  );
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: true,
+      isDemo: false,
+      applyLifecycle: () => {},
+      logAudit: harness.logAudit
+    }),
+    new Error(SELF_PAY_UKE_BLOCKED_MESSAGE)
+  );
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: true,
+      applyLifecycle: () => {},
+      logAudit: harness.logAudit
+    }),
+    new Error(DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE)
+  );
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: { ...SAMPLE_VISIT_FOR_OFFICIAL, claimLifecycle: { status: 'exported' } },
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: () => {},
+      logAudit: harness.logAudit
+    }),
+    new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.locked)
+  );
+
+  assert.equal(harness.auditEntries.length, 0);
+  assert.deepEqual(harness.events, []);
+});
+
+test('buildSingleOfficialUkeModalClaimState blocks demo visits with explicit demo message', () => {
+  const state = buildSingleOfficialUkeModalClaimState({
+    isSelfPayClaimExcluded: false,
+    isDemoVisit: true,
+    hasClaimErrors: false,
+    claimValidationErrors: []
+  });
+  assert.equal(state.hasClaimErrors, true);
+  assert.deepEqual(state.claimErrorMessages, [DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE]);
+});
+

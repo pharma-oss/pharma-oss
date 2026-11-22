@@ -52,6 +52,8 @@ export interface SingleOfficialUkeModalProps {
   interventions?: SingleOfficialUkeInterventionLike[];
   hasClaimErrors?: boolean;
   claimErrorMessages?: string[];
+  /** ダウンロード実行前に請求ロック・監査ログ記録を行うフック。失敗して例外を投げた場合はファイルを出力しない。 */
+  onBeforeDownload?: (result: SingleDispensingUkeOfficialResult) => Promise<void> | void;
   onExportSuccess?: (result: SingleDispensingUkeOfficialResult) => Promise<void> | void;
 }
 
@@ -66,6 +68,7 @@ export function SingleOfficialUkeModal({
   interventions,
   hasClaimErrors = false,
   claimErrorMessages = [],
+  onBeforeDownload,
   onExportSuccess
 }: SingleOfficialUkeModalProps) {
   const [copySuccess, setCopySuccess] = useState(false);
@@ -181,6 +184,11 @@ export function SingleOfficialUkeModal({
     setIsExporting(true);
     setExportError(null);
     try {
+      // 請求ロック・監査ログ記録を先に完了させ、失敗時はファイルを出力しない
+      if (onBeforeDownload) {
+        await onBeforeDownload(officialResult);
+      }
+
       // Uint8Array から Shift_JIS バイナリ Blob を生成
       const blob = new Blob([officialResult.content as unknown as BlobPart], {
         type: 'application/octet-stream'
@@ -203,7 +211,7 @@ export function SingleOfficialUkeModal({
     } finally {
       setIsExporting(false);
     }
-  }, [officialResult, isExporting, onExportSuccess]);
+  }, [officialResult, isExporting, onBeforeDownload, onExportSuccess]);
 
   if (!isOpen) return null;
 

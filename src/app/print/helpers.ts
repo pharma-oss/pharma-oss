@@ -636,20 +636,34 @@ export function getSingleLegacyUkeBlockReason(params: {
   return null;
 }
 
+export const DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE =
+  'チュートリアルのデモ受付のため、公式UKEファイルは出力できません。';
+
 /**
  * 単票公式UKEモーダルへ渡すエラー有無とメッセージ配列を組み立てる純粋関数。
- * 自費患者は請求前チェックエラー有無にかかわらず公式UKE出力をブロックする。
+ * 自費患者およびチュートリアルのデモ受付は請求前チェックエラー有無にかかわらず公式UKE出力をブロックする。
  */
 export function buildSingleOfficialUkeModalClaimState(params: {
   isSelfPayClaimExcluded: boolean;
+  isDemoVisit?: boolean;
   hasClaimErrors: boolean;
   claimValidationErrors: ReadonlyArray<string | { message?: string }>;
 }): { hasClaimErrors: boolean; claimErrorMessages: string[] } {
+  if (params.isSelfPayClaimExcluded) {
+    return {
+      hasClaimErrors: true,
+      claimErrorMessages: [SELF_PAY_UKE_BLOCKED_MESSAGE]
+    };
+  }
+  if (params.isDemoVisit) {
+    return {
+      hasClaimErrors: true,
+      claimErrorMessages: [DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE]
+    };
+  }
   return {
-    hasClaimErrors: params.hasClaimErrors || params.isSelfPayClaimExcluded,
-    claimErrorMessages: params.isSelfPayClaimExcluded
-      ? [SELF_PAY_UKE_BLOCKED_MESSAGE]
-      : params.claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))
+    hasClaimErrors: params.hasClaimErrors,
+    claimErrorMessages: params.claimValidationErrors.map((e) => (typeof e === 'string' ? e : e?.message || JSON.stringify(e)))
   };
 }
 

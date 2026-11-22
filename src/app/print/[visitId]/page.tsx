@@ -79,7 +79,7 @@ import {
   getClaimReturnReasonByCode
 } from '@/lib/claim_return_manager';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
-import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
+import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, runWithAuditRollback } from '@/lib/audit_guard';
 import { downloadTextFile } from '@/lib/blob_download';
 import { extractErrorMessage, userFacingErrorMessage } from '@/lib/user_facing_error';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
@@ -142,6 +142,7 @@ import {
   applyItemClaimFlagWithAudit,
   buildReceiptReissueAuditDetail,
   changeClaimConditions,
+  executeSingleOfficialUkeExport,
   persistClaimLifecycleWithAudit,
   persistClaimOptions as persistVisitClaimOptions,
   printDocumentsWithAuditLog
@@ -167,10 +168,7 @@ import { CopaymentGuidanceBanner } from '../components/CopaymentGuidanceBanner';
 import { ReceiptConsoleSummaryPanel } from '../components/ReceiptConsoleSummaryPanel';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
-import {
-  formatSingleLegacyUkeExportAuditMessage,
-  formatSingleOfficialUkeExportAuditMessage
-} from '@/lib/receipt/uke_migration_policy';
+import { formatSingleLegacyUkeExportAuditMessage } from '@/lib/receipt/uke_migration_policy';
 import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
 import {
   type DbKeyEscrowPayload,
@@ -1004,9 +1002,9 @@ export default function PrintPage() {
     }
   };
 
-  const applyClaimLifecycleToVisit = (lifecycle: ClaimLifecycleState) => {
+  const applyClaimLifecycleToVisit = useCallback((lifecycle: ClaimLifecycleState) => {
     setVisitData((prev) => prev ? { ...prev, claimLifecycle: lifecycle } : prev);
-  };
+  }, []);
 
   const persistClaimLifecycle = async (nextLifecycle: ClaimLifecycleState, detail: string) => {
     await persistClaimLifecycleWithAudit({
@@ -1041,23 +1039,29 @@ export default function PrintPage() {
     }));
   }, [prescriptionItems, remarks]);
 
-  const handleOfficialUkeExportSuccess = useCallback(async (result: SingleDispensingUkeOfficialResult) => {
-    if (!db) return;
-    await recordAuditOrNotify(
-      () => logAuditAction(
-        db,
-        'uke_export',
-        formatSingleOfficialUkeExportAuditMessage({
-          patientName: patientData?.name,
-          totalPoints: result.totalPoints,
-          recordCount: result.records.length
-        }),
-        visitData?.patientId,
-        patientData?.name
-      ),
-      (message) => alert(message)
-    );
-  }, [db, patientData?.name, visitData?.patientId]);
+  const handleOfficialUkeBeforeDownload = useCallback(async (result: SingleDispensingUkeOfficialResult) => {
+    if (!visitData || !patientData) {
+      throw new Error('受付または患者情報が読み込まれていません。');
+    }
+    const currentUserForClaim = getCurrentUser();
+    await executeSingleOfficialUkeExport({
+      db,
+      visitData,
+      patientData,
+      prescriptionItems,
+      result,
+      operatorName: currentUserForClaim.name,
+      canExportUke: canUserPerform(currentUserForClaim, 'export_uke'),
+      permissionDeniedMessage: getPermissionDeniedMessage(currentUserForClaim, 'export_uke'),
+      isSelfPayClaimExcluded,
+      isDemo: isDemoVisit(visitData),
+      applyLifecycle: applyClaimLifecycleToVisit
+    });
+  }, [applyClaimLifecycleToVisit, db, isSelfPayClaimExcluded, patientData, prescriptionItems, visitData]);
+
+  const handleOfficialUkeExportSuccess = useCallback(() => {
+    setIsOfficialUkeModalOpen(false);
+  }, []);
 
   const handleDownloadUke = async () => {
     if (!ensurePermission('export_uke')) return;
@@ -1416,6 +1420,7 @@ export default function PrintPage() {
   const insuranceAmounts = calculatePrintReceiptInsuranceAmounts(totalPoints, patientData.insuranceInfo?.burdenRatio);
   const officialUkeModalClaimState = buildSingleOfficialUkeModalClaimState({
     isSelfPayClaimExcluded,
+    isDemoVisit: isDemoVisit(visitData),
     hasClaimErrors,
     claimValidationErrors
   });
@@ -2117,6 +2122,7 @@ export default function PrintPage() {
           interventions={interventions}
           hasClaimErrors={officialUkeModalClaimState.hasClaimErrors}
           claimErrorMessages={officialUkeModalClaimState.claimErrorMessages}
+          onBeforeDownload={handleOfficialUkeBeforeDownload}
           onExportSuccess={handleOfficialUkeExportSuccess}
         />
       )}

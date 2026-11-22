@@ -67,7 +67,10 @@ export function inspectAndBuildSingleDispensingUkeOfficial(
   const claimCase = toSingleClaimCase(input);
   const results = buildMonthlyClaimUkeResults([claimCase], input.generatedAt);
   const result = results[0];
-  const preflightReport = buildMonthlyClaimUkePreflightReport(results);
+  // 単票公式UKEは初回出力（draft）および再請求準備（rebilling）を許可する。
+  // 一方で既出力ロック済み（exported/accepted/closed）や返戻対応中（returned）は引き続きブロックする。
+  const singleOfficialOptions = { allowDraft: true } as const;
+  const preflightReport = buildMonthlyClaimUkePreflightReport(results, singleOfficialOptions);
 
   const blockingIssues: SingleDispensingUkeOfficialIssueItem[] = [];
   const warningIssues: SingleDispensingUkeOfficialIssueItem[] = [];
@@ -113,7 +116,7 @@ export function inspectAndBuildSingleDispensingUkeOfficial(
   }
 
   try {
-    const bundle = buildMonthlyClaimOfficialUkeBundle([claimCase], results);
+    const bundle = buildMonthlyClaimOfficialUkeBundle([claimCase], results, singleOfficialOptions);
     const text = bundle.records
       .map((record) => [record.type, ...record.fields].join(','))
       .join('\r\n') + '\r\n';
@@ -147,6 +150,7 @@ export function inspectAndBuildSingleDispensingUkeOfficial(
  * 1件の受付データ（単票）から公式提出仕様の UKE ファイル（RECEIPTY.CYO）を生成する純粋関数
  * 
  * - 月次公式 UKE バンドル生成と同じエンジンを共有し、契約・集計・バリデーションの一貫性を担保する。
+ * - 単票初回出力（draft）および再請求準備（rebilling）を受け入れ、既出力ロック済み・返戻対応中はブロックする。
  * - 末尾に公式仕様の GO レコード（件数: 1、合計点数、99）および EOF (0x1A) を付与する。
  * - 条件付き補助レコード（SN, JD, MF, ST）を共通モジュール経由で正しく展開する。
  */
@@ -158,7 +162,7 @@ export function buildSingleDispensingUkeOfficial(
   const results = buildMonthlyClaimUkeResults([claimCase], input.generatedAt);
   const result = results[0];
 
-  const bundle = buildMonthlyClaimOfficialUkeBundle([claimCase], results);
+  const bundle = buildMonthlyClaimOfficialUkeBundle([claimCase], results, { allowDraft: true });
 
   const text = bundle.records
     .map((record) => [record.type, ...record.fields].join(','))

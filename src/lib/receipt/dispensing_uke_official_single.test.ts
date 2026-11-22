@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import type { CalculationResultItem } from '@/lib/calculator';
 import type { DispensingUkeItem } from './dispensing_uke';
-import { buildSingleDispensingUkeOfficial } from './dispensing_uke_official_single';
+import {
+  buildSingleDispensingUkeOfficial,
+  inspectAndBuildSingleDispensingUkeOfficial
+} from './dispensing_uke_official_single';
+import { buildMonthlyClaimUkePreflightReport, buildMonthlyClaimUkeResults } from '@/lib/monthly_claim_uke';
 
 const testSettings: FacilitySettings = {
   id: 'default',
@@ -187,3 +191,54 @@ test('buildSingleDispensingUkeOfficial throws error when readiness preflight fai
     /公式提出準備に/
   );
 });
+
+test('buildSingleDispensingUkeOfficial and inspectAndBuildSingleDispensingUkeOfficial allow first-time draft visits while monthly preflight still rejects draft', () => {
+  const input = createStandardSingleSocialCase();
+  input.visit.claimLifecycle = undefined;
+
+  const built = buildSingleDispensingUkeOfficial(input);
+  assert.equal(built.fileName, 'RECEIPTY.CYO');
+  assert.equal(built.totalPoints, 83);
+  assert.equal(built.content[built.content.length - 1], 0x1a);
+
+  const inspected = inspectAndBuildSingleDispensingUkeOfficial({
+    ...input,
+    visit: { ...input.visit, claimLifecycle: { status: 'draft' } }
+  });
+  assert.equal(inspected.errorMessage, null);
+  assert.deepEqual(inspected.blockingIssues, []);
+  assert.ok(inspected.result !== null);
+
+  // 月次一括 UKE の既定事前チェックは引き続き draft 受付をブロックする契約を維持
+  const monthlyResults = buildMonthlyClaimUkeResults([input]);
+  const monthlyPreflight = buildMonthlyClaimUkePreflightReport(monthlyResults);
+  assert.equal(
+    monthlyPreflight.batchErrorIssues.some((issue) => issue.code === 'monthly_uke_unprepared_claim_mixed'),
+    true
+  );
+});
+
+test('buildSingleDispensingUkeOfficial still blocks exported and returned visits to prevent duplicate submission', () => {
+  const exportedCase = createStandardSingleSocialCase();
+  exportedCase.visit.claimLifecycle = {
+    status: 'exported',
+    exportedAt: '2026-06-10T11:00:00.000Z',
+    exportedFileName: 'RECEIPTY.CYO'
+  };
+  const exportedInspection = inspectAndBuildSingleDispensingUkeOfficial(exportedCase);
+  assert.equal(exportedInspection.result, null);
+  assert.ok(exportedInspection.blockingIssues.some((issue) => issue.code === 'monthly_uke_locked_claim_mixed'));
+  assert.throws(() => buildSingleDispensingUkeOfficial(exportedCase));
+
+  const returnedCase = createStandardSingleSocialCase();
+  returnedCase.visit.claimLifecycle = {
+    status: 'returned',
+    returnedAt: '2026-06-15T10:00:00.000Z',
+    returnReason: '保険者番号誤り'
+  };
+  const returnedInspection = inspectAndBuildSingleDispensingUkeOfficial(returnedCase);
+  assert.equal(returnedInspection.result, null);
+  assert.ok(returnedInspection.blockingIssues.some((issue) => issue.code === 'monthly_uke_returned_claim_mixed'));
+  assert.throws(() => buildSingleDispensingUkeOfficial(returnedCase));
+});
+
