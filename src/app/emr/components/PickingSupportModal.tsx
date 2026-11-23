@@ -59,6 +59,9 @@ export interface PickingSupportModalProps {
   userId?: string;
   onScanGs1: (scannedCode: string) => Promise<{ success: boolean; message: string }>;
   onManualVerify?: (itemId: string, reason: string) => Promise<{ success: boolean; message: string }>;
+  /** 操作者が権限「ピッキングの目視照合」を持つか。持たない場合はボタンを押せなくし、理由を出す */
+  canManualVerify?: boolean;
+  manualVerifyDeniedMessage?: string;
   onRecordShortage: (itemId: string, shortageQty: number, note: string) => Promise<boolean | void>;
   onResetPick: (itemId: string) => void;
   onExportInstruction: () => Promise<void>;
@@ -76,6 +79,8 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   userId,
   onScanGs1,
   onManualVerify,
+  canManualVerify = true,
+  manualVerifyDeniedMessage = '目視照合は薬剤師または管理者が行います。',
   onRecordShortage,
   onResetPick,
   onExportInstruction,
@@ -153,12 +158,13 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
   };
 
   const openManualVerifyEditor = (itemId: string) => {
+    if (!canManualVerify) return;
     setEditingShortageItemId(null);
     setManualVerifyState({ itemId, reason: '', isSubmitting: false });
   };
 
   const submitManualVerify = async (itemId: string) => {
-    if (!onManualVerify || manualVerifyState.isSubmitting || !manualVerifyState.reason) return;
+    if (!onManualVerify || !canManualVerify || manualVerifyState.isSubmitting || !manualVerifyState.reason) return;
     setManualVerifyState((prev) => ({ ...prev, isSubmitting: true }));
     setScanMessage(null);
     try {
@@ -273,6 +279,12 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
             <AlertTriangle size={16} />
             <span>{loadErrorMessage}</span>
           </div>
+        )}
+
+        {onManualVerify && !canManualVerify && items.some((item) => !item.isPicked) && (
+          <p id="manual-verify-denied-note" className="manual-verify-denied-note" data-testid="manual-verify-denied-note">
+            {manualVerifyDeniedMessage}
+          </p>
         )}
 
         <div className="picking-list">
@@ -420,6 +432,9 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
                             className="btn-secondary btn-manual-verify"
                             data-testid={`manual-verify-open-${item.itemId}`}
                             onClick={() => openManualVerifyEditor(item.itemId)}
+                            disabled={!canManualVerify}
+                            title={canManualVerify ? undefined : manualVerifyDeniedMessage}
+                            aria-describedby={canManualVerify ? undefined : 'manual-verify-denied-note'}
                           >
                             目視確認で照合
                           </button>
@@ -659,6 +674,11 @@ export const PickingSupportModal: React.FC<PickingSupportModalProps> = ({
           font-size: var(--fs-xs);
           color: var(--success);
           font-family: monospace;
+        }
+        .manual-verify-denied-note {
+          margin: 0 0 var(--space-2);
+          font-size: var(--fs-sm);
+          color: var(--text-muted);
         }
         .item-manual-badge {
           font-size: var(--fs-xs);

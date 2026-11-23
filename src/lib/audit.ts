@@ -47,7 +47,8 @@ export const ALL_PERMISSION_ACTIONS = [
   'approve_daily_closing',
   'review_ai_suggestions',
   'manage_backups',
-  'manage_staff'
+  'manage_staff',
+  'manual_picking_verification'
 ] as const;
 
 export type PermissionAction = typeof ALL_PERMISSION_ACTIONS[number];
@@ -72,7 +73,9 @@ export const DEFAULT_ROLE_PERMISSION_POLICY: RolePermissionPolicy = {
     'view_audit_logs',
     'approve_daily_closing',
     'review_ai_suggestions',
-    'manage_backups'
+    'manage_backups',
+    // GS1 の裏付けが無い照合は、現物を見た薬剤師の判断そのものなので事務には渡さない
+    'manual_picking_verification'
   ],
   clerk: [
     'receive_prescription',
@@ -92,7 +95,8 @@ export const PERMISSION_LABELS: Record<PermissionAction, string> = {
   approve_daily_closing: '日次締め承認',
   review_ai_suggestions: 'AI補助提案の確認',
   manage_backups: 'バックアップ/復旧',
-  manage_staff: 'スタッフ管理'
+  manage_staff: 'スタッフ管理',
+  manual_picking_verification: 'ピッキングの目視照合'
 };
 
 const knownPermissionActions = new Set<PermissionAction>(ALL_PERMISSION_ACTIONS);

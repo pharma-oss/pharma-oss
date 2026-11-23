@@ -2,7 +2,7 @@ import type { PrescriptionItem, Visit } from '@/db/types';
 import { logAuditAction, type AuditLogDatabaseLike } from './audit';
 import { ExportAuditFailedError, exportWithAuditFirst, recordAuditOrNotify } from './audit_guard';
 import { downloadTextFile } from './blob_download';
-import type { EmrPickingItem } from './emr_helpers';
+import { parseManualPickingReason, type EmrPickingItem } from './emr_helpers';
 import type { PickingReceiptInput } from './picking_receipt';
 import type { PickingResultApplyPlan, PickingResultParseIssue } from './picking_system';
 
@@ -116,6 +116,7 @@ export async function executePrintPickingReceipt(params: {
         isPicked: !!item.isPicked,
         pickedLotNumber: item.pickedLotNumber,
         pickedExpirationDate: item.pickedExpirationDate,
+        manualVerificationReason: parseManualPickingReason(item.pickedGs1Code) ?? undefined,
         shortageQuantity: item.shortageQuantity,
         shortageNote: item.shortageNote
       }))

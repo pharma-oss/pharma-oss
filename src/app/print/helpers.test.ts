@@ -37,6 +37,7 @@ import {
   type PrintDrugMasterDoc
 } from './helpers.ts';
 import { buildPrescriptionInputAudit } from '@/lib/prescription_input_audit';
+import { formatManualPickingMarker } from '@/lib/emr_helpers';
 import type { PrescriptionItem } from '@/db/types';
 import type { PrintPrescriptionItem } from './types.ts';
 
@@ -454,6 +455,18 @@ test('getPickingEvidence distinguishes GS1 verified, manual picked, and unverifi
   // 未照合: isPicked が false または未設定
   assert.equal(getPickingEvidence({ isPicked: false }), '未照合');
   assert.equal(getPickingEvidence({}), '未照合');
+});
+
+test('getPickingEvidence never labels a manual visual check as GS1 verified', () => {
+  // 目視照合は pickedGs1Code に理由付きの印が入る。GS1 の値があるだけで「GS1照合済み」と印刷してはいけない。
+  const marker = formatManualPickingMarker('バーコードスキャナ未導入');
+  assert.equal(
+    getPickingEvidence({ isPicked: true, pickedGs1Code: marker }),
+    '目視照合済み（GS1照合なし・理由: バーコードスキャナ未導入）'
+  );
+  assert.doesNotMatch(getPickingEvidence({ isPicked: true, pickedGs1Code: marker }), /GS1照合済み/);
+  // 印が残っていても未ピッキングなら未照合
+  assert.equal(getPickingEvidence({ isPicked: false, pickedGs1Code: marker }), '未照合');
 });
 
 

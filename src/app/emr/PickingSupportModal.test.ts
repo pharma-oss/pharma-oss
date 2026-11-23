@@ -22,6 +22,7 @@ import {
   type PickingItem
 } from '@/lib/emr_helpers';
 import type { AuditLog, PrescriptionItem } from '@/db/types';
+import { DEFAULT_ROLE_PERMISSION_POLICY } from '@/lib/audit';
 import { findOpeningTag } from '@/lib/test_support/html_disabled_tags';
 
 const DISABLED_ATTRIBUTE_PATTERN = /\sdisabled=""(?=[\s/>]|$)/;
@@ -427,7 +428,7 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
   assert.equal(parseManualPickingReason(formatManualPickingMarker('GS1・JAN未登録品目')), 'GS1・JAN未登録品目');
   assert.equal(parseManualPickingReason('0104987001001001'), null);
   assert.ok(
-    buildManualPickingAuditMessage({ drugName: 'アムロジピン錠5mg', reason: 'バーコードスキャナ未導入', pharmacistName: '佐藤 薬剤師' })
+    buildManualPickingAuditMessage({ drugName: 'アムロジピン錠5mg', reason: 'バーコードスキャナ未導入', operatorName: '佐藤', operatorRoleLabel: '薬剤師' })
       .includes('[目視照合]')
   );
 
@@ -450,6 +451,7 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
       findOne: (id: string) => ({
         exec: async () => (id === 'item-100'
           ? {
+            visitId: storedItem.visitId,
             dispensedDrug: storedItem.dispensedDrug,
             drugId: storedItem.drugId,
             modify: async (fn: (data: PrescriptionItem) => PrescriptionItem) => {
@@ -458,6 +460,16 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
             }
           }
           : null)
+      })
+    },
+    visits: {
+      findOne: (id: string) => ({
+        exec: async () => (id === 'visit-1' ? { patientId: 'pt-77' } : null)
+      })
+    },
+    patients: {
+      findOne: (id: string) => ({
+        exec: async () => (id === 'pt-77' ? { name: '目視 花子' } : null)
       })
     },
     audit_logs: {
@@ -475,7 +487,10 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
     ensureActiveVisitEditable: async () => ({ ok: true }),
     itemId: 'item-100',
     reason: '',
-    pharmacistName: '佐藤 薬剤師',
+    operatorName: '佐藤',
+    operatorRoleLabel: '薬剤師',
+    canVerify: true,
+    permissionDeniedMessage: '権限がありません',
     notify: {
       success: (m) => notifications.push(`ok:${m}`),
       error: (m) => notifications.push(`err:${m}`),
@@ -492,7 +507,10 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
     ensureActiveVisitEditable: async () => ({ ok: true }),
     itemId: 'item-100',
     reason: 'バーコードスキャナ未導入',
-    pharmacistName: '佐藤 薬剤師',
+    operatorName: '佐藤',
+    operatorRoleLabel: '薬剤師',
+    canVerify: true,
+    permissionDeniedMessage: '権限がありません',
     notify: {
       success: (m) => notifications.push(`ok:${m}`),
       error: (m) => notifications.push(`err:${m}`),
@@ -506,6 +524,91 @@ test('executeManualVisualPicking enforces mandatory reason, marks item picked wi
   assert.equal(insertedAudits.length, 1);
   assert.ok(insertedAudits[0].details.includes('[目視照合]'));
   assert.ok(insertedAudits[0].details.includes('バーコードスキャナ未導入'));
-  assert.ok(insertedAudits[0].details.includes('佐藤 薬剤師'));
+  assert.ok(insertedAudits[0].details.includes('確認者: 佐藤（薬剤師）'));
+  assert.ok(insertedAudits[0].details.includes('GS1照合なし'));
+  // GS1 の裏付けが無い照合なので、患者別の監査ログ検索で拾えるよう明細の受付→患者に紐付ける
+  assert.equal(insertedAudits[0].patientId, 'pt-77');
+  assert.equal(insertedAudits[0].patientName, '目視 花子');
 });
 
+
+test('executeManualVisualPicking refuses operators without the manual picking permission before touching the item', async () => {
+  let modifyCalls = 0;
+  let auditInserts = 0;
+  const notifications: string[] = [];
+  const mockDb = {
+    prescription_items: {
+      findOne: () => ({
+        exec: async () => ({
+          visitId: 'visit-1',
+          dispensedDrug: 'アムロジピン錠5mg',
+          drugId: '620000001',
+          modify: async () => { modifyCalls++; }
+        })
+      })
+    },
+    audit_logs: {
+      find: () => ({ exec: async () => [] }),
+      insert: async () => { auditInserts++; }
+    }
+  };
+  const denied = '事務員（事務）には「ピッキングの目視照合」の権限がありません。';
+
+  const result = await executeManualVisualPicking({
+    db: mockDb,
+    ensureActiveVisitEditable: async () => ({ ok: true }),
+    itemId: 'item-100',
+    reason: 'バーコードスキャナ未導入',
+    operatorName: '事務員',
+    operatorRoleLabel: '事務',
+    canVerify: false,
+    permissionDeniedMessage: denied,
+    notify: {
+      success: (m) => notifications.push(`ok:${m}`),
+      error: (m) => notifications.push(`err:${m}`),
+      warning: (m) => notifications.push(`warn:${m}`)
+    }
+  });
+
+  assert.deepEqual(result, { success: false, message: denied });
+  assert.equal(modifyCalls, 0);
+  assert.equal(auditInserts, 0);
+  assert.deepEqual(notifications, [`err:${denied}`]);
+});
+
+test('PickingSupportModal disables the manual visual-check button and explains why when the operator lacks the permission', () => {
+  const items = [
+    {
+      itemId: 'item-unpicked',
+      drugName: 'ロキソプロフェンNa錠60mg',
+      totalQuantity: 21,
+      location: 'B-02',
+      isPicked: false,
+      shortageQuantity: 0
+    }
+  ];
+  const deniedMessage = '事務員（事務）には「ピッキングの目視照合」の権限がありません。';
+  const deniedHtml = renderToStaticMarkup(React.createElement(PickingSupportModal, createMockPickingSupportModalProps({
+    items,
+    canManualVerify: false,
+    manualVerifyDeniedMessage: deniedMessage
+  })));
+  const deniedBtn = findOpeningTag(deniedHtml, 'data-testid="manual-verify-open-item-unpicked"', 'button');
+  assert.ok(DISABLED_ATTRIBUTE_PATTERN.test(deniedBtn), '権限が無ければ目視照合ボタンを押せない');
+  assert.ok(deniedHtml.includes('data-testid="manual-verify-denied-note"'));
+  assert.ok(deniedHtml.includes(deniedMessage));
+
+  const allowedHtml = renderToStaticMarkup(React.createElement(PickingSupportModal, createMockPickingSupportModalProps({
+    items,
+    canManualVerify: true
+  })));
+  const allowedBtn = findOpeningTag(allowedHtml, 'data-testid="manual-verify-open-item-unpicked"', 'button');
+  assert.ok(!DISABLED_ATTRIBUTE_PATTERN.test(allowedBtn), '権限があれば押せる');
+  assert.ok(!allowedHtml.includes('data-testid="manual-verify-denied-note"'));
+});
+
+test('default role policy gives manual picking verification to pharmacists and admins but not clerks', () => {
+  assert.ok(DEFAULT_ROLE_PERMISSION_POLICY.admin.includes('manual_picking_verification'));
+  assert.ok(DEFAULT_ROLE_PERMISSION_POLICY.pharmacist.includes('manual_picking_verification'));
+  assert.ok(!DEFAULT_ROLE_PERMISSION_POLICY.clerk.includes('manual_picking_verification'));
+});

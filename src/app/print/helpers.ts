@@ -17,6 +17,7 @@ import { PATIENT_IDENTITY_MARKS, type PatientIdentityMark, type PrintItemMasterF
 import { calculateInsuranceAmounts, type InsuranceAmountBreakdown } from '@/lib/billing';
 import { SELF_PAY_UKE_BLOCKED_MESSAGE } from '@/lib/self_pay_claim';
 import type { ClaimLifecycleStatus } from '@/lib/claim_lifecycle';
+import { parseManualPickingReason } from '@/lib/emr_helpers';
 
 export interface PrintDrugMasterDoc {
   name?: string;
@@ -323,6 +324,12 @@ export function getDispensingTotalAmountText(item: AmountTextSourceItem): string
 }
 
 export function getPickingEvidence(item: PickingEvidenceSourceItem): string {
+  // 目視照合は pickedGs1Code に理由付きの印を入れて記録する(emr_helpers の executeManualVisualPicking)。
+  // GS1 の値が入っているからといって「GS1照合済み」と印刷すると、行っていない照合を帳票が証明してしまう。
+  const manualReason = parseManualPickingReason(item.pickedGs1Code);
+  if (manualReason) {
+    return item.isPicked ? `目視照合済み（GS1照合なし・理由: ${manualReason}）` : '未照合';
+  }
   const hasGs1 = Boolean(item.pickedGs1Code || item.pickedGtin);
   if (hasGs1) {
     if (item.pickedLotNumber) {

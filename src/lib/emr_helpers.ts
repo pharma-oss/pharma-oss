@@ -148,22 +148,57 @@ export function parseManualPickingReason(pickedGs1Code?: string): string | null 
 export function buildManualPickingAuditMessage(params: {
   drugName: string;
   reason: string;
-  pharmacistName?: string;
+  operatorName?: string;
+  /** 確認者の役割(薬剤師・管理者)。押せる役割は権限「ピッキングの目視照合」で絞る */
+  operatorRoleLabel?: string;
 }): string {
-  const actor = params.pharmacistName?.trim() || '担当薬剤師';
-  return `[目視照合] 「${params.drugName}」を薬剤師の目視確認で照合しました（理由: ${params.reason.trim()} / 確認者: ${actor}）。`;
+  const name = params.operatorName?.trim() || '担当者';
+  const role = params.operatorRoleLabel?.trim();
+  const actor = role ? `${name}（${role}）` : name;
+  return `[目視照合] 「${params.drugName}」をGS1照合なしの目視確認で照合しました（理由: ${params.reason.trim()} / 確認者: ${actor}）。`;
 }
 
 export interface ManualPickingDbLike extends AuditLogDatabaseLike {
   prescription_items: {
     findOne: (itemId: string) => {
       exec: () => Promise<{
+        visitId?: string;
         dispensedDrug?: string;
         drugId: string;
         modify: (fn: (data: PrescriptionItem) => PrescriptionItem) => Promise<unknown>;
       } | null>;
     };
   };
+  // 監査ログを患者に紐付けるために明細の受付→患者をたどる。無ければ患者なしで記録する。
+  visits?: {
+    findOne: (visitId: string) => {
+      exec: () => Promise<{ patientId?: string } | null>;
+    };
+  };
+  patients?: {
+    findOne: (patientId: string) => {
+      exec: () => Promise<{ name?: string } | null>;
+    };
+  };
+}
+
+// 目視照合は GS1 という機械的な裏付けが無い照合なので、患者別の監査ログ検索で必ず拾えるようにする。
+// 患者の引き当てに失敗しても照合そのものは止めない(監査ログは患者なしで残る)。
+async function resolveManualPickingPatient(
+  db: ManualPickingDbLike,
+  visitId: string | undefined
+): Promise<{ patientId?: string; patientName?: string }> {
+  if (!visitId || !db.visits) return {};
+  try {
+    const visit = await db.visits.findOne(visitId).exec();
+    const patientId = visit?.patientId;
+    if (!patientId) return {};
+    const patient = db.patients ? await db.patients.findOne(patientId).exec() : null;
+    return { patientId, patientName: patient?.name || undefined };
+  } catch (error) {
+    console.warn('Failed to resolve patient for manual picking audit:', error);
+    return {};
+  }
 }
 
 export async function executeManualVisualPicking(params: {
@@ -171,9 +206,17 @@ export async function executeManualVisualPicking(params: {
   ensureActiveVisitEditable: (stage: 'picking') => Promise<{ ok: true } | { ok: false; message: string }>;
   itemId: string;
   reason: string;
-  pharmacistName?: string;
+  operatorName?: string;
+  operatorRoleLabel?: string;
+  /** 押した時点の操作者が権限「ピッキングの目視照合」を持つか。画面のボタンとは別に、ここでも止める */
+  canVerify: boolean;
+  permissionDeniedMessage: string;
   notify: { success: (msg: string) => void; error: (msg: string) => void; warning: (msg: string) => void };
 }): Promise<{ success: boolean; message: string }> {
+  if (!params.canVerify) {
+    params.notify.error(params.permissionDeniedMessage);
+    return { success: false, message: params.permissionDeniedMessage };
+  }
   if (!params.db) {
     return { success: false, message: 'データベースが未接続です。' };
   }
@@ -206,6 +249,7 @@ export async function executeManualVisualPicking(params: {
       return data;
     });
     const activeDb = params.db;
+    const { patientId, patientName } = await resolveManualPickingPatient(activeDb, doc.visitId);
     await recordAuditOrNotify(
       () => logAuditAction(
         activeDb,
@@ -213,8 +257,11 @@ export async function executeManualVisualPicking(params: {
         buildManualPickingAuditMessage({
           drugName,
           reason: trimmedReason,
-          pharmacistName: params.pharmacistName
-        })
+          operatorName: params.operatorName,
+          operatorRoleLabel: params.operatorRoleLabel
+        }),
+        patientId,
+        patientName
       ),
       (message) => params.notify.warning(message)
     );

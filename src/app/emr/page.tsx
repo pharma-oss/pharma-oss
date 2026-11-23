@@ -12,7 +12,7 @@ import { calculatePatientAge } from '@/lib/patient_age';
 import { isFeatureImplemented, UNIMPLEMENTED_BADGE_LABEL } from '@/lib/feature_availability';
 import { createPatientDataFetchErrorWarning, createWarningsCalculationErrorWarning, findPatientAlertDrugWarnings, isActivePatientAlert } from '@/lib/patient_alerts';
 import { aggregateStockRequirements, compareStockLotsByExpiration, detectFefoPickingDeviation, findMatchingStockLotForGs1Barcode, findStockShortages, getStockDrugId, getTotalStock, calculateRequiredStockAmount, matchGs1BarcodeToStockTarget } from '@/lib/stock';
-import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
+import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, getRoleLabel, logAuditAction } from '@/lib/audit';
 import { recordAuditOrNotify, runWithAuditRollback } from '@/lib/audit_guard';
 import { extractErrorMessage } from '@/lib/user_facing_error';
 import { getClaimEditBlockedMessage, isClaimEditBlocked } from '@/lib/claim_edit_guard';
@@ -237,6 +237,31 @@ export default function EmrPage() {
     const visit = await findActiveVisit();
     return evaluateActiveVisitEditability(visit, scope);
   }, [findActiveVisit]);
+
+  // 目視照合(GS1なし)は権限「ピッキングの目視照合」を持つ役割だけ。スタッフを切り替えると画面ごと作り直されるので、
+  // ボタンの表示はマウント時の操作者で決め、押したときにもう一度その時点の操作者で確かめる。
+  const manualPickingPermission = useMemo(() => {
+    const operator = getCurrentUser();
+    return {
+      allowed: canUserPerform(operator, 'manual_picking_verification'),
+      deniedMessage: getPermissionDeniedMessage(operator, 'manual_picking_verification')
+    };
+  }, []);
+
+  const handleManualVerifyPicking = useCallback((itemId: string, reason: string) => {
+    const operator = getCurrentUser();
+    return executeManualVisualPicking({
+      db,
+      ensureActiveVisitEditable,
+      itemId,
+      reason,
+      operatorName: operator.name,
+      operatorRoleLabel: getRoleLabel(operator.role),
+      canVerify: canUserPerform(operator, 'manual_picking_verification'),
+      permissionDeniedMessage: getPermissionDeniedMessage(operator, 'manual_picking_verification'),
+      notify: toast
+    });
+  }, [db, ensureActiveVisitEditable]);
 
   const handleInsertFollowUpDraft = useCallback((detail: GuidanceSoapInsertDetail) => {
     document.dispatchEvent(new CustomEvent('insert-soap-guidance', { detail }));
@@ -1827,7 +1852,9 @@ export default function EmrPage() {
           const res = await handleVerifyPickingScan(scannedCode);
           return { success: res.ok, message: res.message };
         }}
-        onManualVerify={(itemId, reason) => executeManualVisualPicking({ db, ensureActiveVisitEditable, itemId, reason, pharmacistName: getCurrentUser().name, notify: toast })}
+        onManualVerify={handleManualVerifyPicking}
+        canManualVerify={manualPickingPermission.allowed}
+        manualVerifyDeniedMessage={manualPickingPermission.deniedMessage}
         onResetPick={handleResetPickingItem}
         onRecordShortage={(itemId, qty, note) => handleRecordPickingShortage(itemId, qty, note)}
         onPrintReceipt={handlePrintPickingReceipt}

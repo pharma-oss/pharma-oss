@@ -11,6 +11,8 @@ export interface PickingReceiptItem {
   isPicked: boolean;
   pickedLotNumber?: string;
   pickedExpirationDate?: string;
+  /** 目視照合のときの理由。GS1 の裏付けが無い照合をレシート上で区別するために使う */
+  manualVerificationReason?: string;
   shortageQuantity?: number;
   shortageNote?: string;
 }
@@ -40,10 +42,13 @@ const formatPrintedAt = (date: Date): string => {
 export const buildPickingReceiptHtml = (input: PickingReceiptInput): string => {
   const printedAt = formatPrintedAt(input.printedAt || new Date());
   const pickedCount = input.items.filter((item) => item.isPicked).length;
+  const manualCount = input.items.filter((item) => item.isPicked && item.manualVerificationReason).length;
   const shortageItems = input.items.filter((item) => (item.shortageQuantity || 0) > 0);
 
   const itemsHtml = input.items.map((item) => {
-    const evidence = item.isPicked
+    const evidence = item.isPicked && item.manualVerificationReason
+      ? `✓目視照合（理由: ${escapeHtml(item.manualVerificationReason)}）`
+      : item.isPicked
       ? `✓照合済${item.pickedLotNumber ? ` Lot ${escapeHtml(item.pickedLotNumber)}` : ''}${item.pickedExpirationDate ? ` 期限 ${escapeHtml(item.pickedExpirationDate)}` : ''}`
       : '未照合';
     const shortage = (item.shortageQuantity || 0) > 0
@@ -109,7 +114,9 @@ export const buildPickingReceiptHtml = (input: PickingReceiptInput): string => {
   <hr>
   ${itemsHtml}
   <div class="summary">
-    <div class="summary-line">GS1照合 ${pickedCount} / ${input.items.length} 件</div>
+    <div class="summary-line">${manualCount > 0
+      ? `照合 ${pickedCount} / ${input.items.length} 件（うち目視 ${manualCount} 件）`
+      : `GS1照合 ${pickedCount} / ${input.items.length} 件`}</div>
     ${shortageSummary}
   </div>
   <div class="footer">現物と数量を確認のうえ監査へ回してください</div>

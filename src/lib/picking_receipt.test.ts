@@ -78,3 +78,25 @@ test('buildPickingReceiptHtml reports no shortage when nothing is missing', () =
   assert.ok(html.includes('不足なし'));
   assert.ok(!html.includes('★不足'));
 });
+
+test('buildPickingReceiptHtml marks manual visual checks instead of counting them as GS1 verified', () => {
+  const html = buildPickingReceiptHtml({
+    ...baseInput,
+    items: [
+      baseInput.items[0],
+      {
+        location: 'B-03',
+        drugName: 'ロキソプロフェン錠60mg',
+        totalQuantity: 9,
+        usage: '1日3回毎食後',
+        days: 3,
+        isPicked: true,
+        manualVerificationReason: 'GS1・JAN未登録品目'
+      }
+    ]
+  });
+
+  assert.ok(html.includes('✓目視照合（理由: GS1・JAN未登録品目）'));
+  assert.ok(html.includes('照合 2 / 2 件（うち目視 1 件）'));
+  assert.ok(!html.includes('GS1照合 2 / 2 件'), '目視照合を GS1 照合の件数に数えない');
+});

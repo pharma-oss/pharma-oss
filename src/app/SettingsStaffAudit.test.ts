@@ -4,7 +4,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import StaffSettingsTab from '@/components/settings/StaffSettingsTab';
 import type { User } from '@/db/types';
-import { DEFAULT_ROLE_PERMISSION_POLICY } from '@/lib/audit';
+import { ALL_PERMISSION_ACTIONS, DEFAULT_ROLE_PERMISSION_POLICY } from '@/lib/audit';
+
+// 役割×権限の表のチェックボックスは権限の数だけ並ぶ(管理者は常に固定・無効)。権限を足しても数え直さずに済むよう、数から求める
+const PERMISSION_COUNT = ALL_PERMISSION_ACTIONS.length;
 import {
   listDisabledOpeningTags,
   findOpeningTag,
@@ -49,15 +52,15 @@ interface ControlSpec {
   expectedCount: number;
 }
 
-// 43個の内訳（15組）:
+// 権限の数を P として 2P+19 個の内訳（15組）:
 // 1. スタッフを追加（btn-add-staff）1
 // 2. オンボーディングの案内（btn-onboarding-action）1
 // 3. 追加フォームのキャンセル（btn-staff-cancel）1
 // 4. 追加フォームの保存（btn-staff-save）1
 // 5. 権限ロールの標準に戻す（btn-role-reset）1
 // 6. 権限ロールの保存（btn-role-save）1
-// 7. 薬剤師列のチェックボックス 12
-// 8. 事務列のチェックボックス 12
+// 7. 薬剤師列のチェックボックス P
+// 8. 事務列のチェックボックス P
 // 9. 復旧の select 2（対象スタッフ・理由。追加フォームの new-staff-role は権限の項が無いので除外）
 // 10. 再設定パスワード（input-full-width）1
 // 11. 対応メモ（recovery-textarea）1
@@ -106,13 +109,13 @@ const STAFF_MANAGEMENT_CONTROL_SPECS: ControlSpec[] = [
     name: 'role-checkbox-pharmacist (薬剤師列の権限チェックボックス)',
     tagName: 'input',
     filter: (tag) => tag.includes('type="checkbox"') && tag.includes('aria-label="薬剤師の'),
-    expectedCount: 12
+    expectedCount: PERMISSION_COUNT
   },
   {
     name: 'role-checkbox-clerk (事務列の権限チェックボックス)',
     tagName: 'input',
     filter: (tag) => tag.includes('type="checkbox"') && tag.includes('aria-label="事務の'),
-    expectedCount: 12
+    expectedCount: PERMISSION_COUNT
   },
   {
     name: 'select-recovery (復旧・退職対応 対象スタッフ・理由選択)',
@@ -260,8 +263,8 @@ describe('StaffSettingsTab contracts', () => {
 
       assert.equal(
         disabledDenied.length,
-        55,
-        `When canManageStaff is false (shouldPromptCurrentStaffPasskey=${shouldPromptCurrentStaffPasskey}), exactly 55 disabled tags must be present (12 admin role fixed checkboxes + 43 staff controls):\n${disabledDenied.join('\n')}`
+        3 * PERMISSION_COUNT + 19,
+        `When canManageStaff is false (shouldPromptCurrentStaffPasskey=${shouldPromptCurrentStaffPasskey}), exactly ${3 * PERMISSION_COUNT + 19} disabled tags must be present (${PERMISSION_COUNT} admin role fixed checkboxes + ${2 * PERMISSION_COUNT} pharmacist/clerk role checkboxes + 19 staff controls):\n${disabledDenied.join('\n')}`
       );
 
       const permittedProps = createMockStaffSettingsProps({
@@ -274,12 +277,12 @@ describe('StaffSettingsTab contracts', () => {
 
       assert.equal(
         disabledPermitted.length,
-        12,
-        `When canManageStaff is true (shouldPromptCurrentStaffPasskey=${shouldPromptCurrentStaffPasskey}), exactly 12 disabled tags must be present:\n${disabledPermitted.join('\n')}`
+        PERMISSION_COUNT,
+        `When canManageStaff is true (shouldPromptCurrentStaffPasskey=${shouldPromptCurrentStaffPasskey}), exactly ${PERMISSION_COUNT} disabled tags must be present:\n${disabledPermitted.join('\n')}`
       );
       assert.ok(
         disabledPermitted.every((tag) => tag.includes('aria-label="管理者の')),
-        `All 12 disabled tags in permitted state must be admin fixed role checkboxes:\n${disabledPermitted.join('\n')}`
+        `All ${PERMISSION_COUNT} disabled tags in permitted state must be admin fixed role checkboxes:\n${disabledPermitted.join('\n')}`
       );
 
       let verifiedControlsCount = 0;
@@ -315,8 +318,8 @@ describe('StaffSettingsTab contracts', () => {
 
       assert.equal(
         verifiedControlsCount,
-        43,
-        `Total verified staff management controls must be 43, got ${verifiedControlsCount}`
+        2 * PERMISSION_COUNT + 19,
+        `Total verified staff management controls must be ${2 * PERMISSION_COUNT + 19}, got ${verifiedControlsCount}`
       );
     }
   });
@@ -331,8 +334,8 @@ describe('StaffSettingsTab contracts', () => {
 
     assert.equal(
       disabledDenied.length,
-      13,
-      `When canViewAuditLogs is false, exactly 13 disabled tags must be present (12 admin role fixed checkboxes + monthly review CSV button):\n${disabledDenied.join('\n')}`
+      PERMISSION_COUNT + 1,
+      `When canViewAuditLogs is false, exactly ${PERMISSION_COUNT + 1} disabled tags must be present (${PERMISSION_COUNT} admin role fixed checkboxes + monthly review CSV button):\n${disabledDenied.join('\n')}`
     );
     const deniedCsvTag = findOpeningTag(
       htmlDenied,
@@ -353,8 +356,8 @@ describe('StaffSettingsTab contracts', () => {
 
     assert.equal(
       disabledPermitted.length,
-      12,
-      `When canViewAuditLogs is true, exactly 12 disabled tags must be present:\n${disabledPermitted.join('\n')}`
+      PERMISSION_COUNT,
+      `When canViewAuditLogs is true, exactly ${PERMISSION_COUNT} disabled tags must be present:\n${disabledPermitted.join('\n')}`
     );
     const permittedCsvTag = findOpeningTag(
       htmlPermitted,
@@ -514,7 +517,7 @@ describe('StaffSettingsTab contracts', () => {
     const roleCheckboxes = extractOpeningTags(savingPolicyHtml, 'input').filter(
       (tag) => tag.includes('type="checkbox"') && (tag.includes('aria-label="薬剤師の') || tag.includes('aria-label="事務の'))
     );
-    assert.equal(roleCheckboxes.length, 24);
+    assert.equal(roleCheckboxes.length, 2 * PERMISSION_COUNT);
     assert.ok(roleCheckboxes.every((tag) => DISABLED_ATTR_PATTERN.test(tag)));
 
     // 3) isHandlingStaffRecovery: true
