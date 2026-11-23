@@ -266,11 +266,16 @@ test('every 保険種別 the patient editor offers has a defined barcode categor
   const select = html.match(/<select[^>]*id="m-ins-type"[^>]*>[\s\S]*?<\/select>/)?.[0] ?? '';
   assert.ok(select.length > 0, 'PatientBanner edit modal must render <select id="m-ins-type">');
   const values = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepStrictEqual(values, ['社保', '国保', '後期高齢', '自費']);
+  assert.deepStrictEqual(values, ['社保', '国保', '後期高齢', '自費', '公費単独']);
+  // 公費単独は「公費のみは自費(3)扱い」という決定どおり、領収証には「自費扱い」と出る(assumed)。それ以外は判定できる選択肢
   const categories = values.map((value) => {
     const result = classifyInsuranceForBarcode({ insuranceType: value });
-    assert.strictEqual(result.assumed, false, `「${value}」 is a defined choice, not a fallback`);
+    if (value === '公費単独') {
+      assert.strictEqual(result.assumed, true, '公費単独 is printed as 自費扱い, per the public-expense-only decision');
+    } else {
+      assert.strictEqual(result.assumed, false, `「${value}」 is a defined choice, not a fallback`);
+    }
     return result.category;
   });
-  assert.deepStrictEqual(categories, ['social', 'national', 'national', 'self_pay']);
+  assert.deepStrictEqual(categories, ['social', 'national', 'national', 'self_pay', 'self_pay']);
 });

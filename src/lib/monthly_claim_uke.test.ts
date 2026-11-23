@@ -633,6 +633,45 @@ test('monthly official UKE derives claim type codes for insured, public expense,
   }
 });
 
+test('monthly official UKE handles the 公費単独 insurance type and stops when an insurer number is left over', () => {
+  const publicExpense = [{ provider: '51136018', recipient: '1234567', burdenRatio: 10 }];
+  const visit = {
+    claimLifecycle: makeRebillingLifecycle(),
+    prescriptionDate: '2026-06-14',
+    dispensingDate: '2026-06-14'
+  };
+  const generatedAt = new Date('2026-06-14T09:00:00.000Z');
+
+  // 保険者番号なし + 公費 1 件 = 公費単独(4212)。HO は出さない
+  const publicOnly = [makeOfficialReadyCase({
+    visit,
+    patient: { insuranceInfo: { insuranceType: '公費単独', burdenRatio: 10 }, publicInsurances: publicExpense }
+  })];
+  const publicOnlyResults = buildMonthlyClaimUkeResults(publicOnly, generatedAt);
+  assert.strictEqual(
+    buildMonthlyClaimUkeOfficialReadinessReport(publicOnly[0]).issues.some((issue) => issue.code === 'official_uke_public_expense_only_insurer_conflict'),
+    false
+  );
+  const publicOnlyBundle = buildMonthlyClaimOfficialUkeBundle(publicOnly, publicOnlyResults);
+  assert.strictEqual(publicOnlyBundle.records.find((record) => record.type === 'RE')?.fields[1], '4212');
+  assert.strictEqual(publicOnlyBundle.records.some((record) => record.type === 'HO'), false);
+
+  // 保険種別は公費単独なのに保険者番号が残っている = 医保併用(4122)として出てしまうので止める
+  const conflicting = [makeOfficialReadyCase({
+    visit,
+    patient: {
+      insuranceInfo: { insuranceType: '公費単独', provider: '06123456', number: '記号123', burdenRatio: 30, relationship: '本人' },
+      publicInsurances: publicExpense
+    }
+  })];
+  const conflictIssue = buildMonthlyClaimUkeOfficialReadinessReport(conflicting[0]).issues
+    .find((issue) => issue.code === 'official_uke_public_expense_only_insurer_conflict');
+  assert.ok(conflictIssue, 'the conflict is reported before export');
+  assert.strictEqual(conflictIssue.severity, 'error');
+  const conflictingResults = buildMonthlyClaimUkeResults(conflicting, generatedAt);
+  assert.throws(() => buildMonthlyClaimOfficialUkeBundle(conflicting, conflictingResults));
+});
+
 test('monthly official UKE bundle separates social and national insurance submissions', () => {
   const claims = [
     makeOfficialReadyCase({

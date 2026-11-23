@@ -2,6 +2,7 @@ import type { Patient, PrescriptionItem, Visit, FacilitySettings } from '@/db/ty
 import type { CalculationResultItem, FeeCode } from '@/lib/calculator';
 import type { UkeRecord } from './uke_generator';
 import { SELF_PAY_UKE_BLOCKED_MESSAGE, isSelfPayPatient } from '@/lib/self_pay_claim';
+import { isPublicExpenseOnlyPatient } from '@/lib/public_expense_only_claim';
 
 export interface DispensingUkeItem extends PrescriptionItem {
   drugName?: string;
@@ -204,7 +205,8 @@ export function buildDispensingUkeRecords(input: BuildDispensingUkeRecordsInput)
     ]
   });
 
-  if (patient.insuranceInfo) {
+  // 公費単独(保険種別が「公費単独」で保険者番号なし)は保険者レコードを作らない。理由は public_expense_only_claim
+  if (patient.insuranceInfo && !isPublicExpenseOnlyPatient(patient)) {
     records.push({
       type: 'HO',
       fields: [

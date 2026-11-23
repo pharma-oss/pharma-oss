@@ -2,6 +2,7 @@ import type { FacilitySettings, Patient, Visit } from '@/db/types';
 import { calculateDispensingFees, type CalculationResultItem, type FeeCode } from '@/lib/calculator';
 import { CLAIM_LIFECYCLE_STATUS_LABELS, getClaimLifecycleStatus, type ClaimLifecycleStatus } from '@/lib/claim_lifecycle';
 import { buildDispensingUkeRecords, type DispensingUkeInterventionLike, type DispensingUkeItem } from '@/lib/receipt/dispensing_uke';
+import { hasPublicExpenseOnlyInsurerConflict } from '@/lib/public_expense_only_claim';
 import {
   buildDispensingUkeOfficialFile,
   DISPENSING_UKE_OFFICIAL_FILE_NAME,
@@ -168,7 +169,8 @@ export type MonthlyClaimUkeOfficialReadinessIssueCode =
   | 'official_uke_copayment_reduction_ratio_invalid'
   | 'official_uke_copayment_reduction_cert_number_invalid'
   | 'official_uke_intervention_inquiry_pending'
-  | 'official_uke_intervention_reason_missing';
+  | 'official_uke_intervention_reason_missing'
+  | 'official_uke_public_expense_only_insurer_conflict';
 
 export interface MonthlyClaimUkeOfficialReadinessIssue {
   severity: MonthlyClaimUkeBatchCheckSeverity;
@@ -754,6 +756,9 @@ function deriveOfficialClaimTypeCode(claim: MonthlyClaimUkeCase): string {
   const publicExpenseCount = patient.publicInsurances?.length ?? 0;
   if (publicExpenseCount > 4) {
     throw new Error(`${patient.name} の公費は公式UKEで扱える4件以内にしてください。`);
+  }
+  if (hasPublicExpenseOnlyInsurerConflict(patient)) {
+    throw new Error(`${patient.name} は保険種別が「公費単独」ですが保険者番号が入っています。医療保険が無ければ保険者番号を消し、あれば保険種別を直してください。`);
   }
 
   if (!insuranceInfo?.provider) {
@@ -1646,6 +1651,17 @@ export function buildMonthlyClaimUkeOfficialReadinessReport(
         feeName: fee.name
       });
     }
+  }
+
+  if (hasPublicExpenseOnlyInsurerConflict(claim.patient)) {
+    addOfficialReadinessIssue(issues, {
+      severity: 'error',
+      code: 'official_uke_public_expense_only_insurer_conflict',
+      title: '保険種別「公費単独」と保険者番号が食い違っています',
+      message: `${patientName} は保険種別が「公費単独」ですが保険者番号が入っています。このまま出すと医保と公費の併用として請求されます。医療保険が無ければ保険者番号を消し、あれば保険種別を直してください。`,
+      visitId,
+      patientName
+    });
   }
 
   if (dispensingDateSource) {

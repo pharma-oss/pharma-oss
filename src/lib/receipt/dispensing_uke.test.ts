@@ -519,3 +519,25 @@ test('buildDispensingUkeRecords supports disabledFeeRationales and interventions
   assert.ok(interventTo.fields[2].includes('結果: 了承'));
   assert.ok(interventTo.fields[2].includes('(患者同意済)'));
 });
+
+test('buildDispensingUkeRecords skips the HO record only for explicit 公費単独 patients without an insurer number', async () => {
+  const buildDispensingUkeRecords = await loadBuilder();
+  const build = (target: Patient) => buildDispensingUkeRecords({
+    visit,
+    patient: target,
+    settings,
+    calculatedFees: [{ code: 'base_fee', name: '調剤基本料1', points: 47, rationale: '施設基準' }],
+    generatedAt: new Date('2026-06-02T10:11:12'),
+    items: []
+  });
+  const publicExpense = [{ provider: '51136018', recipient: '1234567', burdenRatio: 10 }];
+
+  // 公費単独: HO を作らず KO だけ。「HO 保険者番号が未入力です」で止まらない
+  const publicOnly = build({ ...patient, insuranceInfo: { insuranceType: '公費単独', burdenRatio: 10 }, publicInsurances: publicExpense });
+  assert.strictEqual(publicOnly.some((record) => record.type === 'HO'), false);
+  assert.strictEqual(publicOnly.some((record) => record.type === 'KO'), true);
+
+  // 保険種別が空で保険者番号も空なのは入力漏れ。これまでどおり HO を作り、出力前チェックで止める
+  const missingInsurer = build({ ...patient, insuranceInfo: { burdenRatio: 30 }, publicInsurances: publicExpense });
+  assert.strictEqual(missingInsurer.some((record) => record.type === 'HO'), true);
+});

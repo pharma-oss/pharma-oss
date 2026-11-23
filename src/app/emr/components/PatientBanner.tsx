@@ -981,6 +981,7 @@ export const PatientBanner = React.memo(function PatientBanner({
                     <option value="国保">国保 (国民健康保険)</option>
                     <option value="後期高齢">後期高齢</option>
                     <option value="自費">自費 (保険を使わない)</option>
+                    <option value="公費単独">公費単独 (医療保険なし・公費のみ)</option>
                   </select>
                 </div>
                 <div className="form-group">

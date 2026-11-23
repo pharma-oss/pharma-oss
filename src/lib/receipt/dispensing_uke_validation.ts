@@ -1871,7 +1871,8 @@ export function validateDispensingUkeRecords(
       }
     }
 
-    if (!records.some((record) => record.type === 'HO')) {
+    // 公費単独(HO なし・KO あり)は正しい形なので知らせない
+    if (!records.some((record) => record.type === 'HO' || record.type === 'KO')) {
       addIssue(issues, {
         severity: 'warning',
         code: 'uke_missing_ho',
