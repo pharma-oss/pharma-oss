@@ -918,18 +918,18 @@ export default function EmrPage() {
         let activePatientAlertsArr: Alert[] = [];
         let hasPatientDataFetchError = false;
         try {
-            const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
-            const patient = patients[0];
-            if (patient) { patientJson = patient.toJSON() as Patient; patientAge = calculatePatientAge(patient.birthDate); }
+          const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
+          const patient = patients[0];
+          if (patient) { patientJson = patient.toJSON() as Patient; patientAge = calculatePatientAge(patient.birthDate); }
 
-            const alerts = await db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
-            if (cancelled) return;
-            activePatientAlertsArr = alerts.map((alert) => alert.toJSON()).filter(isActivePatientAlert);
-            setPatientAlerts(activePatientAlertsArr);
+          const alerts = await db.alerts.find({ selector: { patientId: visit.patientId } }).exec();
+          if (cancelled) return;
+          activePatientAlertsArr = alerts.map((alert) => alert.toJSON()).filter(isActivePatientAlert);
+          setPatientAlerts(activePatientAlertsArr);
         } catch (e) {
-            if (cancelled) return;
-            console.error("Failed to fetch patient data for warnings", e);
-            hasPatientDataFetchError = true;
+          if (cancelled) return;
+          console.error("Failed to fetch patient data for warnings", e);
+          hasPatientDataFetchError = true;
         }
 
         const contraindicatedConditionPatientTexts = buildContraindicatedConditionPatientTexts({
@@ -946,34 +946,34 @@ export default function EmrPage() {
 
         // Fetch all drug names in current prescription for cross-checking
         for (const item of items) {
-           const drug = drugsMap.get(item.drugId);
-           if (drug) {
-              currentDrugs.push(drug);
-              currentAlertItems.push({
-                itemId: item.itemId,
-                drugId: item.drugId,
-                drugName: drug.name,
-                dispensedDrug: item.dispensedDrug,
-                yjCode: drug.yjCode,
-                genericName: drug.genericName
-              });
-           } else if (item.dispensedDrug) {
-              currentDrugs.push({
-                code: item.drugId,
-                name: item.dispensedDrug,
-                genericName: item.dispensedDrug,
-                isGeneric: false,
-                isHighRisk: false
-              });
-              currentAlertItems.push({
-                itemId: item.itemId,
-                drugId: item.drugId,
-                drugName: item.dispensedDrug,
-                dispensedDrug: item.dispensedDrug,
-                yjCode: '',
-                genericName: item.dispensedDrug
-              });
-           }
+          const drug = drugsMap.get(item.drugId);
+          if (drug) {
+            currentDrugs.push(drug);
+            currentAlertItems.push({
+              itemId: item.itemId,
+              drugId: item.drugId,
+              drugName: drug.name,
+              dispensedDrug: item.dispensedDrug,
+              yjCode: drug.yjCode,
+              genericName: drug.genericName
+            });
+          } else if (item.dispensedDrug) {
+            currentDrugs.push({
+              code: item.drugId,
+              name: item.dispensedDrug,
+              genericName: item.dispensedDrug,
+              isGeneric: false,
+              isHighRisk: false
+            });
+            currentAlertItems.push({
+              itemId: item.itemId,
+              drugId: item.drugId,
+              drugName: item.dispensedDrug,
+              dispensedDrug: item.dispensedDrug,
+              yjCode: '',
+              genericName: item.dispensedDrug
+            });
+          }
         }
         setPrescribedDrugs(currentDrugs);
 
@@ -992,10 +992,10 @@ export default function EmrPage() {
         // Also eliminate redundant queries by collecting unique drug names first.
         const uniqueDrugs = new Map();
         for (let i = 0; i < items.length; i++) {
-           const drug = drugsMap.get(items[i].drugId);
-           if (drug && !uniqueDrugs.has(drug.name)) {
-              uniqueDrugs.set(drug.name, drug);
-           }
+          const drug = drugsMap.get(items[i].drugId);
+          if (drug && !uniqueDrugs.has(drug.name)) {
+            uniqueDrugs.set(drug.name, drug);
+          }
         }
 
         const drugInfoMap = await findDrugInfosByDrugNames(
@@ -1044,51 +1044,51 @@ export default function EmrPage() {
         let hasUnevaluableAgeWarning = false;
 
         for (let i = 0; i < items.length; i++) {
-           const item = items[i];
-           const drug = drugsMap.get(item.drugId);
-           if (!drug) continue;
+          const item = items[i];
+          const drug = drugsMap.get(item.drugId);
+          if (!drug) continue;
 
-           const docs = drugInfoMap.get(drug.name);
+          const docs = drugInfoMap.get(drug.name);
 
-           if (docs && docs.length > 0) {
-              const info = docs[0];
+          if (docs && docs.length > 0) {
+            const info = docs[0];
 
-              // Check usage warnings dynamically based on the parsed condition
-              if (info.usageWarnings) {
-                 for (const warning of info.usageWarnings) {
-                    const evaluation = evaluateUsageWarning(warning.condition, {
-                       amount: item.amount,
-                       age: patientAge,
-                       diseases: contraindicatedConditionPatientTexts
-                    });
+            // Check usage warnings dynamically based on the parsed condition
+            if (info.usageWarnings) {
+              for (const warning of info.usageWarnings) {
+                const evaluation = evaluateUsageWarning(warning.condition, {
+                  amount: item.amount,
+                  age: patientAge,
+                  diseases: contraindicatedConditionPatientTexts
+                });
 
-                    if (evaluation.triggered) {
-                       newWarnings.push({
-                          type: 'usage',
-                          severity: warning.severity || 'warning',
-                          drug: drug.name,
-                          message: warning.message
-                       });
-                    }
-                    if (evaluation.unevaluable) {
-                       hasUnevaluableAgeWarning = true;
-                    }
-                 }
+                if (evaluation.triggered) {
+                  newWarnings.push({
+                    type: 'usage',
+                    severity: warning.severity || 'warning',
+                    drug: drug.name,
+                    message: warning.message
+                  });
+                }
+                if (evaluation.unevaluable) {
+                  hasUnevaluableAgeWarning = true;
+                }
               }
-           }
+            }
+          }
         }
 
         if (hasUnevaluableAgeWarning) {
-           newWarnings.push({
-              type: 'usage',
-              severity: 'warning',
-              drug: '（患者情報）',
-              message: '生年月日が未登録または不正なため、年齢に基づく警告を判定できませんでした。患者情報を確認してください。'
-           });
+          newWarnings.push({
+            type: 'usage',
+            severity: 'warning',
+            drug: '（患者情報）',
+            message: '生年月日が未登録または不正なため、年齢に基づく警告を判定できませんでした。患者情報を確認してください。'
+          });
         }
 
         if (hasPatientDataFetchError) {
-           newWarnings.push(createPatientDataFetchErrorWarning());
+          newWarnings.push(createPatientDataFetchErrorWarning());
         }
         newWarnings.push(...buildClinicalSafetyWarningInsightItems({
           drugs: currentAlertItems,
@@ -1346,7 +1346,7 @@ export default function EmrPage() {
   }, []);
 
   return (
-      <div className="emr-page">
+    <div className="emr-page">
       <div className="page-header emr-header">
         <PatientBanner patientAlerts={patientAlerts} targetVisitId={targetVisitId} onOpenPicking={() => setIsPickingModalOpen(true)} />
       </div>

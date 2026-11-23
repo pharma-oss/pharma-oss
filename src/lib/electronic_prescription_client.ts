@@ -1193,10 +1193,8 @@ export async function runElectronicPrescriptionConnectorPreflight(
   }
 }
 
+// fetch の中断は環境によって DOMException(Error の派生でないこともある)で届くため、name だけで判定する
 export function isAbortError(error: unknown): boolean {
-  if (error instanceof Error) {
-    return error.name === 'AbortError';
-  }
   return typeof error === 'object'
     && error !== null
     && (error as { name?: unknown }).name === 'AbortError';

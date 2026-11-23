@@ -188,8 +188,8 @@ export async function loadPatientBannerRecord(
   const visit = targetVisitId
     ? await db.visits.findOne(targetVisitId).exec()
     : (await db.visits.find({ selector: { status: 'processing' } }).exec())
-        .slice()
-        .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
+      .slice()
+      .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''))[0];
   if (!visit) return null;
   const patients = await db.patients.find({ selector: { patientId: visit.patientId } }).exec();
   return patients.length > 0 ? (patients[0].toJSON() as Patient) : null;
@@ -502,23 +502,23 @@ export const PatientBanner = React.memo(function PatientBanner({
       const now = new Date().toISOString();
       const questionnairePayload: VisitInitialQuestionnaire | undefined = hasQuestionnaireInput
         ? {
-            sourceType: questionnaireSourceType,
-            capturedAt: questionnaireCapturedAt || now,
-            imageDataUrl: questionnaireImageDataUrl || undefined,
-            imageOriginalName: questionnaireImageName || undefined,
-            imageByteSize: questionnaireImageByteSize || undefined,
-            imageCompressedAt: questionnaireImageDataUrl ? now : undefined,
-            rawText: questionnaireRawText.trim() || undefined,
-            allergies: questionnaireAllergies.trim() || undefined,
-            adverseDrugReactions: questionnaireAdverseDrugReactions.trim() || undefined,
-            medicalHistory: questionnaireMedicalHistory.trim() || undefined,
-            currentSymptoms: questionnaireCurrentSymptoms.trim() || undefined,
-            pregnancyLactation: questionnairePregnancyLactation.trim() || undefined,
-            lifestyle: questionnaireLifestyle.trim() || undefined,
-            notes: questionnaireNotes.trim() || undefined,
-            reviewedAt: now,
-            reviewedBy: getCurrentUser().name
-          }
+          sourceType: questionnaireSourceType,
+          capturedAt: questionnaireCapturedAt || now,
+          imageDataUrl: questionnaireImageDataUrl || undefined,
+          imageOriginalName: questionnaireImageName || undefined,
+          imageByteSize: questionnaireImageByteSize || undefined,
+          imageCompressedAt: questionnaireImageDataUrl ? now : undefined,
+          rawText: questionnaireRawText.trim() || undefined,
+          allergies: questionnaireAllergies.trim() || undefined,
+          adverseDrugReactions: questionnaireAdverseDrugReactions.trim() || undefined,
+          medicalHistory: questionnaireMedicalHistory.trim() || undefined,
+          currentSymptoms: questionnaireCurrentSymptoms.trim() || undefined,
+          pregnancyLactation: questionnairePregnancyLactation.trim() || undefined,
+          lifestyle: questionnaireLifestyle.trim() || undefined,
+          notes: questionnaireNotes.trim() || undefined,
+          reviewedAt: now,
+          reviewedBy: getCurrentUser().name
+        }
         : undefined;
 
       await executePatientInsuranceSave({
@@ -780,7 +780,7 @@ export const PatientBanner = React.memo(function PatientBanner({
               </div>
               <p className="modal-subtitle">{patientName} 様の請求保険者・公費負担情報を設定します。</p>
             </div>
-            
+
             <div className="modal-body">
               <div className="modal-section-title">患者基本情報</div>
               <div className="form-grid">
@@ -992,23 +992,23 @@ export const PatientBanner = React.memo(function PatientBanner({
                 </div>
                 <div className="form-group">
                   <label htmlFor="m-ins-provider">保険者番号 (8桁/6桁)</label>
-                  <input 
+                  <input
                     id="m-ins-provider"
-                    type="text" 
+                    type="text"
                     maxLength={8}
-                    placeholder="例: 06139999" 
-                    value={editProvider} 
-                    onChange={(e) => setEditProvider(e.target.value)} 
+                    placeholder="例: 06139999"
+                    value={editProvider}
+                    onChange={(e) => setEditProvider(e.target.value)}
                   />
                 </div>
                 <div className="form-group">
                   <label htmlFor="m-ins-number">記号番号</label>
-                  <input 
+                  <input
                     id="m-ins-number"
-                    type="text" 
-                    placeholder="例: 記号123 番号456" 
-                    value={editNumber} 
-                    onChange={(e) => setEditNumber(e.target.value)} 
+                    type="text"
+                    placeholder="例: 記号123 番号456"
+                    value={editNumber}
+                    onChange={(e) => setEditNumber(e.target.value)}
                   />
                 </div>
                 <div className="form-group full-width">
@@ -1107,31 +1107,31 @@ export const PatientBanner = React.memo(function PatientBanner({
                       <div className="form-grid">
                         <div className="form-group">
                           <label htmlFor={`m-pub-provider-${idx}`}>公費負担者番号 (8桁)</label>
-                          <input 
+                          <input
                             id={`m-pub-provider-${idx}`}
-                            type="text" 
+                            type="text"
                             maxLength={8}
-                            placeholder="例: 51136018 (難病)" 
-                            value={pub.provider} 
-                            onChange={(e) => handleUpdatePublicInsurance(idx, { provider: e.target.value })} 
+                            placeholder="例: 51136018 (難病)"
+                            value={pub.provider}
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { provider: e.target.value })}
                           />
                         </div>
                         <div className="form-group">
                           <label htmlFor={`m-pub-recipient-${idx}`}>公費受給者番号 (7桁)</label>
-                          <input 
+                          <input
                             id={`m-pub-recipient-${idx}`}
-                            type="text" 
+                            type="text"
                             maxLength={7}
-                            placeholder="例: 1234567" 
-                            value={pub.recipient} 
-                            onChange={(e) => handleUpdatePublicInsurance(idx, { recipient: e.target.value })} 
+                            placeholder="例: 1234567"
+                            value={pub.recipient}
+                            onChange={(e) => handleUpdatePublicInsurance(idx, { recipient: e.target.value })}
                           />
                         </div>
                         <div className="form-group full-width">
                           <label htmlFor={`m-pub-burden-${idx}`}>公費自己負担割合 (%)</label>
-                          <select 
+                          <select
                             id={`m-pub-burden-${idx}`}
-                            value={pub.burdenRatio} 
+                            value={pub.burdenRatio}
                             onChange={(e) => handleUpdatePublicInsurance(idx, { burdenRatio: Number(e.target.value) })}
                           >
                             <option value={10}>10 % (1割負担)</option>
@@ -1518,7 +1518,6 @@ export const PatientBanner = React.memo(function PatientBanner({
         .patient-alerts-footer {
           justify-content: flex-end;
           flex-wrap: wrap;
-          flex-wrap: balance;
           margin-top: var(--space-1);
           max-width: 100%;
         }
