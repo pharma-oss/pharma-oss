@@ -6,6 +6,8 @@ import {
   EXPORT_AUDIT_FAILED_MESSAGE,
   ExportAuditFailedError,
   ROLLBACK_ALSO_FAILED_NOTE,
+  VOIDING_AUDIT_NOT_RECORDED_NOTE,
+  appendVoidingAuditOrNote,
   exportWithAuditFirst,
   recordAuditOrNotify,
   runWithAuditRollback
@@ -174,4 +176,13 @@ test('recordAuditOrNotify stays quiet on success and notifies when the record wa
   const throwing = async (): Promise<boolean> => { throw new Error('boom'); };
   assert.strictEqual(await recordAuditOrNotify(throwing, notify), false);
   assert.strictEqual(messages.length, 2, 'a throwing audit call is reported like a failed one');
+});
+
+test('appendVoidingAuditOrNote returns an empty note only when the voiding entry was recorded', async () => {
+  assert.strictEqual(await appendVoidingAuditOrNote(async () => true), '');
+  assert.strictEqual(await appendVoidingAuditOrNote(async () => false), VOIDING_AUDIT_NOT_RECORDED_NOTE);
+  assert.strictEqual(
+    await appendVoidingAuditOrNote(async () => { throw new Error('hash chain unavailable'); }),
+    VOIDING_AUDIT_NOT_RECORDED_NOTE
+  );
 });

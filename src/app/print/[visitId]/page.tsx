@@ -79,7 +79,7 @@ import {
   getClaimReturnReasonByCode
 } from '@/lib/claim_return_manager';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction, type PermissionAction } from '@/lib/audit';
-import { AuditLogFailedError, ExportAuditFailedError, exportWithAuditFirst, runWithAuditRollback } from '@/lib/audit_guard';
+import { AuditLogFailedError, ExportAuditFailedError, ROLLBACK_ALSO_FAILED_NOTE, appendVoidingAuditOrNote, exportWithAuditFirst, runWithAuditRollback } from '@/lib/audit_guard';
 import { downloadTextFile } from '@/lib/blob_download';
 import { extractErrorMessage, userFacingErrorMessage } from '@/lib/user_facing_error';
 import { validateDispensingUkeRecords } from '@/lib/receipt/dispensing_uke_validation';
@@ -168,7 +168,7 @@ import { CopaymentGuidanceBanner } from '../components/CopaymentGuidanceBanner';
 import { ReceiptConsoleSummaryPanel } from '../components/ReceiptConsoleSummaryPanel';
 import { SingleOfficialUkeModal } from '../components/SingleOfficialUkeModal';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
-import { formatSingleLegacyUkeExportAuditMessage } from '@/lib/receipt/uke_migration_policy';
+import { formatSingleLegacyUkeExportAuditMessage, formatUkeExportClaimLockVoidedAuditMessage } from '@/lib/receipt/uke_migration_policy';
 import { buildVisitCopaymentGuidance } from '@/lib/patient_copayment_support';
 import {
   type DbKeyEscrowPayload,
@@ -1004,7 +1004,7 @@ export default function PrintPage() {
 
   const applyClaimLifecycleToVisit = useCallback((lifecycle: ClaimLifecycleState) => {
     setVisitData((prev) => prev ? { ...prev, claimLifecycle: lifecycle } : prev);
-  }, []);
+  }, [setVisitData]);
 
   const persistClaimLifecycle = async (nextLifecycle: ClaimLifecycleState, detail: string) => {
     await persistClaimLifecycleWithAudit({
@@ -1164,13 +1164,28 @@ export default function PrintPage() {
         patientData?.name
       );
       if (!auditOk) {
+        const auditFailedMessage = 'UKE出力の監査ログ記録に失敗したため、出力を中止しました。';
         const rollbackLifecycle = previousLifecycleForExport || { status: 'draft' as const };
         const visitDoc = await db.visits.findOne(visitId).exec();
         if (visitDoc) {
-          await visitDoc.patch({ claimLifecycle: rollbackLifecycle });
+          try {
+            await visitDoc.patch({ claimLifecycle: rollbackLifecycle });
+          } catch (rollbackError) {
+            // ロックは残ったままなので、先に残したロックの記録は事実。取り消しの記録は書かない
+            console.error('Failed to roll back claim lock after UKE audit failure:', rollbackError);
+            throw new Error(`${auditFailedMessage}${ROLLBACK_ALSO_FAILED_NOTE}`);
+          }
           setVisitData((prev) => prev ? { ...prev, claimLifecycle: rollbackLifecycle } : prev);
         }
-        throw new Error('UKE出力の監査ログ記録に失敗したため、出力を中止しました。');
+        // ロックの記録(claim_lifecycle)は先に残っていて消せないので、打ち消す記録を追記する
+        const voidNote = await appendVoidingAuditOrNote(() => logAuditAction(
+          db,
+          'claim_lifecycle',
+          formatUkeExportClaimLockVoidedAuditMessage({ fileName }),
+          visitData?.patientId,
+          patientData?.name
+        ));
+        throw new Error(`${auditFailedMessage}${voidNote}`);
       }
 
       const blob = new Blob([ukeContent as unknown as BlobPart], { type: 'text/csv;charset=shift_jis' });

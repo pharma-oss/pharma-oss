@@ -359,3 +359,16 @@ export function formatMonthlyLegacyUkeExportAuditMessage(params: {
 }): string {
   return `月次一括UKE（点検用旧形式）出力: ${params.ukeFileName} / 受付 ${params.claimCount}件 / 合計 ${params.totalPoints}点。`;
 }
+
+/**
+ * 請求ロック(claim_lifecycle)の監査ログは残ったが、続く UKE 出力の監査ログが残らず出力を中止し、
+ * 請求ロックを元に戻したときに追記する「取り消し」の記録。監査ログは追記のみで消せないため、
+ * ログだけを読む人にも、直前のロックの記録が実際には行われなかった操作だと分かるようにする。
+ */
+export function formatUkeExportClaimLockVoidedAuditMessage(params: {
+  fileName: string;
+  claimCount?: number;
+}): string {
+  const countText = params.claimCount !== undefined ? `（${params.claimCount}件）` : '';
+  return `請求状態変更の取り消し: 「${params.fileName}」の出力は監査ログ記録に失敗したため中止し、請求ロック${countText}を元に戻しました。この出力についての直前の「請求をロックしました」の記録は無効です。`;
+}

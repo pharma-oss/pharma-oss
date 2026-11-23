@@ -29,6 +29,8 @@ import type { SingleDispensingUkeOfficialResult } from '../../lib/receipt/dispen
 import type { Patient, PrescriptionItem, Visit } from '../../db/types.ts';
 import type { ClaimLifecycleState } from '../../lib/claim_lifecycle.ts';
 import type { FeeCalculationOptions } from '../../lib/calculator.ts';
+import { RxLikeStore } from '../../lib/test_support/rxdb_like_doc.ts';
+import { ROLLBACK_ALSO_FAILED_NOTE, VOIDING_AUDIT_NOT_RECORDED_NOTE } from '../../lib/audit_guard.ts';
 
 // PrintPickingFlow.test.ts がソース文字列の正規表現で見ていた
 // 「監査ログが残らなければ操作を確定させない」契約を、モック DB での実動テストへ昇格したもの。
@@ -1095,10 +1097,111 @@ test('executeSingleOfficialUkeExport rolls back claimLifecycle when uke_export a
     new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack)
   );
 
-  assert.equal(auditCall, 2);
+  // ロックの記録 → UKE出力の記録(失敗) → ロックの記録を打ち消す記録
+  assert.equal(auditCall, 3);
+  assert.deepEqual(harness.auditEntries.map((entry) => entry.actionType), ['claim_lifecycle', 'claim_lifecycle']);
+  assert.match(harness.auditEntries[1].details, /^請求状態変更の取り消し: 「RECEIPTY\.CYO」/);
+  assert.match(harness.auditEntries[1].details, /直前の「請求をロックしました」の記録は無効です/);
+  assert.equal(harness.auditEntries[1].patientId, 'pt_0001');
   assert.deepEqual(harness.currentVisit().claimLifecycle, previousRebilling);
   assert.equal(appliedStates.length, 2);
   assert.deepEqual(appliedStates[1], previousRebilling);
+});
+
+test('executeSingleOfficialUkeExport tells the operator when even the voiding entry cannot be recorded', async () => {
+  const harness = createHarness({ visit: { ...SAMPLE_VISIT_FOR_OFFICIAL } });
+  let lifecycleCalls = 0;
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: () => {},
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      // 1件目のロックの記録だけ残り、UKE出力の記録も、打ち消す記録も残らない
+      logAudit: async (db, actionType, details, patientId, patientName) => {
+        if (actionType === 'claim_lifecycle' && lifecycleCalls++ === 0) {
+          return harness.logAudit(db, actionType, details, patientId, patientName);
+        }
+        return false;
+      }
+    }),
+    new Error(`${SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack}${VOIDING_AUDIT_NOT_RECORDED_NOTE}`)
+  );
+  assert.equal(harness.currentVisit().claimLifecycle?.status, 'draft');
+});
+
+test('executeSingleOfficialUkeExport treats a throwing uke_export audit as not recorded and rolls the lock back', async () => {
+  const harness = createHarness({ visit: { ...SAMPLE_VISIT_FOR_OFFICIAL } });
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: () => {},
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      logAudit: async (db, actionType, details, patientId, patientName) => {
+        if (actionType === 'uke_export') throw new Error('audit store unavailable');
+        return harness.logAudit(db, actionType, details, patientId, patientName);
+      }
+    }),
+    new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack)
+  );
+  assert.equal(harness.currentVisit().claimLifecycle?.status, 'draft');
+});
+
+test('executeSingleOfficialUkeExport does not void the lock record when the lock itself could not be rolled back', async () => {
+  const store = new RxLikeStore({ ...SAMPLE_VISIT_FOR_OFFICIAL });
+  const db = { visits: { findOne: (_id: string) => ({ exec: async () => store.open() }) } };
+  const auditTypes: string[] = [];
+  let lockWritten = false;
+  // ロックの書き込みは通し、そのあとの書き込み(取り消し)だけを失敗させる
+  store.failWrite = () => {
+    if (!lockWritten) {
+      lockWritten = true;
+      return false;
+    }
+    return true;
+  };
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: db as unknown as Parameters<typeof executeSingleOfficialUkeExport>[0]['db'],
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: () => {},
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      logAudit: async (_db, actionType) => {
+        auditTypes.push(actionType);
+        return actionType !== 'uke_export';
+      }
+    }),
+    new Error(`${SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack}${ROLLBACK_ALSO_FAILED_NOTE}`)
+  );
+
+  // ロックは残ったまま = ロックの記録は事実なので、打ち消す記録は書かない
+  assert.equal((store.current().claimLifecycle as ClaimLifecycleState).status, 'exported');
+  assert.deepEqual(auditTypes, ['claim_lifecycle', 'uke_export']);
 });
 
 test('executeSingleOfficialUkeExport rejects permission denied, self-pay, demo, and already-locked visits before DB write', async () => {
@@ -1187,3 +1290,69 @@ test('buildSingleOfficialUkeModalClaimState blocks demo visits with explicit dem
   assert.deepEqual(state.claimErrorMessages, [DEMO_OFFICIAL_UKE_BLOCKED_MESSAGE]);
 });
 
+
+test('executeSingleOfficialUkeExport re-checks the stored claim status so a stale screen cannot export a locked claim twice', async () => {
+  // 画面は請求前(draft)のままだが、保存済みの受付は別タブ・別端末で既に出力済み
+  const storedLifecycle: ClaimLifecycleState = {
+    status: 'exported',
+    exportedAt: '2026-06-10T11:00:00.000Z',
+    exportedFileName: 'RECEIPTY.CYO',
+    totalPoints: 83
+  };
+  const harness = createHarness({ visit: { ...SAMPLE_VISIT_FOR_OFFICIAL, claimLifecycle: storedLifecycle } });
+  const appliedStates: ClaimLifecycleState[] = [];
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: harness.db,
+      visitData: SAMPLE_VISIT_FOR_OFFICIAL,
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: (l) => appliedStates.push(l),
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      logAudit: harness.logAudit
+    }),
+    new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.locked)
+  );
+
+  assert.equal(harness.auditEntries.length, 0);
+  assert.equal(harness.visitPatches.length, 0);
+  assert.deepEqual(harness.currentVisit().claimLifecycle, storedLifecycle);
+  // 画面を保存済みの状態にそろえ、出力ボタンなどが古い状態のまま残らないようにする
+  assert.deepEqual(appliedStates, [storedLifecycle]);
+});
+
+test('executeSingleOfficialUkeExport rolls back on a real-RxDB-like document when the uke_export audit fails', async () => {
+  // RxDB の文書は読み込んだ時点の版で書く。取り消しを古いインスタンスの patch() で書くと CONFLICT になり、
+  // 請求ロックだけが残る。RxLikeStore はその性質を再現する(偽物の Object.assign では見逃す)。
+  const previousRebilling: ClaimLifecycleState = { status: 'rebilling', rebillingReason: '返戻修正後再請求' };
+  const store = new RxLikeStore({ ...SAMPLE_VISIT_FOR_OFFICIAL, claimLifecycle: previousRebilling });
+  const db = { visits: { findOne: (_id: string) => ({ exec: async () => store.open() }) } };
+  const appliedStates: ClaimLifecycleState[] = [];
+
+  await assert.rejects(
+    () => executeSingleOfficialUkeExport({
+      db: db as unknown as Parameters<typeof executeSingleOfficialUkeExport>[0]['db'],
+      visitData: { ...SAMPLE_VISIT_FOR_OFFICIAL, claimLifecycle: previousRebilling },
+      patientData: SAMPLE_PATIENT_FOR_OFFICIAL,
+      prescriptionItems: SAMPLE_ITEMS_FOR_OFFICIAL,
+      result: SAMPLE_OFFICIAL_RESULT,
+      canExportUke: true,
+      permissionDeniedMessage: '権限がありません',
+      isSelfPayClaimExcluded: false,
+      isDemo: false,
+      applyLifecycle: (l) => appliedStates.push(l),
+      exportedAt: '2026-06-10T12:00:00.000Z',
+      logAudit: async (_db, actionType) => actionType !== 'uke_export'
+    }),
+    new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack)
+  );
+
+  assert.deepEqual(store.current().claimLifecycle, previousRebilling);
+  assert.deepEqual(appliedStates.map((state) => state.status), ['exported', 'rebilling']);
+});

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canUserPerform, getCurrentUser, getPermissionDeniedMessage, logAuditAction } from '@/lib/audit';
-import { recordAuditOrNotify } from '@/lib/audit_guard';
+import { appendVoidingAuditOrNote, recordAuditOrNotify } from '@/lib/audit_guard';
 import { extractErrorMessage } from '@/lib/user_facing_error';
 import { markClaimClosed, markClaimExported } from '@/lib/claim_lifecycle';
 import { buildClaimExportSnapshot } from '@/lib/claim_snapshot';
@@ -65,6 +65,7 @@ import {
   UKE_UI_GUIDANCE,
   formatMonthlyLegacyUkeExportAuditMessage,
   formatMonthlyOfficialUkeExportAuditMessage,
+  formatUkeExportClaimLockVoidedAuditMessage,
   formatUkeRetirementStatusBadge,
   summarizeUkeExportsFromAuditLogs,
   type UkeExportAuditSummary
@@ -447,6 +448,7 @@ export function ClaimWorkbenchSection({
     // 請求状態の書き換え。まとめて適用し、途中や後続の監査ログで失敗したらまとめて戻す。
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
+    let lockAuditRecord: { fileName: string; claimCount: number } | null = null;
     try {
       const { cases, selfPayExcluded, missingMessages, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
@@ -537,6 +539,8 @@ export function ClaimWorkbenchSection({
       if (!lifecycleAuditOk) {
         throw new Error('月次公式UKEの請求状態監査ログ記録に失敗しました');
       }
+      // ここから先で失敗したら、残ったロックの記録を打ち消す記録を追記する(catch)
+      lockAuditRecord = { fileName: officialFileName, claimCount: visitDocs.length };
 
       const reconciliation = bundle.officialReconciliationReport;
       const exportAuditOk = await logAuditAction(
@@ -568,8 +572,17 @@ export function ClaimWorkbenchSection({
     } catch (err: unknown) {
       console.error('Failed to export official UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
+      // ロックを元に戻せたときだけ、先に残ったロックの記録(claim_lifecycle)を打ち消す。戻せなければ記録は事実のまま
+      const recordedLock = lockAuditRecord;
+      const voidNote = recordedLock && !undoNote
+        ? await appendVoidingAuditOrNote(() => logAuditAction(
+          db,
+          'claim_lifecycle',
+          formatUkeExportClaimLockVoidedAuditMessage(recordedLock)
+        ))
+        : '';
       const message = extractErrorMessage(err) ?? '不明なエラー';
-      toast.error(`公式UKEの出力に失敗しました: ${message}${undoNote}`);
+      toast.error(`公式UKEの出力に失敗しました: ${message}${undoNote}${voidNote}`);
     } finally {
       setIsExportingOfficialUke(false);
     }
@@ -595,6 +608,7 @@ export function ClaimWorkbenchSection({
     // 請求状態の書き換え。まとめて適用し、途中や後続の監査ログで失敗したらまとめて戻す。
     const lifecyclePatches: ReversiblePatch[] = [];
     let appliedLifecyclePatches: ReversiblePatch[] = [];
+    let lockAuditRecord: { fileName: string; claimCount: number } | null = null;
     try {
       const { cases, selfPayExcluded, missingMessages, visitDocs } = await buildClaimWorkbenchUkeCases(exportableClaimWorkItems);
       if (missingMessages.length > 0) {
@@ -672,6 +686,8 @@ export function ClaimWorkbenchSection({
       if (!lifecycleAuditOk) {
         throw new Error('月次一括UKEの請求状態監査ログ記録に失敗しました');
       }
+      // ここから先で失敗したら、残ったロックの記録を打ち消す記録を追記する(catch)
+      lockAuditRecord = { fileName: ukeFileName, claimCount: visitDocs.length };
 
       const exportAuditOk = await logAuditAction(
         db,
@@ -698,8 +714,17 @@ export function ClaimWorkbenchSection({
     } catch (err: unknown) {
       console.error('Failed to export UKE:', err);
       const undoNote = await undoAppliedPatchesNote(appliedLifecyclePatches);
+      // ロックを元に戻せたときだけ、先に残ったロックの記録(claim_lifecycle)を打ち消す。戻せなければ記録は事実のまま
+      const recordedLock = lockAuditRecord;
+      const voidNote = recordedLock && !undoNote
+        ? await appendVoidingAuditOrNote(() => logAuditAction(
+          db,
+          'claim_lifecycle',
+          formatUkeExportClaimLockVoidedAuditMessage(recordedLock)
+        ))
+        : '';
       const message = extractErrorMessage(err) ?? '不明なエラー';
-      toast.error(`UKEの出力に失敗しました: ${message}${undoNote}`);
+      toast.error(`UKEの出力に失敗しました: ${message}${undoNote}${voidNote}`);
     } finally {
       setIsExportingUke(false);
     }

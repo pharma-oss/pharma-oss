@@ -89,3 +89,20 @@ export async function recordAuditOrNotify(
   if (!auditOk) notify(AUDIT_NOT_RECORDED_NOTICE);
   return auditOk;
 }
+
+export const VOIDING_AUDIT_NOT_RECORDED_NOTE =
+  ' 監査ログには直前の「請求をロックしました」の記録が残っていますが、それを取り消す記録も残せませんでした。実際には出力していません。管理者へ連絡してください。';
+
+// 1つの操作を監査ログ2件で記録する場合(請求ロック -> UKE出力)に、後の1件が残らず操作を取り消したとき用。
+// 監査ログはハッシュチェーンで追記のみなので、先に残った1件は消せない。打ち消す記録を追記し、
+// ログだけを読む人にも「その操作は行われなかった」と分かるようにする。
+// 追記にも失敗したら、画面のエラーに添える文を返す(追記できたら空文字)。
+// 操作の取り消し(データを元に戻すこと)に失敗したときは、先の記録は事実のままなので呼ばないこと。
+export async function appendVoidingAuditOrNote(logAudit: () => Promise<boolean>): Promise<string> {
+  try {
+    if (await logAudit()) return '';
+  } catch (error) {
+    console.error('Failed to record voiding audit log:', error);
+  }
+  return VOIDING_AUDIT_NOT_RECORDED_NOTE;
+}

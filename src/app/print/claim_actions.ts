@@ -16,7 +16,11 @@ import {
 } from '@/lib/claim_lifecycle';
 import { buildClaimExportSnapshot } from '@/lib/claim_snapshot';
 import type { SingleDispensingUkeOfficialResult } from '@/lib/receipt/dispensing_uke_official_single';
-import { formatSingleOfficialUkeExportAuditMessage } from '@/lib/receipt/uke_migration_policy';
+import {
+  formatSingleOfficialUkeExportAuditMessage,
+  formatUkeExportClaimLockVoidedAuditMessage
+} from '@/lib/receipt/uke_migration_policy';
+import { appendVoidingAuditOrNote, ROLLBACK_ALSO_FAILED_NOTE } from '@/lib/audit_guard';
 import { SELF_PAY_UKE_BLOCKED_MESSAGE } from '@/lib/self_pay_claim';
 import type { AuditActionType, Patient, PharmacyDatabase, PrescriptionItem, Visit } from '@/db/types';
 import { restoreFields, restoreWith } from '@/lib/rxdb_restore';
@@ -573,7 +577,7 @@ export interface ExecuteSingleOfficialUkeExportParams {
 /**
  * 単票公式 UKE（RECEIPTY.CYO）のダウンロード前処理。
  *
- * 権限・自費・デモ・請求状態（draft / rebilling のみ許可）を検証したうえで、
+ * 権限・自費・デモ・請求状態（draft / rebilling のみ許可。画面の状態と保存済みの状態の両方）を検証したうえで、
  * 請求ロック（markClaimExported）と 2 種の監査ログ（claim_lifecycle / uke_export）を
  * ファイルダウンロードより先に確定させる。いずれかの監査ログ記録に失敗した場合は
  * claimLifecycle を直前の状態へ巻き戻して例外を投げ、ファイルを出力させない。
@@ -621,6 +625,13 @@ export async function executeSingleOfficialUkeExport(
     throw new Error(CLAIM_ACTION_MESSAGES.claimLifecycleVisitNotFound);
   }
   const previousLifecycle = visitDoc.toJSON().claimLifecycle as ClaimLifecycleState | undefined;
+  // 画面の状態は古いことがある(他端末やこの端末の別タブが先に出力・返戻登録した直後など)。
+  // 保存されている最新の請求状態でも判定し、同じ受付の公式UKEを二重に出さない。
+  const storedStatus = getClaimLifecycleStatus(previousLifecycle);
+  if (storedStatus !== 'draft' && storedStatus !== 'rebilling') {
+    applyLifecycle(previousLifecycle as ClaimLifecycleState);
+    throw new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.locked);
+  }
 
   const exportSnapshot = buildClaimExportSnapshot({
     visit: visitData,
@@ -650,22 +661,42 @@ export async function executeSingleOfficialUkeExport(
     logAudit
   });
 
-  const ukeAuditOk = await logAudit(
-    db,
-    'uke_export',
-    formatSingleOfficialUkeExportAuditMessage({
-      patientName: patientData.name,
-      totalPoints: result.totalPoints,
-      recordCount: result.records.length
-    }),
-    visitData.patientId,
-    patientData.name
-  );
+  let ukeAuditOk = false;
+  try {
+    ukeAuditOk = await logAudit(
+      db,
+      'uke_export',
+      formatSingleOfficialUkeExportAuditMessage({
+        patientName: patientData.name,
+        totalPoints: result.totalPoints,
+        recordCount: result.records.length
+      }),
+      visitData.patientId,
+      patientData.name
+    );
+  } catch (error) {
+    // 例外でも「残らなかった」と同じに扱う(ロックだけが残ってファイルが出ない状態にしない)
+    console.error('Failed to record official UKE export audit log:', error);
+  }
   if (!ukeAuditOk) {
     const rollbackLifecycle: ClaimLifecycleState = previousLifecycle || { status: 'draft' };
-    await restoreFields(visitDoc, { claimLifecycle: rollbackLifecycle });
+    try {
+      await restoreFields(visitDoc, { claimLifecycle: rollbackLifecycle });
+    } catch (error) {
+      // ロックは残ったままなので、先に残したロックの記録は事実。取り消しの記録は書かない
+      console.error('Failed to roll back claim lock after official UKE audit failure:', error);
+      throw new Error(`${SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack}${ROLLBACK_ALSO_FAILED_NOTE}`);
+    }
     applyLifecycle(rollbackLifecycle);
-    throw new Error(SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack);
+    // ロックの記録(claim_lifecycle)は先に残っていて消せないので、打ち消す記録を追記する
+    const voidNote = await appendVoidingAuditOrNote(() => logAudit(
+      db,
+      'claim_lifecycle',
+      formatUkeExportClaimLockVoidedAuditMessage({ fileName: result.fileName }),
+      visitData.patientId,
+      patientData.name
+    ));
+    throw new Error(`${SINGLE_OFFICIAL_UKE_EXPORT_MESSAGES.auditRolledBack}${voidNote}`);
   }
 
   return { nextLifecycle };
